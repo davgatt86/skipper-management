@@ -1,0 +1,6 @@
+# Supabase configuration
+# These values are set in Netlify's environment variables, not in this file
+# This file is just a reference of what variables the app needs
+
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_KEY=sb_publishable_...
