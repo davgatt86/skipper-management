@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
 import Contracts from './pages/Contracts'
+import Landings from './pages/Landings'
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -55,6 +56,11 @@ export default function App() {
         <Route path="/contracts" element={
           <ProtectedRoute>
             <Contracts />
+          </ProtectedRoute>
+        } />
+        <Route path="/landings" element={
+          <ProtectedRoute>
+            <Landings />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
