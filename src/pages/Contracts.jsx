@@ -45,6 +45,8 @@ function promptDate(message) {
   return t
 }
 
+const round2 = (x) => Math.round(x * 100) / 100
+
 export default function Contracts() {
   const { appUser } = useAuth()
   const [contracts, setContracts] = useState([])
@@ -106,6 +108,14 @@ export default function Contracts() {
   const crewWithCurrent = new Set(
     contracts.filter(c => c.status === 'current').map(c => c.crew_id)
   )
+
+  function ghbHalves(c) {
+    const raw = settings ? Number(settings.ghb_first_half_pct) : 0.5
+    const frac = raw > 1 ? raw / 100 : raw
+    const total = Number(c.going_home_bonus)
+    const first = round2(total * frac)
+    return { total, first, second: round2(total - first) }
+  }
 
   async function addContract(e) {
     e.preventDefault()
@@ -174,16 +184,34 @@ export default function Contracts() {
     else loadAll()
   }
 
+  async function markHalfPaid(c, half) {
+    const { first, second } = ghbHalves(c)
+    const amount = half === 'first' ? first : second
+    const name = c.crew?.full_name || 'crewman'
+    const label = half === 'first' ? '1st' : '2nd'
+    if (!confirm(`Record ${label} half GHB of ${money(amount, settings?.currency)} as paid to ${name}?`)) return
+    const d = promptDate(`Date the ${label} half was paid`)
+    if (!d) return
+    const { error } = await supabase.from('payments').insert({
+      fleet_id: appUser.fleet_id,
+      crew_id: c.crew_id,
+      payment_date: d,
+      amount,
+      payment_type: half === 'first' ? 'ghb_first_half' : 'ghb_second_half',
+      contract_id: c.id,
+      notes: `GHB ${label} half`,
+      created_by: appUser.id,
+    })
+    if (error) setError(error.message)
+    else loadAll()
+  }
+
   function renderGhb(c) {
     const cur = settings?.currency || ''
     if (c.going_home_bonus === null || c.going_home_bonus === undefined) {
       return <span className="muted">not set</span>
     }
-    const raw = settings ? Number(settings.ghb_first_half_pct) : 0.5
-    const frac = raw > 1 ? raw / 100 : raw
-    const total = Number(c.going_home_bonus)
-    const first = Math.round(total * frac * 100) / 100
-    const second = total - first
+    const { total, first, second } = ghbHalves(c)
     const paid = ghbPaid[c.id] || {}
 
     if (c.status === 'current') {
@@ -212,6 +240,30 @@ export default function Contracts() {
       if (est) return <span className="muted" style={{ fontStyle: 'italic' }}>≈ {fmtDate(est)}</span>
     }
     return '—'
+  }
+
+  const btnStyle = { padding: '0.3rem 0.7rem', fontSize: '0.85rem' }
+
+  function actionButtons(c) {
+    const paid = ghbPaid[c.id] || {}
+    const hasGhb = c.going_home_bonus !== null && c.going_home_bonus !== undefined
+    return (
+      <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        {c.status === 'current' && (
+          <button className="secondary" onClick={() => markGoneHome(c)} style={btnStyle}>Gone home…</button>
+        )}
+        {c.status === 'pending_return' && (
+          <button className="secondary" onClick={() => markReturned(c)} style={btnStyle}>Returned…</button>
+        )}
+        {hasGhb && (c.status === 'pending_return' || c.status === 'completed') && !paid.first && (
+          <button className="secondary" onClick={() => markHalfPaid(c, 'first')} style={btnStyle}>1st half paid…</button>
+        )}
+        {hasGhb && c.status === 'completed' && !paid.second && (
+          <button className="secondary" onClick={() => markHalfPaid(c, 'second')} style={btnStyle}>2nd half paid…</button>
+        )}
+        <button className="secondary" onClick={() => setGhbAmount(c)} style={btnStyle}>Set GHB…</button>
+      </div>
+    )
   }
 
   return (
@@ -305,32 +357,8 @@ export default function Contracts() {
                     </td>
                     <td style={{ padding: '0.6rem 0.4rem' }}>{renderGhb(c)}</td>
                     {canEdit && (
-                      <td style={{ padding: '0.6rem 0.4rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {c.status === 'current' && (
-                          <button
-                            className="secondary"
-                            onClick={() => markGoneHome(c)}
-                            style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem', marginLeft: '0.3rem' }}
-                          >
-                            Gone home…
-                          </button>
-                        )}
-                        {c.status === 'pending_return' && (
-                          <button
-                            className="secondary"
-                            onClick={() => markReturned(c)}
-                            style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem', marginLeft: '0.3rem' }}
-                          >
-                            Returned…
-                          </button>
-                        )}
-                        <button
-                          className="secondary"
-                          onClick={() => setGhbAmount(c)}
-                          style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem', marginLeft: '0.3rem' }}
-                        >
-                          Set GHB…
-                        </button>
+                      <td style={{ padding: '0.6rem 0.4rem' }}>
+                        {actionButtons(c)}
                       </td>
                     )}
                   </tr>
