@@ -179,9 +179,10 @@ export default function Contracts() {
     if (c.going_home_bonus === null || c.going_home_bonus === undefined) {
       return <span className="muted">not set</span>
     }
-    const pct = settings ? Number(settings.ghb_first_half_pct) : 50
+    const raw = settings ? Number(settings.ghb_first_half_pct) : 0.5
+    const frac = raw > 1 ? raw / 100 : raw
     const total = Number(c.going_home_bonus)
-    const first = Math.round(total * pct) / 100
+    const first = Math.round(total * frac * 100) / 100
     const second = total - first
     const paid = ghbPaid[c.id] || {}
 
