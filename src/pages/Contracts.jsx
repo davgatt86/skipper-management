@@ -344,7 +344,7 @@ export default function Contracts() {
                 {contracts.map(c => (
                   <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: '0.6rem 0.4rem', fontWeight: 600 }}>
-                      {c.crew?.full_name || '—'}
+                      <Link to={`/contracts/${c.id}`}>{c.crew?.full_name || '—'}</Link>
                       {c.notes && <div className="muted" style={{ fontSize: '0.8rem', fontWeight: 400 }}>{c.notes}</div>}
                     </td>
                     <td style={{ padding: '0.6rem 0.4rem' }}>{fmtDate(c.start_date)}</td>
