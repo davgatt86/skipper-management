@@ -64,6 +64,23 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {appUser?.role !== 'crew' && (
+        <div className="card">
+          <h2>Fleet tools</h2>
+          <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+            <a href="https://pd-dk-gross-estimator.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+              Trip Gross Estimator
+            </a>
+            <a href="https://fish-sales.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+              Fish Sales Tracker
+            </a>
+            <a href="https://sales-analyser.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+              Sales Analyser
+            </a>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2>Crew status</h2>
         {loading && <p className="muted">Loading…</p>}
