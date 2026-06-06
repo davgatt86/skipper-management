@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
 import Contracts from './pages/Contracts'
+import ContractDetail from './pages/ContractDetail'
 import Landings from './pages/Landings'
 import Closeout from './pages/Closeout'
 import OneOffs from './pages/OneOffs'
@@ -58,6 +59,11 @@ export default function App() {
         <Route path="/contracts" element={
           <ProtectedRoute>
             <Contracts />
+          </ProtectedRoute>
+        } />
+        <Route path="/contracts/:id" element={
+          <ProtectedRoute>
+            <ContractDetail />
           </ProtectedRoute>
         } />
         <Route path="/landings" element={
