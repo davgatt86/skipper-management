@@ -56,6 +56,11 @@ export default function Dashboard() {
           <Link to="/closeout" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
             Month Closeout
           </Link>
+          {appUser?.role === 'skipper' && (
+            <Link to="/one-offs" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+              One-Off Bonuses
+            </Link>
+          )}
         </div>
       </div>
 
