@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Login from './pages/Login'
@@ -8,6 +9,7 @@ import ContractDetail from './pages/ContractDetail'
 import Landings from './pages/Landings'
 import Closeout from './pages/Closeout'
 import OneOffs from './pages/OneOffs'
+const Sales = lazy(() => import('./pages/Sales'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -79,6 +81,13 @@ export default function App() {
         <Route path="/one-offs" element={
           <ProtectedRoute>
             <OneOffs />
+          </ProtectedRoute>
+        } />
+        <Route path="/sales" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Sales />
+            </Suspense>
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/" replace />} />

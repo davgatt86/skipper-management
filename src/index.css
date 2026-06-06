@@ -89,3 +89,16 @@ h2 { font-size: 1.25rem; color: var(--navy); margin-bottom: 0.75rem; }
 .muted { color: var(--grey-400); font-size: 0.9rem; }
 .error { color: var(--red); margin: 0.5rem 0; }
 .success { color: var(--green); margin: 0.5rem 0; }
+
+
+/* ---- Fish Sales print / save-as-PDF ---- */
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  body { background: white; }
+  .container { max-width: none; padding: 0; }
+  .card { border: none; padding: 0.5rem 0; margin-bottom: 0.75rem; break-inside: avoid; }
+  #sales-report h2.print-only { display: block !important; font-size: 1.4rem; margin-bottom: 1rem; }
+  #sales-report table { font-size: 0.8rem; }
+  #sales-report .recharts-responsive-container { break-inside: avoid; }
+}
