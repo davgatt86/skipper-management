@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { supabase } from '../supabaseClient'
+
+const STATUS_LABEL = { on_boat: 'On Boat', on_leave: 'On Leave', former: 'Former' }
+const STATUS_COLOR = { on_boat: 'var(--green)', on_leave: 'var(--amber)', former: 'var(--grey-400)' }
 
 export default function Dashboard() {
   const { appUser, signOut } = useAuth()
@@ -13,16 +17,17 @@ export default function Dashboard() {
       const { data, error } = await supabase
         .from('crew')
         .select('id, full_name, status')
+        .is('archived_at', null)
         .order('full_name')
-      if (error) {
-        setError(error.message)
-      } else {
-        setCrew(data || [])
-      }
+      if (error) setError(error.message)
+      else setCrew(data || [])
       setLoading(false)
     }
     loadCrew()
   }, [])
+
+  const onBoatCount = crew.filter(c => c.status === 'on_boat').length
+  const onLeaveCount = crew.filter(c => c.status === 'on_leave').length
 
   return (
     <div className="container">
@@ -37,47 +42,43 @@ export default function Dashboard() {
       </header>
 
       <div className="card">
-        <h2>Database connection test</h2>
-        {loading && <p className="muted">Loading crew from database…</p>}
-        {error && (
-          <div>
-            <p className="error">Error: {error}</p>
-            <p className="muted">
-              This usually means the crew table is empty (which it is — we haven't added anyone yet),
-              or that Row Level Security is blocking access. Both are normal at this stage.
-            </p>
+        <h2>Manage</h2>
+        <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          <Link to="/crew" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+            Crew ({crew.length})
+          </Link>
+          <div style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', color: 'var(--grey-400)' }}>
+            Contracts<br /><small>(coming soon)</small>
           </div>
-        )}
-        {!loading && !error && (
-          <>
-            <p className="success">✓ Connected to Supabase</p>
-            {crew.length === 0 ? (
-              <p className="muted">No crew in the database yet. We'll add them in the next step.</p>
-            ) : (
-              <ul style={{ listStyle: 'none', marginTop: '0.5rem' }}>
-                {crew.map((c) => (
-                  <li key={c.id} style={{ padding: '0.4rem 0', borderBottom: '1px solid var(--border)' }}>
-                    <strong>{c.full_name}</strong> — <span className="muted">{c.status}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
+          <div style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', color: 'var(--grey-400)' }}>
+            Landings<br /><small>(coming soon)</small>
+          </div>
+        </div>
       </div>
 
       <div className="card">
-        <h2>What's working so far</h2>
-        <ul style={{ paddingLeft: '1.2rem', lineHeight: '1.8' }}>
-          <li>✓ App deployed to Netlify</li>
-          <li>✓ Connected to Supabase database</li>
-          <li>✓ Login + auth flow</li>
-          <li>✓ Reads from the crew table</li>
-          <li className="muted">○ Crew management (next)</li>
-          <li className="muted">○ Contracts (next)</li>
-          <li className="muted">○ Landings (next)</li>
-          <li className="muted">○ Month closeout (later)</li>
-        </ul>
+        <h2>Crew status</h2>
+        {loading && <p className="muted">Loading…</p>}
+        {error && <p className="error">Error: {error}</p>}
+        {!loading && !error && crew.length === 0 && (
+          <p className="muted">No crew added yet. <Link to="/crew">Add your first crewman →</Link></p>
+        )}
+        {!loading && !error && crew.length > 0 && (
+          <>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div><span style={{ color: STATUS_COLOR.on_boat, fontWeight: 700, fontSize: '1.3rem' }}>{onBoatCount}</span> <span className="muted">on boat</span></div>
+              <div><span style={{ color: STATUS_COLOR.on_leave, fontWeight: 700, fontSize: '1.3rem' }}>{onLeaveCount}</span> <span className="muted">on leave</span></div>
+            </div>
+            <ul style={{ listStyle: 'none' }}>
+              {crew.map((c) => (
+                <li key={c.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+                  <strong>{c.full_name}</strong>
+                  <span style={{ color: STATUS_COLOR[c.status], fontWeight: 600 }}>{STATUS_LABEL[c.status]}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
     </div>
   )
