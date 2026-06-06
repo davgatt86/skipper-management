@@ -1,39 +1,109 @@
-// Loads pdf.js (CDN) and the canonical shared parser parse-core.js, which is
-// hosted in the fish-sales-tracker repo and served at fish-sales.netlify.app.
-// ALL sales-note parsing fixes are made in parse-core.js, never here.
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuth } from '../AuthContext'
+import { supabase } from '../supabaseClient'
 
-const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-const PARSE_CORE_SRC = 'https://fish-sales.netlify.app/parse-core.js'
+const STATUS_LABEL = { on_boat: 'On Boat', on_leave: 'On Leave', former: 'Former' }
+const STATUS_COLOR = { on_boat: 'var(--green)', on_leave: 'var(--amber)', former: 'var(--grey-400)' }
 
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    if (document.querySelector(`script[src="${src}"]`)) return res()
-    const s = document.createElement('script')
-    s.src = src
-    s.onload = res
-    s.onerror = () => rej(new Error('Failed to load ' + src))
-    document.body.appendChild(s)
-  })
-}
+export default function Dashboard() {
+  const { appUser, signOut } = useAuth()
+  const [crew, setCrew] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
-export async function ensureParsing() {
-  if (!window.pdfjsLib) {
-    await loadScript(PDFJS_SRC)
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER
-  }
-  if (!window.ParseCore) await loadScript(PARSE_CORE_SRC)
-  return { pdfjsLib: window.pdfjsLib, ParseCore: window.ParseCore }
-}
+  useEffect(() => {
+    async function loadCrew() {
+      const { data, error } = await supabase
+        .from('crew')
+        .select('id, full_name, status')
+        .is('archived_at', null)
+        .order('full_name')
+      if (error) setError(error.message)
+      else setCrew(data || [])
+      setLoading(false)
+    }
+    loadCrew()
+  }, [])
 
-// Parse one File -> ParseCore result {market, rows, meta, reconcile, filename}
-export async function parseSalesPdf(file) {
-  const { pdfjsLib, ParseCore } = await ensureParsing()
-  return ParseCore.parsePdf(await file.arrayBuffer(), pdfjsLib, file.name)
-}
+  const onBoatCount = crew.filter(c => c.status === 'on_boat').length
+  const onLeaveCount = crew.filter(c => c.status === 'on_leave').length
 
-// Same dedup key scheme as the Fish Sales Tracker.
-export function dedupKey(res) {
-  const m = res.meta || {}
-  return (res.market || '') + '|' + (m.vessel || '') + '|' + (m.saleNo || m.isoDate || res.filename || '')
+  return (
+    <div className="container">
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h1 style={{ marginBottom: 0 }}>Skipper Management</h1>
+          <p className="muted">
+            Signed in as {appUser?.display_name || 'Unknown'} ({appUser?.role || 'no role'})
+          </p>
+        </div>
+        <button className="secondary" onClick={signOut}>Sign out</button>
+      </header>
+
+      <div className="card">
+        <h2>Manage</h2>
+        <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+          <Link to="/crew" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+            Crew ({crew.length})
+          </Link>
+          <Link to="/contracts" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+            Contracts
+          </Link>
+          <Link to="/landings" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+            Landings
+          </Link>
+          <Link to="/closeout" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+            Month Closeout
+          </Link>
+          {appUser?.role === 'skipper' && (
+            <Link to="/one-offs" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+              One-Off Bonuses
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {appUser?.role !== 'crew' && (
+        <div className="card">
+          <h2>Fleet tools</h2>
+          <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+            {appUser?.role === 'skipper' && (
+              <Link to="/sales" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600, background: 'var(--grey-50)' }}>
+                Fish Sales
+              </Link>
+            )}
+            <a href="https://pd-dk-gross-estimator.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+              Trip Gross Estimator
+            </a>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <h2>Crew status</h2>
+        {loading && <p className="muted">Loading…</p>}
+        {error && <p className="error">Error: {error}</p>}
+        {!loading && !error && crew.length === 0 && (
+          <p className="muted">No crew added yet. <Link to="/crew">Add your first crewman →</Link></p>
+        )}
+        {!loading && !error && crew.length > 0 && (
+          <>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div><span style={{ color: STATUS_COLOR.on_boat, fontWeight: 700, fontSize: '1.3rem' }}>{onBoatCount}</span> <span className="muted">on boat</span></div>
+              <div><span style={{ color: STATUS_COLOR.on_leave, fontWeight: 700, fontSize: '1.3rem' }}>{onLeaveCount}</span> <span className="muted">on leave</span></div>
+            </div>
+            <ul style={{ listStyle: 'none' }}>
+              {crew.map((c) => (
+                <li key={c.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+                  <strong>{c.full_name}</strong>
+                  <span style={{ color: STATUS_COLOR[c.status], fontWeight: 600 }}>{STATUS_LABEL[c.status]}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
