@@ -56,7 +56,7 @@ export default function Dashboard() {
           <Link to="/closeout" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
             Month Closeout
           </Link>
-          {appUser?.role === 'skipper' && (
+          {['skipper', 'viewer'].includes(appUser?.role) && (
             <Link to="/one-offs" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
               One-Off Bonuses
             </Link>
@@ -68,19 +68,13 @@ export default function Dashboard() {
         <div className="card">
           <h2>Fleet tools</h2>
           <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-            {appUser?.role === 'skipper' && (
+            {['skipper', 'viewer'].includes(appUser?.role) && (
               <Link to="/sales" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600, background: 'var(--grey-50)' }}>
                 Fish Sales
               </Link>
             )}
             <a href="https://pd-dk-gross-estimator.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
               Trip Gross Estimator
-            </a>
-            <a href="https://fish-sales.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
-              Fish Sales Tracker
-            </a>
-            <a href="https://sales-analyser.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
-              Sales Analyser
             </a>
           </div>
         </div>

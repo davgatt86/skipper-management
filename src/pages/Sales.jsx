@@ -37,6 +37,7 @@ function Kpi({ label, value, sub }) {
 export default function Sales() {
   const { appUser } = useAuth()
   const isSkipper = appUser?.role === 'skipper'
+  const canView = isSkipper || appUser?.role === 'viewer'
 
   const [landings, setLandings] = useState([])
   const [rows, setRows] = useState([])
@@ -201,7 +202,7 @@ export default function Sales() {
   const perLanding = useMemo(() => mode === 'month' ? landingSeries(scopeLandings) : [], [mode, scopeLandings])
   const speciesChart = useMemo(() => speciesTbl.slice(0, 10).map(s => ({ label: s.species, value: s.value, kg: r2(s.kg / 1000) })), [speciesTbl])
 
-  if (!isSkipper) {
+  if (!canView) {
     return <div className="container"><p className="muted">Skipper access only. <Link to="/">← Back</Link></p></div>
   }
 
@@ -380,10 +381,10 @@ export default function Sales() {
         {mode === 'landing' && a4Rows.length > 0 && (
           <div className="card">
             <h2>A4 haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>Mini Metro / Metro / Chipper</span></h2>
-            <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+            {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <button className="secondary" onClick={autoSplit}>Auto-split by price bands</button>
               <button className="secondary" onClick={() => saveSubGrades(a4Rows.map(r => ({ id: r.id, sub_grade: null })))}>Clear split</button>
-            </div>
+            </div>}
             <Scroll>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                 <thead><tr><th style={th}>Buyer</th><th style={thR}>Boxes</th><th style={thR}>£/kg</th><th style={th}>Sub-grade</th></tr></thead>
@@ -394,7 +395,7 @@ export default function Sales() {
                       <td style={tdR}>{num(r.boxes)}</td>
                       <td style={tdR}>{gbp(r.price_per_kg)}</td>
                       <td style={td}>
-                        <select className="no-print" value={r.sub_grade || ''} onChange={e => saveSubGrades([{ id: r.id, sub_grade: e.target.value || null }])} style={{ width: 'auto', padding: '0.25rem 0.5rem' }}>
+                        <select className="no-print" disabled={!isSkipper} value={r.sub_grade || ''} onChange={e => saveSubGrades([{ id: r.id, sub_grade: e.target.value || null }])} style={{ width: 'auto', padding: '0.25rem 0.5rem' }}>
                           <option value="">—</option>
                           <option>Chipper</option>
                           <option>Metro</option>
@@ -410,7 +411,7 @@ export default function Sales() {
           </div>
         )}
 
-        {mode === 'landing' && landingId && landingById[landingId] && (
+        {isSkipper && mode === 'landing' && landingId && landingById[landingId] && (
           <div className="card no-print">
             <button className="secondary" style={{ color: 'var(--red)' }} onClick={() => deleteLanding(landingById[landingId])}>Delete this landing</button>
           </div>
@@ -418,7 +419,7 @@ export default function Sales() {
       </div>
 
       {/* upload */}
-      <div className="card no-print">
+      {isSkipper && <div className="card no-print">
         <h2>Import sales notes</h2>
         <p className="muted" style={{ marginBottom: '0.75rem' }}>
           Upload Don Fishing / Scrabster / Hanstholm / Shetland PDFs — duplicates are skipped automatically and totals are checked against each note's printed TOTAL.
@@ -430,7 +431,7 @@ export default function Sales() {
             {uploadLog.map((l, i) => <li key={i} style={{ padding: '0.15rem 0' }}>{l}</li>)}
           </ul>
         )}
-      </div>
+      </div>}
 
       {loading && <p className="muted">Loading…</p>}
     </div>

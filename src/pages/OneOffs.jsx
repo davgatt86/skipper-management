@@ -48,6 +48,7 @@ export default function OneOffs() {
   const [busy, setBusy] = useState(false)
 
   const isSkipper = appUser?.role === 'skipper'
+  const canView = isSkipper || appUser?.role === 'viewer'
 
   async function loadAll() {
     setLoading(true)
@@ -71,9 +72,9 @@ export default function OneOffs() {
     setLoading(false)
   }
 
-  useEffect(() => { if (isSkipper) loadAll() }, [isSkipper])
+  useEffect(() => { if (canView) loadAll() }, [canView])
 
-  if (!isSkipper) {
+  if (!canView) {
     return (
       <div className="container">
         <div style={{ marginBottom: '1rem' }}>
