@@ -50,9 +50,9 @@ export default function Dashboard() {
           <Link to="/contracts" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
             Contracts
           </Link>
-          <div style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', color: 'var(--grey-400)' }}>
-            Landings<br /><small>(coming soon)</small>
-          </div>
+          <Link to="/landings" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
+            Landings
+          </Link>
         </div>
       </div>
 
