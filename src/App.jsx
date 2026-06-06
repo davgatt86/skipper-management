@@ -3,10 +3,10 @@ import { AuthProvider, useAuth } from './AuthContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
+import Contracts from './pages/Contracts'
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
-
   if (loading) {
     return (
       <div style={{
@@ -20,11 +20,9 @@ function ProtectedRoute({ children }) {
       </div>
     )
   }
-
   if (!session) {
     return <Navigate to="/login" replace />
   }
-
   return children
 }
 
@@ -52,6 +50,11 @@ export default function App() {
         <Route path="/crew" element={
           <ProtectedRoute>
             <Crew />
+          </ProtectedRoute>
+        } />
+        <Route path="/contracts" element={
+          <ProtectedRoute>
+            <Contracts />
           </ProtectedRoute>
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
