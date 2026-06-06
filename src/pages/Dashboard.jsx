@@ -33,7 +33,7 @@ export default function Dashboard() {
     <div className="container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>
-          <h1 style={{ marginBottom: 0 }}>Dashboard</h1>
+          <h1 style={{ marginBottom: 0 }}>Skipper Management</h1>
           <p className="muted">
             Signed in as {appUser?.display_name || 'Unknown'} ({appUser?.role || 'no role'})
           </p>
@@ -68,6 +68,11 @@ export default function Dashboard() {
         <div className="card">
           <h2>Fleet tools</h2>
           <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+            {appUser?.role === 'skipper' && (
+              <Link to="/sales" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600, background: 'var(--grey-50)' }}>
+                Fish Sales
+              </Link>
+            )}
             <a href="https://pd-dk-gross-estimator.netlify.app" target="_blank" rel="noreferrer" style={{ display: 'block', padding: '1rem', border: '1px solid var(--border)', borderRadius: 6, textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 600 }}>
               Trip Gross Estimator
             </a>
