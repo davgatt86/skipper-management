@@ -50,6 +50,7 @@ export default function Quota() {
 
   const [snapshots, setSnapshots] = useState([])
   const [trips, setTrips] = useState([])
+  const [adjustments, setAdjustments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -61,14 +62,16 @@ export default function Quota() {
   const pushLog = m => setLog(l => [...l, m])
 
   async function loadAll() {
-    const [snapRes, lineRes, tripRes, catchRes] = await Promise.all([
+    const [snapRes, lineRes, tripRes, catchRes, adjRes] = await Promise.all([
       supabase.from('quota_snapshots').select('*').order('last_updated', { ascending: false }),
       supabase.from('quota_lines').select('*'),
       supabase.from('quota_trips').select('*').order('arrival_at', { ascending: false }),
       supabase.from('quota_trip_catches').select('*'),
+      supabase.from('quota_adjustments').select('*').order('created_at'),
     ])
-    const err = snapRes.error || lineRes.error || tripRes.error || catchRes.error
+    const err = snapRes.error || lineRes.error || tripRes.error || catchRes.error || adjRes.error
     if (err) { setError(err.message); return }
+    setAdjustments(adjRes.data || [])
     const linesBySnap = {}
     for (const l of lineRes.data || []) (linesBySnap[l.snapshot_id] = linesBySnap[l.snapshot_id] || []).push(l)
     const catchesByTrip = {}
@@ -123,6 +126,31 @@ export default function Quota() {
     await loadAll(); setBusy(false)
   }
 
+  // ---------- what-if swaps & rentals ----------
+  const [outStock, setOutStock] = useState('')
+  const [outT, setOutT] = useState('')
+  const [inStock, setInStock] = useState('')
+  const [inT, setInT] = useState('')
+  const [adjNote, setAdjNote] = useState('')
+
+  async function addAdjustment(e) {
+    e.preventDefault()
+    const rows = []
+    if (outStock && Number(outT) > 0) rows.push({ year: Number(year), stock: outStock, direction: 'out', tonnes: Number(outT), note: adjNote.trim() })
+    if (inStock && Number(inT) > 0) rows.push({ year: Number(year), stock: inStock, direction: 'in', tonnes: Number(inT), note: adjNote.trim() })
+    if (!rows.length) { setError('Pick a stock and tonnage for at least one side.'); return }
+    setError('')
+    const { error: err } = await supabase.from('quota_adjustments').insert(rows)
+    if (err) { setError(err.message); return }
+    setOutStock(''); setOutT(''); setInStock(''); setInT(''); setAdjNote('')
+    loadAll()
+  }
+
+  async function deleteAdjustment(a) {
+    const { error: err } = await supabase.from('quota_adjustments').delete().eq('id', a.id)
+    if (err) setError(err.message); else loadAll()
+  }
+
   // ---------- derived ----------
   const latestByYear = useMemo(() => latestSnapshotByYear(snapshots), [snapshots])
   const years = useMemo(() => {
@@ -134,12 +162,12 @@ export default function Quota() {
   useEffect(() => { if (!years.includes(year)) setYear(years[0]) }, [years]) // eslint-disable-line
 
   const snapshot = latestByYear[year]
-  const pos = useMemo(() => buildPosition({ snapshot, trips, year }), [snapshot, trips, year])
+  const pos = useMemo(() => buildPosition({ snapshot, trips, year, adjustments }), [snapshot, trips, year, adjustments])
 
   const sections = useMemo(() => [...new Set(pos.rows.map(r => r.section))], [pos.rows])
   const visRows = useMemo(() => {
     let rows = pos.rows.filter(r => section === 'all' ? true : r.section === section)
-    if (section === 'all') rows = rows.filter(r => (r.allocation || 0) !== 0 || (r.catch_total || 0) !== 0 || r.since_t !== 0)
+    if (section === 'all') rows = rows.filter(r => (r.allocation || 0) !== 0 || (r.catch_total || 0) !== 0 || r.since_t !== 0 || r.adj_t !== 0)
     return rows
   }, [pos.rows, section])
 
@@ -206,6 +234,7 @@ export default function Quota() {
                 <th style={thR}>Catch NOR t</th>
                 <th style={thR}>Balance t</th>
                 <th style={thR}>Since stmt t</th>
+                <th style={thR}>Swaps t</th>
                 <th style={thR}>Est. balance t</th>
               </tr>
             </thead>
@@ -225,21 +254,70 @@ export default function Quota() {
                     <td style={tdR}>{t3(r.catch_nor)}</td>
                     <td style={tdR}>{t3(r.balance)}</td>
                     <td style={tdR}>{r.since_t ? t3(r.since_t) : '—'}</td>
+                    <td style={{ ...tdR, color: r.adj_t > 0 ? '#15803d' : r.adj_t < 0 ? '#b91c1c' : 'inherit' }}>
+                      {r.adj_t ? (r.adj_t > 0 ? '+' : '') + t3(r.adj_t) : '—'}
+                    </td>
                     <td style={{ ...tdR, fontWeight: 700, color: warn ? '#b91c1c' : near ? '#c2410c' : 'var(--navy)' }}>
                       {t3(est)}
                     </td>
                   </tr>
                 )
               })}
-              {!visRows.length && <tr><td style={td} colSpan={7} className="muted">Nothing to show — upload an AFPO statement and trip reports.</td></tr>}
+              {!visRows.length && <tr><td style={td} colSpan={8} className="muted">Nothing to show — upload an AFPO statement and trip reports.</td></tr>}
             </tbody>
           </table>
         </Scroll>
         <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem', marginBottom: 0 }}>
-          Est. balance = AFPO balance minus logbook catch from trips landed after {snapshot ? fmtDate(snapshot.last_landing_date) : 'the statement date'}.
-          Year-straddling trips book each catch to its catch date's year.
+          Est. balance = AFPO balance, minus logbook catch from trips landed after {snapshot ? fmtDate(snapshot.last_landing_date) : 'the statement date'}.
+          Year-straddling trips book each catch to its catch date's year. What-if swaps & rentals below also feed the Est. balance.
         </p>
       </div>
+
+      {isSkipper && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <h3 style={{ marginTop: 0 }}>Swaps & rentals — what-if ({year})</h3>
+          <p className="muted" style={{ fontSize: '0.82rem' }}>
+            Try a swap or rental before it's official — e.g. 20t NS Cod OUT for 100t NS Saithe IN.
+            Either side can be left blank for a one-way rental. Entries adjust the Est. balance column until you remove them.
+          </p>
+          <form onSubmit={addAdjustment} style={{ display: 'grid', gap: '0.5rem', maxWidth: 560 }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ width: 36, fontWeight: 700, color: '#b91c1c' }}>OUT</span>
+              <select value={outStock} onChange={e => setOutStock(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+                <option value="">— stock —</option>
+                {(snapshot?.lines || []).map(l => <option key={l.id || l.stock} value={l.stock}>{l.stock}</option>)}
+              </select>
+              <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={outT} onChange={e => setOutT(e.target.value)} style={{ width: 110 }} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ width: 36, fontWeight: 700, color: '#15803d' }}>IN</span>
+              <select value={inStock} onChange={e => setInStock(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+                <option value="">— stock —</option>
+                {(snapshot?.lines || []).map(l => <option key={l.id || l.stock} value={l.stock}>{l.stock}</option>)}
+              </select>
+              <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={inT} onChange={e => setInT(e.target.value)} style={{ width: 110 }} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <input placeholder="Note, e.g. swap with WK170 (optional)" value={adjNote} onChange={e => setAdjNote(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+              <button type="submit">Add</button>
+            </div>
+          </form>
+          {adjustments.filter(a => Number(a.year) === Number(year)).length > 0 && (
+            <div style={{ marginTop: '0.8rem' }}>
+              {adjustments.filter(a => Number(a.year) === Number(year)).map(a => (
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0', borderTop: '1px solid var(--border)', fontSize: '0.88rem', flexWrap: 'wrap' }}>
+                  <span>
+                    <strong style={{ color: a.direction === 'in' ? '#15803d' : '#b91c1c' }}>{a.direction.toUpperCase()}</strong>{' '}
+                    {Number(a.tonnes).toLocaleString('en-GB', { maximumFractionDigits: 3 })} t {a.stock}
+                    {a.note && <span className="muted"> — {a.note}</span>}
+                  </span>
+                  <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem' }} onClick={() => deleteAdjustment(a)}>remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {(pos.nonquotaRows.length > 0 || pos.unmappedRows.length > 0) && (
         <div className="card" style={{ marginBottom: '1rem' }}>

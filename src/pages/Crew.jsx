@@ -7,6 +7,7 @@ import { useAuth } from '../AuthContext'
 const STATUSES = ['on_boat', 'on_leave', 'former']
 const STATUS_LABEL = { on_boat: 'On Boat', on_leave: 'On Leave', former: 'Former' }
 const STATUS_COLOR = { on_boat: 'var(--green)', on_leave: 'var(--amber)', former: 'var(--grey-400)' }
+const TYPE_LABEL = { contracted: 'Contracted (agency)', self_employed: 'Self-employed (UK)' }
 
 export default function Crew() {
   const { appUser } = useAuth()
@@ -16,6 +17,7 @@ export default function Crew() {
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [newStatus, setNewStatus] = useState('on_leave')
+  const [newType, setNewType] = useState('contracted')
   const [busy, setBusy] = useState(false)
 
   const canEdit = appUser?.role === 'skipper'
@@ -43,6 +45,7 @@ export default function Crew() {
       fleet_id: appUser.fleet_id,
       full_name: newName.trim(),
       status: newStatus,
+      crew_type: newType,
     })
     setBusy(false)
     if (error) {
@@ -50,6 +53,7 @@ export default function Crew() {
     } else {
       setNewName('')
       setNewStatus('on_leave')
+      setNewType('contracted')
       setAdding(false)
       loadCrew()
     }
@@ -57,6 +61,12 @@ export default function Crew() {
 
   async function updateStatus(id, status) {
     const { error } = await supabase.from('crew').update({ status }).eq('id', id)
+    if (error) setError(error.message)
+    else loadCrew()
+  }
+
+  async function updateType(id, crew_type) {
+    const { error } = await supabase.from('crew').update({ crew_type }).eq('id', id)
     if (error) setError(error.message)
     else loadCrew()
   }
@@ -107,6 +117,16 @@ export default function Crew() {
                 {STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
               </select>
             </label>
+            <label style={{ display: 'block', marginBottom: '1rem' }}>
+              <div style={{ marginBottom: '0.3rem', fontWeight: 600 }}>Type</div>
+              <select value={newType} onChange={(e) => setNewType(e.target.value)}>
+                <option value="contracted">{TYPE_LABEL.contracted}</option>
+                <option value="self_employed">{TYPE_LABEL.self_employed}</option>
+              </select>
+              <div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}>
+                Self-employed rotation crew get no contracts or box bonus — they're listed for the rota.
+              </div>
+            </label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Add'}</button>
               <button type="button" className="secondary" onClick={() => { setAdding(false); setNewName(''); setError('') }}>Cancel</button>
@@ -126,6 +146,7 @@ export default function Crew() {
               <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border)' }}>
                 <th style={{ padding: '0.6rem 0.4rem' }}>Name</th>
                 <th style={{ padding: '0.6rem 0.4rem' }}>Status</th>
+                <th style={{ padding: '0.6rem 0.4rem' }}>Type</th>
                 {canEdit && <th style={{ padding: '0.6rem 0.4rem', textAlign: 'right' }}>Actions</th>}
               </tr>
             </thead>
@@ -146,6 +167,20 @@ export default function Crew() {
                       <span style={{ color: STATUS_COLOR[c.status], fontWeight: 600 }}>
                         {STATUS_LABEL[c.status]}
                       </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '0.6rem 0.4rem' }}>
+                    {canEdit ? (
+                      <select
+                        value={c.crew_type || 'contracted'}
+                        onChange={(e) => updateType(c.id, e.target.value)}
+                        style={{ width: 'auto', padding: '0.3rem 0.5rem', fontSize: '0.85rem' }}
+                      >
+                        <option value="contracted">Contracted</option>
+                        <option value="self_employed">Self-employed</option>
+                      </select>
+                    ) : (
+                      <span className="muted">{(c.crew_type || 'contracted') === 'self_employed' ? 'Self-employed' : 'Contracted'}</span>
                     )}
                   </td>
                   {canEdit && (

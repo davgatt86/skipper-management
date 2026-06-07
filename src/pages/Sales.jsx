@@ -178,7 +178,7 @@ export default function Sales() {
       let healed = ''
       // self-heal landings that lost their crew (duplicate-key bug)
       if (!l.locked && (l.landing_crew || []).length === 0) {
-        const aboard = await onBoatCrewIds()
+        const aboard = await aboardOnDate(date)
         if (aboard.length) {
           const { error: he } = await supabase.from('landing_crew')
             .insert(aboard.map(crew_id => ({ landing_id: l.id, crew_id })))
@@ -192,7 +192,7 @@ export default function Sales() {
         .eq('id', l.id)
       return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx${healed}`
     }
-    const aboard = await onBoatCrewIds()
+    const aboard = await aboardOnDate(date)
     if (!aboard.length) return ' — no crew marked on boat, crew landing not created'
     const { data: ins, error: ie } = await supabase.from('landings')
       .insert({ fleet_id: appUser.fleet_id, landing_date: date, boxes: Number(boxes), notes: 'Auto from sales notes', locked: false, created_by: appUser.id, sales_keys: [key] })
@@ -204,9 +204,21 @@ export default function Sales() {
     return ` → crew landing created (${num(boxes)} bx, ${aboard.length} crew aboard)`
   }
 
-  async function onBoatCrewIds() {
-    const { data: crewRows } = await supabase.from('crew').select('id, status').is('archived_at', null)
-    return (crewRows || []).filter(c => c.status === 'on_boat').map(c => c.id)
+  // Crew aboard for a landing date = crew with an agency contract covering
+  // it; falls back to contracted on-boat crew. Self-employed rotation crew
+  // never earn box bonus so they're excluded from both paths.
+  async function aboardOnDate(date) {
+    const [ctRes, cRes] = await Promise.all([
+      supabase.from('contracts').select('crew_id, start_date, end_date'),
+      supabase.from('crew').select('id, status, archived_at, crew_type'),
+    ])
+    const crewRows = (cRes.data || []).filter(c => !c.archived_at)
+    const live = new Set(crewRows.map(c => c.id))
+    const ids = [...new Set((ctRes.data || [])
+      .filter(ct => ct.start_date <= date && (!ct.end_date || date <= ct.end_date))
+      .map(ct => ct.crew_id))].filter(id => live.has(id))
+    if (ids.length) return ids
+    return crewRows.filter(c => c.status === 'on_boat' && c.crew_type !== 'self_employed').map(c => c.id)
   }
 
   async function deleteLanding(l) {

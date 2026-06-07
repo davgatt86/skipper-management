@@ -33,7 +33,7 @@ export default function CrewHub() {
     async function load() {
       const monthStart = new Date().toISOString().slice(0, 8) + '01'
       const [cRes, ctRes, lRes, sRes, pRes] = await Promise.all([
-        supabase.from('crew').select('id, full_name, status').is('archived_at', null).order('full_name'),
+        supabase.from('crew').select('id, full_name, status, crew_type').is('archived_at', null).order('full_name'),
         supabase.from('contracts').select('id, crew_id, start_date, end_date, status, going_home_bonus').order('start_date', { ascending: false }),
         supabase.from('landings').select('id, landing_date, boxes, landing_crew(crew_id)').gte('landing_date', monthStart),
         supabase.from('settings').select('*').maybeSingle(),
@@ -123,11 +123,11 @@ export default function CrewHub() {
                 return (
                   <li key={c.id} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <strong>{c.full_name}</strong>
+                      <strong>{c.full_name}{c.crew_type === 'self_employed' && <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem' }}> · self-employed</span>}</strong>
                       <span style={{ color: STATUS_COLOR[c.status], fontWeight: 600 }}>{STATUS_LABEL[c.status]}</span>
                     </div>
                     <div className="muted" style={{ fontSize: '0.85rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.2rem' }}>
-                      {c.status === 'on_boat' && (
+                      {c.status === 'on_boat' && c.crew_type !== 'self_employed' && (
                         <>
                           {i.aboardMonths != null && <span>{i.aboardMonths} months aboard</span>}
                           <span>{i.monthBoxes ? i.monthBoxes.toLocaleString('en-GB') : 0} boxes this month → {money(i.monthBonus || 0, cur)}</span>

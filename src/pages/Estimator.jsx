@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Link } from "react-router-dom";
+import BackNav from "../BackNav";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -12,12 +12,14 @@ import autoTable from "jspdf-autotable";
    - Estimated gross per market, side by side, CSV export
    ============================================================ */
 
-const FONT = `"DM Sans", -apple-system, sans-serif`;
-const MONO = `"DM Mono", ui-monospace, monospace`;
+const FONT = `inherit`;
+const MONO = `ui-monospace, SFMono-Regular, monospace`;
+// App light theme (matches index.css): ink doubles as the primary button
+// colour, so navy keeps those buttons looking like the rest of the app.
 const C = {
-  bg: "#0f1419", panel: "#1a2129", panel2: "#222b35", line: "#33404d",
-  ink: "#e8edf2", dim: "#8b9aa8", pd: "#4a9eff", dk: "#ff7a45",
-  good: "#3ddc84", warn: "#ffcc44", bad: "#ff5470",
+  bg: "#ffffff", panel: "#FAFAFA", panel2: "#F2F2F2", line: "#d0d7de",
+  ink: "#1F3864", dim: "#6b7280", pd: "#2E75B6", dk: "#c2410c",
+  good: "#15803d", warn: "#b45309", bad: "#C00000",
 };
 
 /* Name-based grade dictionary: species -> size token -> {pd grade, dk sort, conf}
@@ -547,7 +549,6 @@ export default function Estimator(){
   return(
     <div style={{minHeight:"100vh",background:C.bg,color:C.ink,fontFamily:FONT,paddingBottom:80}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap');
         *{box-sizing:border-box} input,select{font-family:${MONO}}
         table{border-collapse:collapse;width:100%}
         th,td{padding:7px 10px;border-bottom:1px solid ${C.line};text-align:left;font-size:13px}
@@ -555,12 +556,12 @@ export default function Estimator(){
         td.r,th.r{text-align:right}
         .ci{width:70px;background:${C.panel2};border:1px solid ${C.line};color:${C.ink};padding:4px 6px;border-radius:5px;text-align:right}
         .si{background:${C.panel2};border:1px solid ${C.line};color:${C.ink};padding:4px 6px;border-radius:5px}
-        tr:hover td{background:rgba(255,255,255,.02)}
+        tr:hover td{background:rgba(31,56,100,.04)}
       `}</style>
 
       <div style={{borderBottom:`1px solid ${C.line}`,padding:"18px 22px",background:C.panel,position:"sticky",top:0,zIndex:10}}>
         <div style={{display:"flex",alignItems:"baseline",gap:14,flexWrap:"wrap"}}>
-          <Link to="/" style={{color:C.dim,fontSize:13,textDecoration:"none"}}>← Dashboard</Link>
+          <BackNav />
           <div style={{fontSize:22,fontWeight:800,letterSpacing:"-.02em"}}>Trip Estimator</div>
           <div style={{color:C.dim,fontSize:13}}>Peterhead vs Hanstholm</div>
           <div style={{marginLeft:"auto",display:"flex",gap:18}}>

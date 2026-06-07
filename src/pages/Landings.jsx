@@ -36,12 +36,13 @@ export default function Landings() {
   const [fNotes, setFNotes] = useState('')
   const [fCrew, setFCrew] = useState([])
   const [busy, setBusy] = useState(false)
+  const [contracts, setContracts] = useState([])
 
   const canEdit = appUser?.role === 'skipper'
 
   async function loadAll() {
     setLoading(true)
-    const [lRes, cRes, sRes] = await Promise.all([
+    const [lRes, cRes, sRes, ctRes] = await Promise.all([
       supabase
         .from('landings')
         .select('*, landing_crew(crew_id)')
@@ -49,15 +50,17 @@ export default function Landings() {
         .order('created_at', { ascending: false }),
       supabase
         .from('crew')
-        .select('id, full_name, status, archived_at')
+        .select('id, full_name, status, archived_at, crew_type')
         .order('full_name'),
       supabase.from('settings').select('*').maybeSingle(),
+      supabase.from('contracts').select('crew_id, start_date, end_date'),
     ])
-    const firstError = lRes.error || cRes.error || sRes.error
+    const firstError = lRes.error || cRes.error || sRes.error || ctRes.error
     if (firstError) setError(firstError.message)
     setLandings(lRes.data || [])
     setCrew(cRes.data || [])
     setSettings(sRes.data || null)
+    setContracts(ctRes.data || [])
     setLoading(false)
   }
 
@@ -67,12 +70,29 @@ export default function Landings() {
   for (const c of crew) crewName[c.id] = c.full_name
   const activeCrew = crew.filter(c => !c.archived_at)
 
+  // Contracted crew aboard on a date = crew with an agency contract
+  // covering it (open-ended contracts count). Self-employed rotation
+  // crew don't earn box bonus, so they're never auto-added.
+  function aboardOn(date) {
+    const ids = [...new Set(contracts
+      .filter(ct => ct.start_date <= date && (!ct.end_date || date <= ct.end_date))
+      .map(ct => ct.crew_id))]
+    return ids.filter(id => {
+      const c = crew.find(x => x.id === id)
+      return c && !c.archived_at
+    })
+  }
+
   function openAdd() {
     setEditingId(null)
     setFDate(new Date().toISOString().slice(0, 10))
     setFBoxes('')
     setFNotes('')
-    setFCrew(activeCrew.filter(c => c.status === 'on_boat').map(c => c.id))
+    const today = new Date().toISOString().slice(0, 10)
+    const fromContracts = aboardOn(today)
+    setFCrew(fromContracts.length
+      ? fromContracts
+      : activeCrew.filter(c => c.status === 'on_boat' && c.crew_type !== 'self_employed').map(c => c.id))
     setError('')
     setFormOpen(true)
   }
@@ -198,19 +218,37 @@ export default function Landings() {
   const boxRate = settings ? Number(settings.box_rate) : null
   const cur = settings?.currency || ''
 
-  // Landings that lost their crew (duplicate-key bug): one-click repair
-  // adds the current on-boat crew so box bonuses count again. Edit any
-  // landing afterwards if the crew for that trip was different.
+  // Landings with no crew aboard: repair adds the crew whose contract
+  // covered each landing date (falls back to contracted on-boat crew if
+  // no contract matches). "Remove all" clears crew from every unlocked
+  // landing so a clean contract-based re-add can follow.
   const crewlessLandings = landings.filter(l => !l.locked && (l.landing_crew || []).length === 0)
+  const unlockedWithCrew = landings.filter(l => !l.locked && (l.landing_crew || []).length > 0)
+
   async function repairCrewless() {
-    const aboard = activeCrew.filter(c => c.status === 'on_boat').map(c => c.id)
-    if (!aboard.length) { setError('No crew marked on boat — set crew status first.'); return }
-    if (!confirm(`Add the ${aboard.length} on-boat crew to ${crewlessLandings.length} landing${crewlessLandings.length === 1 ? '' : 's'} with no crew aboard?`)) return
+    const fallback = activeCrew.filter(c => c.status === 'on_boat' && c.crew_type !== 'self_employed').map(c => c.id)
+    if (!confirm(`Add crew (from contract dates) to ${crewlessLandings.length} landing${crewlessLandings.length === 1 ? '' : 's'} with no crew aboard?`)) return
     setBusy(true)
+    let skipped = 0
     for (const l of crewlessLandings) {
+      const aboard = aboardOn(l.landing_date)
+      const ids = aboard.length ? aboard : fallback
+      if (!ids.length) { skipped++; continue }
       const { error: e } = await supabase.from('landing_crew')
-        .insert(aboard.map(crew_id => ({ landing_id: l.id, crew_id })))
+        .insert(ids.map(crew_id => ({ landing_id: l.id, crew_id })))
       if (e && e.code !== '23505') { setError(`${fmtDate(l.landing_date)}: ${e.message}`); setBusy(false); return }
+    }
+    setBusy(false)
+    if (skipped) setError(`${skipped} landing(s) skipped — no contract covered the date and no contracted crew marked on boat.`)
+    loadAll()
+  }
+
+  async function removeAllCrew() {
+    if (!confirm(`Remove ALL crew from ${unlockedWithCrew.length} unlocked landing${unlockedWithCrew.length === 1 ? '' : 's'}? Locked (closed) months are left alone. You can re-add from contract dates afterwards.`)) return
+    setBusy(true)
+    for (const l of unlockedWithCrew) {
+      const { error: e } = await supabase.from('landing_crew').delete().eq('landing_id', l.id)
+      if (e) { setError(`${fmtDate(l.landing_date)}: ${e.message}`); setBusy(false); return }
     }
     setBusy(false)
     loadAll()
@@ -236,16 +274,27 @@ export default function Landings() {
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
-      {canEdit && crewlessLandings.length > 0 && (
-        <div className="card" style={{ borderColor: '#c2410c' }}>
-          <p style={{ marginBottom: '0.6rem' }}>
-            <strong>{crewlessLandings.length} landing{crewlessLandings.length === 1 ? ' has' : 's have'} no crew aboard</strong>
-            <span className="muted"> — boxes won't count towards anyone's bonus until crew are added.</span>
+      {canEdit && (crewlessLandings.length > 0 || unlockedWithCrew.length > 0) && (
+        <details className="card" style={crewlessLandings.length ? { borderColor: '#c2410c' } : {}}>
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+            Crew tools{crewlessLandings.length > 0 && <span style={{ color: '#c2410c' }}> — {crewlessLandings.length} landing{crewlessLandings.length === 1 ? ' has' : 's have'} no crew aboard</span>}
+          </summary>
+          <p className="muted" style={{ fontSize: '0.85rem', margin: '0.6rem 0' }}>
+            Crew are matched from contract dates. Boxes don't count towards anyone's bonus until crew are aboard. Locked months are never touched.
           </p>
-          <button onClick={repairCrewless} disabled={busy}>
-            {busy ? 'Repairing…' : 'Add current on-boat crew to all'}
-          </button>
-        </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {crewlessLandings.length > 0 && (
+              <button onClick={repairCrewless} disabled={busy}>
+                {busy ? 'Working…' : `Add crew from contract dates (${crewlessLandings.length})`}
+              </button>
+            )}
+            {unlockedWithCrew.length > 0 && (
+              <button className="secondary" onClick={removeAllCrew} disabled={busy} style={{ color: 'var(--red)', borderColor: 'var(--red)' }}>
+                Remove all crew from unlocked landings ({unlockedWithCrew.length})
+              </button>
+            )}
+          </div>
+        </details>
       )}
 
       {formOpen && (
@@ -258,7 +307,7 @@ export default function Landings() {
             </label>
             <label style={{ display: 'block', marginBottom: '1rem' }}>
               <div style={{ marginBottom: '0.3rem', fontWeight: 600 }}>Boxes</div>
-              <input type="number" min="1" step="1" value={fBoxes} onChange={(e) => setFBoxes(e.target.value)} placeholder="e.g. 250" required />
+              <input type="number" min="0.01" step="0.01" value={fBoxes} onChange={(e) => setFBoxes(e.target.value)} placeholder="e.g. 825.25" required />
               {fBoxes !== '' && boxRate !== null && (
                 <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.3rem' }}>
                   Bonus per man: {money(Number(fBoxes) * boxRate, cur)} ({money(boxRate, cur)}/box)
