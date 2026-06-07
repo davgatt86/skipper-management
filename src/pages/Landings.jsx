@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import BackNav from '../BackNav'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -113,16 +114,28 @@ export default function Landings() {
         .eq('id', editingId)
       if (upErr) { setError(upErr.message); setBusy(false); return }
 
-      const { error: delErr } = await supabase
-        .from('landing_crew')
-        .delete()
-        .eq('landing_id', editingId)
-      if (delErr) { setError(delErr.message); setBusy(false); return }
-
-      const { error: lcErr } = await supabase
-        .from('landing_crew')
-        .insert(fCrew.map(crew_id => ({ landing_id: editingId, crew_id })))
-      if (lcErr) { setError(lcErr.message); setBusy(false); return }
+      // Diff the crew list instead of delete-all-then-reinsert: a retry or
+      // double-tap on a slow connection could land between the two steps,
+      // wiping the crew and then failing on landing_crew_pkey. Removing
+      // only de-ticked crew and adding only new ones is safe to repeat.
+      const before = (landings.find(x => x.id === editingId)?.landing_crew || []).map(x => x.crew_id)
+      const toRemove = before.filter(id => !fCrew.includes(id))
+      const toAdd = fCrew.filter(id => !before.includes(id))
+      if (toRemove.length) {
+        const { error: delErr } = await supabase
+          .from('landing_crew')
+          .delete()
+          .eq('landing_id', editingId)
+          .in('crew_id', toRemove)
+        if (delErr) { setError(delErr.message); setBusy(false); return }
+      }
+      if (toAdd.length) {
+        const { error: lcErr } = await supabase
+          .from('landing_crew')
+          .insert(toAdd.map(crew_id => ({ landing_id: editingId, crew_id })))
+        // 23505 duplicate key = row already there, which is what we want
+        if (lcErr && lcErr.code !== '23505') { setError(lcErr.message); setBusy(false); return }
+      }
     } else {
       const { data, error: insErr } = await supabase
         .from('landings')
@@ -141,7 +154,7 @@ export default function Landings() {
       const { error: lcErr } = await supabase
         .from('landing_crew')
         .insert(fCrew.map(crew_id => ({ landing_id: data.id, crew_id })))
-      if (lcErr) {
+      if (lcErr && lcErr.code !== '23505') {
         setError(`Landing saved but crew list failed: ${lcErr.message}. Edit the landing to fix the crew.`)
         setBusy(false)
         loadAll()
@@ -185,10 +198,28 @@ export default function Landings() {
   const boxRate = settings ? Number(settings.box_rate) : null
   const cur = settings?.currency || ''
 
+  // Landings that lost their crew (duplicate-key bug): one-click repair
+  // adds the current on-boat crew so box bonuses count again. Edit any
+  // landing afterwards if the crew for that trip was different.
+  const crewlessLandings = landings.filter(l => !l.locked && (l.landing_crew || []).length === 0)
+  async function repairCrewless() {
+    const aboard = activeCrew.filter(c => c.status === 'on_boat').map(c => c.id)
+    if (!aboard.length) { setError('No crew marked on boat — set crew status first.'); return }
+    if (!confirm(`Add the ${aboard.length} on-boat crew to ${crewlessLandings.length} landing${crewlessLandings.length === 1 ? '' : 's'} with no crew aboard?`)) return
+    setBusy(true)
+    for (const l of crewlessLandings) {
+      const { error: e } = await supabase.from('landing_crew')
+        .insert(aboard.map(crew_id => ({ landing_id: l.id, crew_id })))
+      if (e && e.code !== '23505') { setError(`${fmtDate(l.landing_date)}: ${e.message}`); setBusy(false); return }
+    }
+    setBusy(false)
+    loadAll()
+  }
+
   return (
     <div className="container">
       <div style={{ marginBottom: '1rem' }}>
-        <Link to="/" style={{ fontSize: '0.9rem' }}>← Back to Dashboard</Link>
+        <BackNav />
       </div>
 
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -204,6 +235,18 @@ export default function Landings() {
       </header>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
+
+      {canEdit && crewlessLandings.length > 0 && (
+        <div className="card" style={{ borderColor: '#c2410c' }}>
+          <p style={{ marginBottom: '0.6rem' }}>
+            <strong>{crewlessLandings.length} landing{crewlessLandings.length === 1 ? ' has' : 's have'} no crew aboard</strong>
+            <span className="muted"> — boxes won't count towards anyone's bonus until crew are added.</span>
+          </p>
+          <button onClick={repairCrewless} disabled={busy}>
+            {busy ? 'Repairing…' : 'Add current on-boat crew to all'}
+          </button>
+        </div>
+      )}
 
       {formOpen && (
         <div className="card">

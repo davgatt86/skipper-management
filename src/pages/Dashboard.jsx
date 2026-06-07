@@ -6,7 +6,6 @@ const tile = {
   textAlign: 'center', textDecoration: 'none', color: 'var(--navy)', fontWeight: 700, fontSize: '1.05rem',
   background: 'var(--grey-50)'
 }
-const tileSoon = { ...tile, color: 'var(--grey-400)', background: 'transparent', cursor: 'default' }
 
 export default function Dashboard() {
   const { appUser, signOut } = useAuth()
@@ -32,11 +31,14 @@ export default function Dashboard() {
           {fleetTools && (
             <Link to="/estimator" style={tile}>Trip Estimator</Link>
           )}
-          {fleetTools && (
-            <div style={tileSoon}>Quota<div style={{ fontSize: '0.75rem', fontWeight: 400 }}>coming soon</div></div>
+          {appUser?.role === 'skipper' && (
+            <Link to="/quota" style={tile}>Quota</Link>
           )}
           {fleetTools && (
             <Link to="/squareup" style={tile}>Square Up</Link>
+          )}
+          {fleetTools && (
+            <Link to="/rota" style={tile}>Rota</Link>
           )}
           <Link to="/crew-hub" style={tile}>Crew</Link>
         </div>

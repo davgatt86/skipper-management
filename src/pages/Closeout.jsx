@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import BackNav from '../BackNav'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -287,7 +288,7 @@ export default function Closeout() {
   return (
     <div className="container">
       <div style={{ marginBottom: '1rem' }}>
-        <Link to="/" style={{ fontSize: '0.9rem' }}>← Back to Dashboard</Link>
+        <BackNav />
       </div>
 
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>

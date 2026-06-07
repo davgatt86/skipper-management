@@ -171,27 +171,42 @@ export default function Sales() {
   async function feedCrewLanding(date, boxes, key) {
     if (!isSkipper || !date || !boxes) return ''
     const { data: existing, error } = await supabase.from('landings')
-      .select('id, boxes, locked, sales_keys').eq('landing_date', date)
+      .select('id, boxes, locked, sales_keys, landing_crew(crew_id)').eq('landing_date', date)
     if (error) return ` (crew landing: ${error.message})`
     const l = (existing || [])[0]
     if (l) {
-      if ((l.sales_keys || []).includes(key)) return ''
+      let healed = ''
+      // self-heal landings that lost their crew (duplicate-key bug)
+      if (!l.locked && (l.landing_crew || []).length === 0) {
+        const aboard = await onBoatCrewIds()
+        if (aboard.length) {
+          const { error: he } = await supabase.from('landing_crew')
+            .insert(aboard.map(crew_id => ({ landing_id: l.id, crew_id })))
+          if (!he || he.code === '23505') healed = ` — re-added ${aboard.length} crew aboard`
+        }
+      }
+      if ((l.sales_keys || []).includes(key)) return healed
       if (l.locked) return ' — crew landing locked (month closed), not updated'
       const { error: e } = await supabase.from('landings')
         .update({ boxes: Math.round((Number(l.boxes || 0) + Number(boxes)) * 100) / 100, sales_keys: [...(l.sales_keys || []), key] })
         .eq('id', l.id)
-      return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx`
+      return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx${healed}`
     }
-    const { data: crewRows, error: ce } = await supabase.from('crew').select('id, status').is('archived_at', null)
-    if (ce) return ` (crew landing: ${ce.message})`
-    const aboard = (crewRows || []).filter(c => c.status === 'on_boat').map(c => c.id)
+    const aboard = await onBoatCrewIds()
     if (!aboard.length) return ' — no crew marked on boat, crew landing not created'
     const { data: ins, error: ie } = await supabase.from('landings')
       .insert({ fleet_id: appUser.fleet_id, landing_date: date, boxes: Number(boxes), notes: 'Auto from sales notes', locked: false, created_by: appUser.id, sales_keys: [key] })
       .select('id').single()
     if (ie) return ` (crew landing: ${ie.message})`
     const { error: lce } = await supabase.from('landing_crew').insert(aboard.map(crew_id => ({ landing_id: ins.id, crew_id })))
-    return lce ? ` (crew aboard failed: ${lce.message} — edit the landing)` : ` → crew landing created (${num(boxes)} bx, ${aboard.length} crew aboard)`
+    // 23505 duplicate key = rows already there; not a failure
+    if (lce && lce.code !== '23505') return ` (crew aboard failed: ${lce.message} — edit the landing)`
+    return ` → crew landing created (${num(boxes)} bx, ${aboard.length} crew aboard)`
+  }
+
+  async function onBoatCrewIds() {
+    const { data: crewRows } = await supabase.from('crew').select('id, status').is('archived_at', null)
+    return (crewRows || []).filter(c => c.status === 'on_boat').map(c => c.id)
   }
 
   async function deleteLanding(l) {
