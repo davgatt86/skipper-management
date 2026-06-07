@@ -247,6 +247,15 @@ export default function Landings() {
     loadAll()
   }
 
+  // Dates with more than one landing — usually a manual entry plus the
+  // auto one from sales notes, which double-counts the month's boxes.
+  const dupDates = (() => {
+    const byDate = {}
+    for (const l of landings) (byDate[l.landing_date] = byDate[l.landing_date] || []).push(l)
+    return Object.entries(byDate).filter(([, ls]) => ls.length > 1)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+  })()
+
   async function removeAllCrew() {
     if (!confirm(`Remove ALL crew from ${unlockedWithCrew.length} unlocked landing${unlockedWithCrew.length === 1 ? '' : 's'}? Locked (closed) months are left alone. You can re-add from contract dates afterwards.`)) return
     setBusy(true)
@@ -277,6 +286,33 @@ export default function Landings() {
       </header>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
+
+      {canEdit && dupDates.length > 0 && (
+        <div className="card" style={{ borderColor: '#c2410c' }}>
+          <p style={{ marginBottom: '0.6rem' }}>
+            <strong>{dupDates.length} date{dupDates.length === 1 ? ' has' : 's have'} more than one landing</strong>
+            <span className="muted"> — boxes count twice for the month. Keep the row that matches the sales note (usually "Auto from sales notes") and delete the manual duplicate.</span>
+          </p>
+          {dupDates.map(([date, ls]) => (
+            <div key={date} style={{ borderTop: '1px solid var(--border)', padding: '0.5rem 0' }}>
+              <strong>{fmtDate(date)}</strong>
+              {ls.map(l => (
+                <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.25rem 0', fontSize: '0.88rem' }}>
+                  <span>
+                    {Number(l.boxes).toLocaleString('en-GB')} bx
+                    <span className="muted"> — {l.notes || 'manual entry'} · {(l.landing_crew || []).length} crew{(l.sales_keys || []).length ? ' · linked to sales note' : ''}{l.locked ? ' · locked' : ''}</span>
+                  </span>
+                  {!l.locked && (
+                    <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem', color: 'var(--red)', borderColor: 'var(--red)' }} onClick={() => deleteLanding(l)}>
+                      delete this one
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {canEdit && (crewlessLandings.length > 0 || unlockedWithCrew.length > 0) && (
         <details className="card" style={crewlessLandings.length ? { borderColor: '#c2410c' } : {}}>

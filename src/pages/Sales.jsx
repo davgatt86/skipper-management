@@ -173,7 +173,14 @@ export default function Sales() {
     const { data: existing, error } = await supabase.from('landings')
       .select('id, boxes, locked, sales_keys, landing_crew(crew_id)').eq('landing_date', date)
     if (error) return ` (crew landing: ${error.message})`
-    const l = (existing || [])[0]
+    const rows = existing || []
+    // If ANY landing on this date already has the note's key, never add the
+    // boxes again (re-uploads used to land them on a second, manual row —
+    // that's where doubled boxes came from). Target the row that already
+    // carries sales keys; a manual row on the same date is left alone.
+    const keyedAnywhere = rows.some(r => (r.sales_keys || []).includes(key))
+    const l = rows.find(r => (r.sales_keys || []).length > 0) || rows[0]
+    const dupNote = rows.length > 1 ? ` ⚠ ${rows.length} landings exist on ${date} — check Crew Landings for duplicates` : ''
     if (l) {
       let healed = ''
       // self-heal landings that lost their crew (duplicate-key bug)
@@ -187,12 +194,12 @@ export default function Sales() {
           else healed = ` (crew re-add failed: ${he.message})`
         }
       }
-      if ((l.sales_keys || []).includes(key)) return healed
+      if (keyedAnywhere) return healed + dupNote
       if (l.locked) return ' — crew landing locked (month closed), not updated'
       const { error: e } = await supabase.from('landings')
         .update({ boxes: Math.round((Number(l.boxes || 0) + Number(boxes)) * 100) / 100, sales_keys: [...(l.sales_keys || []), key] })
         .eq('id', l.id)
-      return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx${healed}`
+      return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx${healed}${dupNote}`
     }
     const aboard = await aboardOnDate(date)
     if (!aboard.length) return ' — no crew marked on boat, crew landing not created'
