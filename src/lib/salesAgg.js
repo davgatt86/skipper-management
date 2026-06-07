@@ -27,6 +27,25 @@ export function gradeLabel(r) {
   return (r.grade || '?') + (r.sub_grade ? ' · ' + r.sub_grade : '')
 }
 
+/* Grade ordering: biggest fish first = lowest grade number.
+ * A0, A+1, A1, A+2, A2 ... then Sort 1, Sort 2 ... then everything else
+ * alphabetically. A4 haddock sub-grades order Chipper > Metro > Mini Metro. */
+const SUB_ORDER = { 'Chipper': 1, 'Metro': 2, 'Mini Metro': 3 }
+export function gradeSortKey(label) {
+  const [g, sub] = String(label).split(' \u00b7 ').map(s => s.trim())
+  let major = 900, minor = 5
+  const m = g.match(/^A(\+)?(\d+)/i)
+  if (m) { major = Number(m[2]); minor = m[1] ? 0 : 1 } // A+n sits just before An
+  else {
+    const s = g.match(/^Sort\s*(\d+)/i)
+    if (s) { major = 500 + Number(s[1]); minor = 0 }
+  }
+  const subOrd = sub ? (SUB_ORDER[sub] || 9) : 0
+  return String(major).padStart(3, '0') + minor + String(subOrd) + g
+}
+export const sortGrades = (list, get = x => x.grade) =>
+  [...list].sort((x, y) => gradeSortKey(get(x)).localeCompare(gradeSortKey(get(y))))
+
 // grade(+sub) breakdown for one species
 export function gradesFor(rows, species) {
   const m = {}
@@ -36,8 +55,7 @@ export function gradesFor(rows, species) {
     const o = (m[k] = m[k] || { grade: k, value: 0, kg: 0, boxes: 0 })
     o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
   }
-  return Object.values(m).map(o => ({ ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes), pkg: o.kg ? r2(o.value / o.kg) : 0 }))
-    .sort((a, b) => (a.grade > b.grade ? 1 : -1))
+  return sortGrades(Object.values(m).map(o => ({ ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes), pkg: o.kg ? r2(o.value / o.kg) : 0 })))
 }
 
 // buyer -> totals + top species by value
@@ -56,17 +74,30 @@ export function byBuyer(rows) {
   }).sort((a, b) => b.value - a.value)
 }
 
-// what a buyer bought, species(+grade) level
-export function buyerDetail(rows, buyer) {
+// what a buyer bought, species level (drill further with buyerSpeciesGrades)
+export function buyerSpecies(rows, buyer) {
   const m = {}
   for (const r of rows) {
     if ((r.buyer || '?') !== buyer) continue
-    const k = (r.species_canon || r.species || '?') + ' ' + gradeLabel(r)
-    const o = (m[k] = m[k] || { item: k, value: 0, kg: 0, boxes: 0 })
+    const k = r.species_canon || r.species || '?'
+    const o = (m[k] = m[k] || { species: k, value: 0, kg: 0, boxes: 0 })
     o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
   }
   return Object.values(m).map(o => ({ ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes), pkg: o.kg ? r2(o.value / o.kg) : 0 }))
     .sort((a, b) => b.value - a.value)
+}
+
+// grade breakdown of one species for one buyer
+export function buyerSpeciesGrades(rows, buyer, species) {
+  const m = {}
+  for (const r of rows) {
+    if ((r.buyer || '?') !== buyer) continue
+    if ((r.species_canon || r.species || '?') !== species) continue
+    const k = gradeLabel(r)
+    const o = (m[k] = m[k] || { grade: k, value: 0, kg: 0, boxes: 0 })
+    o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
+  }
+  return sortGrades(Object.values(m).map(o => ({ ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes), pkg: o.kg ? r2(o.value / o.kg) : 0 })))
 }
 
 // monthly series for charts: [{m:'2026-01', label:'Jan', value, kg}]
