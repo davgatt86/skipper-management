@@ -15,6 +15,7 @@ const Estimator = lazy(() => import('./pages/Estimator'))
 const SquareUp = lazy(() => import('./squareup/SquareUp'))
 const Quota = lazy(() => import('./pages/Quota'))
 const Rota = lazy(() => import('./pages/Rota'))
+const Password = lazy(() => import('./pages/Password'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -104,6 +105,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <SquareUp />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/password" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Password />
             </Suspense>
           </ProtectedRoute>
         } />
