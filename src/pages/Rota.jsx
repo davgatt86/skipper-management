@@ -55,7 +55,7 @@ export default function Rota() {
       supabase.from('rota_trips').select('*').order('start_date'),
       supabase.from('rota_trip_crew').select('*'),
       supabase.from('rota_holidays').select('*').order('start_date'),
-      supabase.from('crew').select('id, full_name, status, archived_at'),
+      supabase.from('crew').select('id, full_name, status, archived_at, crew_type'),
     ])
     const err = t.error || tc.error || h.error || c.error
     if (err) { setError(err.message); return }
@@ -68,6 +68,9 @@ export default function Rota() {
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
 
   const crewName = useMemo(() => Object.fromEntries(crew.map(c => [c.id, c.full_name])), [crew])
+  // Rota crew = self-employed UK rotation lads only; contracted agency
+  // crew are managed through contracts, not the rota.
+  const rotaCrew = useMemo(() => crew.filter(c => c.crew_type === 'self_employed' && c.status !== 'former'), [crew])
 
   // day iso -> trip / holidays covering it
   const tripFor = iso => trips.find(t => t.start_date <= iso && iso <= t.end_date)
@@ -246,7 +249,7 @@ export default function Rota() {
               </div>
               {open && isSkipper && (
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-                  {crew.filter(c => c.status !== 'former').map(c => {
+                  {rotaCrew.map(c => {
                     const onTrip = t.crew_ids.includes(c.id)
                     const onHol = holidays.some(h => h.crew_id === c.id && !(h.end_date < t.start_date || t.end_date < h.start_date))
                     return (
@@ -288,7 +291,7 @@ export default function Rota() {
           <form onSubmit={saveHoliday} style={{ marginTop: '0.8rem', display: 'grid', gap: '0.6rem', maxWidth: 420 }}>
             <select value={hCrew} onChange={e => setHCrew(e.target.value)} required>
               <option value="">Crewman…</option>
-              {crew.filter(c => c.status !== 'former').map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              {rotaCrew.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
             </select>
             <label style={{ fontSize: '0.85rem' }}>From <input type="date" value={hStart} onChange={e => setHStart(e.target.value)} required /></label>
             <label style={{ fontSize: '0.85rem' }}>To <input type="date" value={hEnd} onChange={e => setHEnd(e.target.value)} required /></label>

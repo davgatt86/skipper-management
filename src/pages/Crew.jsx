@@ -135,12 +135,17 @@ export default function Crew() {
         </div>
       )}
 
-      <div className="card">
-        {loading && <p className="muted">Loading…</p>}
-        {!loading && crew.length === 0 && (
-          <p className="muted">No crew yet. {canEdit && 'Click "Add crewman" above to add your first.'}</p>
-        )}
-        {!loading && crew.length > 0 && (
+      {loading && <div className="card"><p className="muted">Loading…</p></div>}
+      {!loading && crew.length === 0 && (
+        <div className="card"><p className="muted">No crew yet. {canEdit && 'Click "Add crewman" above to add your first.'}</p></div>
+      )}
+      {!loading && [
+        ['contracted', 'Contracted crew (agency)', crew.filter(c => (c.crew_type || 'contracted') !== 'self_employed')],
+        ['self_employed', 'Self-employed crew (UK rotation)', crew.filter(c => c.crew_type === 'self_employed')],
+      ].map(([key, title, group]) => group.length === 0 ? null : (
+      <div className="card" key={key}>
+        <h2 style={{ marginTop: 0 }}>{title} <span className="muted" style={{ fontWeight: 400, fontSize: '0.9rem' }}>({group.length})</span></h2>
+        {(
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border)' }}>
@@ -151,7 +156,7 @@ export default function Crew() {
               </tr>
             </thead>
             <tbody>
-              {crew.map(c => (
+              {group.map(c => (
                 <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '0.6rem 0.4rem', fontWeight: 600 }}>{c.full_name}</td>
                   <td style={{ padding: '0.6rem 0.4rem' }}>
@@ -200,6 +205,7 @@ export default function Crew() {
           </table>
         )}
       </div>
+      ))}
     </div>
   )
 }

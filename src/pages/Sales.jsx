@@ -181,8 +181,10 @@ export default function Sales() {
         const aboard = await aboardOnDate(date)
         if (aboard.length) {
           const { error: he } = await supabase.from('landing_crew')
-            .insert(aboard.map(crew_id => ({ landing_id: l.id, crew_id })))
-          if (!he || he.code === '23505') healed = ` — re-added ${aboard.length} crew aboard`
+            .upsert(aboard.map(crew_id => ({ landing_id: l.id, crew_id })),
+                    { onConflict: 'landing_id,crew_id', ignoreDuplicates: true })
+          if (!he) healed = ` — re-added ${aboard.length} crew aboard`
+          else healed = ` (crew re-add failed: ${he.message})`
         }
       }
       if ((l.sales_keys || []).includes(key)) return healed
@@ -198,9 +200,10 @@ export default function Sales() {
       .insert({ fleet_id: appUser.fleet_id, landing_date: date, boxes: Number(boxes), notes: 'Auto from sales notes', locked: false, created_by: appUser.id, sales_keys: [key] })
       .select('id').single()
     if (ie) return ` (crew landing: ${ie.message})`
-    const { error: lce } = await supabase.from('landing_crew').insert(aboard.map(crew_id => ({ landing_id: ins.id, crew_id })))
-    // 23505 duplicate key = rows already there; not a failure
-    if (lce && lce.code !== '23505') return ` (crew aboard failed: ${lce.message} — edit the landing)`
+    const { error: lce } = await supabase.from('landing_crew')
+      .upsert(aboard.map(crew_id => ({ landing_id: ins.id, crew_id })),
+              { onConflict: 'landing_id,crew_id', ignoreDuplicates: true })
+    if (lce) return ` (crew aboard failed: ${lce.message} — edit the landing)`
     return ` → crew landing created (${num(boxes)} bx, ${aboard.length} crew aboard)`
   }
 

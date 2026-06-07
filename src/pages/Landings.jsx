@@ -150,11 +150,13 @@ export default function Landings() {
         if (delErr) { setError(delErr.message); setBusy(false); return }
       }
       if (toAdd.length) {
+        // upsert = ON CONFLICT DO NOTHING: a hidden duplicate no longer
+        // aborts the whole batch, and any error left is a real one we show
         const { error: lcErr } = await supabase
           .from('landing_crew')
-          .insert(toAdd.map(crew_id => ({ landing_id: editingId, crew_id })))
-        // 23505 duplicate key = row already there, which is what we want
-        if (lcErr && lcErr.code !== '23505') { setError(lcErr.message); setBusy(false); return }
+          .upsert(toAdd.map(crew_id => ({ landing_id: editingId, crew_id })),
+                  { onConflict: 'landing_id,crew_id', ignoreDuplicates: true })
+        if (lcErr) { setError(`Crew not saved: ${lcErr.message}`); setBusy(false); return }
       }
     } else {
       const { data, error: insErr } = await supabase
@@ -173,8 +175,9 @@ export default function Landings() {
 
       const { error: lcErr } = await supabase
         .from('landing_crew')
-        .insert(fCrew.map(crew_id => ({ landing_id: data.id, crew_id })))
-      if (lcErr && lcErr.code !== '23505') {
+        .upsert(fCrew.map(crew_id => ({ landing_id: data.id, crew_id })),
+                { onConflict: 'landing_id,crew_id', ignoreDuplicates: true })
+      if (lcErr) {
         setError(`Landing saved but crew list failed: ${lcErr.message}. Edit the landing to fix the crew.`)
         setBusy(false)
         loadAll()
@@ -235,8 +238,9 @@ export default function Landings() {
       const ids = aboard.length ? aboard : fallback
       if (!ids.length) { skipped++; continue }
       const { error: e } = await supabase.from('landing_crew')
-        .insert(ids.map(crew_id => ({ landing_id: l.id, crew_id })))
-      if (e && e.code !== '23505') { setError(`${fmtDate(l.landing_date)}: ${e.message}`); setBusy(false); return }
+        .upsert(ids.map(crew_id => ({ landing_id: l.id, crew_id })),
+                { onConflict: 'landing_id,crew_id', ignoreDuplicates: true })
+      if (e) { setError(`${fmtDate(l.landing_date)}: ${e.message}`); setBusy(false); return }
     }
     setBusy(false)
     if (skipped) setError(`${skipped} landing(s) skipped — no contract covered the date and no contracted crew marked on boat.`)
