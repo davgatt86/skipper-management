@@ -24,7 +24,7 @@ export function Section({ icon: Icon, title, count, accent = C.brass, children }
         <span style={{ display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 8, background: `${accent}26`, border: `1px solid ${accent}66`, flexShrink: 0 }}>
           <Icon size={15} color={accent} />
         </span>
-        <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 17, fontWeight: 600, letterSpacing: 0.3, flex: 1, color: C.ink }}>{title}</span>
+        <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: 0.3, flex: 1, color: C.ink }}>{title}</span>
         {count != null && <span style={{ color: C.dim, fontSize: 12, fontWeight: 500 }}>{count}</span>}
       </div>
       <div style={{ padding: 13 }}>{children}</div>

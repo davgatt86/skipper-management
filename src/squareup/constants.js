@@ -1,17 +1,19 @@
+// App light theme (matches index.css). ink doubles as dark-on-light text
+// and the dark side of accent gradients, so navy keeps it on brand.
 export const C = {
-  bg: '#0b1a2c',
-  bgDeep: '#08131f',
-  panel: '#16293d',
-  panel2: '#1d3550',
-  line: '#2a4c6b',
-  ink: '#e8f1f8',
-  dim: '#8badc7',
-  brass: '#d9a441',
-  brassDk: '#a8780f',
-  sea: '#4ab5ae',
-  red: '#d96459',
-  green: '#52b788',
-  amber: '#e9b54a',
+  bg: '#ffffff',
+  bgDeep: '#F2F2F2',
+  panel: '#FAFAFA',
+  panel2: '#ffffff',
+  line: '#d0d7de',
+  ink: '#1F3864',
+  dim: '#6b7280',
+  brass: '#a8780f',
+  brassDk: '#7c5806',
+  sea: '#0f766e',
+  red: '#C00000',
+  green: '#15803d',
+  amber: '#b45309',
 };
 
 export const SHARE_OPTIONS = [

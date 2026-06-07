@@ -60,12 +60,12 @@ export default function Preview(props) {
         background: 'white', color: '#0a1622',
         maxWidth: 720, width: '100%', margin: '0 auto', padding: '34px 32px',
         borderRadius: 4, boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
-        fontFamily: "'Outfit', system-ui, sans-serif", boxSizing: 'border-box',
+        fontFamily: 'inherit', boxSizing: 'border-box',
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '2px solid #0a1622', paddingBottom: 12, marginBottom: 22, gap: 10 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 26, fontWeight: 700, letterSpacing: 0.4, lineHeight: 1 }}>{vessel || '—'}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: 0.4, lineHeight: 1 }}>{vessel || '—'}</div>
             <div style={{ color: '#5a6a7a', fontSize: 11.5, marginTop: 4, letterSpacing: 1.8, textTransform: 'uppercase', fontWeight: 600 }}>Trip Square-Up</div>
           </div>
           <div style={{ textAlign: 'right', color: '#3a4a5c', fontSize: 13, flexShrink: 0 }}>
@@ -213,7 +213,7 @@ const btnSecondary = {
 function DocSection({ title, children }) {
   return (
     <div style={{ marginBottom: 20, pageBreakInside: 'avoid', breakInside: 'avoid' }}>
-      <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 11, fontWeight: 700, letterSpacing: 2.5, textTransform: 'uppercase', color: '#8a5a0a', marginBottom: 8, paddingBottom: 5, borderBottom: '1px solid #c8d2dc' }}>{title}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 2.5, textTransform: 'uppercase', color: '#8a5a0a', marginBottom: 8, paddingBottom: 5, borderBottom: '1px solid #c8d2dc' }}>{title}</div>
       {children}
     </div>
   );

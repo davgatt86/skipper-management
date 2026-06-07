@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import BackNav from '../BackNav';
 import './squareup.css';
 import {
   Anchor, Ship, Plus, Trash2, Users, Fuel, Truck, FileText,
@@ -277,19 +277,19 @@ export default function SquareUp() {
   return (
     <div className="squareup-root" style={{
       minHeight: '100vh',
-      background: `radial-gradient(1200px 600px at 50% -10%, #173657 0%, ${C.bg} 55%, ${C.bgDeep} 100%)`,
-      color: C.ink, fontFamily: "'Outfit', system-ui, sans-serif",
+      background: C.bg,
+      color: 'var(--text)', fontFamily: 'inherit',
       padding: '22px 14px calc(110px + env(safe-area-inset-bottom))',
     }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
-        <Link to="/" style={{ color: C.dim, fontSize: 13, textDecoration: 'none', display: 'inline-block', marginBottom: 10 }}>← Dashboard</Link>
+        <div style={{ marginBottom: 10 }}><BackNav /></div>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
           <div style={{ display: 'grid', placeItems: 'center', width: 44, height: 44, borderRadius: 12, background: `linear-gradient(145deg, ${C.brass}, ${C.brassDk})`, boxShadow: `0 6px 18px ${C.brass}44` }}>
             <Anchor size={22} color={C.bg} strokeWidth={2.5} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>Square-Up Sheet</h1>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>Square-Up Sheet</h1>
             <p style={{ margin: '1px 0 0', color: C.dim, fontSize: 12.5 }}>Generate a PDF for the office</p>
           </div>
           <IconBtn onClick={startNewTrip} icon={RotateCcw} color={C.dim} title="Start new trip" />
