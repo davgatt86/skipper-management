@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import BackNav from '../BackNav';
+import { supabase } from '../supabaseClient';
 import './squareup.css';
 import {
   Anchor, Ship, Plus, Trash2, Users, Fuel, Truck, FileText,
@@ -47,7 +48,7 @@ function CrewRow({ c, onUpdate, onRemove, onToggleSave }) {
 }
 
 // ── Add crew menu ──────────────────────────────────────────────────────
-function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRoster, onClose }) {
+function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRoster, onClose, onKitty, kittyAdded }) {
   return (
     <div style={{ background: C.panel2, border: `1px solid ${C.brass}88`, borderRadius: 11, padding: 12, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
@@ -56,7 +57,7 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
       </div>
       {roster.length > 0 ? (
         <>
-          <div style={{ color: C.dim, fontSize: 11, marginBottom: 6 }}>From your roster — tap to add</div>
+          <div style={{ color: C.dim, fontSize: 11, marginBottom: 6 }}>Self-employed crew (from the Crew page) — tap to add</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
             {roster.map((r) => {
               const inTrip = existingRosterIds.includes(r.id);
@@ -73,7 +74,7 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
                     }}>
                     {r.name}{inTrip ? ' · added' : ''}
                   </button>
-                  <IconBtn onClick={() => onRemoveFromRoster(r.id)} title="Remove from roster" />
+                  {!r.fromApp && <IconBtn onClick={() => onRemoveFromRoster(r.id)} title="Remove from roster" />}
                 </div>
               );
             })}
@@ -81,17 +82,27 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
         </>
       ) : (
         <div style={{ color: C.dim, fontSize: 13, marginBottom: 10, fontStyle: 'italic', lineHeight: 1.4 }}>
-          Your roster is empty. Add a crewman below and tap the bookmark icon to save them for next time.
+          No self-employed crew on the Crew page yet — add them there and they'll show here. Use "One-off name" for anyone else.
         </div>
       )}
-      <button onClick={onNew} style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-        background: `linear-gradient(180deg, ${C.brass}, ${C.brassDk})`, color: C.bg,
-        border: 'none', borderRadius: 9, padding: '11px 14px', cursor: 'pointer',
-        fontSize: 14, fontWeight: 700, width: '100%',
-      }}>
-        <Plus size={15} /> New crewman
-      </button>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button onClick={onKitty} disabled={kittyAdded} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          background: kittyAdded ? C.panel : C.ink, color: kittyAdded ? C.dim : C.bg,
+          border: 'none', borderRadius: 9, padding: '11px 14px',
+          cursor: kittyAdded ? 'default' : 'pointer', fontSize: 14, fontWeight: 700, flex: 1, minWidth: 180,
+        }}>
+          <Users size={15} /> {kittyAdded ? 'Kitty added' : 'Kitty (contracted crew)'}
+        </button>
+        <button onClick={onNew} style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+          background: `linear-gradient(180deg, ${C.brass}, ${C.brassDk})`, color: C.bg,
+          border: 'none', borderRadius: 9, padding: '11px 14px', cursor: 'pointer',
+          fontSize: 14, fontWeight: 700, flex: 1, minWidth: 150,
+        }}>
+          <Plus size={15} /> One-off name
+        </button>
+      </div>
     </div>
   );
 }
@@ -101,6 +112,7 @@ export default function SquareUp() {
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState('edit');
   const [roster, setRosterState] = useState([]);
+  const [appCrew, setAppCrew] = useState([]);
   const [foreignRoster, setForeignRosterState] = useState([]);
 
   const [vessel, setVessel] = useState('Audacious BF83');
@@ -118,6 +130,12 @@ export default function SquareUp() {
   // Load on mount
   useEffect(() => {
     setRosterState(loadRoster());
+    supabase.from('crew')
+      .select('id, full_name, status, archived_at, crew_type')
+      .then(({ data }) => {
+        const rows = (data || []).filter(c => !c.archived_at && c.status !== 'former' && c.crew_type === 'self_employed');
+        setAppCrew(rows.map(c => ({ id: 'app-' + c.id, name: c.full_name, fromApp: true })));
+      });
     setForeignRosterState(loadForeignRoster());
     const t = loadTrip();
     if (t) {
@@ -161,6 +179,16 @@ export default function SquareUp() {
       shareKey: m.defaultShareKey || 'full',
       shareCustom: m.defaultShareCustom || '',
       bonus: m.defaultBonus || '',
+    }]);
+    setShowAddCrew(false);
+  };
+
+  // One row standing in for all the contracted (agency) crew — their
+  // combined share comes off the top as the "kitty".
+  const addKitty = () => {
+    setCrew((prev) => [...prev, {
+      id: uid(), rosterId: null, name: 'Kitty (contracted crew)',
+      shareKey: 'full', shareCustom: '', bonus: '',
     }]);
     setShowAddCrew(false);
   };
@@ -316,7 +344,13 @@ export default function SquareUp() {
               onToggleSave={() => toggleSaveRoster(c)} />
           ))}
           {showAddCrew ? (
-            <AddCrewMenu roster={roster}
+            <AddCrewMenu
+              roster={[
+                ...appCrew,
+                ...roster.filter(r => !appCrew.some(a => a.name.toLowerCase() === (r.name || '').toLowerCase())),
+              ]}
+              kittyAdded={crew.some(c => (c.name || '').toLowerCase().startsWith('kitty'))}
+              onKitty={addKitty}
               existingRosterIds={crew.map((c) => c.rosterId).filter(Boolean)}
               onPick={addFromRoster} onNew={addNew}
               onRemoveFromRoster={removeFromRoster}
