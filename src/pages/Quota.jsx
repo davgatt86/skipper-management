@@ -5,10 +5,12 @@ import { useAuth } from '../AuthContext'
 import { parseAfpoXlsx } from '../lib/quota/afpoParse'
 import { parseTripPdf } from '../lib/quota/mcatchParse'
 import { latestSnapshotByYear, buildPosition } from '../lib/quota/quotaAgg'
+import { STOCK_SECTIONS, sectionOfStock } from '../lib/quota/stockMaster'
 
 const fmtDate = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—'
 const t3 = n => n == null ? '—' : Number(n).toLocaleString('en-GB', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
 const kg0 = n => Number(n || 0).toLocaleString('en-GB', { maximumFractionDigits: 0 })
+const today = () => new Date().toISOString().slice(0, 10)
 
 const th = { textAlign: 'left', padding: '0.45rem 0.6rem', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap', color: 'var(--navy)' }
 const td = { padding: '0.45rem 0.6rem', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }
@@ -22,6 +24,7 @@ function Scroll({ children }) {
 function Badge({ tone, children }) {
   const colours = {
     official: { bg: '#eef4ff', fg: '#1d4ed8' },
+    manual: { bg: '#f5f3ff', fg: '#6d28d9' },
     est: { bg: '#fff7ed', fg: '#c2410c' },
     warn: { bg: '#fef2f2', fg: '#b91c1c' },
     ok: { bg: '#f0fdf4', fg: '#15803d' },
@@ -44,6 +47,19 @@ function UploadBtn({ label, accept, multiple, busy, onFiles }) {
   )
 }
 
+function StockSelect({ value, onChange, exclude = new Set(), style }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={style}>
+      <option value="">— pick a stock —</option>
+      {STOCK_SECTIONS.map(g => (
+        <optgroup key={g.section} label={g.section}>
+          {g.stocks.map(s => <option key={s} value={s} disabled={exclude.has(s)}>{s}{exclude.has(s) ? ' (tracked)' : ''}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  )
+}
+
 export default function Quota() {
   const { appUser } = useAuth()
   const isSkipper = appUser?.role === 'skipper'
@@ -51,6 +67,9 @@ export default function Quota() {
   const [snapshots, setSnapshots] = useState([])
   const [trips, setTrips] = useState([])
   const [adjustments, setAdjustments] = useState([])
+  const [manualStocks, setManualStocks] = useState([])
+  const [manualEntries, setManualEntries] = useState([])
+  const [manualReady, setManualReady] = useState(true) // false until quota_manual.sql has been run
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -62,15 +81,26 @@ export default function Quota() {
   const pushLog = m => setLog(l => [...l, m])
 
   async function loadAll() {
-    const [snapRes, lineRes, tripRes, catchRes, adjRes] = await Promise.all([
+    const [snapRes, lineRes, tripRes, catchRes, adjRes, msRes, meRes] = await Promise.all([
       supabase.from('quota_snapshots').select('*').order('last_updated', { ascending: false }),
       supabase.from('quota_lines').select('*'),
       supabase.from('quota_trips').select('*').order('arrival_at', { ascending: false }),
       supabase.from('quota_trip_catches').select('*'),
       supabase.from('quota_adjustments').select('*').order('created_at'),
+      supabase.from('quota_manual_stocks').select('*').order('created_at'),
+      supabase.from('quota_manual_entries').select('*').order('entry_date'),
     ])
     const err = snapRes.error || lineRes.error || tripRes.error || catchRes.error || adjRes.error
     if (err) { setError(err.message); return }
+    // manual tables are a later migration — degrade gracefully until it's run
+    if (msRes.error || meRes.error) {
+      setManualReady(false)
+      setManualStocks([]); setManualEntries([])
+    } else {
+      setManualReady(true)
+      setManualStocks(msRes.data || [])
+      setManualEntries(meRes.data || [])
+    }
     setAdjustments(adjRes.data || [])
     const linesBySnap = {}
     for (const l of lineRes.data || []) (linesBySnap[l.snapshot_id] = linesBySnap[l.snapshot_id] || []).push(l)
@@ -126,6 +156,77 @@ export default function Quota() {
     await loadAll(); setBusy(false)
   }
 
+  // ---------- manual stocks ----------
+  const [msStock, setMsStock] = useState('')
+  const [msT, setMsT] = useState('')
+  const [msDate, setMsDate] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [anchorDraft, setAnchorDraft] = useState({})   // id -> {t, d}
+  const [entryDraft, setEntryDraft] = useState({})     // id -> {date, kind, tonnes, note}
+  const [openLedger, setOpenLedger] = useState({})     // id -> bool
+
+  const tracked = useMemo(() => new Set(manualStocks.filter(m => Number(m.year) === Number(year)).map(m => m.stock)), [manualStocks, year])
+
+  async function addManualStock(e, stockOverride) {
+    if (e) e.preventDefault()
+    const stock = stockOverride || msStock
+    if (!stock) { setError('Pick a stock first.'); return }
+    setError('')
+    const row = {
+      year: Number(year),
+      stock,
+      section: sectionOfStock(stock),
+      anchor_t: stockOverride ? null : (msT === '' ? null : Number(msT)),
+      anchor_date: stockOverride ? null : (msDate || null),
+    }
+    const { error: err } = await supabase.from('quota_manual_stocks').insert(row)
+    if (err) {
+      setError(err.code === '23505' ? `${stock} is already tracked for ${year}.` : err.message)
+      return
+    }
+    setMsStock(''); setMsT(''); setMsDate(''); setShowAdd(false)
+    loadAll()
+  }
+
+  async function saveAnchor(ms) {
+    const d = anchorDraft[ms.id] || {}
+    const t = d.t !== undefined ? d.t : ms.anchor_t
+    const date = d.d !== undefined ? d.d : ms.anchor_date
+    const { error: err } = await supabase.from('quota_manual_stocks')
+      .update({ anchor_t: t === '' || t == null ? null : Number(t), anchor_date: date || null })
+      .eq('id', ms.id)
+    if (err) { setError(err.message); return }
+    setAnchorDraft(a => { const n = { ...a }; delete n[ms.id]; return n })
+    loadAll()
+  }
+
+  async function deleteManualStock(ms) {
+    if (!window.confirm(`Stop tracking ${ms.stock} (${ms.year})? Its typed entries go too.`)) return
+    const { error: err } = await supabase.from('quota_manual_stocks').delete().eq('id', ms.id)
+    if (err) setError(err.message); else loadAll()
+  }
+
+  async function addEntry(ms) {
+    const d = entryDraft[ms.id] || {}
+    if (!d.tonnes || Number(d.tonnes) <= 0) { setError('Entry needs a tonnage.'); return }
+    setError('')
+    const { error: err } = await supabase.from('quota_manual_entries').insert({
+      manual_stock_id: ms.id,
+      entry_date: d.date || today(),
+      kind: d.kind || 'catch',
+      tonnes: Number(d.tonnes),
+      note: (d.note || '').trim(),
+    })
+    if (err) { setError(err.message); return }
+    setEntryDraft(a => { const n = { ...a }; delete n[ms.id]; return n })
+    loadAll()
+  }
+
+  async function deleteEntry(id) {
+    const { error: err } = await supabase.from('quota_manual_entries').delete().eq('id', id)
+    if (err) setError(err.message); else loadAll()
+  }
+
   // ---------- what-if swaps & rentals ----------
   const [outStock, setOutStock] = useState('')
   const [outT, setOutT] = useState('')
@@ -156,18 +257,30 @@ export default function Quota() {
   const years = useMemo(() => {
     const ys = new Set(Object.keys(latestByYear))
     for (const t of trips) for (const c of t.catches) ys.add(c.catch_date.slice(0, 4))
+    for (const m of manualStocks) ys.add(String(m.year))
     const arr = [...ys].sort().reverse()
     return arr.length ? arr : [String(new Date().getFullYear())]
-  }, [latestByYear, trips])
+  }, [latestByYear, trips, manualStocks])
   useEffect(() => { if (!years.includes(year)) setYear(years[0]) }, [years]) // eslint-disable-line
 
   const snapshot = latestByYear[year]
-  const pos = useMemo(() => buildPosition({ snapshot, trips, year, adjustments }), [snapshot, trips, year, adjustments])
+  const pos = useMemo(
+    () => buildPosition({ snapshot, trips, year, adjustments, manualStocks, manualEntries }),
+    [snapshot, trips, year, adjustments, manualStocks, manualEntries])
+
+  const manualMode = !snapshot // no AFPO statement for the year -> compact table
+  const yearManual = useMemo(() => manualStocks.filter(m => Number(m.year) === Number(year)), [manualStocks, year])
+  const entriesByMs = useMemo(() => {
+    const out = {}
+    for (const e of manualEntries) (out[e.manual_stock_id] = out[e.manual_stock_id] || []).push(e)
+    return out
+  }, [manualEntries])
 
   const sections = useMemo(() => [...new Set(pos.rows.map(r => r.section))], [pos.rows])
   const visRows = useMemo(() => {
     let rows = pos.rows.filter(r => section === 'all' ? true : r.section === section)
-    if (section === 'all') rows = rows.filter(r => (r.allocation || 0) !== 0 || (r.catch_total || 0) !== 0 || r.since_t !== 0 || r.adj_t !== 0)
+    if (section === 'all') rows = rows.filter(r =>
+      r.source !== 'afpo' || (r.allocation || 0) !== 0 || (r.catch_total || 0) !== 0 || r.since_t !== 0 || r.adj_t !== 0)
     return rows
   }, [pos.rows, section])
 
@@ -181,26 +294,54 @@ export default function Quota() {
     )
   }
 
+  const nothingYet = !snapshots.length && !trips.length && !manualStocks.length
+
   return (
     <div className="container">
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
         <div>
           <h1 style={{ marginBottom: 0 }}>Quota</h1>
-          <p className="muted" style={{ marginBottom: 0 }}>AFPO holdings vs logbook catch</p>
+          <p className="muted" style={{ marginBottom: 0 }}>PO figures vs logbook catch</p>
         </div>
         <Link to="/">← Dashboard</Link>
       </header>
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
+      {!manualReady && (
+        <p style={{ color: '#c2410c', fontSize: '0.85rem' }}>
+          Manual stock tracking isn't set up in the database yet — run <code>supabase/quota_manual.sql</code> in the Supabase SQL editor, then reload.
+        </p>
+      )}
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <UploadBtn label="Upload AFPO holdings (.xlsx)" accept=".xlsx,.xls" multiple busy={busy} onFiles={uploadAfpo} />
+          {manualReady && <button onClick={() => setShowAdd(s => !s)} disabled={busy}>{showAdd ? 'Close' : '+ Add stock'}</button>}
           <UploadBtn label="Upload trip reports (.pdf)" accept="application/pdf" multiple busy={busy} onFiles={uploadTrips} />
+          <UploadBtn label="Upload AFPO holdings (.xlsx)" accept=".xlsx,.xls" multiple busy={busy} onFiles={uploadAfpo} />
           <span className="muted" style={{ fontSize: '0.85rem' }}>
-            {snapshots.length} statement{snapshots.length === 1 ? '' : 's'} · {trips.length} trip{trips.length === 1 ? '' : 's'} loaded
+            {snapshots.length} statement{snapshots.length === 1 ? '' : 's'} · {trips.length} trip{trips.length === 1 ? '' : 's'} · {manualStocks.length} manual stock{manualStocks.length === 1 ? '' : 's'}
           </span>
         </div>
+        {nothingYet && !showAdd && (
+          <p className="muted" style={{ fontSize: '0.85rem', marginTop: '0.7rem', marginBottom: 0 }}>
+            Start by adding the stocks you hold and typing the figure your PO gave you — or, if you're in AFPO, upload your holdings spreadsheet.
+            Either way, uploading mcatch trip reports deducts catch automatically.
+          </p>
+        )}
+        {showAdd && (
+          <form onSubmit={addManualStock} style={{ display: 'grid', gap: '0.5rem', maxWidth: 560, marginTop: '0.8rem' }}>
+            <StockSelect value={msStock} onChange={setMsStock} exclude={tracked} />
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input type="number" min="0" step="0.001" placeholder="tonnes (PO figure)" value={msT} onChange={e => setMsT(e.target.value)} style={{ width: 160 }} />
+              <input type="date" value={msDate} onChange={e => setMsDate(e.target.value)} />
+              <button type="submit">Track stock</button>
+            </div>
+            <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 0 }}>
+              The figure is good as of the date: use 1 January {year} for a season-start allocation, or the date the PO gave you a balance.
+              Catch dated after it comes off. Leave both blank to just start tracking catch.
+            </p>
+          </form>
+        )}
         {log.length > 0 && (
           <ul style={{ marginTop: '0.7rem', marginBottom: 0, paddingLeft: '1.1rem', fontSize: '0.85rem' }}>
             {log.map((m, i) => <li key={i}>{m}</li>)}
@@ -219,105 +360,212 @@ export default function Quota() {
           </select>
           {snapshot
             ? <Badge tone="official">official as of {fmtDate(snapshot.last_landing_date)}</Badge>
-            : <Badge tone="warn">no AFPO statement for {year}</Badge>}
+            : yearManual.length
+              ? <Badge tone="manual">manual figures</Badge>
+              : <Badge tone="warn">no figures for {year}</Badge>}
           {pos.sinceTrips > 0 && <Badge tone="est">estimated now: {pos.sinceTrips} trip{pos.sinceTrips === 1 ? '' : 's'} since statement</Badge>}
           {pos.sinceTrips === 0 && snapshot && <Badge tone="ok">no landings since statement</Badge>}
         </div>
 
+        {pos.conflicts.length > 0 && (
+          <p style={{ color: '#c2410c', fontSize: '0.82rem' }}>
+            The AFPO statement already covers {pos.conflicts.join(', ')} — the manual figure for {pos.conflicts.length === 1 ? 'it' : 'them'} is being ignored. Remove it below to clear this note.
+          </p>
+        )}
+
         <Scroll>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.88rem' }}>
             <thead>
-              <tr>
-                <th style={th}>Stock</th>
-                <th style={thR}>Allocation t</th>
-                <th style={thR}>Catch UK t</th>
-                <th style={thR}>Catch NOR t</th>
-                <th style={thR}>Balance t</th>
-                <th style={thR}>Since stmt t</th>
-                <th style={thR}>Swaps t</th>
-                <th style={thR}>Est. balance t</th>
-              </tr>
+              {manualMode ? (
+                <tr>
+                  <th style={th}>Stock</th>
+                  <th style={thR}>PO figure t</th>
+                  <th style={th}>As of</th>
+                  <th style={thR}>Caught since t</th>
+                  <th style={thR}>Typed +/− t</th>
+                  <th style={thR}>What-if t</th>
+                  <th style={thR}>Est. balance t</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th style={th}>Stock</th>
+                  <th style={thR}>Allocation t</th>
+                  <th style={thR}>Catch UK t</th>
+                  <th style={thR}>Catch NOR t</th>
+                  <th style={thR}>Balance t</th>
+                  <th style={thR}>Since stmt t</th>
+                  <th style={thR}>Adj t</th>
+                  <th style={thR}>Est. balance t</th>
+                </tr>
+              )}
             </thead>
             <tbody>
               {visRows.map(r => {
                 const est = r.est_balance
                 const warn = est != null && est < 0
-                const near = est != null && !warn && r.allocation > 0 && est < r.allocation * 0.1
+                const near = est != null && !warn && (r.allocation || r.balance) > 0 && est < (r.allocation || r.balance) * 0.1
+                const estStyle = { ...tdR, fontWeight: 700, color: warn ? '#b91c1c' : near ? '#c2410c' : 'var(--navy)' }
+                const stockCell = (
+                  <td style={td}>
+                    {r.stock}
+                    {r.source === 'manual' && <> <Badge tone="manual">manual</Badge></>}
+                    {section === 'all' && <span className="muted" style={{ fontSize: '0.75rem' }}> · {r.section}</span>}
+                    {r.source === 'untracked' && manualReady && (
+                      <> <button className="secondary" style={{ padding: '0.05rem 0.45rem', fontSize: '0.75rem', marginLeft: '0.4rem' }}
+                        onClick={() => addManualStock(null, r.stock)}>track</button></>
+                    )}
+                    {r.double_count_risk && <span title="This stock has both typed catches and trip-report catches — make sure a trip isn't counted twice." style={{ marginLeft: '0.3rem' }}>⚠</span>}
+                  </td>
+                )
+                if (manualMode) {
+                  return (
+                    <tr key={r.section + r.stock}>
+                      {stockCell}
+                      <td style={tdR}>{t3(r.balance)}</td>
+                      <td style={td}>{fmtDate(r.anchor_date)}</td>
+                      <td style={tdR}>{r.since_t ? t3(r.since_t) : '—'}</td>
+                      <td style={{ ...tdR, color: r.man_t > 0 ? '#15803d' : r.man_t < 0 ? '#b91c1c' : 'inherit' }}>
+                        {r.man_t ? (r.man_t > 0 ? '+' : '') + t3(r.man_t) : '—'}
+                      </td>
+                      <td style={{ ...tdR, color: r.adj_t > 0 ? '#15803d' : r.adj_t < 0 ? '#b91c1c' : 'inherit' }}>
+                        {r.adj_t ? (r.adj_t > 0 ? '+' : '') + t3(r.adj_t) : '—'}
+                      </td>
+                      <td style={estStyle}>{t3(est)}</td>
+                    </tr>
+                  )
+                }
+                const adjShown = r.adj_t + (r.man_t || 0)
                 return (
                   <tr key={r.section + r.stock}>
-                    <td style={td}>
-                      {r.stock}
-                      {section === 'all' && <span className="muted" style={{ fontSize: '0.75rem' }}> · {r.section}</span>}
-                    </td>
+                    {stockCell}
                     <td style={tdR}>{t3(r.allocation)}</td>
                     <td style={tdR}>{t3(r.catch_uk)}</td>
                     <td style={tdR}>{t3(r.catch_nor)}</td>
                     <td style={tdR}>{t3(r.balance)}</td>
                     <td style={tdR}>{r.since_t ? t3(r.since_t) : '—'}</td>
-                    <td style={{ ...tdR, color: r.adj_t > 0 ? '#15803d' : r.adj_t < 0 ? '#b91c1c' : 'inherit' }}>
-                      {r.adj_t ? (r.adj_t > 0 ? '+' : '') + t3(r.adj_t) : '—'}
+                    <td style={{ ...tdR, color: adjShown > 0 ? '#15803d' : adjShown < 0 ? '#b91c1c' : 'inherit' }}>
+                      {adjShown ? (adjShown > 0 ? '+' : '') + t3(adjShown) : '—'}
                     </td>
-                    <td style={{ ...tdR, fontWeight: 700, color: warn ? '#b91c1c' : near ? '#c2410c' : 'var(--navy)' }}>
-                      {t3(est)}
-                    </td>
+                    <td style={estStyle}>{t3(est)}</td>
                   </tr>
                 )
               })}
-              {!visRows.length && <tr><td style={td} colSpan={8} className="muted">Nothing to show — upload an AFPO statement and trip reports.</td></tr>}
+              {!visRows.length && <tr><td style={td} colSpan={manualMode ? 7 : 8} className="muted">Nothing to show — add a stock, or upload an AFPO statement and trip reports.</td></tr>}
             </tbody>
           </table>
         </Scroll>
         <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem', marginBottom: 0 }}>
-          Est. balance = AFPO balance, minus logbook catch from trips landed after {snapshot ? fmtDate(snapshot.last_landing_date) : 'the statement date'}.
-          Year-straddling trips book each catch to its catch date's year. What-if swaps & rentals below also feed the Est. balance.
+          {manualMode
+            ? <>Est. balance = the PO figure, minus trip-report catch landed after its date, plus/minus typed catches and leases, plus what-if swaps.
+              Year-straddling trips book each catch to its catch date's year.</>
+            : <>Est. balance = AFPO balance, minus logbook catch from trips landed after {fmtDate(snapshot?.last_landing_date)}.
+              Year-straddling trips book each catch to its catch date's year. Adj = what-if swaps & rentals{yearManual.length ? ', plus typed entries on manual stocks' : ''}.</>}
         </p>
       </div>
 
-      {isSkipper && (
+      {manualReady && yearManual.length > 0 && (
         <div className="card" style={{ marginBottom: '1rem' }}>
-          <h3 style={{ marginTop: 0 }}>Swaps & rentals — what-if ({year})</h3>
+          <h3 style={{ marginTop: 0 }}>Manual stocks ({year})</h3>
           <p className="muted" style={{ fontSize: '0.82rem' }}>
-            Try a swap or rental before it's official — e.g. 20t NS Cod OUT for 100t NS Saithe IN.
-            Either side can be left blank for a one-way rental. Entries adjust the Est. balance column until you remove them.
+            Set or correct the PO figure, and type catches or leases against it. If you upload mcatch trip reports, don't also type those
+            trips' catch here — it would count twice.
           </p>
-          <form onSubmit={addAdjustment} style={{ display: 'grid', gap: '0.5rem', maxWidth: 560 }}>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ width: 36, fontWeight: 700, color: '#b91c1c' }}>OUT</span>
-              <select value={outStock} onChange={e => setOutStock(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
-                <option value="">— stock —</option>
-                {(snapshot?.lines || []).map(l => <option key={l.id || l.stock} value={l.stock}>{l.stock}</option>)}
-              </select>
-              <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={outT} onChange={e => setOutT(e.target.value)} style={{ width: 110 }} />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ width: 36, fontWeight: 700, color: '#15803d' }}>IN</span>
-              <select value={inStock} onChange={e => setInStock(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
-                <option value="">— stock —</option>
-                {(snapshot?.lines || []).map(l => <option key={l.id || l.stock} value={l.stock}>{l.stock}</option>)}
-              </select>
-              <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={inT} onChange={e => setInT(e.target.value)} style={{ width: 110 }} />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <input placeholder="Note, e.g. swap with WK170 (optional)" value={adjNote} onChange={e => setAdjNote(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
-              <button type="submit">Add</button>
-            </div>
-          </form>
-          {adjustments.filter(a => Number(a.year) === Number(year)).length > 0 && (
-            <div style={{ marginTop: '0.8rem' }}>
-              {adjustments.filter(a => Number(a.year) === Number(year)).map(a => (
-                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0', borderTop: '1px solid var(--border)', fontSize: '0.88rem', flexWrap: 'wrap' }}>
-                  <span>
-                    <strong style={{ color: a.direction === 'in' ? '#15803d' : '#b91c1c' }}>{a.direction.toUpperCase()}</strong>{' '}
-                    {Number(a.tonnes).toLocaleString('en-GB', { maximumFractionDigits: 3 })} t {a.stock}
-                    {a.note && <span className="muted"> — {a.note}</span>}
-                  </span>
-                  <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem' }} onClick={() => deleteAdjustment(a)}>remove</button>
+          {yearManual.map(ms => {
+            const draft = anchorDraft[ms.id] || {}
+            const ed = entryDraft[ms.id] || {}
+            const list = entriesByMs[ms.id] || []
+            const open = !!openLedger[ms.id]
+            return (
+              <div key={ms.id} style={{ borderTop: '1px solid var(--border)', padding: '0.6rem 0' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <strong style={{ minWidth: 140 }}>{ms.stock}</strong>
+                  <input type="number" min="0" step="0.001" placeholder="tonnes"
+                    value={draft.t !== undefined ? draft.t : (ms.anchor_t ?? '')}
+                    onChange={e => setAnchorDraft(a => ({ ...a, [ms.id]: { ...a[ms.id], t: e.target.value } }))}
+                    style={{ width: 120 }} />
+                  <input type="date"
+                    value={draft.d !== undefined ? draft.d : (ms.anchor_date || '')}
+                    onChange={e => setAnchorDraft(a => ({ ...a, [ms.id]: { ...a[ms.id], d: e.target.value } }))} />
+                  {anchorDraft[ms.id] !== undefined && <button onClick={() => saveAnchor(ms)}>Save</button>}
+                  <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem' }} onClick={() => setOpenLedger(o => ({ ...o, [ms.id]: !open }))}>
+                    {list.length} entr{list.length === 1 ? 'y' : 'ies'} {open ? '▾' : '▸'}
+                  </button>
+                  <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem' }} onClick={() => deleteManualStock(ms)}>remove</button>
                 </div>
-              ))}
-            </div>
-          )}
+                {ms.anchor_t == null && <p className="muted" style={{ fontSize: '0.78rem', margin: '0.3rem 0 0' }}>No PO figure yet — catch is tracked but no balance can be estimated until you set one.</p>}
+                {open && (
+                  <div style={{ marginTop: '0.5rem', paddingLeft: '0.5rem' }}>
+                    {list.map(e => (
+                      <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', padding: '0.2rem 0', flexWrap: 'wrap' }}>
+                        <span>
+                          {fmtDate(e.entry_date)}{' '}
+                          <strong style={{ color: e.kind === 'lease_in' ? '#15803d' : '#b91c1c' }}>
+                            {e.kind === 'catch' ? 'Catch' : e.kind === 'lease_in' ? 'Lease/swap IN' : 'Lease/swap OUT'}
+                          </strong>{' '}
+                          {Number(e.tonnes).toLocaleString('en-GB', { maximumFractionDigits: 3 })} t
+                          {e.note && <span className="muted"> — {e.note}</span>}
+                          {ms.anchor_date && !((e.entry_date || '') > ms.anchor_date) && <span className="muted"> (before figure date — not counted)</span>}
+                        </span>
+                        <button className="secondary" style={{ padding: '0.05rem 0.45rem', fontSize: '0.75rem' }} onClick={() => deleteEntry(e.id)}>x</button>
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center', marginTop: '0.4rem' }}>
+                      <input type="date" value={ed.date || today()} onChange={e => setEntryDraft(a => ({ ...a, [ms.id]: { ...ed, date: e.target.value } }))} />
+                      <select value={ed.kind || 'catch'} onChange={e => setEntryDraft(a => ({ ...a, [ms.id]: { ...ed, kind: e.target.value } }))}>
+                        <option value="catch">Catch (deduct)</option>
+                        <option value="lease_in">Lease/swap IN (add)</option>
+                        <option value="lease_out">Lease/swap OUT (deduct)</option>
+                      </select>
+                      <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={ed.tonnes || ''} onChange={e => setEntryDraft(a => ({ ...a, [ms.id]: { ...ed, tonnes: e.target.value } }))} style={{ width: 110 }} />
+                      <input placeholder="note (optional)" value={ed.note || ''} onChange={e => setEntryDraft(a => ({ ...a, [ms.id]: { ...ed, note: e.target.value } }))} style={{ flex: 1, minWidth: 140 }} />
+                      <button onClick={() => addEntry(ms)}>Add</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
+
+      <div className="card" style={{ marginBottom: '1rem' }}>
+        <h3 style={{ marginTop: 0 }}>Swaps & rentals — what-if ({year})</h3>
+        <p className="muted" style={{ fontSize: '0.82rem' }}>
+          Try a swap or rental before it's official — e.g. 20t NS Cod OUT for 100t NS Saithe IN.
+          Either side can be left blank for a one-way rental. Entries adjust the Est. balance column until you remove them.
+          Once a lease is real, record it as a Lease/swap entry on the stock instead.
+        </p>
+        <form onSubmit={addAdjustment} style={{ display: 'grid', gap: '0.5rem', maxWidth: 560 }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ width: 36, fontWeight: 700, color: '#b91c1c' }}>OUT</span>
+            <StockSelect value={outStock} onChange={setOutStock} style={{ flex: 1, minWidth: 160 }} />
+            <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={outT} onChange={e => setOutT(e.target.value)} style={{ width: 110 }} />
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ width: 36, fontWeight: 700, color: '#15803d' }}>IN</span>
+            <StockSelect value={inStock} onChange={setInStock} style={{ flex: 1, minWidth: 160 }} />
+            <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={inT} onChange={e => setInT(e.target.value)} style={{ width: 110 }} />
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <input placeholder="Note, e.g. swap with WK170 (optional)" value={adjNote} onChange={e => setAdjNote(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
+            <button type="submit">Add</button>
+          </div>
+        </form>
+        {adjustments.filter(a => Number(a.year) === Number(year)).length > 0 && (
+          <div style={{ marginTop: '0.8rem' }}>
+            {adjustments.filter(a => Number(a.year) === Number(year)).map(a => (
+              <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0', borderTop: '1px solid var(--border)', fontSize: '0.88rem', flexWrap: 'wrap' }}>
+                <span>
+                  <strong style={{ color: a.direction === 'in' ? '#15803d' : '#b91c1c' }}>{a.direction.toUpperCase()}</strong>{' '}
+                  {Number(a.tonnes).toLocaleString('en-GB', { maximumFractionDigits: 3 })} t {a.stock}
+                  {a.note && <span className="muted"> — {a.note}</span>}
+                </span>
+                <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem' }} onClick={() => deleteAdjustment(a)}>remove</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {(pos.nonquotaRows.length > 0 || pos.unmappedRows.length > 0) && (
         <div className="card" style={{ marginBottom: '1rem' }}>
