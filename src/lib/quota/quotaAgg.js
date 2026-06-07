@@ -1,12 +1,20 @@
 // Quota position maths.
-// Official = latest AFPO snapshot for the year (tonnes).
-// Estimated now = official balance minus logbook catch from trips that
-// LANDED after the statement's last-landing date (catch rows year-filtered
-// by catch_date, so year-straddling trips book to both years correctly).
-// Trip arrival (not catch date) decides whether AFPO has seen the trip,
-// because AFPO books per landing — a trip landed after the statement may
-// still hold catches dated before it.
+//
+// Two sources, one engine — every row is an anchor figure plus the
+// catch that's come off since the anchor's date:
+//   AFPO row    anchor = statement balance, as of last-landing date
+//   Manual row  anchor = the PO's figure typed in, as of its own date
+//               (a season-start allocation is just an anchor dated 1 Jan)
+//
+// Estimated now = anchor, minus logbook catch from trips that LANDED
+// after the anchor date (catch rows year-filtered by catch_date, so
+// year-straddling trips book to both years correctly), minus typed
+// catches, plus/minus typed leases, plus what-if adjustments.
+// Trip arrival (not catch date) decides whether the PO has seen the
+// trip, because POs book per landing — a trip landed after the
+// statement may still hold catches dated before it.
 import { mapStock, FAO_NAMES } from './stockMap.js'
+import { sectionOfStock } from './stockMaster.js'
 
 export const r3 = n => Math.round(Number(n || 0) * 1000) / 1000
 
@@ -23,9 +31,11 @@ export function latestSnapshotByYear(snapshots) {
 // Build the position table for one year.
 // trips: [{...trip, catches:[...]}]
 // adjustments: what-if swaps & rentals [{stock, direction:'in'|'out', tonnes}]
-export function buildPosition({ snapshot, trips, year, adjustments = [] }) {
+// manualStocks: [{id, year, stock, section, anchor_t, anchor_date}]
+// manualEntries: [{manual_stock_id, entry_date, kind, tonnes}]
+export function buildPosition({ snapshot, trips, year, adjustments = [], manualStocks = [], manualEntries = [] }) {
   const cutoff = snapshot?.last_landing_date || null // 'YYYY-MM-DD'
-  const byStock = {}   // stock -> { since_uk_kg, since_nor_kg, total_year_kg }
+  const byStock = {}   // stock -> { list: [{arrDate, eez, kg}], total_year_kg }
   const nonquota = {}  // species -> { kg, sinceKg }
   const unmapped = {}  // 'SPP / area' -> kg
   let sinceTrips = 0
@@ -51,14 +61,24 @@ export function buildPosition({ snapshot, trips, year, adjustments = [] }) {
         continue
       }
       touches = true
-      const s = byStock[m.stock] = byStock[m.stock] || { since_uk_kg: 0, since_nor_kg: 0, total_year_kg: 0 }
+      const s = byStock[m.stock] = byStock[m.stock] || { list: [], total_year_kg: 0 }
       s.total_year_kg += c.live_kg
-      if (afterStatement) {
-        if (c.eez === 'NOR') s.since_nor_kg += c.live_kg
-        else s.since_uk_kg += c.live_kg
-      }
+      s.list.push({ arrDate, eez: c.eez, kg: c.live_kg })
     }
     if (afterStatement && touches) sinceTrips++
+  }
+
+  // Logbook kg landed after a given cutoff date (null cutoff = all year)
+  const sinceFor = (stock, cut) => {
+    const s = byStock[stock]
+    const out = { uk: 0, nor: 0 }
+    if (!s) return out
+    for (const c of s.list) {
+      if (cut && !(c.arrDate > cut)) continue
+      if (c.eez === 'NOR') out.nor += c.kg
+      else out.uk += c.kg
+    }
+    return out
   }
 
   // Net what-if adjustment per stock (IN positive, OUT negative, tonnes)
@@ -68,15 +88,36 @@ export function buildPosition({ snapshot, trips, year, adjustments = [] }) {
     adjByStock[a.stock] = (adjByStock[a.stock] || 0) + (a.direction === 'in' ? 1 : -1) * Number(a.tonnes || 0)
   }
 
-  // Merge with snapshot lines (tonnes)
+  // Typed ledger per manual stock (tonnes), entries on/before anchor ignored
+  const entriesByMs = {}
+  for (const e of manualEntries) (entriesByMs[e.manual_stock_id] = entriesByMs[e.manual_stock_id] || []).push(e)
+  const ledgerFor = (ms) => {
+    const out = { catch_t: 0, lease_in_t: 0, lease_out_t: 0, counted: 0, total: 0 }
+    for (const e of entriesByMs[ms.id] || []) {
+      out.total++
+      if (ms.anchor_date && !((e.entry_date || '') > ms.anchor_date)) continue
+      out.counted++
+      const t = Number(e.tonnes || 0)
+      if (e.kind === 'catch') out.catch_t += t
+      else if (e.kind === 'lease_in') out.lease_in_t += t
+      else if (e.kind === 'lease_out') out.lease_out_t += t
+    }
+    return out
+  }
+
   const rows = []
   const seen = new Set()
+  const conflicts = []
+  const afpoStocks = new Set((snapshot?.lines || []).map(l => l.stock))
+
+  // 1. AFPO lines — authoritative where present
   for (const l of snapshot?.lines || []) {
-    const s = byStock[l.stock] || { since_uk_kg: 0, since_nor_kg: 0, total_year_kg: 0 }
+    const s = sinceFor(l.stock, cutoff)
     seen.add(l.stock)
-    const sinceT = (s.since_uk_kg + s.since_nor_kg) / 1000
+    const sinceT = (s.uk + s.nor) / 1000
     const adjT = adjByStock[l.stock] || 0
     rows.push({
+      source: 'afpo',
       section: l.section,
       stock: l.stock,
       allocation: l.allocation,
@@ -84,23 +125,68 @@ export function buildPosition({ snapshot, trips, year, adjustments = [] }) {
       catch_nor: l.catch_nor,
       catch_total: l.catch_total,
       balance: l.balance,
-      since_uk_t: r3(s.since_uk_kg / 1000),
-      since_nor_t: r3(s.since_nor_kg / 1000),
+      anchor_date: cutoff,
+      since_uk_t: r3(s.uk / 1000),
+      since_nor_t: r3(s.nor / 1000),
       since_t: r3(sinceT),
+      man_t: 0,
       adj_t: r3(adjT),
       est_balance: l.balance != null ? r3(l.balance - sinceT + adjT) : null,
       fqa_units: l.fqa_units,
+      total_year_kg: byStock[l.stock]?.total_year_kg || 0,
     })
   }
-  // Logbook stocks with no AFPO line (shouldn't happen, but never hide fish)
+
+  // 2. Manual stocks — used where AFPO has no line for the year
+  for (const ms of manualStocks) {
+    if (Number(ms.year) !== Number(year)) continue
+    if (afpoStocks.has(ms.stock)) { conflicts.push(ms.stock); continue }
+    seen.add(ms.stock)
+    const s = sinceFor(ms.stock, ms.anchor_date || null)
+    const sinceT = (s.uk + s.nor) / 1000
+    const led = ledgerFor(ms)
+    const manT = led.lease_in_t - led.lease_out_t - led.catch_t
+    const adjT = adjByStock[ms.stock] || 0
+    const hasAnchor = ms.anchor_t != null && ms.anchor_t !== ''
+    rows.push({
+      source: 'manual',
+      manual_id: ms.id,
+      section: ms.section || sectionOfStock(ms.stock),
+      stock: ms.stock,
+      allocation: null,
+      catch_uk: null,
+      catch_nor: null,
+      catch_total: null,
+      balance: hasAnchor ? Number(ms.anchor_t) : null,
+      anchor_date: ms.anchor_date || null,
+      since_uk_t: r3(s.uk / 1000),
+      since_nor_t: r3(s.nor / 1000),
+      since_t: r3(sinceT),
+      man_t: r3(manT),
+      man_catch_t: r3(led.catch_t),
+      adj_t: r3(adjT),
+      est_balance: hasAnchor ? r3(Number(ms.anchor_t) - sinceT + manT + adjT) : null,
+      fqa_units: null,
+      total_year_kg: byStock[ms.stock]?.total_year_kg || 0,
+      double_count_risk: led.catch_t > 0 && sinceT > 0,
+    })
+  }
+
+  // 3. Logbook stocks tracked nowhere — never hide fish, offer to track
   for (const [stock, s] of Object.entries(byStock)) {
     if (seen.has(stock)) continue
-    const sinceT = (s.since_uk_kg + s.since_nor_kg) / 1000
+    const sin = sinceFor(stock, null)
+    const sinceT = (sin.uk + sin.nor) / 1000
     rows.push({
-      section: '(no AFPO line)', stock,
+      source: 'untracked',
+      section: sectionOfStock(stock) || '(no AFPO line)',
+      stock,
       allocation: null, catch_uk: null, catch_nor: null, catch_total: null, balance: null,
-      since_uk_t: r3(s.since_uk_kg / 1000), since_nor_t: r3(s.since_nor_kg / 1000),
-      since_t: r3(sinceT), adj_t: r3(adjByStock[stock] || 0), est_balance: null, fqa_units: null,
+      anchor_date: null,
+      since_uk_t: r3(sin.uk / 1000), since_nor_t: r3(sin.nor / 1000),
+      since_t: r3(sinceT), man_t: 0, adj_t: r3(adjByStock[stock] || 0),
+      est_balance: null, fqa_units: null,
+      total_year_kg: s.total_year_kg,
     })
   }
 
@@ -111,5 +197,5 @@ export function buildPosition({ snapshot, trips, year, adjustments = [] }) {
     .map(([key, kg]) => ({ key, kg: r3(kg) }))
     .sort((a, b) => b.kg - a.kg)
 
-  return { rows, nonquotaRows, unmappedRows, cutoff, sinceTrips }
+  return { rows, nonquotaRows, unmappedRows, cutoff, sinceTrips, conflicts }
 }
