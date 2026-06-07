@@ -13,6 +13,8 @@ import OneOffs from './pages/OneOffs'
 const Sales = lazy(() => import('./pages/Sales'))
 const Estimator = lazy(() => import('./pages/Estimator'))
 const SquareUp = lazy(() => import('./squareup/SquareUp'))
+const Quota = lazy(() => import('./pages/Quota'))
+const Rota = lazy(() => import('./pages/Rota'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -102,6 +104,20 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <SquareUp />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/rota" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Rota />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/quota" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Quota />
             </Suspense>
           </ProtectedRoute>
         } />
