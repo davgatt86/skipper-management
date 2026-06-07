@@ -1,10 +1,15 @@
 -- ============================================================
--- MULTI-TENANCY MIGRATION — run once in Supabase SQL editor
+-- MULTI-TENANCY MIGRATION (v2) — run once in Supabase SQL editor
 -- Adds fleet_id scoping to every tenant table.
 -- Existing policies are NOT touched: new RESTRICTIVE policies
 -- are layered on top, so current viewer/crew/skipper access is
 -- unchanged while only one fleet exists.
 -- Safe to re-run (idempotent).
+--
+-- v2: removed wage_payments (it is a VIEW over payments, not a
+-- table — with security_invoker it inherits the payments fleet
+-- policy automatically). Loops now skip anything that isn't a
+-- real table, with a NOTICE, instead of aborting.
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -58,10 +63,12 @@ create policy fleets_member_read on public.fleets
   for select using (id = public.current_fleet_id());
 
 -- ------------------------------------------------------------
--- 4. Add fleet_id to every tenant table:
+-- 4. Add fleet_id to every tenant TABLE:
 --    add column -> backfill to Don fleet -> NOT NULL ->
 --    default current_fleet_id() for future app inserts ->
 --    index -> restrictive isolation policy
+--    Views (e.g. wage_payments) are deliberately absent: with
+--    security_invoker = true they inherit base-table policies.
 -- ------------------------------------------------------------
 do $$
 declare
@@ -69,11 +76,21 @@ declare
 begin
   foreach t in array array[
     'crew', 'contracts', 'landings', 'landing_crew',
-    'month_closeouts', 'payments', 'wage_payments',
+    'month_closeouts', 'payments',
     'one_off_bonuses', 'settings',
     'sales_landings', 'sales_rows'
   ]
   loop
+    -- only proceed if this is a real table in public
+    if not exists (
+      select 1 from pg_class rel
+      join pg_namespace ns on ns.oid = rel.relnamespace
+      where ns.nspname = 'public' and rel.relname = t and rel.relkind = 'r'
+    ) then
+      raise notice 'skipping % — not a table in public schema', t;
+      continue;
+    end if;
+
     execute format('alter table public.%I add column if not exists fleet_id uuid references public.fleets(id)', t);
     execute format('update public.%I set fleet_id = %L where fleet_id is null',
                    t, '00000000-0000-4000-8000-000000000001');
@@ -114,10 +131,19 @@ declare
 begin
   foreach t in array array[
     'crew', 'contracts', 'landings', 'landing_crew',
-    'month_closeouts', 'payments', 'wage_payments',
+    'month_closeouts', 'payments',
     'one_off_bonuses', 'sales_landings', 'sales_rows'
   ]
   loop
+    if not exists (
+      select 1 from pg_class rel
+      join pg_namespace ns on ns.oid = rel.relnamespace
+      where ns.nspname = 'public' and rel.relname = t and rel.relkind = 'r'
+    ) then
+      raise notice 'skipping % — not a table in public schema', t;
+      continue;
+    end if;
+
     for c in
       select con.conname,
              (select string_agg(quote_ident(a.attname), ', ' order by k.ord)
@@ -156,7 +182,6 @@ union all select 'landings',        count(*) from public.landings        where f
 union all select 'landing_crew',    count(*) from public.landing_crew    where fleet_id is null
 union all select 'month_closeouts', count(*) from public.month_closeouts where fleet_id is null
 union all select 'payments',        count(*) from public.payments        where fleet_id is null
-union all select 'wage_payments',   count(*) from public.wage_payments   where fleet_id is null
 union all select 'one_off_bonuses', count(*) from public.one_off_bonuses where fleet_id is null
 union all select 'settings',        count(*) from public.settings        where fleet_id is null
 union all select 'sales_landings',  count(*) from public.sales_landings  where fleet_id is null
