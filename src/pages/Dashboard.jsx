@@ -20,7 +20,10 @@ export default function Dashboard() {
             Signed in as {appUser?.display_name || 'Unknown'} ({appUser?.role || 'no role'})
           </p>
         </div>
-        <button className="secondary" onClick={signOut}>Sign out</button>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <Link to="/password" style={{ fontSize: '0.85rem' }}>Change password</Link>
+          <button className="secondary" onClick={signOut}>Sign out</button>
+        </div>
       </header>
 
       <div className="card">
