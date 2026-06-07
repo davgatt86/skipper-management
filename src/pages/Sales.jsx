@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey } from '../lib/parseCore'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerDetail, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, r2 } from '../lib/salesAgg'
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, r2 } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
@@ -154,7 +154,8 @@ export default function Sales() {
         }
         existing.add(key)
         const warn = rec.found && !rec.ok ? `  ⚠ totals differ from the note's printed TOTAL (£ ${rec.diffs.value >= 0 ? '+' : ''}${rec.diffs.value})` : ''
-        log.push(`✓ ${f.name}: ${res.meta.vessel} ${fmtDate(res.meta.isoDate)} — ${num(tot.boxes)} bx, ${gbp(tot.value)}${warn}`)
+        const fed = await feedCrewLanding(res.meta.isoDate, tot.boxes, key)
+        log.push(`✓ ${f.name}: ${res.meta.vessel} ${fmtDate(res.meta.isoDate)} — ${num(tot.boxes)} bx, ${gbp(tot.value)}${warn}${fed}`)
       } catch (err) {
         log.push(`✗ ${f.name}: ${err.message}`)
       }
@@ -162,6 +163,35 @@ export default function Sales() {
     }
     await loadLandings()
     setBusy(false)
+  }
+
+  /* After a sales note imports, feed its box total into the crew-bonus
+   * landing for that date (sum across joint-trip notes; never twice for
+   * the same note thanks to sales_keys; locked months left alone). */
+  async function feedCrewLanding(date, boxes, key) {
+    if (!isSkipper || !date || !boxes) return ''
+    const { data: existing, error } = await supabase.from('landings')
+      .select('id, boxes, locked, sales_keys').eq('landing_date', date)
+    if (error) return ` (crew landing: ${error.message})`
+    const l = (existing || [])[0]
+    if (l) {
+      if ((l.sales_keys || []).includes(key)) return ''
+      if (l.locked) return ' — crew landing locked (month closed), not updated'
+      const { error: e } = await supabase.from('landings')
+        .update({ boxes: Math.round((Number(l.boxes || 0) + Number(boxes)) * 100) / 100, sales_keys: [...(l.sales_keys || []), key] })
+        .eq('id', l.id)
+      return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx`
+    }
+    const { data: crewRows, error: ce } = await supabase.from('crew').select('id, status').is('archived_at', null)
+    if (ce) return ` (crew landing: ${ce.message})`
+    const aboard = (crewRows || []).filter(c => c.status === 'on_boat').map(c => c.id)
+    if (!aboard.length) return ' — no crew marked on boat, crew landing not created'
+    const { data: ins, error: ie } = await supabase.from('landings')
+      .insert({ fleet_id: appUser.fleet_id, landing_date: date, boxes: Number(boxes), notes: 'Auto from sales notes', locked: false, created_by: appUser.id, sales_keys: [key] })
+      .select('id').single()
+    if (ie) return ` (crew landing: ${ie.message})`
+    const { error: lce } = await supabase.from('landing_crew').insert(aboard.map(crew_id => ({ landing_id: ins.id, crew_id })))
+    return lce ? ` (crew aboard failed: ${lce.message} — edit the landing)` : ` → crew landing created (${num(boxes)} bx, ${aboard.length} crew aboard)`
   }
 
   async function deleteLanding(l) {
@@ -462,9 +492,10 @@ function SpeciesRow({ s, open, onToggle, rows }) {
 }
 
 function BuyerRow({ b, open, onToggle, rows }) {
+  const [openSp, setOpenSp] = useState('')
   return (
     <>
-      <tr onClick={onToggle} style={{ cursor: 'pointer' }}>
+      <tr onClick={() => { onToggle(); setOpenSp('') }} style={{ cursor: 'pointer' }}>
         <td style={{ ...td, fontWeight: 600, color: 'var(--navy)' }}>{open ? '▾ ' : '▸ '}{b.buyer}</td>
         <td style={tdR}>{num(b.boxes)}</td>
         <td style={tdR}>{num(b.kg)}</td>
@@ -472,13 +503,33 @@ function BuyerRow({ b, open, onToggle, rows }) {
         <td style={tdR}>{gbp(b.pkg)}</td>
         <td style={td} className="muted">{b.top}</td>
       </tr>
-      {open && buyerDetail(rows, b.buyer).map(d => (
-        <tr key={d.item} style={{ background: 'var(--grey-50)' }}>
-          <td style={{ ...td, paddingLeft: '1.8rem' }}>{d.item}</td>
-          <td style={tdR}>{num(d.boxes)}</td>
-          <td style={tdR}>{num(d.kg)}</td>
-          <td style={tdR}>{gbp0(d.value)}</td>
-          <td style={tdR}>{gbp(d.pkg)}</td>
+      {open && buyerSpecies(rows, b.buyer).map(sp => (
+        <SpRows key={sp.species} buyer={b.buyer} sp={sp} rows={rows}
+          open={openSp === sp.species}
+          onToggle={() => setOpenSp(openSp === sp.species ? '' : sp.species)} />
+      ))}
+    </>
+  )
+}
+
+function SpRows({ buyer, sp, rows, open, onToggle }) {
+  return (
+    <>
+      <tr onClick={onToggle} style={{ background: 'var(--grey-50)', cursor: 'pointer' }}>
+        <td style={{ ...td, paddingLeft: '1.8rem', fontWeight: 600 }}>{open ? '▾ ' : '▸ '}{sp.species}</td>
+        <td style={tdR}>{num(sp.boxes)}</td>
+        <td style={tdR}>{num(sp.kg)}</td>
+        <td style={tdR}>{gbp0(sp.value)}</td>
+        <td style={tdR}>{gbp(sp.pkg)}</td>
+        <td style={td}></td>
+      </tr>
+      {open && buyerSpeciesGrades(rows, buyer, sp.species).map(g => (
+        <tr key={g.grade} style={{ background: 'var(--grey-50)' }}>
+          <td style={{ ...td, paddingLeft: '3.4rem' }} className="muted">{g.grade}</td>
+          <td style={tdR}>{num(g.boxes)}</td>
+          <td style={tdR}>{num(g.kg)}</td>
+          <td style={tdR}>{gbp0(g.value)}</td>
+          <td style={tdR}>{gbp(g.pkg)}</td>
           <td style={td}></td>
         </tr>
       ))}
