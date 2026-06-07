@@ -22,7 +22,8 @@ export function latestSnapshotByYear(snapshots) {
 
 // Build the position table for one year.
 // trips: [{...trip, catches:[...]}]
-export function buildPosition({ snapshot, trips, year }) {
+// adjustments: what-if swaps & rentals [{stock, direction:'in'|'out', tonnes}]
+export function buildPosition({ snapshot, trips, year, adjustments = [] }) {
   const cutoff = snapshot?.last_landing_date || null // 'YYYY-MM-DD'
   const byStock = {}   // stock -> { since_uk_kg, since_nor_kg, total_year_kg }
   const nonquota = {}  // species -> { kg, sinceKg }
@@ -60,6 +61,13 @@ export function buildPosition({ snapshot, trips, year }) {
     if (afterStatement && touches) sinceTrips++
   }
 
+  // Net what-if adjustment per stock (IN positive, OUT negative, tonnes)
+  const adjByStock = {}
+  for (const a of adjustments) {
+    if (Number(a.year) !== Number(year)) continue
+    adjByStock[a.stock] = (adjByStock[a.stock] || 0) + (a.direction === 'in' ? 1 : -1) * Number(a.tonnes || 0)
+  }
+
   // Merge with snapshot lines (tonnes)
   const rows = []
   const seen = new Set()
@@ -67,6 +75,7 @@ export function buildPosition({ snapshot, trips, year }) {
     const s = byStock[l.stock] || { since_uk_kg: 0, since_nor_kg: 0, total_year_kg: 0 }
     seen.add(l.stock)
     const sinceT = (s.since_uk_kg + s.since_nor_kg) / 1000
+    const adjT = adjByStock[l.stock] || 0
     rows.push({
       section: l.section,
       stock: l.stock,
@@ -78,7 +87,8 @@ export function buildPosition({ snapshot, trips, year }) {
       since_uk_t: r3(s.since_uk_kg / 1000),
       since_nor_t: r3(s.since_nor_kg / 1000),
       since_t: r3(sinceT),
-      est_balance: l.balance != null ? r3(l.balance - sinceT) : null,
+      adj_t: r3(adjT),
+      est_balance: l.balance != null ? r3(l.balance - sinceT + adjT) : null,
       fqa_units: l.fqa_units,
     })
   }
@@ -90,7 +100,7 @@ export function buildPosition({ snapshot, trips, year }) {
       section: '(no AFPO line)', stock,
       allocation: null, catch_uk: null, catch_nor: null, catch_total: null, balance: null,
       since_uk_t: r3(s.since_uk_kg / 1000), since_nor_t: r3(s.since_nor_kg / 1000),
-      since_t: r3(sinceT), est_balance: null, fqa_units: null,
+      since_t: r3(sinceT), adj_t: r3(adjByStock[stock] || 0), est_balance: null, fqa_units: null,
     })
   }
 
