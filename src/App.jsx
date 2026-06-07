@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import CrewHub from './pages/CrewHub'
 import Crew from './pages/Crew'
 import Contracts from './pages/Contracts'
 import ContractDetail from './pages/ContractDetail'
@@ -10,6 +11,8 @@ import Landings from './pages/Landings'
 import Closeout from './pages/Closeout'
 import OneOffs from './pages/OneOffs'
 const Sales = lazy(() => import('./pages/Sales'))
+const Estimator = lazy(() => import('./pages/Estimator'))
+const SquareUp = lazy(() => import('./squareup/SquareUp'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -81,6 +84,25 @@ export default function App() {
         <Route path="/one-offs" element={
           <ProtectedRoute>
             <OneOffs />
+          </ProtectedRoute>
+        } />
+        <Route path="/crew-hub" element={
+          <ProtectedRoute>
+            <CrewHub />
+          </ProtectedRoute>
+        } />
+        <Route path="/estimator" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Estimator />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/squareup" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <SquareUp />
+            </Suspense>
           </ProtectedRoute>
         } />
         <Route path="/sales" element={
