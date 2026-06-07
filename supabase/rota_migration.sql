@@ -1,102 +1,76 @@
 -- ============================================================
--- MULTI-TENANCY MIGRATION (v2) — run once in Supabase SQL editor
--- Adds fleet_id scoping to every tenant table.
--- Existing policies are NOT touched: new RESTRICTIVE policies
--- are layered on top, so current viewer/crew/skipper access is
--- unchanged while only one fleet exists.
--- Safe to re-run (idempotent).
---
--- v2: removed wage_payments (it is a VIEW over payments, not a
--- table — with security_invoker it inherits the payments fleet
--- policy automatically). Loops now skip anything that isn't a
--- real table, with a NOTICE, instead of aborting.
+-- TRIP / CREW ROTA PLANNER — run once in Supabase SQL editor
+-- Planned trip periods on a calendar + crew per trip + crew
+-- holidays. Skippers edit; viewers (e.g. office) can read.
+-- Fleet-scoped like everything else. Safe to re-run.
 -- ============================================================
 
--- ------------------------------------------------------------
--- 1. Fleets table + seed The Don Fishing Co. Ltd
---    (fixed UUID so re-runs and admin SQL can reference it)
--- ------------------------------------------------------------
-create table if not exists public.fleets (
-  id         uuid primary key,
-  name       text not null,
-  created_at timestamptz default now()
+create table if not exists public.rota_trips (
+  id         uuid primary key default gen_random_uuid(),
+  fleet_id   uuid not null references public.fleets(id) default public.current_fleet_id(),
+  start_date date not null,
+  end_date   date not null,
+  colour     int  not null default 0,      -- index into the app palette
+  label      text default '',
+  created_at timestamptz default now(),
+  check (end_date >= start_date)
 );
+create index if not exists rota_trips_fleet_idx on public.rota_trips (fleet_id);
+create index if not exists rota_trips_start_idx on public.rota_trips (start_date);
 
-insert into public.fleets (id, name)
-values ('00000000-0000-4000-8000-000000000001', 'The Don Fishing Co. Ltd')
-on conflict (id) do nothing;
+create table if not exists public.rota_trip_crew (
+  trip_id  uuid not null references public.rota_trips(id) on delete cascade,
+  crew_id  uuid not null references public.crew(id) on delete cascade,
+  fleet_id uuid not null references public.fleets(id) default public.current_fleet_id(),
+  primary key (trip_id, crew_id)
+);
+create index if not exists rota_trip_crew_fleet_idx on public.rota_trip_crew (fleet_id);
 
-alter table public.fleets enable row level security;
+create table if not exists public.rota_holidays (
+  id         uuid primary key default gen_random_uuid(),
+  fleet_id   uuid not null references public.fleets(id) default public.current_fleet_id(),
+  crew_id    uuid not null references public.crew(id) on delete cascade,
+  start_date date not null,
+  end_date   date not null,
+  note       text default '',
+  created_at timestamptz default now(),
+  check (end_date >= start_date)
+);
+create index if not exists rota_holidays_fleet_idx on public.rota_holidays (fleet_id);
+create index if not exists rota_holidays_crew_idx on public.rota_holidays (crew_id);
 
--- ------------------------------------------------------------
--- 2. Anchor: app_users.fleet_id
--- ------------------------------------------------------------
-alter table public.app_users add column if not exists fleet_id uuid references public.fleets(id);
-
-update public.app_users
-set fleet_id = '00000000-0000-4000-8000-000000000001'
-where fleet_id is null;
-
-alter table public.app_users alter column fleet_id set not null;
-
--- ------------------------------------------------------------
--- 3. Helper: which fleet does the logged-in user belong to?
---    security definer = reads app_users without RLS recursion
---    (same pattern as the existing role helpers)
--- ------------------------------------------------------------
-create or replace function public.current_fleet_id()
-returns uuid
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select fleet_id from public.app_users where id = auth.uid()
-$$;
-
-revoke all on function public.current_fleet_id() from anon;
-grant execute on function public.current_fleet_id() to authenticated;
-
--- Members can read their own fleet's row (name etc.)
-drop policy if exists fleets_member_read on public.fleets;
-create policy fleets_member_read on public.fleets
-  for select using (id = public.current_fleet_id());
-
--- ------------------------------------------------------------
--- 4. Add fleet_id to every tenant TABLE:
---    add column -> backfill to Don fleet -> NOT NULL ->
---    default current_fleet_id() for future app inserts ->
---    index -> restrictive isolation policy
---    Views (e.g. wage_payments) are deliberately absent: with
---    security_invoker = true they inherit base-table policies.
--- ------------------------------------------------------------
+-- RLS: skipper + viewer read, skipper-only write, fleet isolation on top
 do $$
-declare
-  t text;
+declare t text;
 begin
-  foreach t in array array[
-    'crew', 'contracts', 'landings', 'landing_crew',
-    'month_closeouts', 'payments',
-    'one_off_bonuses', 'settings',
-    'sales_landings', 'sales_rows'
-  ]
+  foreach t in array array['rota_trips','rota_trip_crew','rota_holidays']
   loop
-    -- only proceed if this is a real table in public
-    if not exists (
-      select 1 from pg_class rel
-      join pg_namespace ns on ns.oid = rel.relnamespace
-      where ns.nspname = 'public' and rel.relname = t and rel.relkind = 'r'
-    ) then
-      raise notice 'skipping % — not a table in public schema', t;
-      continue;
-    end if;
+    execute format('alter table public.%I enable row level security', t);
 
-    execute format('alter table public.%I add column if not exists fleet_id uuid references public.fleets(id)', t);
-    execute format('update public.%I set fleet_id = %L where fleet_id is null',
-                   t, '00000000-0000-4000-8000-000000000001');
-    execute format('alter table public.%I alter column fleet_id set not null', t);
-    execute format('alter table public.%I alter column fleet_id set default public.current_fleet_id()', t);
-    execute format('create index if not exists %I on public.%I (fleet_id)', t || '_fleet_idx', t);
+    execute format('drop policy if exists %I on public.%I', t || '_read', t);
+    execute format(
+      'create policy %I on public.%I for select
+         using (exists (select 1 from public.app_users u where u.id = auth.uid() and u.role in (''skipper'',''viewer'')))',
+      t || '_read', t);
+
+    execute format('drop policy if exists %I on public.%I', t || '_write_ins', t);
+    execute format(
+      'create policy %I on public.%I for insert
+         with check (exists (select 1 from public.app_users u where u.id = auth.uid() and u.role = ''skipper''))',
+      t || '_write_ins', t);
+
+    execute format('drop policy if exists %I on public.%I', t || '_write_upd', t);
+    execute format(
+      'create policy %I on public.%I for update
+         using (exists (select 1 from public.app_users u where u.id = auth.uid() and u.role = ''skipper''))
+         with check (exists (select 1 from public.app_users u where u.id = auth.uid() and u.role = ''skipper''))',
+      t || '_write_upd', t);
+
+    execute format('drop policy if exists %I on public.%I', t || '_write_del', t);
+    execute format(
+      'create policy %I on public.%I for delete
+         using (exists (select 1 from public.app_users u where u.id = auth.uid() and u.role = ''skipper''))',
+      t || '_write_del', t);
 
     execute format('drop policy if exists %I on public.%I', 'fleet_isolation_' || t, t);
     execute format(
@@ -107,82 +81,6 @@ begin
   end loop;
 end $$;
 
--- Same restrictive layer on app_users (users only ever see
--- rows inside their own fleet; own-row reads still pass)
-drop policy if exists fleet_isolation_app_users on public.app_users;
-create policy fleet_isolation_app_users on public.app_users
-  as restrictive for all to authenticated
-  using (fleet_id = public.current_fleet_id())
-  with check (fleet_id = public.current_fleet_id());
-
--- ------------------------------------------------------------
--- 5. Re-key single-fleet unique constraints to per-fleet ones.
---    Finds every UNIQUE constraint (not primary keys) on the
---    tenant tables that doesn't already include fleet_id, drops
---    it, and recreates it as UNIQUE (fleet_id, ...same cols...).
---    Covers sales_landings.dedup_key and e.g. any unique month
---    on month_closeouts — two fleets can then close the same
---    month or land the same sale number without colliding.
--- ------------------------------------------------------------
-do $$
-declare
-  t text;
-  c record;
-begin
-  foreach t in array array[
-    'crew', 'contracts', 'landings', 'landing_crew',
-    'month_closeouts', 'payments',
-    'one_off_bonuses', 'sales_landings', 'sales_rows'
-  ]
-  loop
-    if not exists (
-      select 1 from pg_class rel
-      join pg_namespace ns on ns.oid = rel.relnamespace
-      where ns.nspname = 'public' and rel.relname = t and rel.relkind = 'r'
-    ) then
-      raise notice 'skipping % — not a table in public schema', t;
-      continue;
-    end if;
-
-    for c in
-      select con.conname,
-             (select string_agg(quote_ident(a.attname), ', ' order by k.ord)
-                from unnest(con.conkey) with ordinality as k(attnum, ord)
-                join pg_attribute a
-                  on a.attrelid = con.conrelid and a.attnum = k.attnum) as collist
-      from pg_constraint con
-      join pg_class rel on rel.oid = con.conrelid
-      join pg_namespace ns on ns.oid = rel.relnamespace
-      where ns.nspname = 'public'
-        and rel.relname = t
-        and con.contype = 'u'
-        and not exists (
-          select 1 from unnest(con.conkey) k(attnum)
-          join pg_attribute a
-            on a.attrelid = con.conrelid and a.attnum = k.attnum
-          where a.attname = 'fleet_id')
-    loop
-      execute format('alter table public.%I drop constraint %I', t, c.conname);
-      execute format('create unique index if not exists %I on public.%I (fleet_id, %s)',
-                     left(t || '_fleet_' || c.conname, 63), t, c.collist);
-    end loop;
-  end loop;
-end $$;
-
--- settings: exactly one row per fleet (app uses .maybeSingle())
-create unique index if not exists settings_one_per_fleet on public.settings (fleet_id);
-
--- ------------------------------------------------------------
--- 6. Verify — every count should be 0
--- ------------------------------------------------------------
-select 'app_users' as tbl, count(*) as missing_fleet from public.app_users where fleet_id is null
-union all select 'crew',            count(*) from public.crew            where fleet_id is null
-union all select 'contracts',       count(*) from public.contracts       where fleet_id is null
-union all select 'landings',        count(*) from public.landings        where fleet_id is null
-union all select 'landing_crew',    count(*) from public.landing_crew    where fleet_id is null
-union all select 'month_closeouts', count(*) from public.month_closeouts where fleet_id is null
-union all select 'payments',        count(*) from public.payments        where fleet_id is null
-union all select 'one_off_bonuses', count(*) from public.one_off_bonuses where fleet_id is null
-union all select 'settings',        count(*) from public.settings        where fleet_id is null
-union all select 'sales_landings',  count(*) from public.sales_landings  where fleet_id is null
-union all select 'sales_rows',      count(*) from public.sales_rows      where fleet_id is null;
+select relname from pg_class rel
+join pg_namespace ns on ns.oid = rel.relnamespace
+where ns.nspname = 'public' and rel.relkind = 'r' and rel.relname like 'rota_%';
