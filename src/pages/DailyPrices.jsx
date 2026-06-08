@@ -48,6 +48,9 @@ export default function DailyPrices() {
   const [log, setLog] = useState([])
   const [error, setError] = useState('')
   const [tab, setTab] = useState('board')
+  const [skipLoaded, setSkipLoaded] = useState(true)
+  const [progress, setProgress] = useState(null)
+  const cancelRef = useRef(false)
 
   async function loadAll() {
     const [pRes, vRes, dRes] = await Promise.all([
@@ -64,36 +67,42 @@ export default function DailyPrices() {
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
 
   async function upload(files) {
-    setBusy(true); setLog([]); setError('')
-    let ok = 0
-    for (const f of files) {
+    setBusy(true); setLog([]); setError(''); cancelRef.current = false
+    const loadedNames = new Set(days.map(d => d.filename).filter(Boolean))
+    let ok = 0, fail = 0, skip = 0
+    setProgress({ done: 0, total: files.length, ok, fail, skip })
+    for (let i = 0; i < files.length; i++) {
+      if (cancelRef.current) { setLog(l => [...l, `■ Stopped at ${i} of ${files.length}. Re-run any time — loaded sheets are skipped.`]); break }
+      const f = files[i]
       try {
-        const res = await parseMarketPdf(f)
-        if (!res.source || !res.price_date || !res.prices.length) {
-          setLog(l => [...l, `✘ ${f.name}: ${res.warnings[0] || 'nothing parsed'}`]); continue
+        if (skipLoaded && loadedNames.has(f.name)) { skip++ }
+        else {
+          const res = await parseMarketPdf(f)
+          if (!res.source || !res.price_date || !res.prices.length) {
+            fail++; setLog(l => [...l, `✘ ${f.name}: ${res.warnings[0] || 'nothing parsed'}`])
+          } else {
+            const { data: existing } = await supabase.from('market_days')
+              .select('id').eq('source', res.source).eq('price_date', res.price_date).maybeSingle()
+            if (existing) await supabase.from('market_days').delete().eq('id', existing.id)
+            const { data: day, error: e1 } = await supabase.from('market_days').insert({
+              source: res.source, price_date: res.price_date,
+              boats: res.meta.boats ?? null, consignments: res.meta.consignments ?? null,
+              total_boxes: res.meta.total_boxes ?? null, total_kg: res.meta.total_kg ?? null,
+              filename: f.name,
+            }).select().single()
+            if (e1) throw e1
+            const e2 = (await supabase.from('market_prices').insert(res.prices.map(p => ({ ...p, day_id: day.id })))).error
+            const e3 = res.volumes.length ? (await supabase.from('market_volumes').insert(res.volumes.map(v => ({ ...v, day_id: day.id })))).error : null
+            if (e2 || e3) { await supabase.from('market_days').delete().eq('id', day.id); throw (e2 || e3) }
+            ok++; loadedNames.add(f.name)
+          }
         }
-        // replace-on-reupload by (source, date)
-        const { data: existing } = await supabase.from('market_days')
-          .select('id').eq('source', res.source).eq('price_date', res.price_date).maybeSingle()
-        if (existing) await supabase.from('market_days').delete().eq('id', existing.id)
-        const { data: day, error: e1 } = await supabase.from('market_days').insert({
-          source: res.source, price_date: res.price_date,
-          boats: res.meta.boats ?? null, consignments: res.meta.consignments ?? null,
-          total_boxes: res.meta.total_boxes ?? null, total_kg: res.meta.total_kg ?? null,
-          filename: f.name,
-        }).select().single()
-        if (e1) throw e1
-        const pr = res.prices.map(p => ({ ...p, day_id: day.id }))
-        const vol = res.volumes.map(v => ({ ...v, day_id: day.id }))
-        const e2 = (await supabase.from('market_prices').insert(pr)).error
-        const e3 = vol.length ? (await supabase.from('market_volumes').insert(vol)).error : null
-        if (e2 || e3) { await supabase.from('market_days').delete().eq('id', day.id); throw (e2 || e3) }
-        ok++
-        setLog(l => [...l, `✔ ${f.name}: ${res.source} ${fmtDate(res.price_date)} — ${res.prices.length} prices${res.volumes.length ? `, ${res.volumes.length} volume rows` : ''}${existing ? ' (replaced)' : ''}`])
-      } catch (e) { setLog(l => [...l, `✘ ${f.name}: ${e.message}`]) }
+      } catch (e) { fail++; setLog(l => [...l, `✘ ${f.name}: ${e.message}`]) }
+      setProgress({ done: i + 1, total: files.length, ok, fail, skip })
+      if ((i & 15) === 0) await new Promise(r => setTimeout(r, 0)) // let the UI breathe
     }
     await loadAll(); setBusy(false)
-    setLog(l => [...l, `Done — ${ok}/${files.length} sheet${files.length === 1 ? '' : 's'} loaded.`])
+    setLog(l => [...l, `Done — ${ok} loaded, ${skip} already in, ${fail} failed, of ${files.length}.`])
   }
 
   const yearsAll = useMemo(() => [...new Set(prices.map(p => p.price_date.slice(0, 4)))].sort(), [prices])
@@ -117,15 +126,33 @@ export default function DailyPrices() {
         <div className="card" style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <UploadBtn busy={busy} onFiles={upload} />
+            {busy && <button className="secondary" onClick={() => { cancelRef.current = true }}>Stop</button>}
+            <label style={{ fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <input type="checkbox" checked={skipLoaded} onChange={e => setSkipLoaded(e.target.checked)} disabled={busy} />
+              skip sheets already loaded
+            </label>
             <span className="muted" style={{ fontSize: '0.85rem' }}>
-              {days.length} day-sheet{days.length === 1 ? '' : 's'} loaded · drag in a whole month at once
+              {days.length} day-sheet{days.length === 1 ? '' : 's'} loaded
             </span>
           </div>
+          {progress && (
+            <div style={{ marginTop: '0.7rem' }}>
+              <div style={{ height: 8, background: 'var(--grey-50)', borderRadius: 999, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <div style={{ width: `${progress.total ? Math.round(progress.done / progress.total * 100) : 0}%`, height: '100%', background: 'var(--navy)', transition: 'width 0.2s' }} />
+              </div>
+              <div className="muted" style={{ fontSize: '0.82rem', marginTop: '0.3rem' }}>
+                {progress.done} / {progress.total} · {progress.ok} loaded, {progress.skip} skipped, {progress.fail} failed
+              </div>
+            </div>
+          )}
           {log.length > 0 && (
             <ul style={{ marginTop: '0.7rem', marginBottom: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', maxHeight: 180, overflowY: 'auto' }}>
               {log.map((m, i) => <li key={i}>{m}</li>)}
             </ul>
           )}
+          <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem', marginBottom: 0 }}>
+            Big backfill? Do it on a computer, a few months at a time. Stop and resume freely — anything already in is skipped, so re-running only does what's left.
+          </p>
         </div>
       )}
 
