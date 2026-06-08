@@ -44,6 +44,7 @@ export default function Dashboard() {
             <Link to="/rota" style={tile}>Rota</Link>
           )}
           <Link to="/crew-hub" style={tile}>Crew</Link>
+          <Link to="/daily-prices" style={tile}>Daily Prices</Link>
         </div>
       </div>
     </div>
