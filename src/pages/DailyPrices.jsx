@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ScatterChart, Scatter, ZAxis,
 } from 'recharts'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseMarketPdf } from '../lib/market/parseMarket'
 import {
-  speciesFor, gradesFor, buildBoard, buildPriceSeries, buildVolumeSeries, monthInsights, monthLabel,
+  speciesFor, gradesFor, buildBoard, buildPriceSeries, buildVolumeSeries,
+  monthInsights, monthLabel, latestDate, shiftDays, MONTHS,
 } from '../lib/market/marketAgg'
 
 const PALETTE = ['#1d4ed8', '#c2410c', '#15803d', '#7c3aed', '#db2777', '#0891b2', '#ca8a04', '#4b5563', '#be123c', '#2563eb', '#65a30d', '#9333ea']
@@ -52,17 +53,29 @@ export default function DailyPrices() {
   const [progress, setProgress] = useState(null)
   const cancelRef = useRef(false)
 
+  async function fetchAll(table) {
+    const SIZE = 1000
+    const { count, error: ce } = await supabase.from(table).select('id', { count: 'exact', head: true })
+    if (ce) return { error: ce }
+    if (!count) return { data: [] }
+    const reqs = []
+    for (let i = 0; i * SIZE < count; i++) {
+      reqs.push(supabase.from(table).select('*').order('price_date').range(i * SIZE, i * SIZE + SIZE - 1))
+    }
+    const results = await Promise.all(reqs)
+    const bad = results.find(r => r.error)
+    if (bad) return { error: bad.error }
+    return { data: results.flatMap(r => r.data || []) }
+  }
+
   async function loadAll() {
-    const [pRes, vRes, dRes] = await Promise.all([
-      supabase.from('market_prices').select('*').order('price_date'),
-      supabase.from('market_volumes').select('*').order('price_date'),
-      supabase.from('market_days').select('*').order('price_date', { ascending: false }),
-    ])
-    if (pRes.error || vRes.error || dRes.error) {
+    const [p, v, d] = await Promise.all([fetchAll('market_prices'), fetchAll('market_volumes'), fetchAll('market_days')])
+    if (p.error || v.error || d.error) {
       setReady(false); setPrices([]); setVolumes([]); setDays([]); return
     }
     setReady(true)
-    setPrices(pRes.data || []); setVolumes(vRes.data || []); setDays(dRes.data || [])
+    setPrices(p.data); setVolumes(v.data)
+    setDays([...d.data].sort((a, b) => b.price_date.localeCompare(a.price_date)))
   }
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
 
@@ -229,36 +242,78 @@ function YearPicker({ years, sel, onToggle }) {
     </div>
   )
 }
-function Chart({ data, keys, yfmt }) {
-  if (!data.length || !keys.length) return <p className="muted" style={{ fontSize: '0.85rem' }}>Pick a species and at least one grade to draw a line.</p>
+// Range presets: window length + granularity + chart type. Single ranges use
+// bars; "Compare years" uses lines (month/week-of-year, one line per year).
+const RANGES = [
+  ['1W', '1 week', 7, 'day'],
+  ['2W', '2 weeks', 14, 'day'],
+  ['1M', '1 month', 31, 'week'],
+  ['3M', '3 months', 93, 'month'],
+  ['6M', '6 months', 186, 'month'],
+  ['1Y', '1 year', 366, 'month'],
+  ['YRS', 'Compare years', 0, 'month'],
+]
+const rangeDef = key => RANGES.find(r => r[0] === key)
+
+function xTickFmt(gran, compareYears) {
+  if (compareYears) return x => x            // 'Jan'.. or 'W01'
+  if (gran === 'day') return x => x.slice(8, 10) + '/' + x.slice(5, 7)
+  if (gran === 'week') return x => 'W' + x.slice(6)
+  return x => MONTHS[+x.slice(5, 7) - 1] + (x.length >= 7 ? " '" + x.slice(2, 4) : '')
+}
+
+function TrendChart({ data, keys, yfmt, kind, gran, compareYears }) {
+  if (!data.length || !keys.length) return <p className="muted" style={{ fontSize: '0.85rem' }}>Pick a species and at least one grade to draw the chart.</p>
+  const fmtX = xTickFmt(gran, compareYears)
+  const common = (
+    <>
+      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+      <XAxis dataKey="x" tick={{ fontSize: 11 }} tickFormatter={fmtX} interval="preserveStartEnd" minTickGap={12} />
+      <YAxis tick={{ fontSize: 11 }} tickFormatter={yfmt} width={52} />
+      <Tooltip formatter={v => yfmt(v)} labelFormatter={fmtX} />
+      <Legend wrapperStyle={{ fontSize: 11 }} />
+    </>
+  )
   return (
-    <div style={{ width: '100%', height: 360 }}>
+    <div style={{ width: '100%', height: 380 }}>
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="x" tick={{ fontSize: 11 }} />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={yfmt} width={52} />
-          <Tooltip formatter={(v) => yfmt(v)} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
-          {keys.map((k, i) => <Line key={k} type="monotone" dataKey={k} stroke={PALETTE[i % PALETTE.length]} dot={false} strokeWidth={2} connectNulls />)}
-        </LineChart>
+        {kind === 'bar' ? (
+          <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            {common}
+            {keys.map((k, i) => <Bar key={k} dataKey={k} fill={PALETTE[i % PALETTE.length]} />)}
+          </BarChart>
+        ) : (
+          <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            {common}
+            {keys.map((k, i) => <Line key={k} type="monotone" dataKey={k} stroke={PALETTE[i % PALETTE.length]} dot={false} strokeWidth={2} connectNulls />)}
+          </LineChart>
+        )}
       </ResponsiveContainer>
     </div>
   )
 }
 
 // ---------------- Price trends ----------------
+function RangePicker({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+      {RANGES.map(([k, lbl]) => <button key={k} className={value === k ? '' : 'secondary'} style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => onChange(k)}>{lbl}</button>)}
+    </div>
+  )
+}
+
 function PriceTrends({ prices, years }) {
   const [source, setSource] = useState('PD')
   const [sel, setSel] = useState([])          // [{species, grades:Set}]
-  const [gran, setGran] = useState('month')
+  const [range, setRange] = useState('1Y')
   const [metric, setMetric] = useState('ave')
-  const [compare, setCompare] = useState(false)
   const [yrs, setYrs] = useState(years.slice(-2))
 
   useEffect(() => { setYrs(years.slice(-2)) }, [years]) // eslint-disable-line
   const speciesOpts = useMemo(() => speciesFor(prices, source), [prices, source])
   const realMetric = source === 'DK' ? 'ave' : metric
+  const [, , days, gran] = rangeDef(range)
+  const compare = range === 'YRS'
 
   function toggleSpecies(sp) {
     setSel(cur => {
@@ -276,24 +331,26 @@ function PriceTrends({ prices, years }) {
       return { ...s, grades }
     }))
   }
-  const series = useMemo(() => buildPriceSeries(prices, {
-    selections: sel, source, gran, metric: realMetric, compareYears: compare, years: yrs,
-  }), [prices, sel, source, gran, realMetric, compare, yrs])
+
+  const series = useMemo(() => {
+    let rows = prices
+    if (!compare) {
+      const latest = latestDate(prices, source)
+      if (latest) { const start = shiftDays(latest, days); rows = prices.filter(p => p.price_date >= start && p.price_date <= latest) }
+    }
+    return buildPriceSeries(rows, { selections: sel, source, gran, metric: realMetric, compareYears: compare, years: yrs })
+  }, [prices, sel, source, gran, days, realMetric, compare, yrs])
 
   return (
     <div className="card">
       <div style={{ display: 'grid', gap: '0.7rem', marginBottom: '0.8rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <Segmented value={source} onChange={setSource} options={[['PD', 'Peterhead'], ['DK', 'Denmark'], ['Combined', 'Combined']]} />
-          <span style={{ color: 'var(--border)' }}>|</span>
-          <Segmented value={gran} onChange={setGran} options={[['week', 'Weekly'], ['month', 'Monthly']]} />
           {source !== 'DK' && <><span style={{ color: 'var(--border)' }}>|</span>
             <Segmented value={metric} onChange={setMetric} options={[['ave', 'Avg'], ['high', 'High'], ['low', 'Low']]} /></>}
         </div>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={chip(compare)} onClick={() => setCompare(c => !c)}>{compare ? '✓ ' : ''}Compare years</span>
-          {compare && <YearPicker years={years} sel={yrs} onToggle={y => setYrs(c => c.includes(y) ? c.filter(x => x !== y) : [...c, y])} />}
-        </div>
+        <div><RangePicker value={range} onChange={setRange} /></div>
+        {compare && <YearPicker years={years} sel={yrs} onToggle={y => setYrs(c => c.includes(y) ? c.filter(x => x !== y) : [...c, y])} />}
         <div>
           <div className="muted" style={{ fontSize: '0.8rem', marginBottom: '0.3rem' }}>Species (up to 3):</div>
           <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -313,9 +370,9 @@ function PriceTrends({ prices, years }) {
           </div>
         ))}
       </div>
-      <Chart data={series.data} keys={series.keys} yfmt={gbp} />
+      <TrendChart data={series.data} keys={series.keys} yfmt={gbp} kind={compare ? 'line' : 'bar'} gran={gran} compareYears={compare} />
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem', marginBottom: 0 }}>
-        Denmark is average price only; Peterhead can show high/avg/low. Each species+grade is its own line — toggle grades off to declutter.
+        {compare ? 'Lines compare the same months across the years you pick.' : 'Bars show the chosen window (daily ≤2 weeks, weekly for a month, monthly beyond).'} Denmark is average price only; Peterhead can show high/avg/low.
       </p>
     </div>
   )
@@ -325,30 +382,31 @@ function PriceTrends({ prices, years }) {
 function VolumeTrends({ volumes, years }) {
   const [source, setSource] = useState('PD')
   const [labels, setLabels] = useState([])
-  const [gran, setGran] = useState('month')
-  const [compare, setCompare] = useState(false)
+  const [range, setRange] = useState('1Y')
   const [yrs, setYrs] = useState(years.slice(-2))
   useEffect(() => { setYrs(years.slice(-2)) }, [years]) // eslint-disable-line
+  const [, , days, gran] = rangeDef(range)
+  const compare = range === 'YRS'
 
-  const labelOpts = useMemo(() => [...new Set(volumes.filter(v => source === 'Combined' || v.source === source).map(v => v.label))].sort(), [volumes, source])
-  const series = useMemo(() => buildVolumeSeries(volumes, { labels, source, gran, compareYears: compare, years: yrs }), [volumes, labels, source, gran, compare, yrs])
+  const labelOpts = useMemo(() => [...new Set(volumes.filter(v => v.source === source).map(v => v.label))].sort(), [volumes, source])
+  const series = useMemo(() => {
+    let rows = volumes
+    if (!compare) {
+      const latest = latestDate(volumes, source)
+      if (latest) { const start = shiftDays(latest, days); rows = volumes.filter(v => v.price_date >= start && v.price_date <= latest) }
+    }
+    return buildVolumeSeries(rows, { labels, source, gran, compareYears: compare, years: yrs })
+  }, [volumes, labels, source, gran, days, compare, yrs])
   const unit = source === 'DK' ? 'kg' : 'boxes'
 
   return (
     <div className="card">
       <div style={{ display: 'grid', gap: '0.7rem', marginBottom: '0.8rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <Segmented value={source} onChange={() => { }} options={[['PD', 'Peterhead (boxes)'], ['DK', 'Denmark (kg)']]} />
-          <span style={{ color: 'var(--border)' }}>|</span>
-          <Segmented value={gran} onChange={setGran} options={[['week', 'Weekly'], ['month', 'Monthly']]} />
-          <button className="secondary" style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => { setSource(source === 'PD' ? 'DK' : 'PD'); setLabels([]) }}>
-            switch to {source === 'PD' ? 'Denmark' : 'Peterhead'}
-          </button>
+          <Segmented value={source} onChange={s => { setSource(s); setLabels([]) }} options={[['PD', 'Peterhead (boxes)'], ['DK', 'Denmark (kg)']]} />
         </div>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={chip(compare)} onClick={() => setCompare(c => !c)}>{compare ? '✓ ' : ''}Compare years</span>
-          {compare && <YearPicker years={years} sel={yrs} onToggle={y => setYrs(c => c.includes(y) ? c.filter(x => x !== y) : [...c, y])} />}
-        </div>
+        <div><RangePicker value={range} onChange={setRange} /></div>
+        {compare && <YearPicker years={years} sel={yrs} onToggle={y => setYrs(c => c.includes(y) ? c.filter(x => x !== y) : [...c, y])} />}
         <div>
           <div className="muted" style={{ fontSize: '0.8rem', marginBottom: '0.3rem' }}>Species ({unit}) — leave empty for all:</div>
           <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -356,9 +414,9 @@ function VolumeTrends({ volumes, years }) {
           </div>
         </div>
       </div>
-      <Chart data={series.data} keys={series.keys} yfmt={num0} />
+      <TrendChart data={series.data} keys={series.keys} yfmt={num0} kind={compare ? 'line' : 'bar'} gran={gran} compareYears={compare} />
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem', marginBottom: 0 }}>
-        Peterhead volume is box counts per species; Denmark is kg landed (from the fiskeauktion.dk export — the Hanstholm report only carries a day total).
+        Peterhead volume is box counts per species; Denmark is kg landed (from the fiskeauktion.dk export — the Hanstholm report carries a day total only).
       </p>
     </div>
   )
