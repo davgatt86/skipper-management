@@ -11,6 +11,10 @@
 const PD_SPECIES = [
   [/^cod\b/i, 'Cod'],
   [/^hadd/i, 'Haddock'],
+  [/^seed$/i, 'Haddock'],
+  [/^chipper/i, 'Haddock'],
+  [/^metro/i, 'Haddock'],
+  [/^round hadd/i, 'Haddock'],
   [/^round whiting/i, 'Whiting'],
   [/^whiting/i, 'Whiting'],
   [/^catfish/i, 'Catfish'],
@@ -29,12 +33,13 @@ const PD_SPECIES = [
   [/^brill/i, 'Brill'],
   [/^witch/i, 'Witch'],
   [/^tusk/i, 'Tusk'],
-  [/^skate/i, 'Skate'],
+  [/skate/i, 'Skate'],
 ]
 const PD_SUBGRADE = {
   'Cod/Large': 'Large', 'Cod Sprags': 'Sprags', 'Cod Medium': 'Medium', 'Cod Selected': 'Selected', 'Cod Small': 'Small',
   'Hadd Lge/Med': 'Lge/Med', 'Hadd Selected': 'Selected', 'Hadd Seed': 'Seed',
   'Hadd Chipper': 'Chipper', 'Hadd Metro': 'Metro', 'Hadd Round': 'Round',
+  'Seed': 'Seed', 'Chippers': 'Chipper', 'Chipper': 'Chipper', 'Metros': 'Metro', 'Metro': 'Metro', 'Round Hadd': 'Round',
   'Round Whiting': 'Round', 'Catfish Scottish': 'Scottish',
 }
 export function pdSpecies(label) {

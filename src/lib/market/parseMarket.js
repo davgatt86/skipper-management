@@ -63,24 +63,70 @@ function parsePd(pages, fullText) {
   const volumes = []
   const meta = { boats: null, consignments: null, total_boxes: null }
 
-  const BLOCKS = [
-    { sp: [40, 120], gr: [120, 160], lo: [156, 196], hi: [196, 228], av: [228, 290] },
-    { sp: [292, 378], gr: [378, 436], lo: [432, 472], hi: [472, 508], av: [508, 575] },
-  ]
+  const GRADE = /^(A[0-9]|B[0-9]|U9|-)$/i
+  const isMoney = s => /^£?\d[\d,]*\.\d{2}$/.test(s)
+  const isHdr = s => /^(LOW|HIGH|AVE)$/i.test(s)
+
+  // 1. Anchor on the "LOW HIGH AVE  LOW HIGH AVE" header row, so column
+  //    positions are read off each sheet instead of hard-coded (templates
+  //    have shifted over the years — 2022 sits at different x than 2026).
+  let cols = null
   for (const pg of pages) {
     for (const r of pg.rows) {
-      for (const b of BLOCKS) {
-        const inB = (x, [a, c]) => x >= a && x < c
-        const spTok = r.items.filter(i => inB(i.x, b.sp)).map(i => i.str)
-        const grTok = r.items.filter(i => inB(i.x, b.gr)).map(i => i.str)
-        const lo = r.items.find(i => inB(i.x, b.lo))?.str
-        const hi = r.items.find(i => inB(i.x, b.hi))?.str
-        const av = r.items.find(i => inB(i.x, b.av))?.str
-        if (!spTok.length || !grTok.length) continue
-        if (av == null && hi == null && lo == null) continue
-        const grade = grTok.join(' ')
-        const { species, subgrade } = pdSpecies(spTok.join(' '))
-        prices.push({ source: 'PD', price_date, species, grade, subgrade, low: num(lo), high: num(hi), ave: num(av) })
+      const lo = r.items.filter(i => /^LOW$/i.test(i.str)).sort((a, b) => a.x - b.x)
+      const hi = r.items.filter(i => /^HIGH$/i.test(i.str)).sort((a, b) => a.x - b.x)
+      const av = r.items.filter(i => /^AVE$/i.test(i.str)).sort((a, b) => a.x - b.x)
+      if (lo.length >= 2 && hi.length >= 2 && av.length >= 2) {
+        cols = {
+          left: { low: lo[0].x, high: hi[0].x, ave: av[0].x },
+          right: { low: lo[1].x, high: hi[1].x, ave: av[1].x },
+        }
+        break
+      }
+    }
+    if (cols) break
+  }
+  if (!cols) {
+    warnings.push('Could not find the LOW/HIGH/AVE header row')
+    return { source: 'PD', price_date, meta, prices, volumes, warnings }
+  }
+
+  // 2. Detect where the right block's species column starts (leftmost text
+  //    token sitting right of the left AVE column), to split the two blocks
+  //    without guessing — the right block's species is its leftmost element.
+  let rightSpeciesX = Infinity
+  for (const pg of pages) for (const r of pg.rows) for (const i of r.items) {
+    if (i.x > cols.left.ave + 5 && !isMoney(i.str) && !isHdr(i.str) && /[A-Za-z]/.test(i.str)) {
+      if (i.x < rightSpeciesX) rightSpeciesX = i.x
+    }
+  }
+  const split = isFinite(rightSpeciesX) ? (cols.left.ave + rightSpeciesX) / 2 : (cols.left.ave + cols.right.low) / 2
+
+  const nearest = (x, c) => {
+    const d = { low: Math.abs(x - c.low), high: Math.abs(x - c.high), ave: Math.abs(x - c.ave) }
+    return d.low <= d.high && d.low <= d.ave ? 'low' : (d.high <= d.ave ? 'high' : 'ave')
+  }
+
+  for (const pg of pages) {
+    for (const r of pg.rows) {
+      for (const side of ['left', 'right']) {
+        const c = cols[side]
+        const its = r.items.filter(i => side === 'left' ? i.x <= split : i.x > split)
+        if (!its.length) continue
+        const slot = { low: null, high: null, ave: null }
+        const headTok = []
+        let grade = ''
+        for (const i of its) {
+          if (isMoney(i.str)) { const k = nearest(i.x, c); if (slot[k] == null) slot[k] = num(i.str) }
+          else if (isHdr(i.str)) { /* header row */ }
+          else if (GRADE.test(i.str)) grade = i.str.toUpperCase()
+          else headTok.push(i.str)
+        }
+        if (slot.low == null && slot.high == null && slot.ave == null) continue
+        const label = headTok.join(' ').trim()
+        if (!label) continue
+        const { species, subgrade } = pdSpecies(label)
+        prices.push({ source: 'PD', price_date, species, grade, subgrade, low: slot.low, high: slot.high, ave: slot.ave })
       }
     }
   }
