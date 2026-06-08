@@ -50,15 +50,16 @@ if (typeof Promise.withResolvers !== 'function') {
 }
 
 import { createClient } from '@supabase/supabase-js'
-import { createRequire } from 'module'
 import { parseMarketFromDoc } from '../../src/lib/market/parseMarket.js'
 
 // parse-core.cjs is the canonical sales-note parser, vendored here so the
-// function can run it server-side. Keep it identical to the copy hosted at
-// fish-sales.netlify.app/parse-core.js — all parser fixes happen there, then
-// this file is replaced with the same contents.
-const require = createRequire(import.meta.url)
-const ParseCore = require('./parse-core.cjs')
+// function can run it server-side. Imported statically so the Netlify/esbuild
+// bundler inlines it (createRequire(import.meta.url) breaks once bundled to
+// CommonJS — import.meta.url is undefined there). Keep this file identical to
+// the copy hosted at fish-sales.netlify.app/parse-core.js — all parser fixes
+// happen there, then this file is replaced with the same contents.
+import ParseCoreModule from './parse-core.cjs'
+const ParseCore = ParseCoreModule?.default ?? ParseCoreModule
 
 const ok = (body) => ({ statusCode: 200, body: typeof body === 'string' ? body : JSON.stringify(body) })
 
