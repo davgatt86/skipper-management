@@ -31,7 +31,6 @@ if (typeof Promise.withResolvers !== 'function') {
   }
 }
 
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { createClient } from '@supabase/supabase-js'
 import { parseMarketFromDoc } from '../../src/lib/market/parseMarket.js'
 
@@ -61,6 +60,10 @@ export const handler = async (event) => {
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!SUPABASE_URL || !SERVICE_KEY) return { statusCode: 500, body: 'server missing supabase env' }
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+
+  // pdf.js is ESM-only; load it via dynamic import (works from CommonJS).
+  const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+
 
   const attachments = body.attachments || []
   const results = []
