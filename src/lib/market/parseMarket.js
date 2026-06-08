@@ -168,7 +168,8 @@ function parseDkHanstholm(pages, fullText) {
 export async function parseMarketPdf(file) {
   const pdfjsLib = await ensurePdfjs()
   const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise
-  return parseMarketFromDoc(pdf, file.name || '')
+  try { return await parseMarketFromDoc(pdf, file.name || '') }
+  finally { try { await pdf.destroy() } catch { /* ignore */ } }
 }
 
 export async function parseMarketFromDoc(pdf, filename) {
