@@ -1,7 +1,7 @@
 // Pure aggregation for the Daily Prices page: period keys, board deltas,
 // price/volume trend series, and month insights. No I/O, easy to reason about.
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export function isoWeek(dateStr) {
   const d = new Date(dateStr + 'T00:00:00Z')
@@ -12,10 +12,13 @@ export function isoWeek(dateStr) {
   return { year: d.getUTCFullYear(), week }
 }
 
-// Period bucket for a date. gran: 'week' | 'month'.
+// Period bucket for a date. gran: 'day' | 'week' | 'month'.
 // Returns { full, label, year, oy }  (oy = ordinal-within-year for compare mode)
 export function periodKey(dateStr, gran) {
   const y = dateStr.slice(0, 4)
+  if (gran === 'day') {
+    return { full: dateStr, label: `${dateStr.slice(8, 10)}/${dateStr.slice(5, 7)}`, year: y, oy: dateStr.slice(5) }
+  }
   if (gran === 'week') {
     const { year, week } = isoWeek(dateStr)
     const w = String(week).padStart(2, '0')
@@ -23,6 +26,19 @@ export function periodKey(dateStr, gran) {
   }
   const m = dateStr.slice(5, 7)
   return { full: `${y}-${m}`, label: `${MONTHS[+m - 1]} ${y}`, year: y, oy: MONTHS[+m - 1] }
+}
+
+// Latest price_date for a source ('Combined' = any).
+export function latestDate(rows, source) {
+  let max = null
+  for (const r of rows) if (source === 'Combined' || r.source === source) { if (!max || r.price_date > max) max = r.price_date }
+  return max
+}
+// ISO date N days before the given date.
+export function shiftDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
 }
 
 const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null
