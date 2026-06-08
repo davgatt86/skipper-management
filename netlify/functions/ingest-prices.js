@@ -1,28 +1,13 @@
 // netlify/functions/ingest-prices.js
-// Inbound-email webhook for the Daily Prices board.
+// ⚠ TEMPORARY VERSION — only to capture the Gmail forwarding confirmation code.
+// Once you've verified the forward in Gmail, put the ORIGINAL ingest-prices.js
+// back so price PDFs ingest normally.
 //
-// Flow:  CloudMailin receives a forwarded price email  ->  POSTs it here as
-// JSON  ->  this function parses any PDF attachments with the SAME parser the
-// app uses  ->  inserts rows into Supabase (dedup by source+date).
-// Runs server-side, so nobody's browser needs to be open.
-//
-// ── Netlify settings (Site settings -> Environment variables) ──────────────
-//   SUPABASE_URL                 e.g. https://fbdfskjojgatsgmvxozo.supabase.co
-//   SUPABASE_SERVICE_ROLE_KEY    Supabase -> Project Settings -> API -> service_role (secret)
-//   INGEST_SECRET                any long random string you invent
-//   ALLOWED_SENDER               davgatt86@gmail.com   (who you forward from)
-//
-// ── CloudMailin ────────────────────────────────────────────────────────────
-//   Target (POST) URL:  https://<your-site>.netlify.app/.netlify/functions/ingest-prices?key=<INGEST_SECRET>
-//   Format:             JSON  (attachments delivered inline)
-//
-// ── Gmail ──────────────────────────────────────────────────────────────────
-//   Forward the Don Fishing + Denmark price emails to your CloudMailin address
-//   (verify it once via the code shown in CloudMailin's message log, then add a
-//   filter: subject contains "Daily Market Prices" -> Forward to that address).
+// What it does differently: if an email has NO PDF attachment (e.g. the Google
+// "Gmail Forwarding confirmation" email), it pulls out the 9-digit code and the
+// confirm link and returns them with a 422 status — which is the case where
+// CloudMailin stores and shows "Your Server's Response Body".
 
-// pdf.js (v4) uses Promise.withResolvers, which only exists on Node 22+.
-// Polyfill so the function runs on any Netlify Node version.
 if (typeof Promise.withResolvers !== 'function') {
   Promise.withResolvers = function () {
     let resolve, reject
@@ -42,19 +27,40 @@ export const handler = async (event) => {
   if (!process.env.INGEST_SECRET || key !== process.env.INGEST_SECRET) {
     return { statusCode: 403, body: 'forbidden' }
   }
-  // browser healthcheck: GET .../ingest-prices?key=... -> confirms it's live
   if (event.httpMethod === 'GET') return ok('ingest-prices ready')
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'POST only' }
 
   let body
   try { body = JSON.parse(event.body || '{}') } catch { return { statusCode: 400, body: 'bad json' } }
 
-  // Defence in depth (the secret URL is the real gate): only accept mail that
-  // carries the allowed forwarder somewhere in its headers/envelope.
+  const attachments = body.attachments || []
+  const isPdf = (a) => /pdf/i.test(a.content_type || a.contentType || '') || /\.pdf$/i.test(a.file_name || a.fileName || a.name || '')
+  const hasPdf = attachments.some(isPdf)
+
+  // ── TEMP: no PDF -> show the email text (code + link) in CloudMailin ──────
+  if (!hasPdf) {
+    const text = body.plain || body.html || ''
+    const code = (text.match(/\b\d{6,9}\b/) || [])[0] || '(no code found — see text below)'
+    const link = (text.match(/https?:\/\/mail-settings\.google\.com\/\S+/i)
+      || text.match(/https?:\/\/\S*confirm\S*/i) || [])[0] || '(no link found — see text below)'
+    return {
+      statusCode: 422,
+      body: JSON.stringify({
+        debug: 'verification email captured — enter the code in Gmail',
+        code,
+        link,
+        from: (body.envelope && body.envelope.from) || (body.headers && body.headers.from) || '',
+        subject: (body.headers && body.headers.subject) || body.subject || '',
+        text: text.slice(0, 4000),
+      }, null, 2),
+    }
+  }
+
+  // ── Normal price path (unchanged) ────────────────────────────────────────
   const allowed = (process.env.ALLOWED_SENDER || '').toLowerCase()
   if (allowed) {
     const hay = (JSON.stringify(body.headers || {}) + ' ' + JSON.stringify(body.envelope || {})).toLowerCase()
-    if (!hay.includes(allowed)) return ok({ skipped: 'sender not allowed' }) // 200 so CloudMailin doesn't retry
+    if (!hay.includes(allowed)) return ok({ skipped: 'sender not allowed' })
   }
 
   const SUPABASE_URL = process.env.SUPABASE_URL
@@ -62,13 +68,12 @@ export const handler = async (event) => {
   if (!SUPABASE_URL || !SERVICE_KEY) return { statusCode: 500, body: 'server missing supabase env' }
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
-  const attachments = body.attachments || []
   const results = []
   for (const a of attachments) {
+    if (!isPdf(a)) continue
     const name = a.file_name || a.fileName || a.name || 'email.pdf'
-    const ctype = a.content_type || a.contentType || ''
     const b64 = a.content || a.data
-    if ((!/pdf/i.test(ctype) && !/\.pdf$/i.test(name)) || !b64) continue
+    if (!b64) continue
     try {
       const buf = Buffer.from(b64, 'base64')
       const pdf = await getDocument({ data: new Uint8Array(buf) }).promise
