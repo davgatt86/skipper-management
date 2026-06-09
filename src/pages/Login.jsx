@@ -34,10 +34,10 @@ export default function Login() {
     }}>
       <div className="card" style={{ maxWidth: 400, width: '100%' }}>
         <h1 style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
-          Crew Bonus Tracker
+          Skipper Management
         </h1>
         <p className="muted" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          The Don Fishing Co.
+          Designed by David Gatt · Built with Claude Opus 4.8
         </p>
 
         <form onSubmit={handleSubmit}>
