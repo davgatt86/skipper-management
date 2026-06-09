@@ -158,3 +158,95 @@ export function autoSplitA4Haddock(rows) {
   })
   return { updates, bands: { miniMax: lowMax, metroMax: midMax } }
 }
+
+/* --------------------------------------------------------------------------
+ * A4 haddock split by MANUAL trip totals (item 1).
+ * The skipper keys the boxes of Mini Metro / Metro / Chipper landed that trip;
+ * we allocate them across the landing's Haddock A4 rows by price rank — the
+ * cheapest boxes are Mini, the dearest are Chipper, the middle (and any
+ * residual when the totals don't quite match the landed A4 boxes) is Metro.
+ * Whole rows are assigned by where their box-midpoint falls, so a row never
+ * gets two labels. Returns { updates:[{id,sub_grade}], actual, entered, diff,
+ * flag } where flag=true when entered vs landed differs by > 3 boxes.
+ * ------------------------------------------------------------------------ */
+export function splitA4ByTotals(rows, totals) {
+  const tgt = rows.filter(r => (r.species_canon || r.species) === 'Haddock' && r.grade === 'A4')
+  if (!tgt.length) return { error: 'No Haddock A4 rows in this landing.' }
+  const mini = Math.max(0, Number(totals.mini) || 0)
+  const metro = Math.max(0, Number(totals.metro) || 0)
+  const chipper = Math.max(0, Number(totals.chipper) || 0)
+  const px = r => Number(r.price_per_kg || 0) || Number(r.price_per_box || 0)
+  const sorted = [...tgt].sort((a, b) => px(a) - px(b))            // cheapest first
+  const total = sorted.reduce((s, r) => s + Number(r.boxes || 0), 0)
+  const actual = r2(total)
+  const entered = r2(mini + metro + chipper)
+  const miniCut = mini                  // boxes up to here (cheapest) = Mini
+  const chipperStart = total - chipper  // boxes beyond here (dearest) = Chipper
+  let cum = 0
+  const updates = sorted.map(r => {
+    const b = Number(r.boxes || 0)
+    const mid = cum + b / 2
+    cum += b
+    let sub
+    if (mid <= miniCut) sub = 'Mini Metro'
+    else if (mid >= chipperStart) sub = 'Chipper'
+    else sub = 'Metro'                   // middle band absorbs any residual
+    return { id: r.id, sub_grade: sub }
+  })
+  const diff = r2(entered - actual)
+  return { updates, actual, entered, diff, flag: Math.abs(diff) > 3 }
+}
+
+/* Best-paying buyer per species + grade (item 2). For each species/grade
+ * (grade includes any A4 sub-grade via gradeLabel), buyers ranked by £/kg.
+ * Returns [{ species, grade, buyers:[{buyer,pkg,boxes,value,kg}], best }]. */
+export function bestBuyerByGrade(rows) {
+  const g = {}
+  for (const r of rows) {
+    const sp = r.species_canon || r.species || '?'
+    const gr = gradeLabel(r)
+    const key = sp + '||' + gr
+    const o = (g[key] = g[key] || { species: sp, grade: gr, buyers: {} })
+    const b = r.buyer || '?'
+    const bo = (o.buyers[b] = o.buyers[b] || { buyer: b, value: 0, kg: 0, boxes: 0 })
+    bo.value += Number(r.value || 0); bo.kg += Number(r.weight_kg || 0); bo.boxes += Number(r.boxes || 0)
+  }
+  return Object.values(g).map(o => {
+    const buyers = Object.values(o.buyers)
+      .map(b => ({ ...b, value: r2(b.value), kg: r2(b.kg), boxes: r2(b.boxes), pkg: b.kg ? r2(b.value / b.kg) : 0 }))
+      .sort((a, b) => b.pkg - a.pkg)
+    return { species: o.species, grade: o.grade, buyers, best: buyers[0] }
+  }).sort((a, b) => a.species.localeCompare(b.species) || gradeSortKey(a.grade).localeCompare(gradeSortKey(b.grade)))
+}
+
+/* Price-trend series for the vessel's own sales (item 3). Plots one line per
+ * selected grade over time. metric: 'pkg' (£/kg) or 'box' (£/box). period:
+ * 'month' (YYYY-MM buckets) or 'year' (YYYY). Returns { data, keys } shaped
+ * for Recharts (data rows keyed by grade label, x = bucket). */
+export function priceTrendSeries(rows, landingById, opts) {
+  const { species, grades, metric = 'pkg', period = 'month' } = opts || {}
+  const sel = new Set(grades || [])
+  const buckets = {}
+  for (const r of rows) {
+    const sp = r.species_canon || r.species || '?'
+    if (species && sp !== species) continue
+    const gl = gradeLabel(r)
+    if (sel.size && !sel.has(gl)) continue
+    const d = landingById[r.landing_id]?.landing_date
+    if (!d) continue
+    const bk = period === 'year' ? d.slice(0, 4) : d.slice(0, 7)
+    const bb = (buckets[bk] = buckets[bk] || {})
+    const o = (bb[gl] = bb[gl] || { value: 0, kg: 0, boxes: 0 })
+    o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
+  }
+  const keys = sel.size ? sortGrades([...sel].map(g => ({ grade: g })), x => x.grade).map(x => x.grade) : []
+  const data = Object.keys(buckets).sort().map(bk => {
+    const row = { x: bk }
+    for (const g of keys) {
+      const o = buckets[bk][g]
+      row[g] = o ? (metric === 'box' ? (o.boxes ? r2(o.value / o.boxes) : null) : (o.kg ? r2(o.value / o.kg) : null)) : null
+    }
+    return row
+  })
+  return { data, keys }
+}
