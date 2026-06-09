@@ -101,6 +101,9 @@ export default function CrewHub() {
           {['skipper', 'viewer'].includes(appUser?.role) && (
             <Link to="/one-offs" style={linkStyle}>One-Off Bonuses</Link>
           )}
+          {appUser?.role === 'skipper' && (
+            <Link to="/settings" style={linkStyle}>Bonus Settings</Link>
+          )}
         </div>
       </div>
 
