@@ -12,6 +12,7 @@ import Closeout from './pages/Closeout'
 import OneOffs from './pages/OneOffs'
 import Settings from './pages/Settings'
 import AddBoat from './pages/AddBoat'
+import Users from './pages/Users'
 const Sales = lazy(() => import('./pages/Sales'))
 const Estimator = lazy(() => import('./pages/Estimator'))
 const SquareUp = lazy(() => import('./squareup/SquareUp'))
@@ -100,6 +101,11 @@ export default function App() {
         <Route path="/add-boat" element={
           <ProtectedRoute>
             <AddBoat />
+          </ProtectedRoute>
+        } />
+        <Route path="/users" element={
+          <ProtectedRoute>
+            <Users />
           </ProtectedRoute>
         } />
         <Route path="/crew-hub" element={
