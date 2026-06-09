@@ -10,6 +10,7 @@ import ContractDetail from './pages/ContractDetail'
 import Landings from './pages/Landings'
 import Closeout from './pages/Closeout'
 import OneOffs from './pages/OneOffs'
+import Settings from './pages/Settings'
 const Sales = lazy(() => import('./pages/Sales'))
 const Estimator = lazy(() => import('./pages/Estimator'))
 const SquareUp = lazy(() => import('./squareup/SquareUp'))
@@ -88,6 +89,11 @@ export default function App() {
         <Route path="/one-offs" element={
           <ProtectedRoute>
             <OneOffs />
+          </ProtectedRoute>
+        } />
+        <Route path="/settings" element={
+          <ProtectedRoute>
+            <Settings />
           </ProtectedRoute>
         } />
         <Route path="/crew-hub" element={
