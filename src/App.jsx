@@ -14,6 +14,7 @@ import Settings from './pages/Settings'
 import AddBoat from './pages/AddBoat'
 import Users from './pages/Users'
 const Sales = lazy(() => import('./pages/Sales'))
+const SalesInsights = lazy(() => import('./pages/SalesInsights'))
 const Estimator = lazy(() => import('./pages/Estimator'))
 const SquareUp = lazy(() => import('./squareup/SquareUp'))
 const Quota = lazy(() => import('./pages/Quota'))
@@ -152,6 +153,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <Sales />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/sales-insights" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <SalesInsights />
             </Suspense>
           </ProtectedRoute>
         } />
