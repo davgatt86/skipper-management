@@ -45,8 +45,8 @@ export default function Dashboard() {
           )}
           <Link to="/crew-hub" style={tile}>Crew</Link>
           <Link to="/daily-prices" style={tile}>Daily Prices</Link>
-          {appUser?.role === 'skipper' && (
-            <Link to="/settings" style={tile}>Settings</Link>
+          {appUser?.is_owner && (
+            <Link to="/add-boat" style={{ ...tile, background: 'var(--navy)', color: '#fff' }}>+ Add Boat</Link>
           )}
         </div>
       </div>
