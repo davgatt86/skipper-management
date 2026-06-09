@@ -250,3 +250,37 @@ export function priceTrendSeries(rows, landingById, opts) {
   })
   return { data, keys }
 }
+
+/* Seasonality grid (species × calendar month). Pools all rows in scope by
+ * month-of-year (so "All" shows true seasonality across years). metric:
+ * 'pkg' (£/kg), 'kg' (tonnes), 'boxes', or 'value' (£). Returns
+ * { species:[…ordered by total value], cells:{species:{1..12:val|null}}, max }. */
+export function seasonalityGrid(rows, landingById, metric = 'pkg') {
+  const sp = {}
+  for (const r of rows) {
+    const d = landingById[r.landing_id]?.landing_date
+    if (!d) continue
+    const mo = Number(d.slice(5, 7))
+    if (!mo) continue
+    const s = r.species_canon || r.species || '?'
+    const o = (sp[s] = sp[s] || { species: s, months: {}, total: 0 })
+    const c = (o.months[mo] = o.months[mo] || { value: 0, kg: 0, boxes: 0 })
+    c.value += Number(r.value || 0); c.kg += Number(r.weight_kg || 0); c.boxes += Number(r.boxes || 0)
+    o.total += Number(r.value || 0)
+  }
+  const val = c => metric === 'pkg' ? (c.kg ? c.value / c.kg : null)
+    : metric === 'kg' ? c.kg / 1000
+      : metric === 'boxes' ? c.boxes
+        : c.value
+  const species = Object.values(sp).sort((a, b) => b.total - a.total).map(o => o.species)
+  const cells = {}; let max = 0
+  for (const o of Object.values(sp)) {
+    cells[o.species] = {}
+    for (let m = 1; m <= 12; m++) {
+      const c = o.months[m]; const v = c ? val(c) : null
+      cells[o.species][m] = v == null ? null : r2(v)
+      if (v != null && v > max) max = v
+    }
+  }
+  return { species, cells, max: r2(max), metric }
+}
