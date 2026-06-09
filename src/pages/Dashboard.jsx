@@ -34,20 +34,20 @@ export default function Dashboard() {
           {appUser?.role === 'skipper' && (
             <Link to="/sales-insights" style={tile}>Sales Insights</Link>
           )}
+          <Link to="/daily-prices" style={tile}>Daily Prices</Link>
           {fleetTools && (
             <Link to="/estimator" style={tile}>Trip Estimator</Link>
           )}
           {appUser?.role === 'skipper' && (
             <Link to="/quota" style={tile}>Quota</Link>
           )}
+          <Link to="/crew-hub" style={tile}>Crew</Link>
           {fleetTools && (
             <Link to="/squareup" style={tile}>Square Up</Link>
           )}
           {fleetTools && (
             <Link to="/rota" style={tile}>Rota</Link>
           )}
-          <Link to="/crew-hub" style={tile}>Crew</Link>
-          <Link to="/daily-prices" style={tile}>Daily Prices</Link>
           {appUser?.role === 'skipper' && (
             <Link to="/users" style={tile}>Users</Link>
           )}
