@@ -31,6 +31,9 @@ export default function Dashboard() {
           {fleetTools && (
             <Link to="/sales" style={tile}>Fish Sales</Link>
           )}
+          {appUser?.role === 'skipper' && (
+            <Link to="/sales-insights" style={tile}>Sales Insights</Link>
+          )}
           {fleetTools && (
             <Link to="/estimator" style={tile}>Trip Estimator</Link>
           )}

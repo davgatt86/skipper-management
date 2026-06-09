@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey } from '../lib/parseCore'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, r2 } from '../lib/salesAgg'
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2 } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
@@ -260,6 +260,16 @@ export default function Sales() {
     await saveSubGrades(res.updates)
     setNotice(`Auto-split done — Mini Metro ≤ £${res.bands.miniMax}/kg, Metro ≤ £${res.bands.metroMax}/kg, Chipper above.`)
   }
+  const [a4Tot, setA4Tot] = useState({ mini: '', metro: '', chipper: '' })
+  async function applyTotals() {
+    const res = splitA4ByTotals(a4Rows, a4Tot)
+    if (res.error) { setNotice(res.error); return }
+    await saveSubGrades(res.updates)
+    const warn = res.flag
+      ? ` ⚠ your totals (${res.entered}) differ from the ${res.actual} A4 boxes landed by ${res.diff > 0 ? '+' : ''}${res.diff} — check the entry.`
+      : ''
+    setNotice(`Split by totals done — Mini ${a4Tot.mini || 0} / Metro ${a4Tot.metro || 0} / Chipper ${a4Tot.chipper || 0} boxes allocated by price.${warn}`)
+  }
 
   /* ---------------- derived ---------------- */
   const k = useMemo(() => kpis(rows, scopeLandings.length), [rows, scopeLandings])
@@ -451,6 +461,20 @@ export default function Sales() {
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <button className="secondary" onClick={autoSplit}>Auto-split by price bands</button>
               <button className="secondary" onClick={() => saveSubGrades(a4Rows.map(r => ({ id: r.id, sub_grade: null })))}>Clear split</button>
+            </div>}
+            {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+              <div>
+                <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>Or enter this trip's totals (boxes), allocated by price:</div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {['mini', 'metro', 'chipper'].map(k => (
+                    <label key={k} style={{ fontSize: '0.8rem' }}>
+                      <div style={{ textTransform: 'capitalize', color: 'var(--grey-400)' }}>{k === 'mini' ? 'Mini Metro' : k}</div>
+                      <input type="number" min="0" step="1" value={a4Tot[k]} onChange={e => setA4Tot({ ...a4Tot, [k]: e.target.value })} style={{ width: 90, padding: '0.25rem 0.5rem' }} />
+                    </label>
+                  ))}
+                  <button className="secondary" style={{ alignSelf: 'flex-end' }} onClick={applyTotals}>Apply totals</button>
+                </div>
+              </div>
             </div>}
             <Scroll>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
