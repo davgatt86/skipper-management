@@ -199,3 +199,55 @@ export function buildPosition({ snapshot, trips, year, adjustments = [], manualS
 
   return { rows, nonquotaRows, unmappedRows, cutoff, sinceTrips, conflicts }
 }
+
+// Forecast: project each stock's estimated balance to year-end using the catch
+// taken in the SAME remaining-months window in prior years (averaged across
+// whatever prior years are on file). Driven by dated trip catch, so it gets
+// sharper as more history is loaded. asOf 'YYYY-MM-DD' sets the window start.
+export function buildForecast({ rows = [], trips = [], year, asOf }) {
+  const md = String(asOf || '').slice(5) || '01-01'   // 'MM-DD' window start
+  const yr = Number(year)
+  const byStockYear = {}                                // stock -> { year -> kg } in window
+  const yearsPresent = new Set()
+  for (const t of trips) {
+    for (const c of t.catches || []) {
+      const cd = c.catch_date || ''
+      const cy = Number(cd.slice(0, 4))
+      if (!cy || cy >= yr) continue                     // prior years only
+      if (cd.slice(5) < md) continue                    // remaining-months window only
+      const m = mapStock(c.species_fao, c.fao_area)
+      if (m.kind !== 'quota') continue
+      yearsPresent.add(cy)
+      const e = (byStockYear[m.stock] = byStockYear[m.stock] || {})
+      e[cy] = (e[cy] || 0) + c.live_kg
+    }
+  }
+  const out = []
+  for (const r of rows) {
+    if (r.est_balance == null) continue                 // no balance -> can't forecast
+    const per = byStockYear[r.stock] || {}
+    const yrs = Object.keys(per)
+    const avgT = yrs.length ? yrs.reduce((a, y) => a + per[y], 0) / yrs.length / 1000 : null
+    // skip dormant zero-TAC lines (no balance, no catch this year, no history, no allocation)
+    const active = r.est_balance > 0 || (r.total_year_kg || 0) > 0 || avgT != null || (r.allocation || 0) > 0
+    if (!active) continue
+    const projected = avgT == null ? null : r3(r.est_balance - avgT)
+    let status
+    if (r.est_balance <= 0) status = 'over'
+    else if (avgT == null) status = 'nodata'
+    else if (projected < 0) status = 'short'
+    else if (projected < r.est_balance * 0.15) status = 'tight'
+    else status = 'ok'
+    out.push({
+      section: r.section, stock: r.stock,
+      est_balance: r.est_balance,
+      prior_years: yrs.map(Number).sort((a, b) => a - b),
+      avg_prior_t: avgT == null ? null : r3(avgT),
+      projected_t: projected,
+      status,
+    })
+  }
+  const rank = { over: 0, short: 1, tight: 2, ok: 3, nodata: 4 }
+  out.sort((a, b) => (rank[a.status] - rank[b.status]) || ((a.projected_t ?? 1e9) - (b.projected_t ?? 1e9)))
+  return { rows: out, years_present: [...yearsPresent].sort(), window_from: md }
+}
