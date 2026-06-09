@@ -123,9 +123,13 @@ export function parseTripXlsx(buf, filename) {
     speciesTotals[sp] = (speciesTotals[sp] || 0) + toNum(r.catch_weight)
   }
   const speciesGrand = Object.values(speciesTotals).reduce((a, b) => a + b, 0)
-  // printed total: the report's headline figure, cross-checked against the
-  // species breakdown's own total
-  const printedTotal = summaryTotal != null ? summaryTotal : (speciesGrand || null)
+  // Reconciliation anchor: the 'Catch by species' grand total. It is the
+  // direct analog of the PDF "Totals" and recomputes from the catch lines, so
+  // it reconciles to the detail table on every export era. The trip-summary
+  // 'total_catch_weight' header is NOT used for reconciliation — in newer
+  // mcatch exports it carries a different figure (a landed / pre-correction
+  // weight) that no longer equals the catch breakdown.
+  const printedTotal = speciesGrand || (summaryTotal != null ? summaryTotal : null)
 
   // ---------- catches ----------
   let catches = []
@@ -193,10 +197,9 @@ export function parseTripXlsx(buf, filename) {
     reconcileOk = Math.abs(parsedSum - r2(printedTotal)) < 0.05
     if (!reconcileOk) warnings.push(`Parsed ${parsedSum.toLocaleString()} kg vs report total ${r2(printedTotal).toLocaleString()} kg`)
   }
-  // cross-check the species breakdown agrees with the headline figure
-  if (summaryTotal != null && speciesGrand && Math.abs(r2(summaryTotal) - r2(speciesGrand)) >= 0.05) {
-    warnings.push(`Report's headline total ${r2(summaryTotal).toLocaleString()} kg disagrees with its species breakdown ${r2(speciesGrand).toLocaleString()} kg`)
-  }
+  // cross-check the species breakdown agrees with the catch detail rows
+  // (this is the real integrity check; the summary header is intentionally
+  // not compared, see note above).
   // per-species reconciliation against Catch by species (catches us if a
   // species was dropped or double-counted, independent of the grand total)
   if (Object.keys(speciesTotals).length) {
