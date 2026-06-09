@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseAfpoXlsx } from '../lib/quota/afpoParse'
 import { parseTripPdf } from '../lib/quota/mcatchParse'
-import { latestSnapshotByYear, buildPosition } from '../lib/quota/quotaAgg'
+import { latestSnapshotByYear, buildPosition, buildForecast } from '../lib/quota/quotaAgg'
 import { STOCK_SECTIONS, sectionOfStock } from '../lib/quota/stockMaster'
 
 const fmtDate = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—'
@@ -60,6 +60,65 @@ function StockSelect({ value, onChange, exclude = new Set(), style }) {
   )
 }
 
+function ForecastView({ year, section, rows, trips }) {
+  const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
+  const fc = useMemo(() => buildForecast({ rows, trips, year, asOf }), [rows, trips, year, asOf])
+  const visible = fc.rows.filter(r => section === 'all' ? true : r.section === section)
+  const tone = { over: 'warn', short: 'warn', tight: 'est', ok: 'ok', nodata: undefined }
+  const label = { over: 'over quota', short: 'will run short', tight: 'tight', ok: 'on track', nodata: 'no history' }
+  const t2 = n => n == null ? '—' : Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const win = `${asOf.slice(8, 10)}/${asOf.slice(5, 7)} → 31/12`
+  return (
+    <div className="card" style={{ marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.6rem' }}>
+        <strong>Year-end forecast</strong>
+        <span className="muted" style={{ fontSize: '0.85rem' }}>
+          rest of {year} ({win}) vs the same window in {fc.years_present.length ? fc.years_present.join(', ') : 'prior years'}
+        </span>
+        <span className="muted" style={{ marginLeft: 'auto', fontSize: '0.85rem' }}>
+          from <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
+        </span>
+      </div>
+      {!fc.years_present.length && (
+        <p style={{ color: '#c2410c', fontSize: '0.85rem' }}>
+          No prior-year trip reports loaded yet, so there's nothing to project against. Upload last year's mcatch trips and this fills in.
+        </p>
+      )}
+      <Scroll>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.88rem' }}>
+          <thead>
+            <tr>
+              <th style={th}>Stock</th>
+              <th style={thR}>Est. balance now t</th>
+              <th style={thR}>Caught {win} t</th>
+              <th style={thR}>Projected year-end t</th>
+              <th style={th}>Outlook</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visible.map(r => {
+              const projStyle = { ...tdR, fontWeight: 700, color: (r.status === 'over' || r.status === 'short') ? '#b91c1c' : r.status === 'tight' ? '#c2410c' : 'var(--navy)' }
+              return (
+                <tr key={r.stock}>
+                  <td style={td}>{r.stock}{section === 'all' && <span className="muted" style={{ fontSize: '0.75rem' }}> · {r.section}</span>}</td>
+                  <td style={tdR}>{t2(r.est_balance)}</td>
+                  <td style={tdR}>{r.avg_prior_t == null ? '—' : t2(r.avg_prior_t)}{r.prior_years.length > 1 && <span className="muted" style={{ fontSize: '0.7rem' }}> ({r.prior_years.length}y avg)</span>}</td>
+                  <td style={projStyle}>{r.projected_t == null ? '—' : t2(r.projected_t)}</td>
+                  <td style={td}><Badge tone={tone[r.status]}>{label[r.status]}</Badge></td>
+                </tr>
+              )
+            })}
+            {!visible.length && <tr><td style={td} colSpan={5} className="muted">No active stocks to forecast in this section.</td></tr>}
+          </tbody>
+        </table>
+      </Scroll>
+      <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem', marginBottom: 0 }}>
+        Projection = estimated balance now − what you landed in the same calendar window in prior years (averaged across the years on file). “No history” = no prior-year catch for that stock in this window yet.
+      </p>
+    </div>
+  )
+}
+
 export default function Quota() {
   const { appUser } = useAuth()
   const isSkipper = appUser?.role === 'skipper'
@@ -76,6 +135,7 @@ export default function Quota() {
   const [log, setLog] = useState([])
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [section, setSection] = useState('all')
+  const [view, setView] = useState('position')
   const [showTrips, setShowTrips] = useState(false)
 
   const pushLog = m => setLog(l => [...l, m])
@@ -349,15 +409,24 @@ export default function Quota() {
         )}
       </div>
 
+      <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          {[['position', 'Position'], ['forecast', 'Forecast']].map(([k, lbl]) => (
+            <button key={k} type="button" onClick={() => setView(k)} className={view === k ? '' : 'secondary'} style={{ padding: '0.4rem 0.9rem' }}>{lbl}</button>
+          ))}
+        </div>
+        <select value={year} onChange={e => setYear(e.target.value)}>
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <select value={section} onChange={e => setSection(e.target.value)}>
+          <option value="all">Active stocks</option>
+          {sections.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {view === 'position' && (<>
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.8rem' }}>
-          <select value={year} onChange={e => setYear(e.target.value)}>
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select value={section} onChange={e => setSection(e.target.value)}>
-            <option value="all">Active stocks</option>
-            {sections.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
           {snapshot
             ? <Badge tone="official">official as of {fmtDate(snapshot.last_landing_date)}</Badge>
             : yearManual.length
@@ -566,8 +635,14 @@ export default function Quota() {
           </div>
         )}
       </div>
+      </>
+      )}
 
-      {(pos.nonquotaRows.length > 0 || pos.unmappedRows.length > 0) && (
+      {view === 'forecast' && (
+        <ForecastView year={year} section={section} rows={pos.rows} trips={trips} />
+      )}
+
+      {view === 'position' && (pos.nonquotaRows.length > 0 || pos.unmappedRows.length > 0) && (
         <div className="card" style={{ marginBottom: '1rem' }}>
           {pos.nonquotaRows.length > 0 && (
             <>
