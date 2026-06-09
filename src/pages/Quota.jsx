@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseAfpoXlsx } from '../lib/quota/afpoParse'
 import { parseTripPdf } from '../lib/quota/mcatchParse'
+import { parseTripXlsx } from '../lib/quota/mcatchXlsxParse'
 import { latestSnapshotByYear, buildPosition, buildForecast } from '../lib/quota/quotaAgg'
 import { STOCK_SECTIONS, sectionOfStock } from '../lib/quota/stockMaster'
 
@@ -198,7 +199,8 @@ export default function Quota() {
     setBusy(true); setLog([]); setError('')
     for (const f of files) {
       try {
-        const res = await parseTripPdf(f)
+        const isXlsx = /\.xlsx?$/i.test(f.name) || (f.type || '').includes('sheet')
+        const res = isXlsx ? parseTripXlsx(await f.arrayBuffer(), f.name) : await parseTripPdf(f)
         res.warnings.forEach(w => pushLog(`⚠ ${f.name}: ${w}`))
         if (!res.trip.trip_nr || !res.catches.length) continue
         // replace-on-reupload so corrected reports propagate
@@ -376,7 +378,7 @@ export default function Quota() {
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {manualReady && <button onClick={() => setShowAdd(s => !s)} disabled={busy}>{showAdd ? 'Close' : '+ Add stock'}</button>}
-          <UploadBtn label="Upload trip reports (.pdf)" accept="application/pdf" multiple busy={busy} onFiles={uploadTrips} />
+          <UploadBtn label="Upload trip reports (.pdf / .xlsx)" accept="application/pdf,.xlsx,.xls" multiple busy={busy} onFiles={uploadTrips} />
           <UploadBtn label="Upload AFPO holdings (.xlsx)" accept=".xlsx,.xls" multiple busy={busy} onFiles={uploadAfpo} />
           <span className="muted" style={{ fontSize: '0.85rem' }}>
             {snapshots.length} statement{snapshots.length === 1 ? '' : 's'} · {trips.length} trip{trips.length === 1 ? '' : 's'} · {manualStocks.length} manual stock{manualStocks.length === 1 ? '' : 's'}
