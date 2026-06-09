@@ -3,6 +3,8 @@ import BackNav from "../BackNav";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { supabase } from "../supabaseClient";
+import { buildEstimatorPrices } from "../lib/market/estimatorPrices";
 
 /* ============================================================
    Trip Gross Estimator v2 — Peterhead vs Hanstholm
@@ -228,8 +230,36 @@ export default function Estimator(){
   const [busy,setBusy]=useState({pd:false,dk:false,boat:false});
   const [nettCfg,setNettCfg]=useState(loadNett);
   const [boxesOverride,setBoxesOverride]=useState("");
+  const [boardMsg,setBoardMsg]=useState("Loading latest board prices…");
   useEffect(()=>{try{localStorage.setItem(NETT_KEY,JSON.stringify(nettCfg));}catch{}},[nettCfg]);
-  const [msg,setMsg]=useState({pd:"",dk:"",boat:"Loaded Trip 54 (so far) — prices default to 22/05/26. Upload to replace either."});
+
+  // Pull the 2 latest days per market from the Daily Prices board and feed them
+  // straight into the PD/DK price grids — no price-sheet upload needed. Manual
+  // upload/edit still works as a fallback for anything the board doesn't carry.
+  async function loadBoardPrices(){
+    setBoardMsg("Loading latest board prices…");
+    try{
+      const grab=async(src)=>{
+        const {data:days}=await supabase.from("market_days").select("price_date").eq("source",src).order("price_date",{ascending:false}).limit(2);
+        const dates=(days||[]).map(d=>d.price_date);
+        if(!dates.length) return {dates:[],rows:[]};
+        const {data:rows}=await supabase.from("market_prices").select("species,grade,subgrade,low,high,ave").eq("source",src).in("price_date",dates);
+        return {dates,rows:rows||[]};
+      };
+      const [pdR,dkR]=await Promise.all([grab("PD"),grab("DK")]);
+      const {pd:pdObj,dk:dkObj,missing}=buildEstimatorPrices(pdR.rows,dkR.rows);
+      if(Object.keys(pdObj).length) setPd(pdObj);
+      if(Object.keys(dkObj).length) setDk(dkObj);
+      if(!pdR.dates.length && !dkR.dates.length){
+        setBoardMsg("No board prices yet — upload price sheets under Daily Prices, or enter prices by hand below.");
+      }else{
+        setBoardMsg(`Board prices loaded — Peterhead ${pdR.dates[0]||"—"}, Hanstholm ${dkR.dates[0]||"—"} (2 latest days, averaged).${missing.length?" Not on the board: "+missing.join(", ")+" — add by hand if you landed them.":""}`);
+      }
+    }catch(e){ setBoardMsg(`Couldn't load board prices (${e.message}). Enter prices by hand, or check Daily Prices.`); }
+  }
+  useEffect(()=>{ loadBoardPrices(); },[]);
+
+  const [msg,setMsg]=useState({pd:"",dk:"",boat:"Upload your boat tally (xlsx / CSV / PDF) to begin — prices come from the Daily Prices board automatically."});
 
   const effW=(r)=>tallyMode==="boxes"?r.boxes*r.avgBox:r.wt;
 
@@ -562,8 +592,9 @@ export default function Estimator(){
       <div style={{borderBottom:`1px solid ${C.line}`,padding:"18px 22px",background:C.panel,position:"sticky",top:0,zIndex:10}}>
         <div style={{display:"flex",alignItems:"baseline",gap:14,flexWrap:"wrap"}}>
           <BackNav />
-          <div style={{fontSize:22,fontWeight:800,letterSpacing:"-.02em"}}>Trip Estimator</div>
+          <div style={{fontSize:22,fontWeight:800,letterSpacing:"-.02em"}}>Where to Land</div>
           <div style={{color:C.dim,fontSize:13}}>Peterhead vs Hanstholm</div>
+          <button onClick={loadBoardPrices} style={{background:"transparent",border:`1px solid ${C.line}`,color:C.ink,padding:"5px 11px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>↻ Latest board prices</button>
           <div style={{marginLeft:"auto",display:"flex",gap:18}}>
             <Tot label="Peterhead" val={fmtGBP(totals.pd)} col={C.pd}/>
             <Tot label="Hanstholm" val={fmtGBP(totals.dk)} col={C.dk}/>
@@ -573,6 +604,7 @@ export default function Estimator(){
         <div style={{display:"flex",gap:8,marginTop:16,flexWrap:"wrap"}}>
           {STEPS.map((s,i)=>(<button key={i} onClick={()=>setStep(i)} style={{background:i===step?C.ink:"transparent",color:i===step?C.bg:C.dim,border:`1px solid ${i===step?C.ink:C.line}`,padding:"6px 13px",borderRadius:20,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>{i+1}. {s}</button>))}
         </div>
+        {boardMsg&&<div style={{fontSize:12,color:C.dim,marginTop:10}}>{boardMsg}</div>}
       </div>
 
       <div style={{maxWidth:1180,margin:"0 auto",padding:"26px 22px"}}>
