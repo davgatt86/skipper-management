@@ -273,6 +273,14 @@ export default function Sales() {
 
   /* ---------------- derived ---------------- */
   const k = useMemo(() => kpis(rows, scopeLandings.length), [rows, scopeLandings])
+  const daysTotal = useMemo(() => scopeLandings.reduce((s, l) => s + (Number(l.days_at_sea) || 0), 0), [scopeLandings])
+  const perDay = daysTotal > 0 ? k.value / daysTotal : null
+  async function saveDays(id, val) {
+    const v = val === '' ? null : Math.round(Number(val) * 4) / 4   // nearest 0.25 day
+    const { error } = await supabase.from('sales_landings').update({ days_at_sea: v }).eq('id', id)
+    if (error) { setError(error.message); return }
+    setLandings(landings.map(l => l.id === id ? { ...l, days_at_sea: v } : l))
+  }
   const speciesTbl = useMemo(() => bySpecies(rows), [rows])
   const buyersTbl = useMemo(() => byBuyer(rows), [rows])
   const monthly = useMemo(() => mode === 'year' ? monthlySeries(rows, landingById, year) : [], [rows, mode, year, landingById])
@@ -341,6 +349,7 @@ export default function Sales() {
             <Kpi label="Boxes" value={num(k.boxes)} />
             <Kpi label="Average £/kg" value={gbp(k.pkg)} />
             <Kpi label="Landings" value={num(k.landings)} />
+            <Kpi label="£/day at sea" value={perDay != null ? gbp0(perDay) : '—'} sub={daysTotal > 0 ? num(r2(daysTotal)) + ' days' : 'add days below'} />
           </div>
         </div>
 
@@ -432,7 +441,7 @@ export default function Sales() {
             <h2>Landings</h2>
             <Scroll>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead><tr><th style={th}>Date</th><th style={th}>Vessel</th><th style={th}>Market</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={th}></th></tr></thead>
+                <thead><tr><th style={th}>Date</th><th style={th}>Vessel</th><th style={th}>Market</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={thR}>Days</th><th style={th}></th></tr></thead>
                 <tbody>
                   {scopeLandings.map(l => (
                     <tr key={l.id}>
@@ -442,12 +451,18 @@ export default function Sales() {
                       <td style={tdR}>{num(l.boxes)}</td>
                       <td style={tdR}>{num(l.weight_kg)}</td>
                       <td style={tdR}>{gbp0(l.value)}</td>
+                      <td style={tdR}>
+                        {isSkipper
+                          ? <input type="number" min="0" step="0.25" defaultValue={l.days_at_sea ?? ''} onBlur={e => saveDays(l.id, e.target.value)} className="no-print" style={{ width: 64, padding: '0.2rem 0.4rem', textAlign: 'right' }} />
+                          : (l.days_at_sea ?? '—')}
+                        <span className="print-only" style={{ display: 'none' }}>{l.days_at_sea ?? '—'}</span>
+                      </td>
                       <td style={{ ...td }} className="no-print">
                         <a href="#view" onClick={e => { e.preventDefault(); setMode('landing'); setLandingId(l.id) }}>view</a>
                       </td>
                     </tr>
                   ))}
-                  {!scopeLandings.length && <tr><td style={td} colSpan={7} className="muted">No landings in this period yet.</td></tr>}
+                  {!scopeLandings.length && <tr><td style={td} colSpan={8} className="muted">No landings in this period yet.</td></tr>}
                 </tbody>
               </table>
             </Scroll>

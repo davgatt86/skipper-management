@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import BackNav from '../BackNav'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
-import { bySpecies, gradesFor, bestBuyerByGrade, priceTrendSeries } from '../lib/salesAgg'
+import { bySpecies, gradesFor, bestBuyerByGrade, priceTrendSeries, seasonalityGrid } from '../lib/salesAgg'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
 } from 'recharts'
@@ -77,7 +77,7 @@ export default function SalesInsights() {
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem' }}>Sales Insights</h1>
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-          {[['trends', 'Price Trends'], ['buyers', 'Buyer League']].map(([k, lbl]) => (
+          {[['trends', 'Price Trends'], ['buyers', 'Buyer League'], ['season', 'Seasonality']].map(([k, lbl]) => (
             <button key={k} className={tab === k ? '' : 'secondary'} onClick={() => setTab(k)}>{lbl}</button>
           ))}
         </div>
@@ -92,7 +92,8 @@ export default function SalesInsights() {
         : error ? <div className="card"><p className="error">Error: {error}</p></div>
           : rows.length === 0 ? <div className="card"><p className="muted">No sales in this period yet.</p></div>
             : tab === 'trends' ? <Trends rows={rows} landingById={landingById} />
-              : <BuyerLeague rows={rows} />}
+              : tab === 'buyers' ? <BuyerLeague rows={rows} />
+                : <Seasonality rows={rows} landingById={landingById} />}
     </div>
   )
 }
@@ -205,6 +206,50 @@ function BuyerLeague({ rows }) {
                 <FragmentRows key={key} g={g} isOpen={isOpen} onToggle={() => setOpen(isOpen ? '' : key)} />
               )
             })}
+          </tbody>
+        </table>
+      </Scroll>
+    </div>
+  )
+}
+
+function Seasonality({ rows, landingById }) {
+  const [metric, setMetric] = useState('pkg')
+  const grid = useMemo(() => seasonalityGrid(rows, landingById, metric), [rows, landingById, metric])
+  const fmt = v => v == null ? '' : metric === 'pkg' ? gbp(v) : metric === 'kg' ? v.toFixed(1) + 't' : metric === 'boxes' ? num(v) : '£' + Math.round(v).toLocaleString('en-GB')
+  const cellStyle = v => {
+    const i = v == null || !grid.max ? 0 : v / grid.max
+    return {
+      padding: '0.4rem 0.3rem', textAlign: 'center', fontSize: '0.78rem', whiteSpace: 'nowrap',
+      background: v == null ? 'transparent' : `rgba(30,58,95,${(0.06 + 0.6 * i).toFixed(3)})`,
+      color: i > 0.55 ? '#fff' : 'var(--navy)', border: '1px solid var(--border)',
+    }
+  }
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '0.75rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.05rem', marginBottom: '0.15rem' }}>Seasonality</h2>
+          <p className="muted" style={{ fontSize: '0.8rem' }}>Species by month — darker is higher. Pools all years in the period to show the pattern.</p>
+        </div>
+        <Seg label="Show" value={metric} onChange={setMetric} options={[['pkg', '£/kg'], ['value', '£'], ['kg', 'Tonnes'], ['boxes', 'Boxes']]} />
+      </div>
+      <Scroll>
+        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, position: 'sticky', left: 0, background: 'var(--card, #fff)' }}>Species</th>
+              {MON.map(m => <th key={m} style={{ ...thR, textAlign: 'center', padding: '0.4rem 0.3rem' }}>{m}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {grid.species.map(s => (
+              <tr key={s}>
+                <td style={{ ...td, fontWeight: 600, position: 'sticky', left: 0, background: 'var(--card, #fff)' }}>{s}</td>
+                {MON.map((_, i) => { const v = grid.cells[s][i + 1]; return <td key={i} style={cellStyle(v)}>{fmt(v)}</td> })}
+              </tr>
+            ))}
+            {!grid.species.length && <tr><td style={td} colSpan={13} className="muted">No sales in this period yet.</td></tr>}
           </tbody>
         </table>
       </Scroll>
