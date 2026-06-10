@@ -34,9 +34,16 @@ export default function SalesInsights() {
   useEffect(() => {
     if (!isSkipper) { setLoading(false); return }
     (async () => {
-      const { data, error } = await supabase.from('sales_landings').select('id, landing_date, market').order('landing_date')
-      if (error) setError(error.message)
-      setLandings(data || [])
+      const all = []
+      let from = 0
+      for (;;) {
+        const { data, error } = await supabase.from('sales_landings').select('id, landing_date, market').order('landing_date').range(from, from + 999)
+        if (error) { setError(error.message); break }
+        all.push(...(data || []))
+        if (!data || data.length < 1000) break
+        from += 1000
+      }
+      setLandings(all)
     })()
   }, [isSkipper])
 
@@ -50,12 +57,21 @@ export default function SalesInsights() {
       const ids = landings.filter(l => scope === 'all' || (l.landing_date || '').startsWith(scope)).map(l => l.id)
       if (!ids.length) { setRows([]); setLoading(false); return }
       const out = []
-      for (let i = 0; i < ids.length; i += 200) {
-        const { data, error } = await supabase.from('sales_rows').select('*').in('landing_id', ids.slice(i, i + 200))
-        if (error) { setError(error.message); break }
-        out.push(...(data || []))
-      }
-      setRows(out); setLoading(false)
+      try {
+        for (let i = 0; i < ids.length; i += 50) {
+          const chunk = ids.slice(i, i + 50)
+          let from = 0
+          for (;;) {
+            const { data, error } = await supabase.from('sales_rows').select('*').in('landing_id', chunk).range(from, from + 999)
+            if (error) throw error
+            out.push(...(data || []))
+            if (!data || data.length < 1000) break
+            from += 1000
+          }
+        }
+        setRows(out)
+      } catch (e) { setError(e.message) }
+      setLoading(false)
     })()
   }, [isSkipper, landings, scope])
 

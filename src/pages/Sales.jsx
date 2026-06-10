@@ -61,11 +61,19 @@ export default function Sales() {
   const [uploadLog, setUploadLog] = useState([])
 
   async function loadLandings() {
-    const { data, error } = await supabase.from('sales_landings').select('*')
-      .order('landing_date', { ascending: false }).order('created_at', { ascending: false })
-    if (error) { setError(error.message); return [] }
-    setLandings(data || [])
-    return data || []
+    const all = []
+    let from = 0
+    for (;;) {
+      const { data, error } = await supabase.from('sales_landings').select('*')
+        .order('landing_date', { ascending: false }).order('created_at', { ascending: false })
+        .range(from, from + 999)
+      if (error) { setError(error.message); return [] }
+      all.push(...(data || []))
+      if (!data || data.length < 1000) break
+      from += 1000
+    }
+    setLandings(all)
+    return all
   }
   useEffect(() => { loadLandings().then(() => setLoading(false)) }, [])
 
