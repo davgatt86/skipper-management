@@ -80,6 +80,19 @@ function StockSelect({ value, onChange, exclude = new Set(), style }) {
   )
 }
 
+// The skipper's main target species, highlighted in the forecast. Matched on
+// the stock label across all areas (NS Cod, Cod Area VIa, WC Saithe, …). Blue
+// Ling is excluded — it's a deepwater bycatch, not common Ling.
+function mainSpeciesOf(stock) {
+  const s = (stock || '').toLowerCase()
+  if (/saithe/.test(s)) return 'Saithe'
+  if (/\bcod\b/.test(s)) return 'Cod'
+  if (/blue\s*ling/.test(s)) return null
+  if (/\bling\b/.test(s)) return 'Ling'
+  if (/monk/.test(s)) return 'Monks'
+  return null
+}
+
 function ForecastView({ year, section, rows, trips }) {
   const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
   const [yearSel, setYearSel] = useState(null)   // null = use every available prior year
@@ -141,10 +154,14 @@ function ForecastView({ year, section, rows, trips }) {
           </thead>
           <tbody>
             {visible.map(r => {
+              const main = mainSpeciesOf(r.stock)
               const projStyle = { ...tdR, fontWeight: 700, color: (r.status === 'over' || r.status === 'short') ? '#b91c1c' : r.status === 'tight' ? '#c2410c' : 'var(--navy)' }
               return (
-                <tr key={r.stock}>
-                  <td style={td}>{r.stock}{section === 'all' && <span className="muted" style={{ fontSize: '0.75rem' }}> · {r.section}</span>}</td>
+                <tr key={r.stock} style={main ? { background: '#eaf1ff' } : undefined}>
+                  <td style={main ? { ...td, borderLeft: '3px solid var(--navy)' } : td}>
+                    {main ? <strong style={{ color: 'var(--navy)' }}>{r.stock}</strong> : r.stock}
+                    {section === 'all' && <span className="muted" style={{ fontSize: '0.75rem' }}> · {r.section}</span>}
+                  </td>
                   <td style={tdR}>{t2(r.est_balance)}</td>
                   <td style={tdR}>{r.avg_prior_t == null ? '—' : t2(r.avg_prior_t)}{r.prior_years.length > 1 && <span className="muted" style={{ fontSize: '0.7rem' }}> ({r.prior_years.length}y avg)</span>}</td>
                   <td style={projStyle}>{r.projected_t == null ? '—' : t2(r.projected_t)}</td>
@@ -157,7 +174,7 @@ function ForecastView({ year, section, rows, trips }) {
         </table>
       </Scroll>
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem', marginBottom: 0 }}>
-        Projection = estimated balance now − what you landed in the same calendar window in prior years (averaged across the selected years). “No history” = no prior-year catch for that stock in this window yet.
+        Projection = estimated balance now − what you landed in the same calendar window in prior years (averaged across the selected years). “No history” = no prior-year catch for that stock in this window yet. Highlighted rows are your main target species (cod, saithe, ling, monks). Sorted worst-first: biggest projected overshoot at the top, most quota left at the bottom.
       </p>
     </div>
   )
