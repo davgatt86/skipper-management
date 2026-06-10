@@ -251,7 +251,14 @@ export function buildForecast({ rows = [], trips = [], year, asOf, selectedYears
       status,
     })
   }
-  const rank = { over: 0, short: 1, tight: 2, ok: 3, nodata: 4 }
-  out.sort((a, b) => (rank[a.status] - rank[b.status]) || ((a.projected_t ?? 1e9) - (b.projected_t ?? 1e9)))
+  // Order by projected year-end balance: biggest overshoot (most negative)
+  // at the top, down to the most quota left at the bottom. A stock already
+  // over with no history sorts to the top on its current negative balance;
+  // a stock with headroom but no prior-year catch has nothing to project, so
+  // it sits at the bottom.
+  const headroom = r => r.projected_t != null
+    ? r.projected_t
+    : (r.status === 'over' ? (r.est_balance ?? -1e8) : 1e8)
+  out.sort((a, b) => headroom(a) - headroom(b))
   return { rows: out, years_present: [...yearsUsed].sort(), available_years: [...availableYears].sort((a, b) => a - b), window_from: md }
 }
