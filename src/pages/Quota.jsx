@@ -18,6 +18,25 @@ const td = { padding: '0.45rem 0.6rem', borderBottom: '1px solid var(--border)',
 const tdR = { ...td, textAlign: 'right' }
 const thR = { ...th, textAlign: 'right' }
 
+// Read every row of a table, page by page. Supabase's default "Max rows"
+// (1000) silently truncates a plain .select(), which on quota_trip_catches
+// (tens of rows per trip) drops catch beyond ~15 trips and makes every stock
+// undercount. Paginating with .range() returns the full set regardless.
+async function selectAll(table, order) {
+  const PAGE = 1000
+  let from = 0
+  const all = []
+  for (;;) {
+    let q = supabase.from(table).select('*').range(from, from + PAGE - 1)
+    if (order) q = q.order(order.col, { ascending: order.asc })
+    const { data, error } = await q
+    if (error) return { data: all, error }
+    all.push(...(data || []))
+    if (!data || data.length < PAGE) return { data: all, error: null }
+    from += PAGE
+  }
+}
+
 function Scroll({ children }) {
   return <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</div>
 }
@@ -143,13 +162,13 @@ export default function Quota() {
 
   async function loadAll() {
     const [snapRes, lineRes, tripRes, catchRes, adjRes, msRes, meRes] = await Promise.all([
-      supabase.from('quota_snapshots').select('*').order('last_updated', { ascending: false }),
-      supabase.from('quota_lines').select('*'),
-      supabase.from('quota_trips').select('*').order('arrival_at', { ascending: false }),
-      supabase.from('quota_trip_catches').select('*'),
-      supabase.from('quota_adjustments').select('*').order('created_at'),
-      supabase.from('quota_manual_stocks').select('*').order('created_at'),
-      supabase.from('quota_manual_entries').select('*').order('entry_date'),
+      selectAll('quota_snapshots', { col: 'last_updated', asc: false }),
+      selectAll('quota_lines'),
+      selectAll('quota_trips', { col: 'arrival_at', asc: false }),
+      selectAll('quota_trip_catches'),
+      selectAll('quota_adjustments', { col: 'created_at', asc: true }),
+      selectAll('quota_manual_stocks', { col: 'created_at', asc: true }),
+      selectAll('quota_manual_entries', { col: 'entry_date', asc: true }),
     ])
     const err = snapRes.error || lineRes.error || tripRes.error || catchRes.error || adjRes.error
     if (err) { setError(err.message); return }
