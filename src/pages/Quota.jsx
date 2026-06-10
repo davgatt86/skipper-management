@@ -82,7 +82,17 @@ function StockSelect({ value, onChange, exclude = new Set(), style }) {
 
 function ForecastView({ year, section, rows, trips }) {
   const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
-  const fc = useMemo(() => buildForecast({ rows, trips, year, asOf }), [rows, trips, year, asOf])
+  const [yearSel, setYearSel] = useState(null)   // null = use every available prior year
+  const fc = useMemo(() => buildForecast({ rows, trips, year, asOf, selectedYears: yearSel }), [rows, trips, year, asOf, yearSel])
+  const avail = fc.available_years || []
+  const isSel = y => !yearSel || yearSel.includes(y)
+  function toggleYear(y) {
+    const base = yearSel || avail
+    const next = base.includes(y) ? base.filter(x => x !== y) : [...base, y].sort((a, b) => a - b)
+    if (!next.length) return                                          // keep at least one year selected
+    const isAll = next.length === avail.length && avail.every(a => next.includes(a))
+    setYearSel(isAll ? null : next)
+  }
   const visible = fc.rows.filter(r => section === 'all' ? true : r.section === section)
   const tone = { over: 'warn', short: 'warn', tight: 'est', ok: 'ok', nodata: undefined }
   const label = { over: 'over quota', short: 'will run short', tight: 'tight', ok: 'on track', nodata: 'no history' }
@@ -95,6 +105,20 @@ function ForecastView({ year, section, rows, trips }) {
         <span className="muted" style={{ fontSize: '0.85rem' }}>
           rest of {year} ({win}) vs the same window in {fc.years_present.length ? fc.years_present.join(', ') : 'prior years'}
         </span>
+        {avail.length > 1 && (
+          <span style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="muted" style={{ fontSize: '0.8rem' }}>years:</span>
+            {avail.map(y => (
+              <button key={y} onClick={() => toggleYear(y)} title={isSel(y) ? 'Click to exclude this year' : 'Click to include this year'}
+                style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem', borderRadius: 6, cursor: 'pointer',
+                  border: '1px solid var(--navy)',
+                  background: isSel(y) ? 'var(--navy)' : 'transparent',
+                  color: isSel(y) ? '#fff' : 'var(--navy)' }}>
+                {y}
+              </button>
+            ))}
+          </span>
+        )}
         <span className="muted" style={{ marginLeft: 'auto', fontSize: '0.85rem' }}>
           from <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
         </span>
@@ -133,7 +157,7 @@ function ForecastView({ year, section, rows, trips }) {
         </table>
       </Scroll>
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.6rem', marginBottom: 0 }}>
-        Projection = estimated balance now − what you landed in the same calendar window in prior years (averaged across the years on file). “No history” = no prior-year catch for that stock in this window yet.
+        Projection = estimated balance now − what you landed in the same calendar window in prior years (averaged across the selected years). “No history” = no prior-year catch for that stock in this window yet.
       </p>
     </div>
   )

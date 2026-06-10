@@ -307,6 +307,7 @@ function PriceTrends({ prices, years }) {
   const [sel, setSel] = useState([])          // [{species, grades:Set}]
   const [range, setRange] = useState('1Y')
   const [metric, setMetric] = useState('ave')
+  const [chartKind, setChartKind] = useState('line')   // line by default, switchable to bar
   const [yrs, setYrs] = useState(years.slice(-2))
 
   useEffect(() => { setYrs(years.slice(-2)) }, [years]) // eslint-disable-line
@@ -348,6 +349,8 @@ function PriceTrends({ prices, years }) {
           <Segmented value={source} onChange={setSource} options={[['PD', 'Peterhead'], ['DK', 'Denmark'], ['Combined', 'Combined']]} />
           {source !== 'DK' && <><span style={{ color: 'var(--border)' }}>|</span>
             <Segmented value={metric} onChange={setMetric} options={[['ave', 'Avg'], ['high', 'High'], ['low', 'Low']]} /></>}
+          <span style={{ color: 'var(--border)' }}>|</span>
+          <Segmented value={chartKind} onChange={setChartKind} options={[['line', 'Line'], ['bar', 'Bar']]} />
         </div>
         <div><RangePicker value={range} onChange={setRange} /></div>
         {compare && <YearPicker years={years} sel={yrs} onToggle={y => setYrs(c => c.includes(y) ? c.filter(x => x !== y) : [...c, y])} />}
@@ -370,9 +373,9 @@ function PriceTrends({ prices, years }) {
           </div>
         ))}
       </div>
-      <TrendChart data={series.data} keys={series.keys} yfmt={gbp} kind={compare ? 'line' : 'bar'} gran={gran} compareYears={compare} />
+      <TrendChart data={series.data} keys={series.keys} yfmt={gbp} kind={chartKind} gran={gran} compareYears={compare} />
       <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem', marginBottom: 0 }}>
-        {compare ? 'Lines compare the same months across the years you pick.' : 'Bars show the chosen window (daily ≤2 weeks, weekly for a month, monthly beyond).'} Denmark is average price only; Peterhead can show high/avg/low.
+        {compare ? 'Comparing the same months across the years you pick.' : 'Showing the chosen window (daily ≤2 weeks, weekly for a month, monthly beyond).'} Denmark is average price only; Peterhead can show high/avg/low.
       </p>
     </div>
   )
