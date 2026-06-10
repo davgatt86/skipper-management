@@ -184,8 +184,32 @@ export const handler = async (event) => {
   const { data: senders, error: se } = await supabase
     .from('ingest_senders').select('email, fleet_id, label')
   if (se) return { statusCode: 500, body: 'cannot read ingest_senders: ' + se.message }
-  const map = new Map((senders || []).map(s => [String(s.email).toLowerCase(), s]))
-  const sender = seen.map(e => map.get(e)).find(Boolean) || null
+  // Two kinds of allow-rule: an exact address ('flemming@…' / 'davgatt86@gmail.com')
+  // or a whole-domain rule whose email begins with '@' ('@hanstholmfiskeauktion.dk').
+  // A domain rule matches that domain and any sub-domain of it, so the auction's
+  // random per-message ESP address (xxxx@em934663.hanstholmfiskeauktion.dk) still
+  // resolves. Exact matches are tried across ALL seen addresses first, so a known
+  // human forwarder always wins and a domain rule can't hijack someone else's
+  // forwarded note; the domain rule is only the fallback (e.g. the auction mailing
+  // us directly, with no known forwarder in the envelope).
+  const exact = new Map()
+  const domains = []
+  for (const s of senders || []) {
+    const e = String(s.email || '').toLowerCase().trim()
+    if (!e) continue
+    if (e.startsWith('@')) domains.push({ suffix: e.slice(1), row: s })
+    else exact.set(e, s)
+  }
+  const domainMatch = (addr) => {
+    const at = addr.lastIndexOf('@')
+    if (at < 0) return null
+    const dom = addr.slice(at + 1)
+    for (const d of domains) if (dom === d.suffix || dom.endsWith('.' + d.suffix)) return d.row
+    return null
+  }
+  const sender = seen.map(e => exact.get(e)).find(Boolean)
+    || seen.map(domainMatch).find(Boolean)
+    || null
   if (!sender) {
     // 422 -> CloudMailin bounces it back to you as an email naming what it saw.
     return { statusCode: 422, body: JSON.stringify({ error: 'unknown forwarder — add them to ingest_senders', addresses_seen: seen }, null, 2) }
