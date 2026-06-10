@@ -218,6 +218,32 @@ export default function Quota() {
     await loadAll(); setBusy(false)
   }
 
+  // ---------- reset ----------
+  // Clears every quota table for THIS fleet via the logged-in session, so
+  // RLS scopes the deletes to the user's own fleet automatically (no need to
+  // know the fleet UUID). Children cascade, but we delete child→parent
+  // explicitly too so it works even if a cascade is ever missing.
+  async function resetQuota() {
+    const summary = `${snapshots.length} statement${snapshots.length === 1 ? '' : 's'}, `
+      + `${trips.length} trip${trips.length === 1 ? '' : 's'}`
+      + (manualReady ? `, ${manualStocks.length} manual stock${manualStocks.length === 1 ? '' : 's'}` : '')
+      + `, ${adjustments.length} swap${adjustments.length === 1 ? '' : 's'}`
+    if (!window.confirm(`Permanently delete ALL quota data for this fleet?\n\nThis clears ${summary} and cannot be undone — you'd need to re-upload to restore it.`)) return
+    setBusy(true); setLog([]); setError('')
+    const tables = ['quota_trip_catches', 'quota_trips', 'quota_lines', 'quota_snapshots']
+    if (manualReady) tables.push('quota_manual_entries', 'quota_manual_stocks')
+    tables.push('quota_adjustments')
+    let failed = false
+    for (const t of tables) {
+      // .not('id','is',null) matches every row the session is allowed to see
+      const { error } = await supabase.from(t).delete().not('id', 'is', null)
+      if (error) { failed = true; pushLog(`✘ ${t}: ${error.message}`) }
+      else pushLog(`✔ cleared ${t}`)
+    }
+    await loadAll(); setBusy(false)
+    pushLog(failed ? '⚠ Some tables could not be cleared — see above.' : '✓ Quota page reset. Ready for a fresh upload.')
+  }
+
   // ---------- manual stocks ----------
   const [msStock, setMsStock] = useState('')
   const [msT, setMsT] = useState('')
@@ -383,6 +409,12 @@ export default function Quota() {
           <span className="muted" style={{ fontSize: '0.85rem' }}>
             {snapshots.length} statement{snapshots.length === 1 ? '' : 's'} · {trips.length} trip{trips.length === 1 ? '' : 's'} · {manualStocks.length} manual stock{manualStocks.length === 1 ? '' : 's'}
           </span>
+          {!nothingYet && (
+            <button onClick={resetQuota} disabled={busy} title="Delete all quota data for this fleet and start fresh"
+              style={{ marginLeft: 'auto', background: '#fee2e2', color: '#b91c1c', borderColor: '#fecaca' }}>
+              Reset quota
+            </button>
+          )}
         </div>
         {nothingYet && !showAdd && (
           <p className="muted" style={{ fontSize: '0.85rem', marginTop: '0.7rem', marginBottom: 0 }}>
