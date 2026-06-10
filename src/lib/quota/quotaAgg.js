@@ -204,11 +204,13 @@ export function buildPosition({ snapshot, trips, year, adjustments = [], manualS
 // taken in the SAME remaining-months window in prior years (averaged across
 // whatever prior years are on file). Driven by dated trip catch, so it gets
 // sharper as more history is loaded. asOf 'YYYY-MM-DD' sets the window start.
-export function buildForecast({ rows = [], trips = [], year, asOf }) {
+export function buildForecast({ rows = [], trips = [], year, asOf, selectedYears = null }) {
   const md = String(asOf || '').slice(5) || '01-01'   // 'MM-DD' window start
   const yr = Number(year)
+  const sel = (selectedYears && selectedYears.length) ? new Set(selectedYears.map(Number)) : null
   const byStockYear = {}                                // stock -> { year -> kg } in window
-  const yearsPresent = new Set()
+  const availableYears = new Set()                      // every prior year with windowed quota catch
+  const yearsUsed = new Set()                           // prior years actually fed into the average
   for (const t of trips) {
     for (const c of t.catches || []) {
       const cd = c.catch_date || ''
@@ -217,7 +219,9 @@ export function buildForecast({ rows = [], trips = [], year, asOf }) {
       if (cd.slice(5) < md) continue                    // remaining-months window only
       const m = mapStock(c.species_fao, c.fao_area)
       if (m.kind !== 'quota') continue
-      yearsPresent.add(cy)
+      availableYears.add(cy)                            // counted before the selection filter, so the picker sees every year
+      if (sel && !sel.has(cy)) continue                 // year deselected -> don't fold it into the average
+      yearsUsed.add(cy)
       const e = (byStockYear[m.stock] = byStockYear[m.stock] || {})
       e[cy] = (e[cy] || 0) + c.live_kg
     }
@@ -249,5 +253,5 @@ export function buildForecast({ rows = [], trips = [], year, asOf }) {
   }
   const rank = { over: 0, short: 1, tight: 2, ok: 3, nodata: 4 }
   out.sort((a, b) => (rank[a.status] - rank[b.status]) || ((a.projected_t ?? 1e9) - (b.projected_t ?? 1e9)))
-  return { rows: out, years_present: [...yearsPresent].sort(), window_from: md }
+  return { rows: out, years_present: [...yearsUsed].sort(), available_years: [...availableYears].sort((a, b) => a - b), window_from: md }
 }
