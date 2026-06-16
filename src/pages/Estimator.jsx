@@ -107,6 +107,8 @@ const DEFAULT_TALLY = [
 const fmtGBP=(n)=>n==null||isNaN(n)?"—":"£"+n.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtKg=(n)=>n==null||isNaN(n)?"—":n.toLocaleString("en-GB",{maximumFractionDigits:1})+" kg";
 const GRADE_LABEL = { A4c:"A4 Chipper", A4m:"A4 Metro (high)", A4ma:"A4 Metro (avg)", A4r:"A4 Round" };
+// Fallback box weight when a tally gives box counts but no weights (handwritten).
+const DEFAULT_BOX_KG = 40;
 
 const norm=(s)=>String(s||"").toUpperCase().replace(/^\d+\.?\s*/,"").replace(/\s*\([^)]*\)\s*$/,"").trim();
 
@@ -311,6 +313,16 @@ export default function Estimator(){
       if(m!=null)return {price:m,exact:false,via:base};
     }
     if(spObj[base]!=null)return {price:spObj[base],exact:false,via:base};
+    // Haddock/Whiting A4 sub-grades (A4ma=Metro avg, A4m=Metro high, A4c=Chipper,
+    // A4r=Round) are NOT on the A1..A5 ladder. If their own price is missing, fall
+    // back ONLY within the A4 family — never step up the ladder to A1, which
+    // massively over-values the catch. If no A4 price exists on this market,
+    // return null so the caller borrows the other market instead.
+    const A4_FALLBACK={A4ma:["A4ma","A4"],A4m:["A4m","A4"],A4c:["A4c","A4"],A4r:["A4r","A4"]};
+    if(A4_FALLBACK[base]){
+      for(const g of A4_FALLBACK[base]){ if(spObj[g]!=null)return {price:spObj[g],exact:false,via:g}; }
+      return null;
+    }
     let idx=ladder.indexOf(base);
     if(idx>=0){
       for(let d=1;d<ladder.length;d++){
@@ -439,7 +451,7 @@ export default function Estimator(){
   // Ask the AI parser for a clean tally array. Either pass {b64,mediaType} for a
   // PDF/image, or {text} for spreadsheet rows the browser already read.
   async function aiBoatRows({b64,mediaType,text}){
-    const prompt=`This is a fishing boat catch tally / landings report. It may be laid out in any style (one boat, or several boats side by side). Extract ONE row per individual size/grade line. For each, give: species (CAPS), the size/grade label exactly as printed, number of boxes, and weight in kg. RULES: Skip species sub-total rows (e.g. "TOTAL", "GH TOTAL", "TOTAL HAD"), the grand total, blank rows, discards/bait/mix rows, and any "haul/discards" section. If the sheet shows several boats with a combined column, use the COMBINED total boxes & kg (not one single boat). If a line has weight but no box count, set boxes to 0. Numbers may use a comma as the decimal separator (e.g. "687,85" means 687.85) and a dot or space as a thousands separator (e.g. "2.534,83" or "2 534,83" means 2534.83) — convert to a plain number. Respond with ONLY a JSON array, no explanation, no markdown: [{"sp":"COD","size":"Sprag","boxes":19,"wt":687.85}].`;
+    const prompt=`This is a fishing boat catch tally / landings report. It may be printed OR HANDWRITTEN, and laid out in any style (one boat, several boats side by side, or a simple handwritten column of species with grades and box counts). Extract ONE row per individual size/grade line. For each, give: species (CAPS), the size/grade label exactly as printed, number of boxes, and weight in kg. RULES: Skip species sub-total rows (e.g. "TOTAL", "GH TOTAL", "TOTAL HAD"), the grand total, blank rows, discards/bait/mix rows, and any "haul/discards" section. If the sheet shows several boats with a combined column, use the COMBINED total boxes & kg (not one single boat). If a line has weight but no box count, set boxes to 0. If a line has a box count but NO weight (common on handwritten tallies), set wt to 0 — do NOT invent a weight. Grade labels may be written as a number+name like "4 METRO", "3 CHIPPER", "5 ROBBY", "2 GOOD SEED" — keep the full label as printed. Numbers may use a comma as the decimal separator (e.g. "687,85" means 687.85) and a dot or space as a thousands separator (e.g. "2.534,83" or "2 534,83" means 2534.83) — convert to a plain number. Respond with ONLY a JSON array, no explanation, no markdown: [{"sp":"COD","size":"Sprag","boxes":19,"wt":687.85}].`;
     const body=b64?{media:b64,mediaType,prompt}:{text,prompt};
     const resp=await fetch("/.netlify/functions/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const data=await resp.json();
@@ -447,7 +459,7 @@ export default function Estimator(){
     let t=data.text||"";
     const a=t.indexOf("["),z=t.lastIndexOf("]");
     if(a<0||z<0||z<=a){throw new Error("no JSON array found");}
-    return JSON.parse(t.slice(a,z+1)).map((r)=>({sp:String(r.sp||"").toUpperCase(),size:String(r.size||""),boxes:+r.boxes||0,wt:+r.wt||0})).filter((r)=>r.sp&&r.wt);
+    return JSON.parse(t.slice(a,z+1)).map((r)=>({sp:String(r.sp||"").toUpperCase(),size:String(r.size||""),boxes:+r.boxes||0,wt:+r.wt||0})).filter((r)=>r.sp&&(r.wt||r.boxes));
   }
 
   async function parseBoat(file){
@@ -460,6 +472,10 @@ export default function Estimator(){
       }else if(name.endsWith(".pdf")){
         usedAI=true;
         parsed=await aiBoatRows({b64:await fileToB64(file),mediaType:"application/pdf"});
+      }else if(/\.(jpe?g|png|webp|heic|heif)$/i.test(name)||(file.type||"").startsWith("image/")){
+        usedAI=true;
+        const mt=(file.type&&file.type.startsWith("image/"))?file.type:"image/jpeg";
+        parsed=await aiBoatRows({b64:await fileToB64(file),mediaType:mt});
       }else if(name.endsWith(".xlsx")||name.endsWith(".xls")||name.endsWith(".xlsm")){
         const buf=await fileToBuf(file);
         const wb=XLSX.read(buf,{type:"array"});
@@ -482,9 +498,11 @@ export default function Estimator(){
         setBusy((b)=>({...b,boat:false}));return;
       }
       if(!parsed.length)throw new Error("no rows found");
-      const t=parsed.map((r,i)=>({id:i,sp:canonSp(r.sp),size:r.size,boxes:r.boxes,wt:r.wt,avgBox:r.boxes?+(r.wt/r.boxes).toFixed(1):0}));
+      const boxOnly=parsed.some((r)=>r.boxes>0&&!(r.wt>0));
+      const t=parsed.map((r,i)=>({id:i,sp:canonSp(r.sp),size:r.size,boxes:r.boxes,wt:r.wt,avgBox:r.boxes?(r.wt>0?+(r.wt/r.boxes).toFixed(1):DEFAULT_BOX_KG):0}));
       setTally(t);setMap(buildMapping(t));
-      setMsg((m)=>({...m,boat:`Loaded ${t.length} size lines across ${new Set(t.map((x)=>x.sp)).size} species${usedAI?" (read by AI — check step 4 carefully)":""}. Mapping auto-built — check step 4.`}));
+      if(boxOnly)setTallyMode("boxes");
+      setMsg((m)=>({...m,boat:`Loaded ${t.length} size lines across ${new Set(t.map((x)=>x.sp)).size} species${usedAI?" (read by AI — check carefully)":""}.${boxOnly?` Box-only tally — box weights set to ${DEFAULT_BOX_KG}kg, adjust per row.`:""} Mapping auto-built — check step 4.`}));
     }catch(e){setMsg((m)=>({...m,boat:`Couldn't read boat file (${e.message}). Sample tally still loaded.`}));}
     finally{setBusy((b)=>({...b,boat:false}));}
   }
@@ -608,7 +626,7 @@ export default function Estimator(){
       </div>
 
       <div style={{maxWidth:1180,margin:"0 auto",padding:"26px 22px"}}>
-        {step===0&&<BoatStep tally={tally} setTally={setTally} mode={tallyMode} setMode={setTallyMode} effW={effW} onUpload={parseBoat} busy={busy.boat} msg={msg.boat} next={()=>setStep(1)}/>}
+        {step===0&&<BoatStep tally={tally} setTally={setTally} setMap={setMap} mode={tallyMode} setMode={setTallyMode} effW={effW} onUpload={parseBoat} busy={busy.boat} msg={msg.boat} next={()=>setStep(1)}/>}
         {step===1&&<PriceStep which="pd" title="Peterhead price sheet" accent={C.pd} prices={pd} setPrices={setPd} onUpload={(f)=>parsePrice(f,"pd")} busy={busy.pd} msg={msg.pd} next={()=>setStep(2)}/>}
         {step===2&&<PriceStep which="dk" title="Hanstholm price sheet" accent={C.dk} prices={dk} setPrices={setDk} onUpload={(f)=>parsePrice(f,"dk")} busy={busy.dk} msg={msg.dk} next={()=>setStep(3)}/>}
         {step===3&&<MapStep tally={tally} map={map} setMap={setMap} pd={pd} dk={dk} pdHigh={pdHigh} setPdHigh={setPdHigh} next={()=>setStep(4)}/>}
@@ -623,28 +641,59 @@ function Card({children,accent}){return(<div style={{background:C.panel,border:`
 function NextBtn({onClick,label="Next →"}){return(<button onClick={onClick} style={{background:C.good,color:"#06281a",border:"none",padding:"11px 22px",borderRadius:8,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:FONT,marginTop:20}}>{label}</button>);}
 function UploadBtn({onUpload,busy,accent,label}){const ref=useRef();return(<><input ref={ref} type="file" accept="image/*,application/pdf,.csv,.tsv,.txt,.xlsx,.xls,.xlsm" style={{display:"none"}} onChange={(e)=>e.target.files[0]&&onUpload(e.target.files[0])}/><button onClick={()=>ref.current.click()} disabled={busy} style={{background:accent,color:"#031018",border:"none",padding:"10px 18px",borderRadius:8,fontWeight:700,cursor:busy?"wait":"pointer",fontFamily:FONT,fontSize:13.5}}>{busy?"Reading…":label}</button></>);}
 
-function BoatStep({tally,setTally,mode,setMode,effW,onUpload,busy,msg,next}){
-  function upd(id,f,v){setTally((p)=>p.map((r)=>r.id===id?{...r,[f]:v===""?0:+v}:r));}
+function BoatStep({tally,setTally,setMap,mode,setMode,effW,onUpload,busy,msg,next}){
+  const SPECIES=Object.keys(GRADE_DICT);
+  const gradesFor=(sp)=>Object.keys(GRADE_DICT[sp]||{});
+  const rebuild=(t)=>{setTally(t);setMap(buildMapping(t));};
+  function updNum(id,f,v){setTally((p)=>p.map((r)=>r.id===id?{...r,[f]:v===""?0:+v}:r));}
+  function updSp(id,v){rebuild(tally.map((r)=>r.id===id?{...r,sp:v}:r));}
+  function updSize(id,v){rebuild(tally.map((r)=>r.id===id?{...r,size:v}:r));}
+  function delRow(id){rebuild(tally.filter((r)=>r.id!==id));}
+  const [na,setNa]=useState({sp:"HADDOCK",size:"",boxes:"",avgBox:""});
+  function addRow(){
+    if(!na.sp)return;
+    const boxes=+na.boxes||0,avgBox=+na.avgBox||0,wt=+(boxes*avgBox).toFixed(1);
+    if(!boxes&&!wt)return;
+    const id=tally.reduce((m,r)=>Math.max(m,r.id),-1)+1;
+    rebuild([...tally,{id,sp:canonSp(na.sp),size:na.size||na.sp,boxes,avgBox:avgBox||(boxes?DEFAULT_BOX_KG:0),wt:wt||0}]);
+    setNa((n)=>({sp:n.sp,size:"",boxes:"",avgBox:n.avgBox})); // keep species + box wt for a fast next line
+    if(mode!=="boxes")setMode("boxes");
+  }
   const totW=tally.reduce((a,r)=>a+effW(r),0);
+  const lblS={display:"flex",flexDirection:"column",gap:3,fontSize:11,color:C.dim,fontWeight:600};
   return(<Card>
     <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
       <div style={{fontSize:18,fontWeight:700}}>Boat tally</div>
-      <UploadBtn onUpload={onUpload} busy={busy} accent={C.good} label="⬆ Upload boat file"/>
+      <UploadBtn onUpload={onUpload} busy={busy} accent={C.good} label="⬆ Upload tally (xlsx · CSV · PDF · photo)"/>
       <div style={{display:"flex",gap:6,background:C.panel2,padding:3,borderRadius:8}}>
         {[["weight","Weight"],["boxes","Boxes × avg"]].map(([m,l])=>(<button key={m} onClick={()=>setMode(m)} style={{background:mode===m?C.ink:"transparent",color:mode===m?C.bg:C.dim,border:"none",padding:"6px 12px",borderRadius:6,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>{l}</button>))}
       </div>
       <div style={{marginLeft:"auto",color:C.dim,fontSize:14,fontFamily:MONO}}>Total: <b style={{color:C.ink}}>{fmtKg(totW)}</b></div>
     </div>
     {msg&&<div style={{fontSize:12.5,color:busy?C.warn:C.dim,marginTop:10}}>{msg}</div>}
-    <div style={{fontSize:11.5,color:C.dim,marginTop:6}}>Accepts the boat <b>.xlsx</b> directly, or CSV/PDF. Skips “*” summary and Total rows automatically.</div>
+    <div style={{fontSize:11.5,color:C.dim,marginTop:6}}>Upload a printed or <b>handwritten</b> tally (photo / PDF / Excel / CSV), or build one by hand below. Every line is editable — change a species or grade and the price mapping updates automatically.</div>
     <div style={{marginTop:16,overflowX:"auto"}}>
       {tally.length===0
-        ? <div style={{padding:"28px 16px",textAlign:"center",color:C.dim,fontSize:13.5,border:`1px dashed ${C.line}`,borderRadius:10}}>No catch loaded yet. Upload the boat file above to begin.</div>
-        : <table><thead><tr><th>Species</th><th>Size</th>{mode==="boxes"?<><th className="r">Boxes</th><th className="r">Avg box</th><th className="r">Weight</th></>:<th className="r">Weight kg</th>}</tr></thead>
-      <tbody>{tally.map((r)=>(<tr key={r.id}><td style={{fontWeight:600}}>{r.sp}</td><td style={{color:C.dim}}>{r.size}</td>
-        {mode==="boxes"?<><td className="r"><input className="ci" style={{width:56}} type="number" value={r.boxes} onChange={(e)=>upd(r.id,"boxes",e.target.value)}/></td><td className="r"><input className="ci" style={{width:60}} type="number" step="0.1" value={r.avgBox} onChange={(e)=>upd(r.id,"avgBox",e.target.value)}/></td><td className="r" style={{color:C.dim,fontFamily:MONO}}>{(r.boxes*r.avgBox).toFixed(1)}</td></>
-        :<td className="r"><input className="ci" style={{width:80}} type="number" step="0.01" value={r.wt} onChange={(e)=>upd(r.id,"wt",e.target.value)}/></td>}
+        ? <div style={{padding:"22px 16px",textAlign:"center",color:C.dim,fontSize:13.5,border:`1px dashed ${C.line}`,borderRadius:10}}>No catch loaded yet. Upload a tally above, or add lines by hand below.</div>
+        : <table><thead><tr><th>Species</th><th>Size / grade</th>{mode==="boxes"?<><th className="r">Boxes</th><th className="r">Box kg</th><th className="r">Weight</th></>:<th className="r">Weight kg</th>}<th></th></tr></thead>
+      <tbody>{tally.map((r)=>(<tr key={r.id}>
+        <td><select className="si" style={{fontSize:13,minWidth:118}} value={r.sp} onChange={(e)=>updSp(r.id,e.target.value)}>{[...new Set([...SPECIES,r.sp])].map((s)=><option key={s} value={s}>{s}</option>)}</select></td>
+        <td><input className="ci" list={`g-${r.sp}`} style={{minWidth:128}} value={r.size} onChange={(e)=>updSize(r.id,e.target.value)}/><datalist id={`g-${r.sp}`}>{gradesFor(r.sp).map((g)=><option key={g} value={g}/>)}</datalist></td>
+        {mode==="boxes"
+          ?<><td className="r"><input className="ci" style={{width:56}} type="number" value={r.boxes} onChange={(e)=>updNum(r.id,"boxes",e.target.value)}/></td><td className="r"><input className="ci" style={{width:60}} type="number" step="0.1" value={r.avgBox} onChange={(e)=>updNum(r.id,"avgBox",e.target.value)}/></td><td className="r" style={{color:C.dim,fontFamily:MONO}}>{(r.boxes*r.avgBox).toFixed(1)}</td></>
+          :<td className="r"><input className="ci" style={{width:80}} type="number" step="0.01" value={r.wt} onChange={(e)=>updNum(r.id,"wt",e.target.value)}/></td>}
+        <td className="r"><button onClick={()=>delRow(r.id)} title="Remove line" style={{background:"none",border:"none",color:C.warn,cursor:"pointer",fontSize:18,lineHeight:1,padding:"0 4px"}}>×</button></td>
       </tr>))}</tbody></table>}
+    </div>
+    <div style={{marginTop:14,padding:"12px 14px",border:`1px dashed ${C.line}`,borderRadius:10,background:C.panel2}}>
+      <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Add a line by hand</div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"flex-end"}}>
+        <label style={lblS}>Species<select className="si" style={{minWidth:130,fontSize:13}} value={na.sp} onChange={(e)=>setNa((n)=>({...n,sp:e.target.value}))}>{SPECIES.map((s)=><option key={s} value={s}>{s}</option>)}</select></label>
+        <label style={lblS}>Grade / size<input className="ci" list={`g-add-${na.sp}`} placeholder="e.g. Metro" style={{minWidth:140}} value={na.size} onChange={(e)=>setNa((n)=>({...n,size:e.target.value}))}/><datalist id={`g-add-${na.sp}`}>{gradesFor(na.sp).map((g)=><option key={g} value={g}/>)}</datalist></label>
+        <label style={lblS}>Boxes<input className="ci" style={{width:70}} type="number" placeholder="0" value={na.boxes} onChange={(e)=>setNa((n)=>({...n,boxes:e.target.value}))}/></label>
+        <label style={lblS}>Box weight kg<input className="ci" style={{width:90}} type="number" step="0.1" placeholder={String(DEFAULT_BOX_KG)} value={na.avgBox} onChange={(e)=>setNa((n)=>({...n,avgBox:e.target.value}))}/></label>
+        <button onClick={addRow} style={{background:C.good,border:"none",color:"#031018",cursor:"pointer",fontWeight:700,borderRadius:8,padding:"9px 16px",fontFamily:FONT,fontSize:13.5}}>+ Add line</button>
+      </div>
     </div>
     <NextBtn onClick={next}/>
   </Card>);
@@ -823,6 +872,9 @@ function ResultStep({rows,totals,summary,fillMissing,setFillMissing,tallyMode,ex
             <span>All-in % <NI val={nettCfg.dk.pct} on={(v)=>setDk("pct",v)}/></span>
             <span>Box levy £ <NI val={nettCfg.dk.boxLevy} on={(v)=>setDk("boxLevy",v)} w={58}/></span>
             <span>Other £ <NI val={nettCfg.dk.otherFixed} on={(v)=>setDk("otherFixed",v)} w={78}/></span>
+          </div>
+          <div style={{marginTop:6,fontSize:11,color:C.dim,fontStyle:"italic",lineHeight:1.5}}>
+            All-in % is inclusive of all Hanstholm costs — labour, forklifts, handling, etc. No separate labour line needed.
           </div>
           <div style={{marginTop:10,fontSize:12,fontFamily:MONO,color:C.dim,lineHeight:1.7}}>
             − {nett.dkPct.toFixed(2)}% = {fmtGBP(nett.dkPctCost)}<br/>
