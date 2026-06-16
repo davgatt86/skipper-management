@@ -28,15 +28,6 @@ function avg(list) {
 }
 const r2 = n => (n == null ? null : Math.round(n * 100) / 100)
 
-// PD A-grade -> haddock A4 sub-grade key, by the board's subgrade label
-function haddockA4Key(subgrade) {
-  const s = String(subgrade || '').toLowerCase()
-  if (s.includes('chipper')) return 'A4c'
-  if (s.includes('mini')) return 'A4ma'
-  if (s.includes('metro')) return 'A4m'
-  return null
-}
-
 /* pdRows / dkRows: market_prices records from the 2 latest days for that source.
  * Each: { species, grade, subgrade, low, high, ave }.
  * Returns { pd, dk } in the Estimator's expected shape, plus a `missing` note
@@ -57,14 +48,26 @@ export function buildEstimatorPrices(pdRows = [], dkRows = []) {
     const name = PD_NAME[g.species]
     if (!name) { missing.add('PD ' + g.species); continue }
     const obj = (pd[name] = pd[name] || {})
-    const ave = r2(avg(g.ave)), high = r2(avg(g.high)), low = r2(avg(g.low))
-    const set = key => { if (ave != null) obj[key] = ave; if (high != null) obj[key + ' (high)'] = high; if (low != null) obj[key + ' (low)'] = low }
-    set(g.grade)
-    // haddock A4 descriptive split -> A4c/A4m/A4ma (so the estimator's haddock mapping resolves)
-    if (name === 'Haddock' && g.grade === 'A4') {
-      const sub = haddockA4Key(g.subgrade)
-      if (sub && ave != null) { obj[sub] = ave; if (high != null) obj[sub + ' (high)'] = high }
+    const ave = r2(avg(g.ave)), high = r2(avg(g.high))   // LOW intentionally dropped — never used to value a tally
+    // Haddock follows the skipper's grading rule and is built on its own:
+    //   A1 / A2 / A3 / A4 Chipper  -> AVG
+    //   Metro                      -> A4 Metro HIGH   (key A4m)
+    //   Mini Metro                 -> A4 Metro AVG    (key A4ma)
+    //   A4 Round (cheap ungutted) and the LOW column are NEVER used.
+    if (name === 'Haddock') {
+      if (g.grade === 'A4') {
+        const s = String(g.subgrade || '').toLowerCase()
+        if (s.includes('chipper')) { if (ave != null) obj['A4c'] = ave }
+        else if (s.includes('metro')) { if (ave != null) obj['A4ma'] = ave; if (high != null) obj['A4m'] = high }
+        // 'round' / anything else on A4 -> ignored on purpose (no bare 'A4' key)
+      } else if (ave != null) {
+        obj[g.grade] = ave   // A1 / A2 / A3 -> AVG only
+      }
+      continue
     }
+    // All other species: AVG (+ HIGH so the "Mid" toggle works). No LOW.
+    if (ave != null) obj[g.grade] = ave
+    if (high != null) obj[g.grade + ' (high)'] = high
   }
 
   // DK: key species|grade ; grade "A"+sort -> sort number; 'U'/blank -> '9'
