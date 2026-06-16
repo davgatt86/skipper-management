@@ -229,6 +229,9 @@ export default function Estimator(){
   const [tallyMode,setTallyMode]=useState("weight");
   const [fillMissing,setFillMissing]=useState(true);
   const [pdHigh,setPdHigh]=useState(false); // false = AVE (default), true = all PD grades use HIGH column
+  // Manual per-grade price overrides set on the Check-mapping step (bump up/down for the next day's market).
+  // Keyed by `${market}|${species}|${grade}` e.g. "pd|Haddock|A4m". Survives a board reload; clearable.
+  const [priceOv,setPriceOv]=useState({});
   const [busy,setBusy]=useState({pd:false,dk:false,boat:false});
   const [nettCfg,setNettCfg]=useState(loadNett);
   const [boxesOverride,setBoxesOverride]=useState("");
@@ -348,21 +351,26 @@ export default function Estimator(){
   const rows=useMemo(()=>tally.map((r,i)=>{
     const m=map[i]||{}; const w=effW(r);
     const pr=resolvePD(m.pdSp,m.pdGr), dr=resolveDK(m.dkSp,m.dkSort);
-    // base prices: same-market value (exact or nearest grade), else 0
-    let pu=pr?pr.price:0, du=dr?dr.price:0;
+    // manual overrides (Check-mapping editor) win over the board price for that grade
+    const povRaw=priceOv[`pd|${m.pdSp}|${m.pdGr}`], dovRaw=priceOv[`dk|${m.dkSp}|${m.dkSort}`];
+    const hasPov=povRaw!=null&&povRaw!==""&&!isNaN(povRaw);
+    const hasDov=dovRaw!=null&&dovRaw!==""&&!isNaN(dovRaw);
+    // base prices: override, else same-market value (exact or nearest grade), else 0
+    let pu=hasPov?+povRaw:(pr?pr.price:0), du=hasDov?+dovRaw:(dr?dr.price:0);
+    const pHas=hasPov||!!pr, dHas=hasDov||!!dr;
     let note="";const notes=[];
-    if(pr&&!pr.exact)notes.push(`PD grade ${pr.via}`);   // same-market step
-    if(dr&&!dr.exact)notes.push(`DK sort ${dr.via}`);
+    if(hasPov)notes.push("PD edited"); else if(pr&&!pr.exact)notes.push(`PD grade ${pr.via}`);   // same-market step
+    if(hasDov)notes.push("DK edited"); else if(dr&&!dr.exact)notes.push(`DK sort ${dr.via}`);
     if(fillMissing){
-      // Only borrow the OTHER market when this species is absent here (pr/dr null)
-      if(!pr&&!dr){note="No price either market";}
-      else if(!pr){pu=du;notes.push("PD ← Hanstholm");}
-      else if(!dr){du=pu;notes.push("DK ← Peterhead");}
+      // Only borrow the OTHER market when this species has no price here (no board price and no override)
+      if(!pHas&&!dHas){note="No price either market";}
+      else if(!pHas){pu=du;notes.push("PD ← Hanstholm");}
+      else if(!dHas){du=pu;notes.push("DK ← Peterhead");}
     }
     if(!note)note=notes.join(" · ");
     return {...r,m,w,pdPrice:pu,dkPrice:du,pdTotal:w*pu,dkTotal:w*du,diff:w*du-w*pu,note,
-            pdExact:pr?pr.exact:false,dkExact:dr?dr.exact:false,pdHas:!!pr,dkHas:!!dr};
-  }),[tally,map,pd,dk,tallyMode,fillMissing,pdHigh]);
+            pdExact:hasPov||(pr?pr.exact:false),dkExact:hasDov||(dr?dr.exact:false),pdHas:pHas,dkHas:dHas};
+  }),[tally,map,pd,dk,tallyMode,fillMissing,pdHigh,priceOv]);
 
   const totals=useMemo(()=>{const t=rows.reduce((a,r)=>({w:a.w+r.w,pd:a.pd+r.pdTotal,dk:a.dk+r.dkTotal}),{w:0,pd:0,dk:0});return{...t,diff:t.dk-t.pd};},[rows]);
   const summary=useMemo(()=>{const m={};rows.forEach((r)=>{if(!m[r.sp])m[r.sp]={sp:r.sp,w:0,pd:0,dk:0};m[r.sp].w+=r.w;m[r.sp].pd+=r.pdTotal;m[r.sp].dk+=r.dkTotal;});return Object.values(m).map((s)=>({...s,diff:s.dk-s.pd}));},[rows]);
@@ -629,7 +637,7 @@ export default function Estimator(){
         {step===0&&<BoatStep tally={tally} setTally={setTally} setMap={setMap} mode={tallyMode} setMode={setTallyMode} effW={effW} onUpload={parseBoat} busy={busy.boat} msg={msg.boat} next={()=>setStep(1)}/>}
         {step===1&&<PriceStep which="pd" title="Peterhead price sheet" accent={C.pd} prices={pd} setPrices={setPd} onUpload={(f)=>parsePrice(f,"pd")} busy={busy.pd} msg={msg.pd} next={()=>setStep(2)}/>}
         {step===2&&<PriceStep which="dk" title="Hanstholm price sheet" accent={C.dk} prices={dk} setPrices={setDk} onUpload={(f)=>parsePrice(f,"dk")} busy={busy.dk} msg={msg.dk} next={()=>setStep(3)}/>}
-        {step===3&&<MapStep tally={tally} map={map} setMap={setMap} pd={pd} dk={dk} pdHigh={pdHigh} setPdHigh={setPdHigh} next={()=>setStep(4)}/>}
+        {step===3&&<MapStep tally={tally} map={map} setMap={setMap} pd={pd} dk={dk} pdHigh={pdHigh} setPdHigh={setPdHigh} priceOv={priceOv} setPriceOv={setPriceOv} next={()=>setStep(4)}/>}
         {step===4&&<ResultStep rows={rows} totals={totals} summary={summary} fillMissing={fillMissing} setFillMissing={setFillMissing} tallyMode={tallyMode} exportPDF={exportPDF} nett={nett} nettCfg={nettCfg} setNettCfg={setNettCfg} tallyBoxes={tallyBoxes} boxesOverride={boxesOverride} setBoxesOverride={setBoxesOverride}/>}
       </div>
     </div>
@@ -718,9 +726,13 @@ function PriceStep({which,title,accent,prices,setPrices,onUpload,busy,msg,next})
   </Card>);
 }
 
-function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,next}){
+function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,priceOv,setPriceOv,next}){
   const [editSp,setEditSp]=useState(false);
   function upd(i,f,v){setMap((p)=>p.map((m,idx)=>idx===i?{...m,[f]:v}:m));}
+  // manual price overrides keyed by `${market}|${species}|${grade}`
+  const ovGet=(mkt,sp,gr)=>{const v=priceOv[`${mkt}|${sp}|${gr}`];return (v!=null&&v!=="")?v:"";};
+  const ovSet=(mkt,sp,gr,v)=>setPriceOv((o)=>{const k=`${mkt}|${sp}|${gr}`;const n={...o};if(v===""||v==null)delete n[k];else n[k]=v;return n;});
+  const editedCount=Object.keys(priceOv||{}).length;
   const pdSp=Object.keys(pd).concat("—"),dkSp=Object.keys(dk).concat("—");
   const cc={high:C.good,med:C.warn,low:C.bad};
   // alias-tolerant species finder (Monks~Monk~Monkfish, Lemons~Lemon, etc.)
@@ -773,6 +785,13 @@ function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,next}){
     <div style={{color:C.dim,fontSize:12.5,marginTop:8,display:"flex",gap:14,flexWrap:"wrap"}}>
       <span><Dot c={C.good}/> good</span><span><Dot c={C.warn}/> check</span><span><Dot c={C.bad}/> best-guess</span>
     </div>
+    <div style={{marginTop:8,fontSize:12,color:C.dim}}>
+      Tip: tap any price below to type tomorrow’s expected figure — the gross updates live. Edited prices show a blue box; tap ↺ to put the board price back.
+    </div>
+    {editedCount>0&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12.5}}>
+      <span style={{color:C.pd,fontWeight:700}}>{editedCount} price{editedCount>1?"s":""} edited by hand</span>
+      <button onClick={()=>setPriceOv({})} style={{border:`1px solid ${C.line}`,background:"transparent",color:C.dim,borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>Reset all to board</button>
+    </div>}
 
     <div style={{marginTop:14,display:"grid",gap:10}}>
       {tally.map((r,i)=>{
@@ -781,6 +800,8 @@ function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,next}){
         const pg=(pdO?Object.keys(pdO):[]).concat("ANY","—");
         const ds=(dkO?Object.keys(dkO):[]).concat("—");
         const pdVal=px(pd,m.pdSp,m.pdGr,pdHigh,PDL), dkVal=px(dk,m.dkSp,m.dkSort,false,DKL);
+        const pOv=ovGet("pd",m.pdSp,m.pdGr), dOv=ovGet("dk",m.dkSp,m.dkSort);
+        const pEff=(pOv!==""&&!isNaN(pOv))?+pOv:pdVal, dEff=(dOv!==""&&!isNaN(dOv))?+dOv:dkVal;
         return(
           <div key={r.id} style={{background:C.panel2,border:`1px solid ${C.line}`,borderLeft:`4px solid ${cc[m.conf]}`,borderRadius:10,padding:"11px 13px"}}>
             {/* line header */}
@@ -791,26 +812,32 @@ function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,next}){
             </div>
             {/* two columns: PD | DK */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:9}}>
-              <div style={{background:pdVal==null?"rgba(255,204,68,.08)":C.panel,borderRadius:8,padding:"8px 9px",borderTop:`2px solid ${pdVal==null?C.warn:C.pd}`,border:pdVal==null?`1px solid ${C.warn}`:"1px solid transparent"}}>
+              <div style={{background:pEff==null?"rgba(255,204,68,.08)":C.panel,borderRadius:8,padding:"8px 9px",borderTop:`2px solid ${pEff==null?C.warn:C.pd}`,border:pEff==null?`1px solid ${C.warn}`:"1px solid transparent"}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                  <span style={{fontSize:10.5,color:pdVal==null?C.warn:C.pd,fontWeight:700,letterSpacing:".04em"}}>PETERHEAD</span>
-                  {pdVal==null&&<span style={{marginLeft:"auto",fontSize:9,fontWeight:800,color:"#06281a",background:C.warn,borderRadius:4,padding:"1px 5px",letterSpacing:".03em"}}>{dkVal!=null?"WILL SUB":"NO PRICE"}</span>}
+                  <span style={{fontSize:10.5,color:pEff==null?C.warn:C.pd,fontWeight:700,letterSpacing:".04em"}}>PETERHEAD</span>
+                  {pEff==null&&<span style={{marginLeft:"auto",fontSize:9,fontWeight:800,color:"#06281a",background:C.warn,borderRadius:4,padding:"1px 5px",letterSpacing:".03em"}}>{dEff!=null?"WILL SUB":"NO PRICE"}</span>}
                 </div>
                 {editSp&&<select className="si" style={{width:"100%",marginBottom:5,fontSize:12}} value={m.pdSp} onChange={(e)=>upd(i,"pdSp",e.target.value)}>{pdSp.map((s)=><option key={s}>{s}</option>)}</select>}
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <select className="si" style={{flex:1,fontSize:14,padding:"7px 8px",color:pdVal==null?C.warn:C.ink}} value={m.pdGr} onChange={(e)=>upd(i,"pdGr",e.target.value)}>{pdVal==null&&!pg.includes(m.pdGr)&&<option value={m.pdGr}>{(GRADE_LABEL[m.pdGr]||m.pdGr)} · no price</option>}{[...new Set(pg)].map((g)=><option key={g} value={g}>{GRADE_LABEL[g]||g}</option>)}</select>
-                  <span style={{fontSize:13,fontFamily:MONO,color:pdVal!=null?C.ink:C.warn,minWidth:46,textAlign:"right"}}>{pdVal!=null?fmtGBP(pdVal):(dkVal!=null?"("+fmtGBP(dkVal)+")":"—")}</span>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <select className="si" style={{flex:1,minWidth:120,fontSize:14,padding:"7px 8px",color:pEff==null?C.warn:C.ink}} value={m.pdGr} onChange={(e)=>upd(i,"pdGr",e.target.value)}>{pdVal==null&&!pg.includes(m.pdGr)&&<option value={m.pdGr}>{(GRADE_LABEL[m.pdGr]||m.pdGr)} · no price</option>}{[...new Set(pg)].map((g)=><option key={g} value={g}>{GRADE_LABEL[g]||g}</option>)}</select>
+                  <span style={{fontSize:12,color:C.dim}}>£</span>
+                  <input className="si" type="number" step="0.01" inputMode="decimal" value={pOv!==""?pOv:(pdVal!=null?pdVal:"")} placeholder={pdVal!=null?pdVal.toFixed(2):"—"} title={pdVal!=null?("Board price "+fmtGBP(pdVal)+" — type to override"):"No board price — type one to use it"} onChange={(e)=>ovSet("pd",m.pdSp,m.pdGr,e.target.value)} style={{width:60,fontSize:13,fontFamily:MONO,textAlign:"right",padding:"6px 6px",color:pEff!=null?C.ink:C.warn,border:pOv!==""?`1px solid ${C.pd}`:undefined,background:pOv!==""?"rgba(91,200,255,.10)":undefined}}/>
+                  {pOv!==""&&<button onClick={()=>ovSet("pd",m.pdSp,m.pdGr,"")} title="Reset to board price" style={{border:"none",background:"transparent",color:C.dim,cursor:"pointer",fontSize:15,lineHeight:1,padding:"0 2px"}}>↺</button>}
+                  {pEff==null&&dEff!=null&&<span style={{fontSize:11,color:C.dim,fontFamily:MONO}}>({fmtGBP(dEff)})</span>}
                 </div>
               </div>
-              <div style={{background:dkVal==null?"rgba(255,204,68,.08)":C.panel,borderRadius:8,padding:"8px 9px",borderTop:`2px solid ${dkVal==null?C.warn:C.dk}`,border:dkVal==null?`1px solid ${C.warn}`:"1px solid transparent"}}>
+              <div style={{background:dEff==null?"rgba(255,204,68,.08)":C.panel,borderRadius:8,padding:"8px 9px",borderTop:`2px solid ${dEff==null?C.warn:C.dk}`,border:dEff==null?`1px solid ${C.warn}`:"1px solid transparent"}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                  <span style={{fontSize:10.5,color:dkVal==null?C.warn:C.dk,fontWeight:700,letterSpacing:".04em"}}>HANSTHOLM</span>
-                  {dkVal==null&&<span style={{marginLeft:"auto",fontSize:9,fontWeight:800,color:"#06281a",background:C.warn,borderRadius:4,padding:"1px 5px",letterSpacing:".03em"}}>{pdVal!=null?"WILL SUB":"NO PRICE"}</span>}
+                  <span style={{fontSize:10.5,color:dEff==null?C.warn:C.dk,fontWeight:700,letterSpacing:".04em"}}>HANSTHOLM</span>
+                  {dEff==null&&<span style={{marginLeft:"auto",fontSize:9,fontWeight:800,color:"#06281a",background:C.warn,borderRadius:4,padding:"1px 5px",letterSpacing:".03em"}}>{pEff!=null?"WILL SUB":"NO PRICE"}</span>}
                 </div>
                 {editSp&&<select className="si" style={{width:"100%",marginBottom:5,fontSize:12}} value={m.dkSp} onChange={(e)=>upd(i,"dkSp",e.target.value)}>{dkSp.map((s)=><option key={s}>{s}</option>)}</select>}
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <select className="si" style={{flex:1,fontSize:14,padding:"7px 8px",color:dkVal==null?C.warn:C.ink}} value={m.dkSort} onChange={(e)=>upd(i,"dkSort",e.target.value)}>{dkVal==null&&!ds.includes(m.dkSort)&&<option value={m.dkSort}>{m.dkSort==="—"?"— none —":m.dkSort+" · no price"}</option>}{[...new Set(ds)].map((g)=><option key={g}>{g}</option>)}</select>
-                  <span style={{fontSize:13,fontFamily:MONO,color:dkVal!=null?C.ink:C.warn,minWidth:46,textAlign:"right"}}>{dkVal!=null?fmtGBP(dkVal):(pdVal!=null?"("+fmtGBP(pdVal)+")":"—")}</span>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <select className="si" style={{flex:1,minWidth:110,fontSize:14,padding:"7px 8px",color:dEff==null?C.warn:C.ink}} value={m.dkSort} onChange={(e)=>upd(i,"dkSort",e.target.value)}>{dkVal==null&&!ds.includes(m.dkSort)&&<option value={m.dkSort}>{m.dkSort==="—"?"— none —":m.dkSort+" · no price"}</option>}{[...new Set(ds)].map((g)=><option key={g}>{g}</option>)}</select>
+                  <span style={{fontSize:12,color:C.dim}}>£</span>
+                  <input className="si" type="number" step="0.01" inputMode="decimal" value={dOv!==""?dOv:(dkVal!=null?dkVal:"")} placeholder={dkVal!=null?dkVal.toFixed(2):"—"} title={dkVal!=null?("Board price "+fmtGBP(dkVal)+" — type to override"):"No board price — type one to use it"} onChange={(e)=>ovSet("dk",m.dkSp,m.dkSort,e.target.value)} style={{width:60,fontSize:13,fontFamily:MONO,textAlign:"right",padding:"6px 6px",color:dEff!=null?C.ink:C.warn,border:dOv!==""?`1px solid ${C.dk}`:undefined,background:dOv!==""?"rgba(124,242,184,.10)":undefined}}/>
+                  {dOv!==""&&<button onClick={()=>ovSet("dk",m.dkSp,m.dkSort,"")} title="Reset to board price" style={{border:"none",background:"transparent",color:C.dim,cursor:"pointer",fontSize:15,lineHeight:1,padding:"0 2px"}}>↺</button>}
+                  {dEff==null&&pEff!=null&&<span style={{fontSize:11,color:C.dim,fontFamily:MONO}}>({fmtGBP(pEff)})</span>}
                 </div>
               </div>
             </div>
