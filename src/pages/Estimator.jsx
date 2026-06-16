@@ -106,7 +106,20 @@ const DEFAULT_TALLY = [
 
 const fmtGBP=(n)=>n==null||isNaN(n)?"—":"£"+n.toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
 const fmtKg=(n)=>n==null||isNaN(n)?"—":n.toLocaleString("en-GB",{maximumFractionDigits:1})+" kg";
-const GRADE_LABEL = { A4c:"A4 Chipper", A4m:"A4 Metro (high)", A4ma:"A4 Metro (avg)", A4r:"A4 Round" };
+const GRADE_LABEL = { A4c:"A4 Chipper", A4m:"A4 Metro", A4ma:"A4 Mini Metro", A4r:"A4 Round" };
+
+// Haddock Metro pair — Mini Metro (A4ma) and Metro (A4m) come off ONE board row.
+// The Peterhead price toggle has two states (hi=false AVG default, hi=true HIGH):
+//   AVG : Mini = blend(low,avg)  ·  Metro = blend(avg,high)
+//   HIGH: Mini = avg             ·  Metro = high
+// The loader stores A4ma/A4m as the AVG-page values and A4m_av/A4m_hi as the
+// HIGH-page values; this picks the right one (with a graceful fallback).
+function metroPrice(o, gr, hi){
+  if(!o) return undefined;
+  if(gr==="A4ma") return hi ? (o.A4m_av!=null?o.A4m_av:o.A4ma) : (o.A4ma!=null?o.A4ma:o.A4m_av);
+  if(gr==="A4m")  return hi ? (o.A4m_hi!=null?o.A4m_hi:o.A4m)  : (o.A4m!=null?o.A4m:o.A4m_hi);
+  return undefined; // not a Metro grade
+}
 // Fallback box weight when a tally gives box counts but no weights (handwritten).
 const DEFAULT_BOX_KG = 40;
 
@@ -341,7 +354,11 @@ export default function Estimator(){
     return null;
   };
   // Returns {price, exact, via} or null when species absent from this market.
-  const resolvePD=(sp,gr)=>{const o=findSpeciesObj(pd,sp);return o?stepGrade(o,gr,pdLadder,pdHigh):null;};
+  const resolvePD=(sp,gr)=>{
+    const o=findSpeciesObj(pd,sp); if(!o) return null;
+    if(gr==="A4ma"||gr==="A4m"){ const p=metroPrice(o,gr,pdHigh); if(p!=null) return {price:p,exact:true,via:gr}; }
+    return stepGrade(o,gr,pdLadder,pdHigh);
+  };
   const resolveDK=(sp,so)=>{const o=findSpeciesObj(dk,sp);return o?stepGrade(o,so,dkLadder,false):null;};
 
   // Back-compat plain-number helpers (0 = not found on this market)
@@ -719,7 +736,7 @@ function PriceStep({which,title,accent,prices,setPrices,onUpload,busy,msg,next})
       {Object.keys(prices).length===0&&<div style={{gridColumn:"1/-1",padding:"28px 16px",textAlign:"center",color:C.dim,fontSize:13.5,border:`1px dashed ${C.line}`,borderRadius:10}}>No prices loaded yet. Upload the sheet above — or skip, and prices from the other market will be used.</div>}
       {Object.keys(prices).map((sp)=>(<div key={sp} style={{background:C.panel2,border:`1px solid ${C.line}`,borderRadius:9,padding:"10px 12px"}}>
         <div style={{fontWeight:700,fontSize:13.5,marginBottom:7}}>{sp}</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>{Object.keys(prices[sp]).map((gr)=>(<div key={gr} style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,color:C.dim,fontFamily:MONO}}>{gr}</span><input className="ci" style={{width:56}} type="number" step="0.01" value={prices[sp][gr]??""} onChange={(e)=>setCell(sp,gr,e.target.value)}/></div>))}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:7}}>{Object.keys(prices[sp]).filter((gr)=>!/_|\((low|high)\)\s*$/.test(gr)).map((gr)=>(<div key={gr} style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:11,color:C.dim,fontFamily:MONO}}>{GRADE_LABEL[gr]||gr}</span><input className="ci" style={{width:56}} type="number" step="0.01" value={prices[sp][gr]??""} onChange={(e)=>setCell(sp,gr,e.target.value)}/></div>))}</div>
       </div>))}
     </div>
     <NextBtn onClick={next}/>
@@ -751,6 +768,7 @@ function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,priceOv,setPriceOv,nex
   const midPx=(o,base)=>{const a=o[base],h=o[base+" (high)"];if(a!=null&&h!=null)return +((a+h)/2);return a!=null?a:(h!=null?h:null);};
   const px=(obj,sp,k,mid,ladder)=>{
     const o=findObj(obj,sp);if(!o)return null;
+    if(k==="A4ma"||k==="A4m"){ const p=metroPrice(o,k,mid); if(p!=null)return p; }
     const plain=!/\((low|high)\)\s*$/.test(String(k));
     if(mid&&plain&&(o[k]!=null||o[k+" (high)"]!=null))return midPx(o,k);
     if(o[k]!=null)return o[k];
@@ -775,12 +793,14 @@ function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,priceOv,setPriceOv,nex
     <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",background:C.panel2,border:`1px solid ${C.line}`,borderRadius:10,padding:"9px 11px"}}>
       <span style={{fontSize:12.5,color:C.pd,fontWeight:700,letterSpacing:".03em"}}>PETERHEAD PRICES</span>
       <div style={{marginLeft:"auto",display:"flex",borderRadius:8,overflow:"hidden",border:`1px solid ${C.line}`}}>
-        <button onClick={()=>setPdHigh(false)} style={{border:"none",cursor:"pointer",fontSize:13,fontWeight:700,padding:"7px 14px",background:!pdHigh?C.pd:"transparent",color:!pdHigh?"#04121f":C.dim}}>Average</button>
-        <button onClick={()=>setPdHigh(true)} style={{border:"none",cursor:"pointer",fontSize:13,fontWeight:700,padding:"7px 14px",background:pdHigh?C.pd:"transparent",color:pdHigh?"#04121f":C.dim}}>Mid (avg+high)</button>
+        <button onClick={()=>setPdHigh(false)} style={{border:"none",cursor:"pointer",fontSize:13,fontWeight:700,padding:"7px 14px",background:!pdHigh?C.pd:"transparent",color:!pdHigh?"#04121f":C.dim}}>AVG</button>
+        <button onClick={()=>setPdHigh(true)} style={{border:"none",cursor:"pointer",fontSize:13,fontWeight:700,padding:"7px 14px",background:pdHigh?C.pd:"transparent",color:pdHigh?"#04121f":C.dim}}>HIGH</button>
       </div>
     </div>
     <div style={{color:C.dim,fontSize:11.5,marginTop:6}}>
-      {pdHigh?"Using the midpoint of each grade’s AVE and HIGH Peterhead price — a realistic “better than average” estimate. You can still change any grade by hand below.":"Using each grade’s AVE (average) Peterhead price. Tap “Mid” to value at the midpoint of average and high."}
+      {pdHigh
+        ?"HIGH: every grade valued at the midpoint of its AVE and HIGH. Mini Metro uses the A4 Metro AVE; Metro uses the A4 Metro HIGH."
+        :"AVG: every grade at its AVE. Mini Metro blends the A4 Metro LOW+AVE; Metro blends the A4 Metro AVE+HIGH. Tap HIGH to lift the whole board."}
     </div>
     <div style={{color:C.dim,fontSize:12.5,marginTop:8,display:"flex",gap:14,flexWrap:"wrap"}}>
       <span><Dot c={C.good}/> good</span><span><Dot c={C.warn}/> check</span><span><Dot c={C.bad}/> best-guess</span>
@@ -797,7 +817,7 @@ function MapStep({tally,map,setMap,pd,dk,pdHigh,setPdHigh,priceOv,setPriceOv,nex
       {tally.map((r,i)=>{
         const m=map[i];
         const pdO=findObj(pd,m.pdSp), dkO=findObj(dk,m.dkSp);
-        const pg=(pdO?Object.keys(pdO):[]).concat("ANY","—");
+        const pg=(pdO?Object.keys(pdO).filter((k)=>!/_|\((low|high)\)\s*$/.test(k)):[]).concat("ANY","—");
         const ds=(dkO?Object.keys(dkO):[]).concat("—");
         const pdVal=px(pd,m.pdSp,m.pdGr,pdHigh,PDL), dkVal=px(dk,m.dkSp,m.dkSort,false,DKL);
         const pOv=ovGet("pd",m.pdSp,m.pdGr), dOv=ovGet("dk",m.dkSp,m.dkSort);
