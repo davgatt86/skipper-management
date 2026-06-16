@@ -57,11 +57,25 @@ export function buildEstimatorPrices(pdRows = [], dkRows = []) {
     if (name === 'Haddock') {
       if (g.grade === 'A4') {
         const s = String(g.subgrade || '').toLowerCase()
-        if (s.includes('chipper')) { if (ave != null) obj['A4c'] = ave }
-        else if (s.includes('metro')) { if (ave != null) obj['A4ma'] = ave; if (high != null) obj['A4m'] = high }
+        if (s.includes('chipper')) {
+          if (ave != null) obj['A4c'] = ave
+          if (high != null) obj['A4c (high)'] = high          // for the HIGH-page avg+high blend
+        } else if (s.includes('metro')) {
+          // Mini Metro (A4ma) and Metro (A4m) both come off this one Metro row.
+          //   AVG page : Mini = blend(low,avg),  Metro = blend(avg,high)
+          //   HIGH page: Mini = avg,             Metro = high
+          const low = r2(avg(g.low))
+          const miniAvg  = (low != null && ave != null)  ? r2((low + ave) / 2)  : (ave != null ? ave : low)
+          const metroAvg = (ave != null && high != null) ? r2((ave + high) / 2) : (high != null ? high : ave)
+          if (miniAvg  != null) obj['A4ma']   = miniAvg   // shown grade + AVG-page value
+          if (metroAvg != null) obj['A4m']    = metroAvg  // shown grade + AVG-page value
+          if (ave  != null)     obj['A4m_av'] = ave       // HIGH-page Mini  (hidden helper)
+          if (high != null)     obj['A4m_hi'] = high      // HIGH-page Metro (hidden helper)
+        }
         // 'round' / anything else on A4 -> ignored on purpose (no bare 'A4' key)
       } else if (ave != null) {
-        obj[g.grade] = ave   // A1 / A2 / A3 -> AVG only
+        obj[g.grade] = ave                                 // A1 / A2 / A3 -> AVG (shown)
+        if (high != null) obj[g.grade + ' (high)'] = high  // for the HIGH-page avg+high blend
       }
       continue
     }
