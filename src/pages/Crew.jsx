@@ -4,6 +4,7 @@ import BackNav from '../BackNav'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { CrewCerts, CertAlerts } from './CrewCerts'
+import { CrewDetails } from './CrewDetails'
 
 const STATUSES = ['on_boat', 'on_leave', 'former']
 const STATUS_LABEL = { on_boat: 'On Boat', on_leave: 'On Leave', former: 'Former' }
@@ -21,6 +22,7 @@ export default function Crew() {
   const [newType, setNewType] = useState('contracted')
   const [busy, setBusy] = useState(false)
   const [openCerts, setOpenCerts] = useState(null)   // crew id whose cert panel is expanded
+  const [openDetails, setOpenDetails] = useState(null) // crew id whose details panel is expanded
 
   const canEdit = appUser?.role === 'skipper'
 
@@ -197,6 +199,13 @@ export default function Crew() {
                     <td style={{ padding: '0.6rem 0.4rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <button
                         className="secondary"
+                        onClick={() => setOpenDetails(openDetails === c.id ? null : c.id)}
+                        style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem', marginRight: '0.3rem' }}
+                      >
+                        {openDetails === c.id ? 'Hide details' : 'Details'}
+                      </button>
+                      <button
+                        className="secondary"
                         onClick={() => setOpenCerts(openCerts === c.id ? null : c.id)}
                         style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem', marginRight: '0.3rem' }}
                       >
@@ -212,6 +221,13 @@ export default function Crew() {
                     </td>
                   )}
                 </tr>
+                {openDetails === c.id && (
+                  <tr>
+                    <td colSpan={canEdit ? 4 : 3} style={{ padding: '0 0.4rem 0.8rem', background: 'var(--bg-soft, #f8fafc)' }}>
+                      <CrewDetails crew={c} canEdit={canEdit} onSaved={loadCrew} />
+                    </td>
+                  </tr>
+                )}
                 {openCerts === c.id && (
                   <tr>
                     <td colSpan={canEdit ? 4 : 3} style={{ padding: '0 0.4rem 0.8rem', background: 'var(--bg-soft, #f8fafc)' }}>

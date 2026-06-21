@@ -44,6 +44,9 @@ export default function Dashboard() {
           {appUser?.role === 'skipper' && (
             <Link to="/vessel" style={tile}>Vessel</Link>
           )}
+          {appUser?.role === 'skipper' && (
+            <Link to="/crew-list" style={tile}>Crew List</Link>
+          )}
           <Link to="/crew-hub" style={tile}>Crew</Link>
           {fleetTools && (
             <Link to="/squareup" style={tile}>Square Up</Link>
