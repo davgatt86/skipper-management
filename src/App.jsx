@@ -21,6 +21,7 @@ const Quota = lazy(() => import('./pages/Quota'))
 const DailyPrices = lazy(() => import('./pages/DailyPrices'))
 const Rota = lazy(() => import('./pages/Rota'))
 const Password = lazy(() => import('./pages/Password'))
+const VesselDetails = lazy(() => import('./pages/VesselDetails'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -167,6 +168,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <DailyPrices />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/vessel" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <VesselDetails />
             </Suspense>
           </ProtectedRoute>
         } />
