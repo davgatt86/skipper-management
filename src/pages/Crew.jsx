@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BackNav from '../BackNav'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { CrewCerts, CertAlerts } from './CrewCerts'
 
 const STATUSES = ['on_boat', 'on_leave', 'former']
 const STATUS_LABEL = { on_boat: 'On Boat', on_leave: 'On Leave', former: 'Former' }
@@ -19,6 +20,7 @@ export default function Crew() {
   const [newStatus, setNewStatus] = useState('on_leave')
   const [newType, setNewType] = useState('contracted')
   const [busy, setBusy] = useState(false)
+  const [openCerts, setOpenCerts] = useState(null)   // crew id whose cert panel is expanded
 
   const canEdit = appUser?.role === 'skipper'
 
@@ -96,6 +98,8 @@ export default function Crew() {
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
+      {canEdit && <CertAlerts />}
+
       {adding && (
         <div className="card">
           <h2>Add new crewman</h2>
@@ -157,7 +161,8 @@ export default function Crew() {
             </thead>
             <tbody>
               {group.map(c => (
-                <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                <Fragment key={c.id}>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '0.6rem 0.4rem', fontWeight: 600 }}>{c.full_name}</td>
                   <td style={{ padding: '0.6rem 0.4rem' }}>
                     {canEdit ? (
@@ -189,7 +194,14 @@ export default function Crew() {
                     )}
                   </td>
                   {canEdit && (
-                    <td style={{ padding: '0.6rem 0.4rem', textAlign: 'right' }}>
+                    <td style={{ padding: '0.6rem 0.4rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button
+                        className="secondary"
+                        onClick={() => setOpenCerts(openCerts === c.id ? null : c.id)}
+                        style={{ padding: '0.3rem 0.7rem', fontSize: '0.85rem', marginRight: '0.3rem' }}
+                      >
+                        {openCerts === c.id ? 'Hide certs' : 'Certificates'}
+                      </button>
                       <button
                         className="secondary"
                         onClick={() => archiveCrew(c.id, c.full_name)}
@@ -200,6 +212,14 @@ export default function Crew() {
                     </td>
                   )}
                 </tr>
+                {openCerts === c.id && (
+                  <tr>
+                    <td colSpan={canEdit ? 4 : 3} style={{ padding: '0 0.4rem 0.8rem', background: 'var(--bg-soft, #f8fafc)' }}>
+                      <CrewCerts crew={c} canEdit={canEdit} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
