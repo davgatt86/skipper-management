@@ -39,7 +39,9 @@ const isoOrNull = (v) => {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null
 }
 
-// file -> { cert_type, cert_number, holder_name, issuer, issue_date, expiry_date }
+import { applyCertExpiryRule } from './certRules'
+
+// file -> { cert_type, cert_number, holder_name, issuer, issue_date, expiry_date, expiry_source }
 export async function parseCertFile(file) {
   const media = await fileToB64(file)
   const mediaType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
@@ -51,7 +53,7 @@ export async function parseCertFile(file) {
   const data = await resp.json()
   if (!resp.ok) throw new Error(data.error || `Parser error ${resp.status}`)
   const j = extractJson(data.text)
-  return {
+  const base = {
     cert_type: (j.cert_type || '').toString().trim(),
     cert_number: (j.cert_number || '').toString().trim() || null,
     holder_name: (j.holder_name || '').toString().trim() || null,
@@ -59,4 +61,8 @@ export async function parseCertFile(file) {
     issue_date: isoOrNull(j.issue_date),
     expiry_date: isoOrNull(j.expiry_date),
   }
+  // Fill the expiry from the cert-type rule when the document didn't print one
+  // (lifetime tickets stay blank; basic-safety certs get +3 years; ENG1 keeps its printed date).
+  const ruled = applyCertExpiryRule(base)
+  return { ...base, expiry_date: ruled.expiry_date, expiry_source: ruled.expiry_source }
 }
