@@ -1,0 +1,62 @@
+// Auto-parse a photo/PDF of a crew certificate via the existing Anthropic
+// vision proxy (netlify/functions/parse). Returns the extracted fields for the
+// skipper to review before saving — cert layouts vary too much to trust blind.
+
+const PROMPT = `You are reading a maritime / commercial fishing crew certificate or qualification (e.g. ENG1 medical, STCW basic safety training, sea survival / personal survival techniques, fire prevention & fire fighting, elementary first aid, proficiency in survival craft, GMDSS, deck or engine certificate of competency).
+
+Return ONLY a JSON object — no markdown, no commentary — with exactly these keys:
+{
+  "cert_type":   "short human name of the certificate (use the document's own title if clearer)",
+  "cert_number": "certificate or reference number, or null",
+  "holder_name": "the crew member's full name as printed, or null",
+  "issuer":      "issuing authority / approved training centre / examining doctor, or null",
+  "issue_date":  "issue or examination date as YYYY-MM-DD, or null",
+  "expiry_date": "expiry / valid-until date as YYYY-MM-DD, or null"
+}
+
+Rules:
+- All dates must be ISO YYYY-MM-DD.
+- If only an issue date and a validity period are shown (e.g. "valid for 5 years"), compute the expiry date.
+- If a field is genuinely absent, use null. Do not guess.`
+
+const fileToB64 = (f) => new Promise((res, rej) => {
+  const r = new FileReader()
+  r.onload = () => res(String(r.result).split(',')[1])
+  r.onerror = rej
+  r.readAsDataURL(f)
+})
+
+function extractJson(text) {
+  const t = String(text || '')
+  const a = t.indexOf('{')
+  const z = t.lastIndexOf('}')
+  if (a < 0 || z < a) throw new Error('No JSON found in the parser response')
+  return JSON.parse(t.slice(a, z + 1))
+}
+
+const isoOrNull = (v) => {
+  const m = String(v || '').match(/(\d{4})-(\d{2})-(\d{2})/)
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null
+}
+
+// file -> { cert_type, cert_number, holder_name, issuer, issue_date, expiry_date }
+export async function parseCertFile(file) {
+  const media = await fileToB64(file)
+  const mediaType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
+  const resp = await fetch('/.netlify/functions/parse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ media, mediaType, prompt: PROMPT }),
+  })
+  const data = await resp.json()
+  if (!resp.ok) throw new Error(data.error || `Parser error ${resp.status}`)
+  const j = extractJson(data.text)
+  return {
+    cert_type: (j.cert_type || '').toString().trim(),
+    cert_number: (j.cert_number || '').toString().trim() || null,
+    holder_name: (j.holder_name || '').toString().trim() || null,
+    issuer: (j.issuer || '').toString().trim() || null,
+    issue_date: isoOrNull(j.issue_date),
+    expiry_date: isoOrNull(j.expiry_date),
+  }
+}
