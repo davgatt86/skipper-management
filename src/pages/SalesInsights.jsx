@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import BackNav from '../BackNav'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
-import { bySpecies, gradesFor, bestBuyerByGrade, priceTrendSeries, seasonalityGrid } from '../lib/salesAgg'
+import { bySpecies, gradesFor, buyerLeague, priceTrendSeries, seasonalityGrid, gradeSeasonality } from '../lib/salesAgg'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
 } from 'recharts'
@@ -29,6 +29,7 @@ export default function SalesInsights() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('trends')
   const [scope, setScope] = useState('all')   // 'all' | a year string
+  const [month, setMonth] = useState('all')   // 'all' | '01'..'12' (Buyer League only)
 
   // load landings once
   useEffect(() => {
@@ -77,6 +78,12 @@ export default function SalesInsights() {
 
   const landingById = useMemo(() => Object.fromEntries(landings.map(l => [l.id, l])), [landings])
 
+  // Month filter narrows the Buyer League only (Trends is a time series, Seasonality pools months).
+  const monthRows = useMemo(
+    () => month === 'all' ? rows : rows.filter(r => (landingById[r.landing_id]?.landing_date || '').slice(5, 7) === month),
+    [rows, month, landingById]
+  )
+
   if (!isSkipper) {
     return (
       <div className="container">
@@ -101,6 +108,15 @@ export default function SalesInsights() {
           <span className="muted" style={{ fontSize: '0.8rem' }}>Period:</span>
           <button className={scope === 'all' ? '' : 'secondary'} style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => setScope('all')}>All</button>
           {years.map(y => <button key={y} className={scope === y ? '' : 'secondary'} style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => setScope(y)}>{y}</button>)}
+          {tab === 'buyers' && (
+            <label style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }} className="muted">
+              Month:{' '}
+              <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '0.2rem 0.4rem', fontSize: '0.82rem' }}>
+                <option value="all">All</option>
+                {MON.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
+              </select>
+            </label>
+          )}
         </div>
       </div>
 
@@ -108,7 +124,7 @@ export default function SalesInsights() {
         : error ? <div className="card"><p className="error">Error: {error}</p></div>
           : rows.length === 0 ? <div className="card"><p className="muted">No sales in this period yet.</p></div>
             : tab === 'trends' ? <Trends rows={rows} landingById={landingById} />
-              : tab === 'buyers' ? <BuyerLeague rows={rows} />
+              : tab === 'buyers' ? <BuyerLeague rows={monthRows} />
                 : <Seasonality rows={rows} landingById={landingById} />}
     </div>
   )
@@ -204,22 +220,52 @@ function Seg({ label, value, onChange, options }) {
 }
 
 function BuyerLeague({ rows }) {
-  const league = useMemo(() => bestBuyerByGrade(rows), [rows])
-  const [open, setOpen] = useState('')
+  const league = useMemo(() => buyerLeague(rows), [rows])
+  const [openSp, setOpenSp] = useState('')
+  const [openGr, setOpenGr] = useState('')
 
   return (
     <div className="card">
-      <h2 style={{ fontSize: '1.05rem', marginBottom: '0.25rem' }}>Best-paying buyer by species &amp; grade</h2>
-      <p className="muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>Ranked by average £/kg across this period's sales notes. Tap a row to see every buyer.</p>
+      <h2 style={{ fontSize: '1.05rem', marginBottom: '0.25rem' }}>Buyer league — by species, then grade</h2>
+      <p className="muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>Ranked by average £/kg, highest first. Tap a species to see its grades; tap a grade for every buyer.</p>
       <Scroll>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.88rem' }}>
-          <thead><tr><th style={th}>Species</th><th style={th}>Grade</th><th style={th}>Best buyer</th><th style={thR}>£/kg</th><th style={thR}>Boxes</th></tr></thead>
+          <thead><tr><th style={th}>Species / grade</th><th style={th}>Best-paying buyer</th><th style={thR}>£/kg</th><th style={thR}>Boxes</th></tr></thead>
           <tbody>
-            {league.map(g => {
-              const key = g.species + '||' + g.grade
-              const isOpen = open === key
+            {league.map(s => {
+              const spOpen = openSp === s.species
               return (
-                <FragmentRows key={key} g={g} isOpen={isOpen} onToggle={() => setOpen(isOpen ? '' : key)} />
+                <Fragment key={s.species}>
+                  <tr onClick={() => { setOpenSp(spOpen ? '' : s.species); setOpenGr('') }} style={{ cursor: 'pointer' }}>
+                    <td style={{ ...td, fontWeight: 700 }}>{spOpen ? '▾' : '▸'} {s.species}</td>
+                    <td style={td}></td>
+                    <td style={tdR}><strong>{gbp(s.pkg)}</strong></td>
+                    <td style={tdR}>{num(s.boxes)}</td>
+                  </tr>
+                  {spOpen && s.grades.map(g => {
+                    const gkey = s.species + '||' + g.grade
+                    const grOpen = openGr === gkey
+                    const more = g.buyers.length > 1
+                    return (
+                      <Fragment key={gkey}>
+                        <tr onClick={() => more && setOpenGr(grOpen ? '' : gkey)} style={{ cursor: more ? 'pointer' : 'default', background: 'var(--grey-50)' }}>
+                          <td style={{ ...td, paddingLeft: '1.6rem' }}>{more ? (grOpen ? '▾' : '▸') : '·'} {g.grade}</td>
+                          <td style={td}><strong>{g.best?.buyer || '—'}</strong></td>
+                          <td style={tdR}>{g.best ? gbp(g.best.pkg) : '—'}</td>
+                          <td style={tdR}>{g.best ? num(g.best.boxes) : '—'}</td>
+                        </tr>
+                        {grOpen && g.buyers.slice(1).map(b => (
+                          <tr key={b.buyer}>
+                            <td style={{ ...td, paddingLeft: '2.8rem' }}></td>
+                            <td style={{ ...td, color: 'var(--grey-400)' }}>{b.buyer}</td>
+                            <td style={{ ...tdR, color: 'var(--grey-400)' }}>{gbp(b.pkg)}</td>
+                            <td style={{ ...tdR, color: 'var(--grey-400)' }}>{num(b.boxes)}</td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    )
+                  })}
+                </Fragment>
               )
             })}
           </tbody>
@@ -231,10 +277,12 @@ function BuyerLeague({ rows }) {
 
 function Seasonality({ rows, landingById }) {
   const [metric, setMetric] = useState('pkg')
+  const [openSp, setOpenSp] = useState('')
   const grid = useMemo(() => seasonalityGrid(rows, landingById, metric), [rows, landingById, metric])
+  const sub = useMemo(() => openSp ? gradeSeasonality(rows, landingById, openSp, metric) : null, [rows, landingById, openSp, metric])
   const fmt = v => v == null ? '' : metric === 'pkg' ? gbp(v) : metric === 'kg' ? v.toFixed(1) + 't' : metric === 'boxes' ? num(v) : '£' + Math.round(v).toLocaleString('en-GB')
-  const cellStyle = v => {
-    const i = v == null || !grid.max ? 0 : v / grid.max
+  const cellStyle = (v, max) => {
+    const i = v == null || !max ? 0 : v / max
     return {
       padding: '0.4rem 0.3rem', textAlign: 'center', fontSize: '0.78rem', whiteSpace: 'nowrap',
       background: v == null ? 'transparent' : `rgba(30,58,95,${(0.06 + 0.6 * i).toFixed(3)})`,
@@ -246,7 +294,7 @@ function Seasonality({ rows, landingById }) {
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '0.75rem' }}>
         <div>
           <h2 style={{ fontSize: '1.05rem', marginBottom: '0.15rem' }}>Seasonality</h2>
-          <p className="muted" style={{ fontSize: '0.8rem' }}>Species by month — darker is higher. Pools all years in the period to show the pattern.</p>
+          <p className="muted" style={{ fontSize: '0.8rem' }}>Species by month — darker is higher. Pools all years in the period. Tap a species to see its grades.</p>
         </div>
         <Seg label="Show" value={metric} onChange={setMetric} options={[['pkg', '£/kg'], ['value', '£'], ['kg', 'Tonnes'], ['boxes', 'Boxes']]} />
       </div>
@@ -259,39 +307,28 @@ function Seasonality({ rows, landingById }) {
             </tr>
           </thead>
           <tbody>
-            {grid.species.map(s => (
-              <tr key={s}>
-                <td style={{ ...td, fontWeight: 600, position: 'sticky', left: 0, background: 'var(--card, #fff)' }}>{s}</td>
-                {MON.map((_, i) => { const v = grid.cells[s][i + 1]; return <td key={i} style={cellStyle(v)}>{fmt(v)}</td> })}
-              </tr>
-            ))}
+            {grid.species.map(s => {
+              const spOpen = openSp === s
+              return (
+                <Fragment key={s}>
+                  <tr onClick={() => setOpenSp(spOpen ? '' : s)} style={{ cursor: 'pointer' }}>
+                    <td style={{ ...td, fontWeight: 600, position: 'sticky', left: 0, background: 'var(--card, #fff)' }}>{spOpen ? '▾' : '▸'} {s}</td>
+                    {MON.map((_, i) => { const v = grid.cells[s][i + 1]; return <td key={i} style={cellStyle(v, grid.max)}>{fmt(v)}</td> })}
+                  </tr>
+                  {spOpen && sub && sub.grades.map(g => (
+                    <tr key={g}>
+                      <td style={{ ...td, paddingLeft: '1.6rem', color: 'var(--grey-400)', fontSize: '0.82rem', position: 'sticky', left: 0, background: 'var(--card, #fff)' }}>{g}</td>
+                      {MON.map((_, i) => { const v = sub.cells[g][i + 1]; return <td key={i} style={cellStyle(v, sub.max)}>{fmt(v)}</td> })}
+                    </tr>
+                  ))}
+                  {spOpen && sub && !sub.grades.length && <tr><td style={td} colSpan={13} className="muted">No grade detail for {s}.</td></tr>}
+                </Fragment>
+              )
+            })}
             {!grid.species.length && <tr><td style={td} colSpan={13} className="muted">No sales in this period yet.</td></tr>}
           </tbody>
         </table>
       </Scroll>
     </div>
-  )
-}
-
-function FragmentRows({ g, isOpen, onToggle }) {
-  return (
-    <>
-      <tr onClick={onToggle} style={{ cursor: 'pointer' }}>
-        <td style={td}>{g.species}</td>
-        <td style={td}>{g.grade}</td>
-        <td style={td}><strong>{g.best?.buyer || '—'}</strong></td>
-        <td style={tdR}>{g.best ? gbp(g.best.pkg) : '—'}</td>
-        <td style={tdR}>{g.best ? num(g.best.boxes) : '—'}</td>
-      </tr>
-      {isOpen && g.buyers.length > 1 && g.buyers.slice(1).map(b => (
-        <tr key={b.buyer} style={{ background: 'var(--grey-50)' }}>
-          <td style={td}></td>
-          <td style={td}></td>
-          <td style={{ ...td, color: 'var(--grey-400)' }}>{b.buyer}</td>
-          <td style={{ ...tdR, color: 'var(--grey-400)' }}>{gbp(b.pkg)}</td>
-          <td style={{ ...tdR, color: 'var(--grey-400)' }}>{num(b.boxes)}</td>
-        </tr>
-      ))}
-    </>
   )
 }
