@@ -284,3 +284,60 @@ export function seasonalityGrid(rows, landingById, metric = 'pkg') {
   }
   return { species, cells, max: r2(max), metric }
 }
+
+/* Buyer league nested species -> grades -> buyers, every level ranked by
+ * average £/kg (highest first), NOT alphabetically (Sales Insights upgrade).
+ * Returns [{ species, pkg, boxes, value, kg,
+ *            grades:[{ grade, pkg, boxes, best, buyers:[…by £/kg] }] }]. */
+export function buyerLeague(rows) {
+  const fin = o => ({ ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes), pkg: o.kg ? r2(o.value / o.kg) : 0 })
+  const sp = {}
+  for (const r of rows) {
+    const s = r.species_canon || r.species || '?'
+    const gl = gradeLabel(r)
+    const b = r.buyer || '?'
+    const o = (sp[s] = sp[s] || { species: s, value: 0, kg: 0, boxes: 0, grades: {} })
+    o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
+    const g = (o.grades[gl] = o.grades[gl] || { grade: gl, value: 0, kg: 0, boxes: 0, buyers: {} })
+    g.value += Number(r.value || 0); g.kg += Number(r.weight_kg || 0); g.boxes += Number(r.boxes || 0)
+    const bo = (g.buyers[b] = g.buyers[b] || { buyer: b, value: 0, kg: 0, boxes: 0 })
+    bo.value += Number(r.value || 0); bo.kg += Number(r.weight_kg || 0); bo.boxes += Number(r.boxes || 0)
+  }
+  return Object.values(sp).map(o => {
+    const grades = Object.values(o.grades).map(g => {
+      const buyers = Object.values(g.buyers).map(fin).sort((a, b) => b.pkg - a.pkg)
+      return { ...fin(g), buyers, best: buyers[0] }
+    }).sort((a, b) => b.pkg - a.pkg)
+    return { ...fin(o), grades }
+  }).sort((a, b) => b.pkg - a.pkg)
+}
+
+/* Grade-level seasonality for ONE species (species × month drill-down).
+ * Same shape as seasonalityGrid but keyed by grade label. */
+export function gradeSeasonality(rows, landingById, species, metric = 'pkg') {
+  const gr = {}
+  for (const r of rows) {
+    if ((r.species_canon || r.species) !== species) continue
+    const d = landingById[r.landing_id]?.landing_date
+    if (!d) continue
+    const mo = Number(d.slice(5, 7)); if (!mo) continue
+    const g = gradeLabel(r)
+    const o = (gr[g] = gr[g] || { grade: g, months: {}, total: 0 })
+    const c = (o.months[mo] = o.months[mo] || { value: 0, kg: 0, boxes: 0 })
+    c.value += Number(r.value || 0); c.kg += Number(r.weight_kg || 0); c.boxes += Number(r.boxes || 0)
+    o.total += Number(r.value || 0)
+  }
+  const val = c => metric === 'pkg' ? (c.kg ? c.value / c.kg : null)
+    : metric === 'kg' ? c.kg / 1000 : metric === 'boxes' ? c.boxes : c.value
+  const grades = sortGrades(Object.values(gr)).map(o => o.grade)
+  const cells = {}; let max = 0
+  for (const o of Object.values(gr)) {
+    cells[o.grade] = {}
+    for (let m = 1; m <= 12; m++) {
+      const c = o.months[m]; const v = c ? val(c) : null
+      cells[o.grade][m] = v == null ? null : r2(v)
+      if (v != null && v > max) max = v
+    }
+  }
+  return { grades, cells, max: r2(max), metric }
+}
