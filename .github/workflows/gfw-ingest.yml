@@ -1,0 +1,27 @@
+name: GFW departures ingest
+
+# Pulls fishing-vessel departures from the six Scottish ports into Supabase,
+# feeding the Peterhead Market Forecast. Runs here (not in a Netlify function)
+# because Global Fishing Watch queries are slow and variable (5s to 30s+),
+# which exceeds Netlify's function limits. GitHub Actions has a 6-hour budget.
+
+on:
+  schedule:
+    - cron: '0 6,12,18 * * *'   # 06:00 / 12:00 / 18:00 UTC daily
+  workflow_dispatch:            # adds a manual "Run workflow" button
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run GFW ingest
+        env:
+          GFW_API_TOKEN: ${{ secrets.GFW_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/gfw-ingest.mjs
