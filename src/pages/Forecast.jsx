@@ -20,6 +20,21 @@ const STATUS = {
 }
 const rank = s => s==='early'?0 : s==='likely'?1 : 2
 
+// Watch ports + colour per port (matches the fleet watchlist spreadsheet)
+const WATCH_PORTS = ['Peterhead','Fraserburgh','Ullapool','Lochinver','Kinlochbervie','Scrabster']
+const PORT_COLORS = {
+  PETERHEAD:     { bg:'#E8F1FF', bd:'#1F6FEB' },
+  FRASERBURGH:   { bg:'#E6F7EC', bd:'#2DA44E' },
+  ULLAPOOL:      { bg:'#FFF1E0', bd:'#E8821E' },
+  LOCHINVER:     { bg:'#F2E9FB', bd:'#8250DF' },
+  KINLOCHBERVIE: { bg:'#E2F6F2', bd:'#1B9E8A' },
+  SCRABSTER:     { bg:'#FFF7DB', bd:'#B8860B' },
+}
+const portStyle = p => PORT_COLORS[(p||'').trim().toUpperCase()] || { bg:'#F0F2F4', bd:'#8C959F' }
+const PortPill = ({ port }) => { const c = portStyle(port); return (
+  <span style={{ fontSize:'0.68rem', fontWeight:700, padding:'0.1rem 0.45rem', borderRadius:999,
+    background:c.bg, border:`1.5px solid ${c.bd}`, color:c.bd, whiteSpace:'nowrap' }}>{port || '—'}</span>) }
+
 export default function Forecast(){
   const { appUser } = useAuth()
   const isSkipper = appUser?.role === 'skipper'
@@ -49,11 +64,11 @@ export default function Forecast(){
         if (isWeekend(d)) continue                 // no Peterhead auction Sat/Sun
         const k = keyOf(d)
         if (k < today) continue                    // rolling: past days fall off
-        ;(map[k] = map[k] || []).push({ vessel: dep.vessel_name, status })
+        ;(map[k] = map[k] || []).push({ vessel: dep.vessel_name, status, port: dep.departure_port })
       }
     }
     return Object.keys(map).sort().map(k => ({
-      key:k, items: map[k].sort((a,b)=> rank(a.status)-rank(b.status) || a.vessel.localeCompare(b.vessel))
+      key:k, items: map[k].sort((a,b)=> rank(a.status)-rank(b.status) || (a.port||'').localeCompare(b.port||'') || a.vessel.localeCompare(b.vessel))
     }))
   }, [deps])
 
@@ -97,6 +112,8 @@ export default function Forecast(){
                 <span style={{width:14,height:14,borderRadius:3,background:STATUS[s].bg,border:`2px solid ${STATUS[s].bd}`}}/>
                 {STATUS[s].label} ({STATUS[s].tag})
               </span>))}
+            <span style={{width:1, alignSelf:'stretch', background:'var(--border)'}}/>
+            {WATCH_PORTS.map(p=> <PortPill key={p} port={p}/> )}
           </div>
           {days.length===0 ? (
             <div className="card"><p className="muted">No upcoming landings forecast. Departures will appear automatically once the MarineTraffic ingest is live — or add one below to test.</p></div>
@@ -106,6 +123,7 @@ export default function Forecast(){
               <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
                 {day.items.map((it,i)=>(
                   <div key={i} style={{display:'flex', alignItems:'center', gap:'0.6rem', padding:'0.4rem 0.6rem', borderRadius:8, background:STATUS[it.status].bg, border:`1px solid ${STATUS[it.status].bd}`}}>
+                    <PortPill port={it.port}/>
                     <span style={{fontWeight:600}}>{it.vessel}</span>
                     <span style={{fontSize:'0.75rem', fontWeight:700, color:STATUS[it.status].fg, marginLeft:'auto'}}>{STATUS[it.status].label}</span>
                     <span className="muted" style={{fontSize:'0.72rem'}}>{STATUS[it.status].tag}</span>
@@ -116,7 +134,7 @@ export default function Forecast(){
             <h2 style={{marginTop:0, fontSize:'1.05rem'}}>Departures (last 10 days)</h2>
             <div style={{display:'grid', gap:'0.6rem', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', alignItems:'end', marginBottom:'0.8rem'}}>
               <label style={lbl}>Vessel<input value={draft.vessel_name} onChange={e=>setDraft(p=>({...p,vessel_name:e.target.value}))} placeholder="AUDACIOUS BF83" style={inp}/></label>
-              <label style={lbl}>Port<input value={draft.departure_port} onChange={e=>setDraft(p=>({...p,departure_port:e.target.value}))} style={inp}/></label>
+              <label style={lbl}>Port<select value={draft.departure_port} onChange={e=>setDraft(p=>({...p,departure_port:e.target.value}))} style={inp}>{WATCH_PORTS.map(p=><option key={p} value={p}>{p}</option>)}</select></label>
               <label style={lbl}>Sailed<input type="date" value={draft.departure_date} onChange={e=>setDraft(p=>({...p,departure_date:e.target.value}))} style={inp}/></label>
               <button onClick={addDeparture} disabled={saving || !draft.vessel_name.trim()}>{saving?'Adding…':'Add departure'}</button>
             </div>
@@ -127,7 +145,7 @@ export default function Forecast(){
                   {deps.map(d=>(
                     <tr key={d.id} style={{borderBottom:'1px solid var(--border)'}}>
                       <td style={td}>{d.vessel_name}</td>
-                      <td style={{...td}} className="muted">{d.departure_port||'—'}</td>
+                      <td style={td}><PortPill port={d.departure_port}/></td>
                       <td style={td}>{d.departure_date ? niceDate(d.departure_date) : '—'}</td>
                       <td style={{...td, textAlign:'right'}}><button className="secondary" onClick={()=>removeDeparture(d.id)} style={{padding:'0.2rem 0.6rem', fontSize:'0.8rem'}}>Remove</button></td>
                     </tr>))}
