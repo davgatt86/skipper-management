@@ -7,12 +7,6 @@
   node_bundler = "esbuild"
   external_node_modules = ["pdfjs-dist"]
 
-# Peterhead Market Forecast ingest — Global Fishing Watch departures.
-# Runs 06:00 / 12:00 / 18:00 UTC daily. This is what registers it as a
-# scheduled function (gives it the Scheduled badge + "Run now" button).
-[functions."gfw-departures"]
-  schedule = "0 6,12,18 * * *"
-
 [[redirects]]
   from = "/*"
   to = "/index.html"
