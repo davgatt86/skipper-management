@@ -61,6 +61,7 @@ async function fetchPort(port, startDate, endDate, token){
   for (let i=0;i<12;i++){
     const url=`${GFW}?limit=${limit}&offset=${offset}`
     const res=await fetch(url,{ method:'POST',
+      signal: AbortSignal.timeout(8000),
       headers:{ 'Authorization':`Bearer ${token}`, 'Content-Type':'application/json',
                 'User-Agent':'skipper-management-forecast/1.0', 'Accept':'application/json' },
       body: JSON.stringify({ datasets:[DATASET], startDate, endDate,
@@ -90,32 +91,44 @@ export const handler = async (event) => {
 
   const supabase=createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   const summary={}; const rows=[]; const seen=new Set()
-  try {
-    for (const port of PORTS){
-      const entries=await fetchPort(port, startDate, endDate, token)
-      let kept=0
-      for (const e of entries){
-        const pv=e.port_visit||{}; const a=pv.endAnchorage||{}
-        if (a.id!==port.id) continue                                  // only true departures from THIS port
-        if (Number(pv.confidence||0) < MIN_CONFIDENCE) continue
-        const v=e.vessel||{}; const raw=v.name||''
-        if (!raw || !e.end) continue
-        const isFish = v.type==='fishing'
-        const inReg  = REGISTER.has(matchKey(raw))
-        if (!isFish && !inReg) continue                               // not a fishing boat
-        const name=displayName(raw)
-        const date=String(e.end).slice(0,10)
-        const dedup=`${name}|${date}`
-        if (seen.has(dedup)) continue
-        seen.add(dedup)
-        rows.push({ fleet_id:FLEET_ID, vessel_name:name, departure_port:port.name,
-                    departure_date:date, departed_at:e.end, source:'ais' })
-        kept++
-      }
-      summary[port.name]={ raw:entries.length, kept }
-    }
 
-    let inserted=0
+  // Poll all six ports in PARALLEL (sequential was blowing past Netlify's 10s
+  // limit -> 502). allSettled means one slow/failed port can't sink the run.
+  const results = await Promise.allSettled(
+    PORTS.map(p => fetchPort(p, startDate, endDate, token))
+  )
+
+  PORTS.forEach((port, i) => {
+    const r = results[i]
+    if (r.status === 'rejected'){
+      summary[port.name] = { error: String((r.reason && r.reason.message) || r.reason) }
+      return
+    }
+    const entries = r.value || []
+    let kept=0
+    for (const e of entries){
+      const pv=e.port_visit||{}; const a=pv.endAnchorage||{}
+      if (a.id!==port.id) continue                                    // only true departures from THIS port
+      if (Number(pv.confidence||0) < MIN_CONFIDENCE) continue
+      const v=e.vessel||{}; const raw=v.name||''
+      if (!raw || !e.end) continue
+      const isFish = v.type==='fishing'
+      const inReg  = REGISTER.has(matchKey(raw))
+      if (!isFish && !inReg) continue                                 // not a fishing boat
+      const name=displayName(raw)
+      const date=String(e.end).slice(0,10)
+      const dedup=`${name}|${date}`
+      if (seen.has(dedup)) continue
+      seen.add(dedup)
+      rows.push({ fleet_id:FLEET_ID, vessel_name:name, departure_port:port.name,
+                  departure_date:date, departed_at:e.end, source:'ais' })
+      kept++
+    }
+    summary[port.name]={ raw:entries.length, kept }
+  })
+
+  let inserted=0
+  try {
     if (rows.length){
       const { data, error }=await supabase.from('vessel_departures')
         .upsert(rows, { onConflict:'fleet_id,vessel_name,departure_date', ignoreDuplicates:true })
@@ -123,8 +136,13 @@ export const handler = async (event) => {
       if (error) throw new Error('supabase: '+error.message)
       inserted=(data||[]).length
     }
-    return ok({ window:`${startDate}..${endDate}`, ports:summary, candidates:rows.length, inserted })
   } catch (err){
-    return { statusCode:502, body: JSON.stringify({ error:String(err && err.message || err), ports:summary }) }
+    const out={ window:`${startDate}..${endDate}`, ports:summary, candidates:rows.length, error:String((err && err.message)||err) }
+    console.error('gfw-departures FAILED', JSON.stringify(out))
+    return { statusCode:502, body: JSON.stringify(out) }
   }
+
+  const out={ window:`${startDate}..${endDate}`, ports:summary, candidates:rows.length, inserted }
+  console.log('gfw-departures OK', JSON.stringify(out))     // shows in the Function log on each run / Run now
+  return ok(out)
 }
