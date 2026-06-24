@@ -77,7 +77,12 @@ async function fetchPort(port, startDate, endDate, token){
 }
 
 export const handler = async (event) => {
-  const isHttp = !!(event && event.httpMethod)
+  // Netlify sends scheduled runs (and "Run now") as a POST whose body is
+  // {"next_run":"..."} — let those straight through. Only enforce the secret
+  // key for a genuine manual browser hit carrying ?key=.
+  let isScheduled=false
+  try { isScheduled = !!(event && event.body && JSON.parse(event.body).next_run) } catch {}
+  const isHttp = !!(event && event.httpMethod) && !isScheduled
   if (isHttp){
     const key=(event.queryStringParameters && event.queryStringParameters.key)||''
     if (!process.env.INGEST_SECRET || key!==process.env.INGEST_SECRET) return { statusCode:403, body:'forbidden' }
