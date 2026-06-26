@@ -49,17 +49,31 @@ export async function parseBondInvoice(file) {
   for (const r of rows) {
     const cells = r.items;
     if (cells.length < 7) continue;
-    const last6 = cells.slice(-6);
-    if (!last6.every((c) => NUM_RE.test(c.str))) continue;
 
-    const descCells = cells.slice(0, -6);
+    // Count the trailing run of decimal-number cells. 60N Bond rows have 7
+    // numeric columns (Qty, Price/Rate, Discount, Net, %VAT, VAT, Total);
+    // older layouts without a Discount column have 6. Read whichever is
+    // present so Qty (first col) is never confused with Price/Rate.
+    let n = 0;
+    while (n < cells.length && NUM_RE.test(cells[cells.length - 1 - n].str)) n++;
+    if (n < 6) continue;
+
+    const take = n >= 7 ? 7 : 6;
+    const nums = cells.slice(-take).map((c) => parseNum(c.str));
+    const descCells = cells.slice(0, -take);
     const description = descCells.map((c) => c.str).join(' ').trim();
     // Skip rows whose description starts with header/footer words
     if (/^(total|vat|net)\b/i.test(description)) continue;
     if (!description) continue;
 
-    const [qty, unitPrice, net, vatPct, vat, total] = last6.map((c) => parseNum(c.str));
-    lineItems.push({ description, qty, unitPrice, net, vatPct, vat, total });
+    let qty, unitPrice, discount, net, vatPct, vat, total;
+    if (take === 7) {
+      [qty, unitPrice, discount, net, vatPct, vat, total] = nums;
+    } else {
+      [qty, unitPrice, net, vatPct, vat, total] = nums;
+      discount = 0;
+    }
+    lineItems.push({ description, qty, unitPrice, discount, net, vatPct, vat, total });
   }
 
   // Extract metadata
