@@ -104,7 +104,10 @@ export default function Closeout() {
     const rows = []
     for (const id of ids) {
       const days = Math.min(byCrew[id] || 0, daysInMonth)
-      const boxes = boxesByCrew[id] || 0
+      // Box tallies from sales notes can be fractional (part boxes). The month
+      // total is stored as a whole number, so round here — keeps boxes, bonus
+      // and the stored value consistent.
+      const boxes = Math.round(boxesByCrew[id] || 0)
       const flat = round2(flatRate * days / daysInMonth)
       const boxBonus = round2(boxes * boxRate)
       rows.push({
