@@ -180,6 +180,31 @@ const canonSp=(raw)=>{
 // the leading number before the name is just the scales touchscreen button position.
 const bracket=(s)=>{const m=String(s||"").match(/\(([^)]*)\)\s*$/);return m?m[1].toUpperCase().trim():"";};
 
+// Grade code from a tally size cell: a parenthesised code "(1c)" OR a bare code
+// exactly as printed on the Peterhead market tally ("1a","2b","5","U9a"). Returns
+// "" for size WORDS (SMALL/METRO/FROGS…) so those still use the name dictionary.
+const gradeCode=(s)=>{
+  const t=String(s||"").toUpperCase().trim();
+  const m=t.match(/\(([^)]*)\)\s*$/);
+  if(m) return m[1].trim();
+  if(/^U9[A-Z]?$/.test(t)) return t;      // U9, U9a..f
+  if(/^\d[A-Z]?$/.test(t)) return t;       // 1, 1a, 2b, 5a …
+  return "";
+};
+// Generic PD/DK grade from a numeric tally code: leading digit -> A-grade,
+// U-codes -> U9. The board-price step later snaps to the nearest grade actually
+// priced (e.g. Plaice board starts at A2, Whiting at A3), so a tally finer than
+// the board still resolves without a per-species table. Cod/Haddock keep their
+// bespoke tables above; everything else runs through here.
+const codeToGrade=(code)=>{
+  const c=String(code||"").toUpperCase().trim();
+  if(!c) return null;
+  if(/^U/.test(c)) return {pd:"U9",dk:"1",c:"med"};
+  const m=c.match(/^(\d)/);
+  if(!m) return null;
+  return {pd:"A"+m[1], dk:m[1], c:"med"};
+};
+
 // Per-species bracket-code -> mapping. Currently Haddock only (per user).
 // Haddock A4 has THREE named PD prices, so we use distinct pd keys: A4c=Chipper, A4m=Metro(high), A4ma=Metro(avg).
 const BRACKET_DICT = {
@@ -211,11 +236,14 @@ function buildMapping(tally){
     WITCH:{pd:"U9",dk:"2",c:"low"}, TUSK:{pd:"U9",dk:"1",c:"low"}, LING:{pd:"A2",dk:"2",c:"low"},
     SQUID:{pd:"U9",dk:"2",c:"low"}, BRILL:{pd:"U9",dk:"—",c:"low"} };
   return tally.map((r)=>{
-    const code=bracket(r.size);
-    // Prefer per-species bracket-code mapping when available
+    const code=gradeCode(r.size);
+    // 1) Per-species bespoke code table (Cod / Haddock have named sub-grades)
     const bd=BRACKET_DICT[r.sp]&&code&&BRACKET_DICT[r.sp][code];
     if(bd) return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:bd.pd, dkSp:SP_TO_DK[r.sp]||"—", dkSort:bd.dk, conf:bd.c };
-    // Fallback: name-based mapping, with boat-synonym normalisation
+    // 2) Generic numeric / U9 tally code -> grade, for every other species
+    const gc=code&&codeToGrade(code);
+    if(gc&&SP_TO_PD[r.sp]) return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:gc.pd, dkSp:SP_TO_DK[r.sp]||"—", dkSort:gc.dk, conf:gc.c };
+    // 3) Name-based mapping, with boat-synonym normalisation (SML/METRO/FROGS…)
     const tok=GRADE_DICT[r.sp]&&GRADE_DICT[r.sp][norm(r.size)]?norm(r.size):canonSize(r.size,r.sp);
     let d=GRADE_DICT[r.sp]&&GRADE_DICT[r.sp][tok];
     // Single-line species (size label is basically the species itself)
