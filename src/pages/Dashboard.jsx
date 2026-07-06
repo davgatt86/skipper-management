@@ -42,6 +42,9 @@ export default function Dashboard() {
             <Link to="/forecast" style={tile}>Market Forecast</Link>
           )}
           {appUser?.role === 'skipper' && (
+            <Link to="/stowage" style={tile}>Stowage Plan</Link>
+          )}
+          {appUser?.role === 'skipper' && (
             <Link to="/quota" style={tile}>Quota</Link>
           )}
           {appUser?.role === 'skipper' && (
