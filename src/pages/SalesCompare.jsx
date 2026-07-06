@@ -11,15 +11,33 @@ const pkgFmt = (n) => '£' + (Number(n)||0).toFixed(2)
 const kInt = (n) => Math.round(Number(n)||0).toLocaleString()
 const EMPTY = { value:0, kg:0, boxes:0, pkg:0 }
 
+// Grade display order: A grades (+ before plain), haddock A4 split Chipper>Metro>Mini Metro,
+// then A5.., A9, U9, then B1..B5. Matches the printed grade sheet.
+const LETTER_ORDER = { A:0, U:1, B:2 }
+const SUB_ORDER = { 'CHIPPER':1, 'METRO':2, 'MINI METRO':3 }
+function gradeOrderKey(label){
+  const parts = String(label).toUpperCase().split('\u00b7').map(x=>x.trim())
+  const g = parts[0] || '', sub = parts[1] || ''
+  const letter = (g.match(/[A-Z]+/) || ['Z'])[0]
+  const num = Number((g.match(/\d+/) || [99])[0])
+  const lg = LETTER_ORDER[letter] ?? 8
+  const subOrd = sub ? (SUB_ORDER[sub] ?? 8) : 0
+  const plus = /\+/.test(g) ? 0 : 1
+  return String(lg) + String(num).padStart(2,'0') + subOrd + plus
+}
+const sortByGrade = (items) => [...items].sort((x,y) => gradeOrderKey(x.label).localeCompare(gradeOrderKey(y.label)))
+
 function idsFor(landings, sel){
   if (sel.mode === 'landing') return sel.landingId ? [sel.landingId] : []
-  if (sel.mode === 'month')  return landings.filter(l => (l.landing_date||'').startsWith(`${sel.year}-${sel.month}`)).map(l => l.id)
-  return landings.filter(l => (l.landing_date||'').startsWith(sel.year)).map(l => l.id)
+  let ls = sel.vessel ? landings.filter(l => l.vessel === sel.vessel) : landings
+  if (sel.mode === 'month')  return ls.filter(l => (l.landing_date||'').startsWith(`${sel.year}-${sel.month}`)).map(l => l.id)
+  return ls.filter(l => (l.landing_date||'').startsWith(sel.year)).map(l => l.id)
 }
 function labelFor(landings, sel){
   if (sel.mode === 'landing'){ const l = landings.find(x=>x.id===sel.landingId); return l ? `${l.vessel} · ${fmtDate(l.landing_date)} · ${shortMarket(l.market)}${l.sale_no?' #'+l.sale_no:''}` : 'Pick a landing' }
-  if (sel.mode === 'month') return `${MONTHS[Number(sel.month)-1]} ${sel.year}`
-  return sel.year
+  const v = sel.vessel ? `${sel.vessel} · ` : ''
+  if (sel.mode === 'month') return `${v}${MONTHS[Number(sel.month)-1]} ${sel.year}`
+  return `${v}${sel.year}`
 }
 // union two aggregation arrays into compare items sorted by combined value
 function mergeCmp(aList, bList, keyField){
@@ -53,8 +71,8 @@ export default function SalesCompare(){
   const [loading, setLoading] = useState(true)
 
   const now = new Date()
-  const [A, setA] = useState({ mode:'landing', year:String(now.getFullYear()), month:String(now.getMonth()+1).padStart(2,'0'), landingId:'' })
-  const [B, setB] = useState({ mode:'landing', year:String(now.getFullYear()), month:String(now.getMonth()+1).padStart(2,'0'), landingId:'' })
+  const [A, setA] = useState({ mode:'landing', vessel:'', year:String(now.getFullYear()), month:String(now.getMonth()+1).padStart(2,'0'), landingId:'' })
+  const [B, setB] = useState({ mode:'landing', vessel:'', year:String(now.getFullYear()), month:String(now.getMonth()+1).padStart(2,'0'), landingId:'' })
 
   const [openSp, setOpenSp] = useState('')            // species-section: which species -> grades
   const [openBuyer, setOpenBuyer] = useState('')      // buyer-section: which buyer -> species
@@ -69,6 +87,7 @@ export default function SalesCompare(){
   })() }, [isSkipper])
 
   const years = useMemo(() => [...new Set(landings.map(l => (l.landing_date||'').slice(0,4)).filter(Boolean))].sort().reverse(), [landings])
+  const vessels = useMemo(() => [...new Set(landings.map(l => l.vessel).filter(Boolean))].sort(), [landings])
   const aIds = useMemo(() => idsFor(landings, A), [landings, A])
   const bIds = useMemo(() => idsFor(landings, B), [landings, B])
   const { rows:aRows, loading:aL } = useRows(aIds)
@@ -83,7 +102,7 @@ export default function SalesCompare(){
     for (const sp of mergeCmp(bySpecies(aRows), bySpecies(bRows), 'species')){
       out.push({ level:0, key:sp.key, label:sp.label, a:sp.a, b:sp.b, expandable:true, open:openSp===sp.key })
       if (openSp===sp.key)
-        for (const gr of mergeCmp(gradesFor(aRows,sp.key), gradesFor(bRows,sp.key), 'grade'))
+        for (const gr of sortByGrade(mergeCmp(gradesFor(aRows,sp.key), gradesFor(bRows,sp.key), 'grade')))
           out.push({ level:1, key:sp.key+'::'+gr.key, label:gr.label, a:gr.a, b:gr.b, expandable:false })
     }
     return out
@@ -99,7 +118,7 @@ export default function SalesCompare(){
           const spKey = bu.key+'::'+sp.key
           out.push({ level:1, key:spKey, label:sp.label, a:sp.a, b:sp.b, expandable:true, open:openBuyerSp===spKey })
           if (openBuyerSp===spKey)
-            for (const gr of mergeCmp(buyerSpeciesGrades(aRows,bu.key,sp.key), buyerSpeciesGrades(bRows,bu.key,sp.key), 'grade'))
+            for (const gr of sortByGrade(mergeCmp(buyerSpeciesGrades(aRows,bu.key,sp.key), buyerSpeciesGrades(bRows,bu.key,sp.key), 'grade')))
               out.push({ level:2, key:spKey+'::'+gr.key, label:gr.label, a:gr.a, b:gr.b, expandable:false })
         }
       }
@@ -123,8 +142,8 @@ export default function SalesCompare(){
 
       {loading ? <div className="card"><p className="muted">Loading…</p></div> : (<>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.8rem' }}>
-          <SidePicker tint="#1E3A5F" tag="A" landings={landings} years={years} sel={A} setSel={setA}/>
-          <SidePicker tint="#0E7490" tag="B" landings={landings} years={years} sel={B} setSel={setB}/>
+          <SidePicker tint="#1E3A5F" tag="A" landings={landings} years={years} vessels={vessels} sel={A} setSel={setA}/>
+          <SidePicker tint="#0E7490" tag="B" landings={landings} years={years} vessels={vessels} sel={B} setSel={setB}/>
         </div>
 
         <div className="card" style={{ marginTop:'0.9rem' }}>
@@ -198,8 +217,9 @@ function CmpSection({ title, aLabel, bLabel, rows, onToggle, empty }){
   )
 }
 
-function SidePicker({ tint, tag, landings, years, sel, setSel }){
+function SidePicker({ tint, tag, landings, years, vessels, sel, setSel }){
   const set = (k,v) => setSel(s => ({ ...s, [k]:v }))
+  const landingOpts = sel.vessel ? landings.filter(l => l.vessel === sel.vessel) : landings
   const btn = (m,label) => (
     <button onClick={() => set('mode', m)} style={{ padding:'4px 10px', border:'none', cursor:'pointer', fontSize:'0.8rem',
       fontWeight: sel.mode===m?700:500, background: sel.mode===m?tint:'#fff', color: sel.mode===m?'#fff':'#334155' }}>{label}</button>)
@@ -211,10 +231,15 @@ function SidePicker({ tint, tag, landings, years, sel, setSel }){
           {btn('landing','Landing')}{btn('month','Month')}{btn('year','Year')}
         </div>
       </div>
+      {vessels.length > 1 && (
+        <select value={sel.vessel} onChange={e=>setSel(s=>({ ...s, vessel:e.target.value, landingId:'' }))} style={{ ...inp, marginBottom:'0.5rem' }}>
+          <option value="">All vessels</option>
+          {vessels.map(v => <option key={v} value={v}>{v}</option>)}
+        </select>)}
       {sel.mode==='landing' && (
         <select value={sel.landingId} onChange={e=>set('landingId', e.target.value)} style={inp}>
           <option value="">— pick a landing —</option>
-          {landings.map(l => <option key={l.id} value={l.id}>{l.vessel} · {fmtDate(l.landing_date)} · {shortMarket(l.market)}{l.sale_no?' #'+l.sale_no:''}</option>)}
+          {landingOpts.map(l => <option key={l.id} value={l.id}>{l.vessel} · {fmtDate(l.landing_date)} · {shortMarket(l.market)}{l.sale_no?' #'+l.sale_no:''}</option>)}
         </select>)}
       {sel.mode==='month' && (
         <div style={{ display:'flex', gap:'0.5rem' }}>
