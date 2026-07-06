@@ -45,6 +45,7 @@ export default function Forecast(){
   const [error, setError] = useState('')
   const [draft, setDraft] = useState({ vessel_name:'', departure_port:'Peterhead', departure_date: todayKey() })
   const [saving, setSaving] = useState(false)
+  const [selected, setSelected] = useState(()=> new Set())   // vessels ticked for bulk-hide
 
   async function load(){
     setLoading(true); setError('')
@@ -79,6 +80,16 @@ export default function Forecast(){
     }))
   }, [deps, ignoreSet])
 
+  // Unique boats currently on the forecast (a boat can appear on +7/+8/+9), for the bulk-hide picker.
+  const visibleVessels = useMemo(()=>{
+    const s = new Set()
+    for (const day of days) for (const it of day.items) s.add(it.vessel)
+    return [...s].sort((a,b)=> a.localeCompare(b))
+  }, [days])
+  const toggleSel = name => setSelected(prev=>{ const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n })
+  const allSelected = visibleVessels.length>0 && selected.size===visibleVessels.length
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(visibleVessels))
+
   async function addDeparture(){
     if (!draft.vessel_name.trim() || !draft.departure_date) return
     setSaving(true)
@@ -108,6 +119,14 @@ export default function Forecast(){
   async function restoreVessel(id){
     const { error } = await supabase.from('vessel_ignores').delete().eq('id', id)
     if (error) setError(error.message); else load()
+  }
+  async function hideSelected(){
+    const names = [...selected]
+    if (!names.length) return
+    if (!confirm(`Hide ${names.length} vessel${names.length>1?'s':''} from the forecast? They won't show again (restore any below).`)) return
+    const rows = names.map(name=>({ fleet_id: appUser.fleet_id, vessel_name: name.trim(), vessel_key: vkey(name) })).filter(r=>r.vessel_key)
+    const { error } = await supabase.from('vessel_ignores').upsert(rows, { onConflict: 'fleet_id,vessel_key' })
+    if (error) setError(error.message); else { setSelected(new Set()); load() }
   }
 
   if (!isSkipper) return (
@@ -151,6 +170,23 @@ export default function Forecast(){
                   </div>))}
               </div>
             </div>))}
+          {visibleVessels.length>0 && (
+            <div className="card">
+              <div style={{display:'flex', alignItems:'center', gap:'0.6rem', flexWrap:'wrap'}}>
+                <h2 style={{marginTop:0, marginBottom:0, fontSize:'1.05rem'}}>Hide vessels</h2>
+                <span className="muted" style={{fontSize:'0.8rem'}}>Tick any boats to keep off the forecast (static-gear, pelagic, non-whitefish). Hidden for good — restore below anytime.</span>
+                <button onClick={hideSelected} disabled={selected.size===0} style={{marginLeft:'auto'}}>Hide selected ({selected.size})</button>
+              </div>
+              <label style={{...chk, fontWeight:700, marginTop:'0.7rem'}}>
+                <input type="checkbox" checked={allSelected} onChange={toggleAll}/> Select all ({visibleVessels.length})
+              </label>
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))', gap:'0.3rem 0.8rem', marginTop:'0.4rem'}}>
+                {visibleVessels.map(v=>(
+                  <label key={v} style={chk}>
+                    <input type="checkbox" checked={selected.has(v)} onChange={()=>toggleSel(v)}/> {v}
+                  </label>))}
+              </div>
+            </div>)}
           {ignores.length>0 && (
             <div className="card">
               <h2 style={{marginTop:0, fontSize:'1.05rem'}}>Hidden vessels ({ignores.length})</h2>
@@ -193,3 +229,4 @@ const inp = { padding:'0.45rem 0.55rem', borderRadius:7, border:'1px solid var(-
 const th = { textAlign:'left', padding:'0.4rem 0.5rem', borderBottom:'2px solid var(--border)', whiteSpace:'nowrap' }
 const td = { padding:'0.4rem 0.5rem', whiteSpace:'nowrap' }
 const hideBtn = { background:'transparent', border:'none', cursor:'pointer', fontSize:'1rem', lineHeight:1, padding:'0 0.2rem', color:'var(--grey-400)', fontWeight:700 }
+const chk = { display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.85rem', cursor:'pointer' }
