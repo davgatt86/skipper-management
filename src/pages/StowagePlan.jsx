@@ -3,21 +3,40 @@ import BackNav from "../BackNav";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../AuthContext";
 
-// ── AUDACIOUS BF83 fishroom geometry (validated against the paper plan) ──────
-const TIERS = {
-  1:{pos:"Aft (bulkhead)",h:Array(16).fill(14)}, 2:{pos:"Aft",h:Array(16).fill(14)},
-  3:{pos:"Aft",h:Array(16).fill(14)}, 4:{pos:"Aft-mid",h:Array(16).fill(14)},
-  5:{pos:"Mid",h:[10,14,14,14,14,10]}, 6:{pos:"Mid",h:[12,14,14,14,14,12]},
-  7:{pos:"Mid",h:[12,14,14,14,14,14,14,14,14,14,12]},
-  8:{pos:"Fwd-mid",h:[5,10,12,14,14,14,14,14,14,14,14,14,12,10,5]},
-  9:{pos:"Fwd",h:[5,9,12,14,14,14,14,14,14,14,12,9,5]},
-  10:{pos:"Fwd",h:[5,10,13,14,14,14,14,14,13,10,5]}, 11:{pos:"Fwd (bow)",h:[4,10,14,14,14,14,14,10,4]},
+// ── Per-vessel fishroom layouts, keyed by fleet id ──────────────────────────
+// Each layout: high = max stack height (top layer), capacity = full-hold boxes,
+// tiers[n].h = boxes-high per slot (a shelf void = a slot shorter than `high`).
+// Add a new boat by dropping its layout in here (worked out from its stowage PDF).
+const rect = (slots, high) => Array(slots).fill(high);
+const LAYOUTS = {
+  // AUDACIOUS BF83 — 29.8m, 14 high, shelf voids, 1,756 boxes
+  "00000000-0000-0000-0000-000000000001": {
+    vessel:"AUDACIOUS BF83", high:14, capacity:1756,
+    tiers:{
+      1:{pos:"Aft (bulkhead)",h:rect(16,14)}, 2:{pos:"Aft",h:rect(16,14)},
+      3:{pos:"Aft",h:rect(16,14)}, 4:{pos:"Aft-mid",h:rect(16,14)},
+      5:{pos:"Mid",h:[10,14,14,14,14,10]}, 6:{pos:"Mid",h:[12,14,14,14,14,12]},
+      7:{pos:"Mid",h:[12,14,14,14,14,14,14,14,14,14,12]},
+      8:{pos:"Fwd-mid",h:[5,10,12,14,14,14,14,14,14,14,14,14,12,10,5]},
+      9:{pos:"Fwd",h:[5,9,12,14,14,14,14,14,14,14,12,9,5]},
+      10:{pos:"Fwd",h:[5,10,13,14,14,14,14,14,13,10,5]},
+      11:{pos:"Fwd (bow)",h:[4,10,14,14,14,14,14,10,4]},
+    },
+  },
+  // BOY ANDREW WK-170 — 27m flyshooter, 11 high, plain rectangles, 1,221 boxes
+  "66df195c-a39e-4559-957c-9ad1f7e15bd9": {
+    vessel:"BOY ANDREW WK-170", high:11, capacity:1221,
+    tiers:{
+      1:{pos:"Fwd (bow)",h:rect(5,11)}, 2:{pos:"Fwd",h:rect(6,11)},
+      3:{pos:"Fwd-mid",h:rect(7,11)}, 4:{pos:"Fwd-mid",h:rect(9,11)},
+      5:{pos:"Mid",h:rect(10,11)}, 6:{pos:"Mid",h:rect(11,11)},
+      7:{pos:"Mid-aft",h:rect(11,11)}, 8:{pos:"Mid-aft",h:rect(13,11)},
+      9:{pos:"Aft",h:rect(13,11)}, 10:{pos:"Aft",h:rect(13,11)},
+      11:{pos:"Aft (bulkhead)",h:rect(13,11)},
+    },
+  },
 };
-const TIER_IDS = Object.keys(TIERS).map(Number);
-const LAYERS = [14,13,12,11,10,9,8,7,6,5,4,3,2,1];
-const capacityOf = (t)=>TIERS[t].h.reduce((a,b)=>a+b,0);
-const TOTAL_CAP = TIER_IDS.reduce((a,t)=>a+capacityOf(t),0);
-const exists = (t,l,s)=> l >= (15 - TIERS[t].h[s]);
+const FALLBACK = { vessel:"", high:1, capacity:0, tiers:{} };
 
 const SPECIES = [
   {code:"HAD",name:"Haddock",c:"#1F6FEB",kg:40},{code:"COD",name:"Cod",c:"#E5484D",kg:30},
@@ -36,6 +55,15 @@ const niceWhen = (ts)=>{ if(!ts) return ""; const d=new Date(ts); return d.toLoc
 export default function StowagePlan(){
   const { appUser } = useAuth();
   const isSkipper = appUser?.role === "skipper";
+  const layout = LAYOUTS[appUser?.fleet_id] || null;   // null => not configured for this boat
+  const L = layout || FALLBACK;
+
+  // geometry derived from the active layout (null-safe via FALLBACK)
+  const TIER_IDS = Object.keys(L.tiers).map(Number);
+  const LAYERS = Array.from({length:L.high},(_,i)=>L.high-i);      // top..1
+  const capacityOf = (t)=> (L.tiers[t]?.h||[]).reduce((a,b)=>a+b,0);
+  const TOTAL_CAP = L.capacity || TIER_IDS.reduce((a,t)=>a+capacityOf(t),0);
+  const exists = (t,l,s)=> !!L.tiers[t] && l >= (L.high - L.tiers[t].h[s] + 1);
 
   const [plans,setPlans]=useState([]);
   const [planId,setPlanId]=useState(null);
@@ -63,7 +91,7 @@ export default function StowagePlan(){
     if(error) setError(error.message);
     setPlans(data||[]); setLoading(false);
   }
-  useEffect(()=>{ if(isSkipper) loadPlans(); else setLoading(false); },[isSkipper]);
+  useEffect(()=>{ if(isSkipper && layout) loadPlans(); else setLoading(false); },[isSkipper, appUser?.fleet_id]);
 
   async function openPlan(id){
     setError(""); planLoaded.current=false;
@@ -72,13 +100,13 @@ export default function StowagePlan(){
     const d = data.data||{};
     setGrid(d.grid||{}); setKg({...DEFAULT_KG,...(d.box_weights||{})});
     setMeta({ ...emptyMeta(), trip:d.trip||{}, record:d.record||[], hauls:d.hauls||[], temp:d.temp||[], signoff:d.signoff||{} });
-    setPlanId(id); setTripNo(data.trip_no); setSection("fishroom");
+    setPlanId(id); setTripNo(data.trip_no); setSection("fishroom"); setTier(1);
     setTimeout(()=>{ planLoaded.current=true; },0);
   }
   async function createPlan(){
     const tn=newTrip.trim(); if(!tn) return;
     const { data, error } = await supabase.from("stowage_plans")
-      .insert({ trip_no:tn, vessel:"AUDACIOUS BF83", data:{}, created_by:appUser.id }).select("id").single();
+      .insert({ trip_no:tn, vessel:L.vessel, data:{}, created_by:appUser.id }).select("id").single();
     if(error){ setError(error.message); return; }
     setNewTrip(""); await loadPlans(); openPlan(data.id);
   }
@@ -90,7 +118,6 @@ export default function StowagePlan(){
   }
   function closePlan(){ setPlanId(null); planLoaded.current=false; loadPlans(); }
 
-  // autosave whole document
   useEffect(()=>{ if(!planId || !planLoaded.current) return;
     const id=setTimeout(async()=>{
       setSaving(true);
@@ -105,34 +132,64 @@ export default function StowagePlan(){
   useEffect(()=>{ const up=()=>{painting.current=false}; window.addEventListener("pointerup",up); return()=>window.removeEventListener("pointerup",up); },[]);
   useEffect(()=>{ setAnchor(null); },[tier,mode,brush,section]);
 
-  const paintCell=useCallback((t,l,s)=>{ if(!exists(t,l,s))return; setGrid(p=>{const n={...p};const k=KEY(t,l,s); if(brush===ERASE)delete n[k]; else n[k]=brush; return n;}); },[brush]);
+  const paintCell=useCallback((t,l,s)=>{ if(!exists(t,l,s))return; setGrid(p=>{const n={...p};const k=KEY(t,l,s); if(brush===ERASE)delete n[k]; else n[k]=brush; return n;}); },[brush,layout]);
   const fillCells=useCallback((cells)=>{ setGrid(p=>{const n={...p}; for(const k of cells){ if(brush===ERASE)delete n[k]; else n[k]=brush;} return n;}); },[brush]);
-  const fillRect=useCallback((a,b)=>{ const l0=Math.min(a.l,b.l),l1=Math.max(a.l,b.l),s0=Math.min(a.s,b.s),s1=Math.max(a.s,b.s); const c=[]; for(let l=l0;l<=l1;l++)for(let s=s0;s<=s1;s++)if(exists(tier,l,s))c.push(KEY(tier,l,s)); fillCells(c); },[tier,fillCells]);
-  const tierCells=(t)=>{const o=[]; for(const l of LAYERS)for(let s=0;s<TIERS[t].h.length;s++)if(exists(t,l,s))o.push(KEY(t,l,s)); return o;};
+  const fillRect=useCallback((a,b)=>{ const l0=Math.min(a.l,b.l),l1=Math.max(a.l,b.l),s0=Math.min(a.s,b.s),s1=Math.max(a.s,b.s); const c=[]; for(let l=l0;l<=l1;l++)for(let s=s0;s<=s1;s++)if(exists(tier,l,s))c.push(KEY(tier,l,s)); fillCells(c); },[tier,fillCells,layout]);
+  const tierCells=(t)=>{const o=[]; for(const l of LAYERS)for(let s=0;s<L.tiers[t].h.length;s++)if(exists(t,l,s))o.push(KEY(t,l,s)); return o;};
   const fillTier=()=>fillCells(tierCells(tier));
-  const fillLayer=(l)=>fillCells(TIERS[tier].h.map((_,s)=>exists(tier,l,s)?KEY(tier,l,s):null).filter(Boolean));
+  const fillLayer=(l)=>fillCells(L.tiers[tier].h.map((_,s)=>exists(tier,l,s)?KEY(tier,l,s):null).filter(Boolean));
   const fillSlot=(s)=>fillCells(LAYERS.map(l=>exists(tier,l,s)?KEY(tier,l,s):null).filter(Boolean));
   const tapCell=(l,s)=>{ if(!exists(tier,l,s))return; if(!anchor)setAnchor({l,s}); else{fillRect(anchor,{l,s});setAnchor(null);} };
 
   const totals=useMemo(()=>{const t={};let filled=0,wt=0; for(const v of Object.values(grid)){t[v]=(t[v]||0)+1;filled++;wt+=(kg[v]||0);} return{t,filled,wt};},[grid,kg]);
-  const tierFill=useMemo(()=>{const m={}; for(const t of TIER_IDS)m[t]=0; for(const k of Object.keys(grid)){const t=+k.split("-")[0]; m[t]=(m[t]||0)+1;} return m;},[grid]);
+  const tierFill=useMemo(()=>{const m={}; for(const t of TIER_IDS)m[t]=0; for(const k of Object.keys(grid)){const t=+k.split("-")[0]; m[t]=(m[t]||0)+1;} return m;},[grid,appUser?.fleet_id]);
   const setTrip=(k,v)=>setMeta(m=>({...m,trip:{...m.trip,[k]:v}}));
   const setSign=(k,v)=>setMeta(m=>({...m,signoff:{...m.signoff,[k]:v}}));
   const setLog=(name)=>(fn)=>setMeta(m=>({...m,[name]: typeof fn==="function"?fn(m[name]):fn}));
 
-  const width=TIERS[tier].h.length; const cell=30; const brushName= brush===ERASE?"empty":SP[brush]?.name;
+  const tierOpts = TIER_IDS.map(String);
+  const recordCols=[
+    {key:"haul",label:"Haul",type:"text",w:42},{key:"time",label:"Time",type:"text",w:56},
+    {key:"tier",label:"Tier",type:"select",options:tierOpts,w:52},
+    {key:"sp",label:"Species",type:"spselect",w:104},{key:"grade",label:"Grade",type:"text",w:60},
+    {key:"boxes",label:"Boxes",type:"num",w:58},{key:"ice",label:"Ice OK",type:"yn",w:56},
+    {key:"temp",label:"°C",type:"num",w:50},{key:"sub",label:"Sub-MCRS",type:"yn",w:64},{key:"initial",label:"Init",type:"text",w:46},
+  ];
+  const haulCols=[
+    {key:"haul",label:"Haul",type:"text",w:42},{key:"shot",label:"Shot time",type:"text",w:66},
+    {key:"hauled",label:"Haul time",type:"text",w:66},{key:"dur",label:"Dur (h)",type:"num",w:54},
+    {key:"pos",label:"Position / Grounds",type:"text",w:150},{key:"mix",label:"Species mix",type:"text",w:130},
+    {key:"boxes",label:"Total boxes",type:"num",w:66},{key:"wt",label:"Est wt (kg)",type:"num",w:78},{key:"initial",label:"Init",type:"text",w:46},
+  ];
+  const tempCols=[
+    {key:"date",label:"Date",type:"text",w:84},{key:"time",label:"Time",type:"text",w:56},
+    {key:"tier",label:"Tier",type:"select",options:tierOpts,w:52},{key:"temp",label:"°C",type:"num",w:52},
+    {key:"action",label:"Action / Notes",type:"text",w:170},{key:"initial",label:"Init",type:"text",w:46},
+  ];
+
+  const width = layout ? L.tiers[tier].h.length : 0; const cell=30; const brushName= brush===ERASE?"empty":SP[brush]?.name;
   const SECTIONS=[["trip","Trip"],["fishroom","Fishroom"],["record","Record"],["hauls","Hauls"],["totals","Totals"],["temp","Temp log"],["signoff","Sign-off"]];
 
   if(!isSkipper) return (
     <div className="container"><div style={{marginBottom:"1rem"}}><BackNav/></div>
       <div className="card"><p className="muted">The stowage plan is available to the skipper.</p></div></div>);
 
-  // ── Trip picker ───────────────────────────────────────────────────────────
+  // Fishroom not set up for this boat yet.
+  if(!layout) return (
+    <div className="container"><div style={{marginBottom:"1rem"}}><BackNav/></div>
+      <div className="card">
+        <h1 style={{marginBottom:"0.4rem"}}>Fishroom Stowage</h1>
+        <p style={{marginBottom:"0.6rem"}}>Your vessel's fishroom layout hasn't been added yet — every boat's hold is different (tiers, widths, stack height), so the plan has to be built to your boat.</p>
+        <p className="muted" style={{marginBottom:0}}>Send the host/owner a PDF copy of your stowage plan / fishroom layout and it'll be added in due course. Once it's in, this page will show your boat's grid and totals.</p>
+      </div>
+    </div>);
+
+  // Trip picker
   if(!planId) return (
     <div className="container">
       <div style={{marginBottom:"1rem"}}><BackNav/></div>
       <div className="card">
-        <h1 style={{marginBottom:"0.3rem"}}>Fishroom Stowage — AUDACIOUS BF83</h1>
+        <h1 style={{marginBottom:"0.3rem"}}>Fishroom Stowage — {L.vessel}</h1>
         <p className="muted" style={{fontSize:"0.85rem",marginBottom:0}}>Pick a trip to open its plan, or start a new one. Each plan holds the box grid, trip totals, stowage record, temp log and sign-off.</p>
       </div>
       {error && <div className="card" style={{borderColor:"var(--red)"}}><p className="error">{error}</p></div>}
@@ -154,14 +211,14 @@ export default function StowagePlan(){
       </div>
     </div>);
 
-  // ── Plan editor ───────────────────────────────────────────────────────────
+  // Plan editor
   return (
     <div className="container">
       <div style={{marginBottom:"1rem"}}><BackNav/></div>
       <div style={{maxWidth:920,margin:"0 auto",padding:"0 2px 40px"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
           <button onClick={closePlan} style={{...tbtn,marginRight:4}}>← Trips</button>
-          <h2 style={{margin:"0 0 2px",fontSize:"1.15rem"}}>Trip {tripNo} — AUDACIOUS BF83</h2>
+          <h2 style={{margin:"0 0 2px",fontSize:"1.15rem"}}>Trip {tripNo} — {L.vessel}</h2>
           <span style={{color:"#64748B",fontSize:".82rem"}}>{totals.filled} / {TOTAL_CAP} boxes · <b>{totals.wt.toLocaleString()} kg</b></span>
           <span style={{marginLeft:"auto",fontSize:".76rem",color:saving?"#B45309":"#16A34A"}}>{saving?"Saving…":"Saved"}</span>
         </div>
@@ -202,16 +259,16 @@ export default function StowagePlan(){
                 T{t}<div style={{fontSize:".64rem",opacity:.8}}>{pct}%</div></button>);})}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
-            <b style={{fontSize:".92rem"}}>Tier {tier} — {TIERS[tier].pos}</b>
+            <b style={{fontSize:".92rem"}}>Tier {tier} — {L.tiers[tier].pos}</b>
             <span style={{color:"#64748B",fontSize:".78rem"}}>{width} slots · {capacityOf(tier)} boxes · {tierFill[tier]} filled</span>
             <button onClick={fillTier} style={tbtn}>Fill tier with {brushName}</button>
           </div>
           <div style={{overflowX:"auto",paddingBottom:6,touchAction:"pan-x"}}>
             <table style={{borderCollapse:"collapse",userSelect:"none"}}><thead><tr><th style={{width:34}}/>
-              {Array.from({length:width},(_,s)=>(<th key={s} onClick={()=>fillSlot(s)} title="Fill slot/column" style={{fontSize:".6rem",color:"#64748B",cursor:"pointer",padding:"2px 0",fontWeight:600}}>S{s+1}{TIERS[tier].h[s]<14&&<div style={{color:"#94A3B8",fontSize:".55rem"}}>▲{TIERS[tier].h[s]}</div>}</th>))}
+              {Array.from({length:width},(_,s)=>(<th key={s} onClick={()=>fillSlot(s)} title="Fill slot/column" style={{fontSize:".6rem",color:"#64748B",cursor:"pointer",padding:"2px 0",fontWeight:600}}>S{s+1}{L.tiers[tier].h[s]<L.high&&<div style={{color:"#94A3B8",fontSize:".55rem"}}>▲{L.tiers[tier].h[s]}</div>}</th>))}
             </tr></thead><tbody>
               {LAYERS.map(l=>(<tr key={l}>
-                <td onClick={()=>fillLayer(l)} title="Fill layer/row" style={{fontSize:".62rem",color:"#64748B",cursor:"pointer",textAlign:"right",paddingRight:5,fontWeight:600,whiteSpace:"nowrap"}}>L{l}{l===14?"▲":l===1?"▼":""}</td>
+                <td onClick={()=>fillLayer(l)} title="Fill layer/row" style={{fontSize:".62rem",color:"#64748B",cursor:"pointer",textAlign:"right",paddingRight:5,fontWeight:600,whiteSpace:"nowrap"}}>L{l}{l===L.high?"▲":l===1?"▼":""}</td>
                 {Array.from({length:width},(_,s)=>{ const ok=exists(tier,l,s);
                   if(!ok)return<td key={s} style={{width:cell,height:cell,background:"repeating-linear-gradient(45deg,#F1F5F9,#F1F5F9 4px,#E2E8F0 4px,#E2E8F0 8px)",border:"1px solid #EEF2F6"}}/>;
                   const code=grid[KEY(tier,l,s)]; const sp=code&&SP[code]; const isA=anchor&&anchor.l===l&&anchor.s===s;
@@ -317,25 +374,6 @@ function LogTable({title,cols,rows,setRows,computed=[]}){
     <button onClick={add} style={{...tbtn,marginTop:10}}>+ Add row</button>
   </div>);
 }
-
-const recordCols=[
-  {key:"haul",label:"Haul",type:"text",w:42},{key:"time",label:"Time",type:"text",w:56},
-  {key:"tier",label:"Tier",type:"select",options:TIER_IDS.map(String),w:52},
-  {key:"sp",label:"Species",type:"spselect",w:104},{key:"grade",label:"Grade",type:"text",w:60},
-  {key:"boxes",label:"Boxes",type:"num",w:58},{key:"ice",label:"Ice OK",type:"yn",w:56},
-  {key:"temp",label:"°C",type:"num",w:50},{key:"sub",label:"Sub-MCRS",type:"yn",w:64},{key:"initial",label:"Init",type:"text",w:46},
-];
-const haulCols=[
-  {key:"haul",label:"Haul",type:"text",w:42},{key:"shot",label:"Shot time",type:"text",w:66},
-  {key:"hauled",label:"Haul time",type:"text",w:66},{key:"dur",label:"Dur (h)",type:"num",w:54},
-  {key:"pos",label:"Position / Grounds",type:"text",w:150},{key:"mix",label:"Species mix",type:"text",w:130},
-  {key:"boxes",label:"Total boxes",type:"num",w:66},{key:"wt",label:"Est wt (kg)",type:"num",w:78},{key:"initial",label:"Init",type:"text",w:46},
-];
-const tempCols=[
-  {key:"date",label:"Date",type:"text",w:84},{key:"time",label:"Time",type:"text",w:56},
-  {key:"tier",label:"Tier",type:"select",options:TIER_IDS.map(String),w:52},{key:"temp",label:"°C",type:"num",w:52},
-  {key:"action",label:"Action / Notes",type:"text",w:170},{key:"initial",label:"Init",type:"text",w:46},
-];
 
 const lbl={display:"flex",flexDirection:"column",gap:"0.25rem",fontSize:"0.8rem",fontWeight:600};
 const tbtn={padding:"4px 9px",borderRadius:7,cursor:"pointer",border:"1px solid #CBD5E1",background:"#fff",fontSize:".78rem",fontWeight:600};
