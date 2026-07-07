@@ -37,3 +37,10 @@ export function dedupKey(res) {
   const m = res.meta || {}
   return (res.market || '') + '|' + (m.vessel || '') + '|' + (m.saleNo || m.isoDate || res.filename || '')
 }
+
+// Convert a DKK-priced result (Hanstholm Afregning) to GBP using the day rate
+// the user enters for that note. ParseCore is already loaded by parseSalesPdf.
+export function applyFxRate(res, rate) {
+  if (!window.ParseCore || !window.ParseCore.applyFxRate) throw new Error('Parser not loaded')
+  return window.ParseCore.applyFxRate(res, rate)
+}
