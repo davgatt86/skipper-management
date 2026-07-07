@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
-import { parseSalesPdf, dedupKey } from '../lib/parseCore'
+import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2 } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
 import {
@@ -137,8 +137,17 @@ export default function Sales() {
     const existing = new Set(landings.map(l => l.dedup_key))
     for (const f of files) {
       try {
-        const res = await parseSalesPdf(f)
+        let res = await parseSalesPdf(f)
         if (!res.rows.length) { log.push(`✗ ${f.name}: no rows parsed (${res.market})`); continue }
+        // Danish (Hanstholm Afregning) notes are priced in DKK — ask for the
+        // day's rate for this note, then convert to £ (rate stays editable later).
+        let fxRate = null
+        if (res.meta.currency === 'DKK') {
+          const ans = window.prompt(`${f.name}\nDanish (DKK) note — gross ${Math.round(res.meta.grossDkk || 0).toLocaleString()} DKK.\nEnter the day's exchange rate for this note (DKK per £1), e.g. 8.75:`, '')
+          const rate = Number(ans)
+          if (!rate || rate <= 0) { log.push(`– ${f.name}: skipped (no DKK rate entered)`); continue }
+          res = applyFxRate(res, rate); fxRate = rate
+        }
         const key = dedupKey(res)
         if (existing.has(key)) { log.push(`– ${f.name}: already imported, skipped`); continue }
         const rec = res.reconcile || {}
@@ -147,14 +156,16 @@ export default function Sales() {
           dedup_key: key, vessel: res.meta.vessel || '', market: res.market || '', port: res.meta.port || '',
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: f.name,
           boxes: tot.boxes, weight_kg: tot.weight, value: tot.value,
-          consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null
+          consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
+          currency: res.meta.currency || null, fx_rate: fxRate
         }).select('id').single()
         if (e1) throw e1
         const payload = res.rows.map(r => ({
           landing_id: ins.id, buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
           presentation: r.presentation || '', grade: r.grade || '', boxes: r.boxes || 0, box_weight: r.box_weight || 0,
           weight_kg: r.total_weight || 0, price_per_kg: r.price_per_kg || 0, price_per_box: r.price_per_box || 0,
-          value: r.total_value || 0, msc: !!r.msc
+          value: r.total_value || 0, msc: !!r.msc,
+          value_dkk: r.value_dkk != null ? r.value_dkk : null, ppk_dkk: r.ppk_dkk != null ? r.ppk_dkk : null
         }))
         for (let i = 0; i < payload.length; i += 500) {
           const { error: e2 } = await supabase.from('sales_rows').insert(payload.slice(i, i + 500))
@@ -299,6 +310,29 @@ export default function Sales() {
     return <div className="container"><p className="muted">Skipper access only. <Link to="/">← Back</Link></p></div>
   }
 
+  async function updateDkkRate(landing, newRate) {
+    const rate = Number(newRate)
+    if (!rate || rate <= 0) { setError('Enter a valid DKK rate (DKK per £1).'); return }
+    setBusy(true); setError('')
+    try {
+      const { data: rws, error: er } = await supabase.from('sales_rows').select('id, value_dkk, ppk_dkk').eq('landing_id', landing.id)
+      if (er) throw er
+      let gross = 0
+      for (const r of (rws || [])) {
+        if (r.value_dkk == null) continue
+        const v = r2(r.value_dkk / rate), ppk = r2((r.ppk_dkk || 0) / rate)
+        gross = r2(gross + v)
+        const { error: eu } = await supabase.from('sales_rows').update({ value: v, price_per_kg: ppk }).eq('id', r.id)
+        if (eu) throw eu
+      }
+      const { error: el } = await supabase.from('sales_landings').update({ value: gross, fx_rate: rate }).eq('id', landing.id)
+      if (el) throw el
+      setNotice(`Updated DKK rate to ${rate} — landing now ${gbp0(gross)}.`)
+      await loadLandings()
+    } catch (err) { setError(err.message) }
+    setBusy(false)
+  }
+
   return (
     <div className="container">
       <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -351,6 +385,9 @@ export default function Sales() {
         {/* KPIs */}
         <div className="card">
           <h2>{scopeLabel}</h2>
+          {mode === 'landing' && landingById[landingId]?.currency === 'DKK' && (
+            <DkkRate landing={landingById[landingId]} onSave={updateDkkRate} />
+          )}
           <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))' }}>
             <Kpi label="Total sales" value={gbp0(k.value)} />
             <Kpi label="Tonnage" value={num(r2(k.kg / 1000)) + ' t'} sub={num(k.kg) + ' kg'} />
@@ -618,5 +655,18 @@ function SpRows({ buyer, sp, rows, open, onToggle }) {
         </tr>
       ))}
     </>
+  )
+}
+
+function DkkRate({ landing, onSave }) {
+  const [v, setV] = useState(landing.fx_rate ?? '')
+  useEffect(() => { setV(landing.fx_rate ?? '') }, [landing.id, landing.fx_rate])
+  return (
+    <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', margin: '0 0 0.7rem', fontSize: '0.85rem' }}>
+      <span className="muted">Danish note · DKK→£ day rate:</span>
+      <input type="number" step="0.0001" min="0" value={v} onChange={e => setV(e.target.value)} style={{ width: 96 }} />
+      <span className="muted">DKK per £1</span>
+      <button className="secondary" onClick={() => onSave(landing, v)} style={{ padding: '2px 10px' }}>Update</button>
+    </div>
   )
 }
