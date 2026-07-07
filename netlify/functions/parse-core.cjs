@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.1.0";
+  const VERSION = "1.2.0";
   const round2 = n => Math.round(n * 100) / 100;
   const num = s => parseFloat(String(s).replace(/,/g, ""));
 
@@ -76,6 +76,8 @@
    * Market detection
    * ------------------------------------------------------------------ */
   function detectMarket(t) {
+    if (/L\.H\.D\.?\s*LIMITED/i.test(t)) return "LHD \u00b7 Lerwick";
+    if (/FISKEAUKTION/i.test(t) && (/Beskrivelse/i.test(t) || /Omkostninger/i.test(t) || /Self-billing/i.test(t))) return "Hanstholm Afregning";
     if (/FISKEAUKTION/i.test(t) || /Indicative exchange rate/i.test(t)) return "Hanstholm";
     if (/SHETLAND SEAFOOD/i.test(t) || /Shetland Clock/i.test(t)) return "Shetland Auction";
     // John S Duncan (Don Fishing's Scrabster branch) issues both a "Supplier
@@ -533,13 +535,103 @@
   }
 
   /* ------------------------------------------------------------------ *
+   * L.H.D. Limited (Lerwick) "Registered Seller Sale Note"
+   * ------------------------------------------------------------------ */
+  const LHD_SPECIES = { "HADD":"Haddock", "MEGRIMS":"Megrim", "MEGRIM":"Megrim", "MONKS":"Monkfish",
+    "MONK":"Monkfish", "SOLE - LEMON":"Lemon Sole", "POLLACK":"Lythe" };
+  function lhdSpecies(raw){
+    const s = String(raw||"").replace(/-MSC\S*/i,"").replace(/\s+/g," ").trim();
+    const up = s.toUpperCase();
+    if (LHD_SPECIES[up]) return LHD_SPECIES[up];
+    return canonSpecies(s);
+  }
+  function lhdBuyer(raw){
+    return String(raw||"").replace(/^\d+\s+/,"").replace(/\s+\d+$/,"").replace(/\s+/g," ").trim();
+  }
+  function parseLHD(allLines){
+    const rows=[]; const meta={ port:"Lerwick" };
+    const RE=/^(.+?) ([A-Z]{2}) (\d) ([A-Z]) ([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+) ([\d,]+\.\d{2}) (.+)$/;
+    let exp=null;
+    for(const ln of allLines){
+      const m=ln.match(RE);
+      if(m){
+        const sp=m[1], pres=m[2], grad=m[3], fresh=m[4];
+        const boxes=num(m[5]), tw=num(m[6]);
+        rows.push({
+          species: sp.trim(), species_canon: lhdSpecies(sp),
+          presentation: pres, grade: grad, quality: fresh,
+          boxes, box_weight: boxes? round2(tw/boxes):0, total_weight: tw,
+          price_per_kg: num(m[7]), price_per_box: num(m[8]), total_value: num(m[9]),
+          buyer: lhdBuyer(m[10]), msc: /-MSC/i.test(sp)
+        });
+        continue;
+      }
+      if(!meta.vessel){ const vm=ln.match(/Vessel\s+(.+?)\s+Port of Landing/i); if(vm) meta.vessel=detectVessel(vm[1])||vm[1].trim().toUpperCase(); }
+      if(!meta.isoDate){ const dm=ln.match(/Date of Landing\s+(\d{2})\/(\d{2})\/(\d{4})/i); if(dm) meta.isoDate=`${dm[3]}-${dm[2]}-${dm[1]}`; }
+      const tm=ln.match(/^(\d+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})$/); if(tm) exp={boxes:num(tm[1]),weight:num(tm[2]),value:num(tm[3])};
+    }
+    return { rows, meta, reconcile: buildReconcile(exp, rows) };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Hanstholm "Afregning" self-billing settlement (printed, DKK)
+   * ------------------------------------------------------------------ */
+  function dkkNum(s){ return parseFloat(String(s).replace(/\./g,"").replace(",",".")); }
+  function parseAfregning(allLines){
+    const rows=[]; const meta={ port:"Hanstholm", currency:"DKK", needsRate:true };
+    const M = { january:"01",february:"02",march:"03",april:"04",may:"05",june:"06",july:"07",august:"08",september:"09",october:"10",november:"11",december:"12" };
+    const RE=/^22\s+(\d+)\s+([\d.]+)\s+(.+?)\s+([A-Z])\s+(\d+)\s+([\d,]+)\s+([\d.,]+)$/;
+    let exp=null;
+    for(const ln of allLines){
+      const m=ln.match(RE);
+      if(m){
+        const b=parseInt(m[1],10), tw=dkkNum(m[2]);
+        rows.push({
+          species: m[3].trim(), species_canon: canonSpecies(m[3]),
+          presentation:"", grade: m[5], quality: m[4],
+          boxes: b, box_weight: b? round2(tw/b):0, total_weight: tw,
+          price_per_kg: dkkNum(m[6]), price_per_box:0, total_value: dkkNum(m[7]),
+          buyer:"Hanstholm Auction", msc:false, currency:"DKK"
+        });
+        continue;
+      }
+      if(!meta.vessel){ const vm=ln.match(/([A-Z]{2,4})\s?(\d{1,4})\s*"([^"]+)"/); if(vm) meta.vessel=vm[3].trim().toUpperCase()+" "+vm[1]+vm[2]; }
+      if(!meta.isoDate){ const dm=ln.match(/(\d{1,2})\.\s+([A-Za-z]+)\s+(\d{4})/); if(dm && M[dm[2].toLowerCase()]) meta.isoDate=`${dm[3]}-${M[dm[2].toLowerCase()]}-${dm[1].padStart(2,"0")}`; }
+      const sm=ln.match(/^(\d+)\s+([\d.]+)\s+([\d.,]+,\d{2})$/); if(sm) exp={boxes:parseInt(sm[1],10),weight:dkkNum(sm[2]),value:dkkNum(sm[3])};
+    }
+    meta.grossDkk = exp ? exp.value : round2(rows.reduce((s,r)=>s+r.total_value,0));
+    return { rows, meta, reconcile: buildReconcile(exp, rows, 0.01) };
+  }
+
+  // Convert a DKK-priced result (Afregning) to GBP using a user-entered day rate
+  // (DKK per 1 GBP). Keeps the DKK originals on each row so the rate is editable.
+  function applyFxRate(res, dkkPerGbp){
+    const r = Number(dkkPerGbp);
+    if(!r || !isFinite(r) || r<=0) return res;
+    const conv = v => round2(v / r);
+    const rows = res.rows.map(row => ({ ...row,
+      value_dkk: row.value_dkk != null ? row.value_dkk : row.total_value,
+      ppk_dkk: row.ppk_dkk != null ? row.ppk_dkk : row.price_per_kg,
+      total_value: conv(row.value_dkk != null ? row.value_dkk : row.total_value),
+      price_per_kg: conv(row.ppk_dkk != null ? row.ppk_dkk : row.price_per_kg),
+      currency: "GBP"
+    }));
+    const ex = res.reconcile && res.reconcile.expected;
+    const meta = { ...res.meta, currency:"GBP", fxRate:r };
+    return { ...res, rows, meta,
+      reconcile: buildReconcile(ex ? { boxes:ex.boxes, weight:ex.weight, value:conv(res.meta.grossDkk != null ? res.meta.grossDkk : ex.value) } : null, rows, 0.05) };
+  }
+
+  /* ------------------------------------------------------------------ *
    * Entry points
    * ------------------------------------------------------------------ */
   function parseExtracted({ allLines, pages, fullText }, filename) {
     if ((fullText || "").trim().length < 20) return { market: "Unscannable", rows: [], meta: {}, reconcile: buildReconcile(null, []), filename };
     const market = detectMarket(fullText);
     let parsed;
-    if (market === "Hanstholm") parsed = parseHanstholm(allLines);
+    if (market === "LHD \u00b7 Lerwick") parsed = parseLHD(allLines);
+    else if (market === "Hanstholm Afregning") parsed = parseAfregning(allLines);
+    else if (market === "Hanstholm") parsed = parseHanstholm(allLines);
     else if (market === "Shetland Auction") parsed = parseShetland(allLines);
     else if (market.startsWith("John S Duncan")) parsed = /Supplier Transactions/i.test(fullText) ? parseJSD(pages) : parseDon(allLines);
     else if (market.startsWith("P&J Johnstone")) parsed = parsePJJ(allLines);
@@ -558,6 +650,6 @@
   return {
     VERSION, parsePdf, parseExtracted, extractPages, itemsToLines,
     detectMarket, detectVessel, canonSpecies, canonBuyer, mapSpeciesCode,
-    parseDon, parseHanstholm, parseJSD, parsePJJ, parseShetland
+    parseDon, parseHanstholm, parseJSD, parsePJJ, parseShetland, parseLHD, parseAfregning, applyFxRate
   };
 });
