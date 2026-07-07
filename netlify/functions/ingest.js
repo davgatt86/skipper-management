@@ -247,6 +247,11 @@ export const handler = async (event) => {
         const rec = res.reconcile || {}
         const tot = rec.actual || { boxes: 0, weight: 0, value: 0 }
         const dkey = dedupKey(res)
+        // Danish (Hanstholm Afregning) notes are priced in DKK and the email
+        // path can't ask for a rate, so land them rate-pending: keep the DKK
+        // originals, hold the £ figures at 0. The skipper sets the day rate in
+        // the app (Fish Sales -> the DKK landing) which converts and fills them.
+        const dkk = res.meta.currency === 'DKK'
 
         // Per-fleet dedup: (fleet_id, dedup_key) is unique after multi_tenancy.sql.
         const { data: dup } = await supabase.from('sales_landings')
@@ -257,8 +262,9 @@ export const handler = async (event) => {
           fleet_id: sender.fleet_id,                       // <- explicit; service role has no current_fleet_id()
           dedup_key: dkey, vessel: res.meta.vessel || '', market: res.market || '', port: res.meta.port || '',
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: name,
-          boxes: tot.boxes, weight_kg: tot.weight, value: tot.value,
+          boxes: tot.boxes, weight_kg: tot.weight, value: dkk ? 0 : tot.value,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
+          currency: res.meta.currency || null, fx_rate: null,
         }).select('id').single()
         if (e1) throw e1
 
@@ -266,8 +272,10 @@ export const handler = async (event) => {
           fleet_id: sender.fleet_id, landing_id: ins.id,
           buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
           presentation: r.presentation || '', grade: r.grade || '', boxes: r.boxes || 0, box_weight: r.box_weight || 0,
-          weight_kg: r.total_weight || 0, price_per_kg: r.price_per_kg || 0, price_per_box: r.price_per_box || 0,
-          value: r.total_value || 0, msc: !!r.msc,
+          weight_kg: r.total_weight || 0,
+          price_per_kg: dkk ? 0 : (r.price_per_kg || 0), price_per_box: dkk ? 0 : (r.price_per_box || 0),
+          value: dkk ? 0 : (r.total_value || 0), msc: !!r.msc,
+          value_dkk: dkk ? (r.total_value || 0) : null, ppk_dkk: dkk ? (r.price_per_kg || 0) : null,
         }))
         for (let i = 0; i < payload.length; i += 500) {
           const { error: e2 } = await supabase.from('sales_rows').insert(payload.slice(i, i + 500))
@@ -275,7 +283,8 @@ export const handler = async (event) => {
         }
         const warn = rec.found && !rec.ok ? ` ⚠ differs from printed TOTAL (£${rec.diffs?.value ?? '?'})` : ''
         const fed = await feedCrewLanding(supabase, sender.fleet_id, createdBy, res.meta.isoDate, tot.boxes, dkey)
-        results.push(`ok ${name}: SALE ${res.market} ${res.meta.vessel || ''} ${res.meta.isoDate || ''} -> ${sender.label || sender.fleet_id} (${res.rows.length} rows, £${tot.value})${warn}${fed}`)
+        const grossTxt = dkk ? `${Math.round(res.meta.grossDkk || tot.value).toLocaleString()} DKK — set £ rate in app` : `£${tot.value}`
+        results.push(`ok ${name}: SALE ${res.market} ${res.meta.vessel || ''} ${res.meta.isoDate || ''} -> ${sender.label || sender.fleet_id} (${res.rows.length} rows, ${grossTxt})${warn}${fed}`)
 
       } else if (kind === 'price') {
         // Shared board — same logic as ingest-prices.js (replace day, insert prices+volumes).
