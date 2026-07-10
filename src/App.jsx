@@ -27,6 +27,7 @@ const Forecast = lazy(() => import('./pages/Forecast'))
 const StowagePlan = lazy(() => import('./pages/StowagePlan'))
 const SalesCompare = lazy(() => import('./pages/SalesCompare'))
 const PriceVsFleet = lazy(() => import('./pages/PriceVsFleet'))
+const Alerts = lazy(() => import('./pages/Alerts'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -215,6 +216,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <PriceVsFleet />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/alerts" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Alerts />
             </Suspense>
           </ProtectedRoute>
         } />
