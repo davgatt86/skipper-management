@@ -306,6 +306,8 @@ export const handler = async (event) => {
         const e3 = res.volumes.length ? (await supabase.from('market_volumes').insert(res.volumes.map(v => ({ ...v, day_id: day.id })))).error : null
         if (e2 || e3) { await supabase.from('market_days').delete().eq('id', day.id); throw (e2 || e3) }
         results.push(`ok ${name}: PRICES ${res.source} ${res.price_date} (${res.prices.length} prices)${existing ? ' replaced' : ''}`)
+        // New board prices in -> refresh price alerts (idempotent, deduped).
+        try { await supabase.rpc('generate_alerts') } catch (e) { /* non-fatal */ }
 
       } else {
         results.push(`skip ${name}: not recognised as a price sheet or sales note`)
