@@ -20,51 +20,28 @@ const STATUS = {
 }
 const rank = s => s==='early'?0 : s==='likely'?1 : 2
 
-// Watch ports + colour per port (matches the fleet watchlist spreadsheet)
-const WATCH_PORTS = ['Peterhead','Fraserburgh','Ullapool','Lochinver','Kinlochbervie','Scrabster']
-const PORT_COLORS = {
-  PETERHEAD:     { bg:'#E8F1FF', bd:'#1F6FEB' },
-  FRASERBURGH:   { bg:'#E6F7EC', bd:'#2DA44E' },
-  ULLAPOOL:      { bg:'#FFF1E0', bd:'#E8821E' },
-  LOCHINVER:     { bg:'#F2E9FB', bd:'#8250DF' },
-  KINLOCHBERVIE: { bg:'#E2F6F2', bd:'#1B9E8A' },
-  SCRABSTER:     { bg:'#FFF7DB', bd:'#B8860B' },
-}
-const portStyle = p => PORT_COLORS[(p||'').trim().toUpperCase()] || { bg:'#F0F2F4', bd:'#8C959F' }
-const PortPill = ({ port }) => { const c = portStyle(port); return (
-  <span style={{ fontSize:'0.68rem', fontWeight:700, padding:'0.1rem 0.45rem', borderRadius:999,
-    background:c.bg, border:`1.5px solid ${c.bd}`, color:c.bd, whiteSpace:'nowrap' }}>{port || '—'}</span>) }
-const vkey = s => (s||'').trim().toUpperCase().replace(/\s+/g,' ')
-
 export default function Forecast(){
   const { appUser } = useAuth()
   const isSkipper = appUser?.role === 'skipper'
   const [deps, setDeps] = useState([])
-  const [ignores, setIgnores] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [draft, setDraft] = useState({ vessel_name:'', departure_port:'Peterhead', departure_date: todayKey() })
   const [saving, setSaving] = useState(false)
-  const [selected, setSelected] = useState(()=> new Set())   // vessels ticked for bulk-hide
 
   async function load(){
     setLoading(true); setError('')
     const cutoff = keyOf(addDays(todayKey(), -10))
-    const [{ data, error }, ign] = await Promise.all([
-      supabase.from('vessel_departures').select('*').gte('departure_date', cutoff).order('departure_date', { ascending:false }),
-      supabase.from('vessel_ignores').select('*').order('vessel_name'),
-    ])
+    const { data, error } = await supabase.from('vessel_departures').select('*')
+      .gte('departure_date', cutoff).order('departure_date', { ascending:false })
     if (error) setError(error.message)
-    setDeps(data || []); setIgnores(ign.data || []); setLoading(false)
+    setDeps(data || []); setLoading(false)
   }
   useEffect(()=>{ if(isSkipper) load(); else setLoading(false) }, [isSkipper])
-
-  const ignoreSet = useMemo(()=> new Set(ignores.map(i=> i.vessel_key || vkey(i.vessel_name))), [ignores])
 
   const days = useMemo(()=>{
     const today = todayKey(); const map = {}
     for (const dep of deps){
-      if (ignoreSet.has(vkey(dep.vessel_name))) continue   // hidden vessels never show
       const base = dep.departure_date || (dep.departed_at ? dep.departed_at.slice(0,10) : null)
       if (!base) continue
       for (const [off, status] of OFFSETS){
@@ -72,23 +49,40 @@ export default function Forecast(){
         if (isWeekend(d)) continue                 // no Peterhead auction Sat/Sun
         const k = keyOf(d)
         if (k < today) continue                    // rolling: past days fall off
-        ;(map[k] = map[k] || []).push({ vessel: dep.vessel_name, status, port: dep.departure_port })
+        ;(map[k] = map[k] || []).push({ vessel: dep.vessel_name, status })
       }
     }
     return Object.keys(map).sort().map(k => ({
-      key:k, items: map[k].sort((a,b)=> rank(a.status)-rank(b.status) || (a.port||'').localeCompare(b.port||'') || a.vessel.localeCompare(b.vessel))
+      key:k, items: map[k].sort((a,b)=> rank(a.status)-rank(b.status) || a.vessel.localeCompare(b.vessel))
     }))
-  }, [deps, ignoreSet])
+  }, [deps])
 
-  // Unique boats currently on the forecast (a boat can appear on +7/+8/+9), for the bulk-hide picker.
-  const visibleVessels = useMemo(()=>{
-    const s = new Set()
-    for (const day of days) for (const it of day.items) s.add(it.vessel)
-    return [...s].sort((a,b)=> a.localeCompare(b))
-  }, [days])
-  const toggleSel = name => setSelected(prev=>{ const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n })
-  const allSelected = visibleVessels.length>0 && selected.size===visibleVessels.length
-  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(visibleVessels))
+  // When your own vessel goes live on the forecast (its 'likely' landing day),
+  // drop an alert naming who else is due to land that day. Dedup'd so it fires
+  // once per boat per trip; re-renders are harmless (upsert ignores dupes).
+  useEffect(() => {
+    if (!isSkipper || !appUser?.fleet_id || !days.length) return
+    const own = new Set(deps.filter(d => d.fleet_id === appUser.fleet_id).map(d => d.vessel_name))
+    if (!own.size) return
+    const today = todayKey()
+    const rows = []
+    for (const g of days) {
+      if (g.key < today) continue
+      const mine = g.items.filter(it => own.has(it.vessel) && it.status === 'likely')
+      if (!mine.length) continue
+      const others = [...new Set(g.items.filter(it => !own.has(it.vessel)).map(it => it.vessel))]
+      const list = others.slice(0, 4).join(', ')
+      const extra = others.length > 4 ? ` +${others.length - 4}` : ''
+      for (const m of mine) rows.push({
+        fleet_id: appUser.fleet_id, type: 'forecast', severity: 'info',
+        title: `${m.vessel} likely landing ${niceDate(g.key)}`,
+        body: others.length ? `Also due that day: ${list}${extra}` : 'No other boats forecast that day.',
+        meta: { vessel: m.vessel, date: g.key, others },
+        dedup_key: `forecast:${m.vessel}:${g.key}`,
+      })
+    }
+    if (rows.length) supabase.from('alerts').upsert(rows, { onConflict: 'fleet_id,dedup_key', ignoreDuplicates: true }).then(() => {}, () => {})
+  }, [days, deps, isSkipper])
 
   async function addDeparture(){
     if (!draft.vessel_name.trim() || !draft.departure_date) return
@@ -106,27 +100,6 @@ export default function Forecast(){
     if (!confirm('Remove this departure?')) return
     const { error } = await supabase.from('vessel_departures').delete().eq('id', id)
     if (error) setError(error.message); else load()
-  }
-
-  async function hideVessel(name){
-    const key = vkey(name)
-    if (!key) return
-    if (!confirm(`Hide ${name} from the forecast? It won't show again (you can restore it below).`)) return
-    const { error } = await supabase.from('vessel_ignores')
-      .upsert({ fleet_id: appUser.fleet_id, vessel_name: name.trim(), vessel_key: key }, { onConflict: 'fleet_id,vessel_key' })
-    if (error) setError(error.message); else load()
-  }
-  async function restoreVessel(id){
-    const { error } = await supabase.from('vessel_ignores').delete().eq('id', id)
-    if (error) setError(error.message); else load()
-  }
-  async function hideSelected(){
-    const names = [...selected]
-    if (!names.length) return
-    if (!confirm(`Hide ${names.length} vessel${names.length>1?'s':''} from the forecast? They won't show again (restore any below).`)) return
-    const rows = names.map(name=>({ fleet_id: appUser.fleet_id, vessel_name: name.trim(), vessel_key: vkey(name) })).filter(r=>r.vessel_key)
-    const { error } = await supabase.from('vessel_ignores').upsert(rows, { onConflict: 'fleet_id,vessel_key' })
-    if (error) setError(error.message); else { setSelected(new Set()); load() }
   }
 
   if (!isSkipper) return (
@@ -151,8 +124,6 @@ export default function Forecast(){
                 <span style={{width:14,height:14,borderRadius:3,background:STATUS[s].bg,border:`2px solid ${STATUS[s].bd}`}}/>
                 {STATUS[s].label} ({STATUS[s].tag})
               </span>))}
-            <span style={{width:1, alignSelf:'stretch', background:'var(--border)'}}/>
-            {WATCH_PORTS.map(p=> <PortPill key={p} port={p}/> )}
           </div>
           {days.length===0 ? (
             <div className="card"><p className="muted">No upcoming landings forecast. Departures will appear automatically once the MarineTraffic ingest is live — or add one below to test.</p></div>
@@ -162,48 +133,17 @@ export default function Forecast(){
               <div style={{display:'flex', flexDirection:'column', gap:'0.4rem'}}>
                 {day.items.map((it,i)=>(
                   <div key={i} style={{display:'flex', alignItems:'center', gap:'0.6rem', padding:'0.4rem 0.6rem', borderRadius:8, background:STATUS[it.status].bg, border:`1px solid ${STATUS[it.status].bd}`}}>
-                    <PortPill port={it.port}/>
                     <span style={{fontWeight:600}}>{it.vessel}</span>
                     <span style={{fontSize:'0.75rem', fontWeight:700, color:STATUS[it.status].fg, marginLeft:'auto'}}>{STATUS[it.status].label}</span>
                     <span className="muted" style={{fontSize:'0.72rem'}}>{STATUS[it.status].tag}</span>
-                    <button onClick={()=>hideVessel(it.vessel)} title="Hide this vessel from the forecast" style={hideBtn}>×</button>
                   </div>))}
               </div>
             </div>))}
-          {visibleVessels.length>0 && (
-            <div className="card">
-              <div style={{display:'flex', alignItems:'center', gap:'0.6rem', flexWrap:'wrap'}}>
-                <h2 style={{marginTop:0, marginBottom:0, fontSize:'1.05rem'}}>Hide vessels</h2>
-                <span className="muted" style={{fontSize:'0.8rem'}}>Tick any boats to keep off the forecast (static-gear, pelagic, non-whitefish). Hidden for good — restore below anytime.</span>
-                <button onClick={hideSelected} disabled={selected.size===0} style={{marginLeft:'auto'}}>Hide selected ({selected.size})</button>
-              </div>
-              <label style={{...chk, fontWeight:700, marginTop:'0.7rem'}}>
-                <input type="checkbox" checked={allSelected} onChange={toggleAll}/> Select all ({visibleVessels.length})
-              </label>
-              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(190px,1fr))', gap:'0.3rem 0.8rem', marginTop:'0.4rem'}}>
-                {visibleVessels.map(v=>(
-                  <label key={v} style={chk}>
-                    <input type="checkbox" checked={selected.has(v)} onChange={()=>toggleSel(v)}/> {v}
-                  </label>))}
-              </div>
-            </div>)}
-          {ignores.length>0 && (
-            <div className="card">
-              <h2 style={{marginTop:0, fontSize:'1.05rem'}}>Hidden vessels ({ignores.length})</h2>
-              <p className="muted" style={{fontSize:'0.82rem', marginTop:0}}>These never appear on the forecast. Restore any that should.</p>
-              <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem'}}>
-                {ignores.map(ig=>(
-                  <span key={ig.id} style={{display:'inline-flex', alignItems:'center', gap:'0.45rem', padding:'0.25rem 0.6rem', borderRadius:999, border:'1px solid var(--border)', fontSize:'0.85rem'}}>
-                    {ig.vessel_name}
-                    <button onClick={()=>restoreVessel(ig.id)} title="Restore" style={{...hideBtn, color:'var(--green)'}}>↺</button>
-                  </span>))}
-              </div>
-            </div>)}
           <div className="card">
             <h2 style={{marginTop:0, fontSize:'1.05rem'}}>Departures (last 10 days)</h2>
             <div style={{display:'grid', gap:'0.6rem', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', alignItems:'end', marginBottom:'0.8rem'}}>
               <label style={lbl}>Vessel<input value={draft.vessel_name} onChange={e=>setDraft(p=>({...p,vessel_name:e.target.value}))} placeholder="AUDACIOUS BF83" style={inp}/></label>
-              <label style={lbl}>Port<select value={draft.departure_port} onChange={e=>setDraft(p=>({...p,departure_port:e.target.value}))} style={inp}>{WATCH_PORTS.map(p=><option key={p} value={p}>{p}</option>)}</select></label>
+              <label style={lbl}>Port<input value={draft.departure_port} onChange={e=>setDraft(p=>({...p,departure_port:e.target.value}))} style={inp}/></label>
               <label style={lbl}>Sailed<input type="date" value={draft.departure_date} onChange={e=>setDraft(p=>({...p,departure_date:e.target.value}))} style={inp}/></label>
               <button onClick={addDeparture} disabled={saving || !draft.vessel_name.trim()}>{saving?'Adding…':'Add departure'}</button>
             </div>
@@ -214,7 +154,7 @@ export default function Forecast(){
                   {deps.map(d=>(
                     <tr key={d.id} style={{borderBottom:'1px solid var(--border)'}}>
                       <td style={td}>{d.vessel_name}</td>
-                      <td style={td}><PortPill port={d.departure_port}/></td>
+                      <td style={{...td}} className="muted">{d.departure_port||'—'}</td>
                       <td style={td}>{d.departure_date ? niceDate(d.departure_date) : '—'}</td>
                       <td style={{...td, textAlign:'right'}}><button className="secondary" onClick={()=>removeDeparture(d.id)} style={{padding:'0.2rem 0.6rem', fontSize:'0.8rem'}}>Remove</button></td>
                     </tr>))}
@@ -228,5 +168,3 @@ const lbl = { display:'flex', flexDirection:'column', gap:'0.25rem', fontSize:'0
 const inp = { padding:'0.45rem 0.55rem', borderRadius:7, border:'1px solid var(--border)', fontSize:'0.95rem', fontWeight:400 }
 const th = { textAlign:'left', padding:'0.4rem 0.5rem', borderBottom:'2px solid var(--border)', whiteSpace:'nowrap' }
 const td = { padding:'0.4rem 0.5rem', whiteSpace:'nowrap' }
-const hideBtn = { background:'transparent', border:'none', cursor:'pointer', fontSize:'1rem', lineHeight:1, padding:'0 0.2rem', color:'var(--grey-400)', fontWeight:700 }
-const chk = { display:'flex', alignItems:'center', gap:'0.4rem', fontSize:'0.85rem', cursor:'pointer' }
