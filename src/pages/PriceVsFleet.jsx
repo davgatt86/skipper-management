@@ -82,7 +82,7 @@ export default function PriceVsFleet(){
         <div style={{ display:'inline-flex', border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
           {[['ytd','Year so far'],['month','Month']].map(([m,label]) => (
             <button key={m} onClick={()=>setMode(m)} style={{ padding:'5px 12px', border:'none', cursor:'pointer', fontSize:'0.85rem',
-              fontWeight: mode===m?700:500, background: mode===m?'var(--navy)':'#fff', color: mode===m?'#fff':'#334155' }}>{label}</button>
+              fontWeight: mode===m?700:500, background: mode===m?'var(--navy)':'var(--surface)', color: mode===m?'var(--on-navy)':'var(--grey-400)' }}>{label}</button>
           ))}
         </div>
         {mode==='month' && (<>
@@ -99,7 +99,7 @@ export default function PriceVsFleet(){
       {error && <div className="card" style={{ borderColor:'var(--red)' }}><p className="error">{error}</p></div>}
 
       <div className="card" style={{ padding:0, overflow:'hidden' }}>
-        <div style={{ ...rowStyle, fontWeight:700, color:'var(--navy)', borderBottom:'2px solid var(--border)', background:'#F8FAFC' }}>
+        <div style={{ ...rowStyle, fontWeight:700, color:'var(--navy)', borderBottom:'2px solid var(--border)', background:'var(--surface-2)' }}>
           <span>Species</span><span style={num}>You £/kg</span><span style={num}>Fleet £/kg</span><span style={num}>vs fleet</span>
         </div>
         {loading ? <div style={{ padding:'1rem' }} className="muted">Loading…</div>
@@ -115,21 +115,21 @@ export default function PriceVsFleet(){
                   <span style={num}>{r.fleet_pkg == null
                     ? <span title="Not enough boats yet" style={{ color:'var(--grey-400)' }}>—</span>
                     : pkg(r.fleet_pkg)}</span>
-                  <span style={num}>{p == null ? '' : <b style={{ color: p>0?'#16A34A':p<0?'#DC2626':'var(--grey-400)' }}>{p>0?'+':''}{p.toFixed(1)}%</b>}</span>
+                  <span style={num}>{p == null ? '' : <b style={{ color: p>0?'var(--green)':p<0?'var(--red)':'var(--grey-400)' }}>{p>0?'+':''}{p.toFixed(1)}%</b>}</span>
                 </div>
                 {isOpen && (grades[r.species] || []).map(g => {
                   const gp = pctText(g.own_pkg, g.fleet_pkg)
                   return (
-                    <div key={g.grade} style={{ ...rowStyle, borderTop:'1px solid #EEF2F6', background:'#FBFCFE' }}>
-                      <span style={{ paddingLeft:'1.4rem', color:'#475569' }}>{g.grade}</span>
+                    <div key={g.grade} style={{ ...rowStyle, borderTop:'1px solid var(--border)', background:'var(--surface-2)' }}>
+                      <span style={{ paddingLeft:'1.4rem', color:'var(--grey-700)' }}>{g.grade}</span>
                       <span style={num}>{pkg(g.own_pkg)}</span>
                       <span style={num}>{g.fleet_pkg == null ? <span style={{ color:'var(--grey-400)' }}>—</span> : pkg(g.fleet_pkg)}</span>
-                      <span style={num}>{gp == null ? '' : <b style={{ color: gp>0?'#16A34A':gp<0?'#DC2626':'var(--grey-400)' }}>{gp>0?'+':''}{gp.toFixed(1)}%</b>}</span>
+                      <span style={num}>{gp == null ? '' : <b style={{ color: gp>0?'var(--green)':gp<0?'var(--red)':'var(--grey-400)' }}>{gp>0?'+':''}{gp.toFixed(1)}%</b>}</span>
                     </div>
                   )
                 })}
                 {isOpen && grades[r.species] && grades[r.species].length===0 && (
-                  <div style={{ ...rowStyle, borderTop:'1px solid #EEF2F6', background:'#FBFCFE', color:'var(--grey-400)' }}><span style={{ paddingLeft:'1.4rem' }}>No grade detail.</span><span/><span/><span/></div>
+                  <div style={{ ...rowStyle, borderTop:'1px solid var(--border)', background:'var(--surface-2)', color:'var(--grey-400)' }}><span style={{ paddingLeft:'1.4rem' }}>No grade detail.</span><span/><span/><span/></div>
                 )}
               </div>
             )

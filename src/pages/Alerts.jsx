@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
+// colour-mix keeps these readable in BOTH themes: a tint of the signal colour
+// over the current surface, so nothing glares on a night wheelhouse screen.
 const SEV = {
-  good: { bg:'#F0FDF4', bd:'#BBF7D0', dot:'#16A34A' },
-  warn: { bg:'#FEF2F2', bd:'#FECACA', dot:'#DC2626' },
-  info: { bg:'#F0F9FF', bd:'#BAE6FD', dot:'#0284C7' },
+  good: { bg:'color-mix(in srgb, var(--green) 14%, var(--surface))', bd:'var(--green)', dot:'var(--green)' },
+  warn: { bg:'color-mix(in srgb, var(--red) 12%, var(--surface))',   bd:'var(--red)',   dot:'var(--red)' },
+  info: { bg:'color-mix(in srgb, var(--navy) 12%, var(--surface))',  bd:'var(--navy)',  dot:'var(--navy)' },
 }
 const TYPE_LABEL = { daily:'Daily jump', fourweek:'4-week', pd_dk:'PD vs DK', own_spike:'Your sales', forecast:'Forecast' }
 const DEFAULTS = { daily_jump_pct:15, four_week_pct:25, pd_dk_gap_pct:20, own_spike_pct:20,
@@ -63,7 +65,7 @@ export default function Alerts(){
   return (
     <div className="container" style={{ maxWidth: 720 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:'0.5rem' }}>
-        <h1 style={{ marginBottom:'0.2rem' }}>Alerts{unread>0 && <span style={{ marginLeft:8, fontSize:'0.8rem', background:'#DC2626', color:'#fff', borderRadius:20, padding:'1px 9px' }}>{unread}</span>}</h1>
+        <h1 style={{ marginBottom:'0.2rem' }}>Alerts{unread>0 && <span style={{ marginLeft:8, fontSize:'0.8rem', background:'var(--red)', color:'var(--on-navy)', borderRadius:20, padding:'1px 9px' }}>{unread}</span>}</h1>
         <p className="muted"><Link to="/">← Dashboard</Link></p>
       </div>
 
@@ -97,12 +99,12 @@ export default function Alerts(){
               <span style={{ width:9, height:9, borderRadius:9, background: a.read_at?'transparent':s.dot, border:`2px solid ${s.dot}`, marginTop:5, flex:'0 0 auto' }} />
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', gap:'0.5rem', alignItems:'baseline', flexWrap:'wrap' }}>
-                  <b style={{ color:'#0F172A' }}>{a.title}</b>
+                  <b style={{ color:'var(--text)' }}>{a.title}</b>
                   <span className="muted" style={{ fontSize:'0.68rem', textTransform:'uppercase', letterSpacing:'0.03em' }}>{TYPE_LABEL[a.type] || a.type}</span>
                 </div>
                 {a.body && <div className="muted" style={{ fontSize:'0.83rem', marginTop:2 }}>{a.body}</div>}
               </div>
-              <button onClick={()=>dismiss(a.id)} title="Dismiss" style={{ border:'none', background:'none', cursor:'pointer', color:'#94A3B8', fontSize:'1.1rem', lineHeight:1, padding:'0 2px' }}>×</button>
+              <button onClick={()=>dismiss(a.id)} title="Dismiss" style={{ border:'none', background:'none', cursor:'pointer', color:'var(--grey-400)', fontSize:'1.1rem', lineHeight:1, padding:'0 2px' }}>×</button>
             </div>
           )
         })}

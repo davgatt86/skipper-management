@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { supabase } from '../supabaseClient'
+import ThemeToggle from '../ThemeToggle'
 
 const tile = {
   display: 'block', padding: '1.6rem 1rem', border: '1px solid var(--border)', borderRadius: 8,
@@ -42,6 +43,7 @@ export default function Dashboard() {
               {unread > 0 && <span style={{ position: 'absolute', top: -6, right: -10, background: '#DC2626', color: '#fff', fontSize: '0.65rem', fontWeight: 700, borderRadius: 20, padding: '1px 6px' }}>{unread}</span>}
             </Link>
           )}
+          <ThemeToggle />
           <Link to="/password" style={{ fontSize: '0.85rem' }}>Change password</Link>
           <button className="secondary" onClick={signOut}>Sign out</button>
         </div>
