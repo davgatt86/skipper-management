@@ -1,0 +1,16 @@
+-- alerts_grade_fix.sql — ALREADY APPLIED live (kept for your records).
+--
+-- BUG: generate_alerts() averaged ave() across whatever grades happened to be on
+-- the board that day. When the GRADE MIX changed (e.g. an A1 appears today that
+-- wasn't there last board) the flat average moved and was reported as a price
+-- move — hence "Haddock up 32%" on a day A4 Chipper had actually FALLEN 35%
+-- (10 Jul flat avg £2.35 across A2/A3/A4Ch/A4Metro/A4Round vs 13 Jul £3.11
+-- across A1/A2/A3/A4Ch/A4 — mix, not price).
+--
+-- FIX: every price comparison is now LIKE-FOR-LIKE on the same grade.
+--   * daily    — same grade vs the last board; alerts name the grade that moved
+--                ("PD: Haddock A4 Chipper down 35%", £2.00 → £1.30)
+--   * fourweek — same grade vs its own trailing 4-week average
+--   * pd_dk    — same species AND grade on both boards
+--   * daily is further limited to grades the fleet actually lands
+-- Full function body is in migration "generate_alerts_grade_aware".
