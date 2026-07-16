@@ -98,6 +98,12 @@ export default function CrewHub() {
           <Link to="/contracts" style={linkStyle}>Contracts</Link>
           <Link to="/landings" style={linkStyle}>Landings</Link>
           <Link to="/closeout" style={linkStyle}>Month Closeout</Link>
+          {appUser?.role === 'skipper' && (
+            <Link to="/crew-certs" style={linkStyle}>Crew Certificates</Link>
+          )}
+          {appUser?.role === 'skipper' && (
+            <Link to="/crew-list" style={linkStyle}>Crew List</Link>
+          )}
           {['skipper', 'viewer'].includes(appUser?.role) && (
             <Link to="/one-offs" style={linkStyle}>One-Off Bonuses</Link>
           )}

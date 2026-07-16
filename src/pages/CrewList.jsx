@@ -130,7 +130,12 @@ export default function CrewList() {
     <div className="container">
       <div style={{ marginBottom: '1rem' }}><BackNav /></div>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h1 style={{ marginBottom: 0 }}>Crew List</h1>
+        <div>
+          <h1 style={{ marginBottom: 0 }}>Crew List</h1>
+          <p className="muted" style={{ marginTop: '0.2rem', fontSize: '0.85rem' }}>
+            Also: <Link to="/crew-certs">Crew Certificates</Link> · <Link to="/engine-logs">Engine Logs</Link>
+          </p>
+        </div>
       </header>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
@@ -161,6 +166,7 @@ export default function CrewList() {
                   {crew.map((c) => {
                     const on = sel[c.id]?.on
                     const noPass = !c.passport_number
+                    const passExpired = c.passport_expiry && new Date(String(c.passport_expiry).slice(0, 10) + 'T00:00:00') < new Date(today() + 'T00:00:00')
                     return (
                       <tr key={c.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '0.4rem', width: 28 }}>
@@ -170,6 +176,7 @@ export default function CrewList() {
                           {c.full_name}
                           {c.status === 'on_boat' && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--green)', fontWeight: 700 }}>● ON BOAT</span>}
                           {on && noPass && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--amber)', fontWeight: 700 }}>no passport on file</span>}
+                          {on && !noPass && passExpired && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--red)', fontWeight: 700 }}>passport expired</span>}
                         </td>
                         <td style={{ padding: '0.4rem', width: 140 }}>
                           {on && (
