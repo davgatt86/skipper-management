@@ -5,6 +5,7 @@ import BackNav from '../BackNav'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
 // ------------------------------------------------------------------
 // Parameter template — modelled on Ægir's Engine Log. Readings are
@@ -62,6 +63,11 @@ export const ENGINE_TEMPLATE = [
 
 const MAIN_HOURS = { group: 'Main Engine 1', param: 'Running Hours' }
 
+// Flattened list of every parameter, for the chart picker.
+const FLAT_PARAMS = ENGINE_TEMPLATE.flatMap((g) => g.params.map((p) => ({ group: g.group, label: p.label, unit: p.unit, key: `${g.group}||${p.label}` })))
+const seriesLabel = (key) => { const f = FLAT_PARAMS.find((x) => x.key === key); return f ? `${f.group.replace('Main Engine 1', 'ME1').replace('Generator ', 'GEN').replace('Gearbox ', 'GB')} · ${f.label}` : key }
+const CHART_COLORS = ['#1d4ed8', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d', '#475569', '#ea580c', '#0d9488', '#9333ea']
+
 const today = () => new Date().toISOString().slice(0, 10)
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '')
 const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
@@ -73,6 +79,12 @@ export default function EngineLogs() {
   const canEdit = appUser?.role === 'skipper'
 
   const [vessel, setVessel] = useState(null)
+  const [view, setView] = useState('entries')            // 'entries' | 'chart'
+  const [chartType, setChartType] = useState('line')     // 'line' | 'bar'
+  const [pickGroup, setPickGroup] = useState('Main Engine 1')
+  const [series, setSeries] = useState(['Main Engine 1||Turbo IN Temp', 'Main Engine 1||Turbo OUT Temp'])
+  const [fromD, setFromD] = useState('')
+  const [toD, setToD] = useState('')
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -203,7 +215,11 @@ export default function EngineLogs() {
           <Stat label="Running hours" value={summary.running != null ? `${Number(summary.running).toLocaleString('en-GB')} h` : '—'} accent="var(--navy)" />
           <Stat label="Log entries" value={summary.entries} />
           <Stat label="Last entry" value={summary.last ? fmt(summary.last) : '—'} />
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+              <button onClick={() => setView('entries')} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', border: 'none', background: view === 'entries' ? 'var(--navy)' : 'transparent', color: view === 'entries' ? '#fff' : 'var(--navy)', cursor: 'pointer' }}>Entries</button>
+              <button onClick={() => setView('chart')} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', border: 'none', background: view === 'chart' ? 'var(--navy)' : 'transparent', color: view === 'chart' ? '#fff' : 'var(--navy)', cursor: 'pointer' }}>Chart</button>
+            </div>
             {logs.length > 0 && <button className="secondary" onClick={() => makePdf(vessel, logs)} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>Export PDF</button>}
             {canEdit && !draft && <button onClick={openNew} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>+ Record log</button>}
           </div>
@@ -250,8 +266,14 @@ export default function EngineLogs() {
       )}
       {!draft && msg && <div className="card"><span style={{ color: 'var(--green)', fontWeight: 600 }}>{msg}</span></div>}
 
+      {/* Chart view */}
+      {view === 'chart' && !loading && logs.length > 0 && (
+        <ChartPanel logs={logs} series={series} setSeries={setSeries} pickGroup={pickGroup} setPickGroup={setPickGroup}
+          chartType={chartType} setChartType={setChartType} fromD={fromD} setFromD={setFromD} toD={toD} setToD={setToD} />
+      )}
+
       {/* History */}
-      {loading ? (
+      {view === 'entries' && (loading ? (
         <div className="card"><p className="muted">Loading…</p></div>
       ) : logs.length === 0 ? (
         <div className="card"><p className="muted">No engine logs yet.{canEdit ? ' Record your first entry above.' : ''}</p></div>
@@ -293,7 +315,7 @@ export default function EngineLogs() {
             {l.notes && <p className="muted" style={{ fontSize: '0.85rem', marginTop: '0.6rem' }}><strong>Notes:</strong> {l.notes}</p>}
           </div>
         ))
-      )}
+      ))}
     </div>
   )
 }
@@ -303,6 +325,89 @@ function Stat({ label, value, accent }) {
     <div>
       <div style={{ fontSize: '1.4rem', fontWeight: 700, color: accent || 'var(--navy)' }}>{value}</div>
       <div className="muted" style={{ fontSize: '0.8rem' }}>{label}</div>
+    </div>
+  )
+}
+
+// ---------------- Chart view ----------------
+function ChartPanel({ logs, series, setSeries, pickGroup, setPickGroup, chartType, setChartType, fromD, setFromD, toD, setToD }) {
+  const asc = [...logs].sort((a, b) => (a.log_date || '').localeCompare(b.log_date || ''))
+  const bounds = { min: asc[0]?.log_date || '', max: asc[asc.length - 1]?.log_date || '' }
+  const from = fromD || bounds.min
+  const to = toD || bounds.max
+  const rows = asc.filter((l) => l.log_date >= from && l.log_date <= to)
+  const data = rows.map((l) => {
+    const row = { date: fmt(l.log_date) }
+    for (const s of series) {
+      const [g, p] = s.split('||')
+      const v = l.readings?.[g]?.[p]
+      if (v != null) row[s] = Number(v)
+    }
+    return row
+  })
+  const toggle = (key) => setSeries((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : (prev.length >= 12 ? prev : [...prev, key]))
+  const groupParams = FLAT_PARAMS.filter((p) => p.group === pickGroup)
+  const Chart = chartType === 'bar' ? BarChart : LineChart
+
+  const btn = (active) => ({ padding: '0.35rem 0.7rem', fontSize: '0.8rem', border: 'none', cursor: 'pointer', background: active ? 'var(--navy)' : 'transparent', color: active ? '#fff' : 'var(--navy)' })
+  const fieldLabel = { display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.78rem', fontWeight: 600 }
+  const inp = { padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid var(--border)' }
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '0.8rem' }}>
+        <label style={fieldLabel}>Equipment
+          <select value={pickGroup} onChange={(e) => setPickGroup(e.target.value)} style={inp}>
+            {ENGINE_TEMPLATE.map((g) => <option key={g.group}>{g.group}</option>)}
+          </select>
+        </label>
+        <label style={fieldLabel}>From<input type="date" value={from} min={bounds.min} max={bounds.max} onChange={(e) => setFromD(e.target.value)} style={inp} /></label>
+        <label style={fieldLabel}>To<input type="date" value={to} min={bounds.min} max={bounds.max} onChange={(e) => setToD(e.target.value)} style={inp} /></label>
+        <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <button onClick={() => setChartType('line')} style={btn(chartType === 'line')}>Line</button>
+          <button onClick={() => setChartType('bar')} style={btn(chartType === 'bar')}>Bar</button>
+        </div>
+        {series.length > 0 && <button className="secondary" onClick={() => setSeries([])} style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}>Clear</button>}
+      </div>
+
+      <div style={{ display: 'grid', gap: '0.25rem 0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: '0.9rem' }}>
+        {groupParams.map((p) => (
+          <label key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
+            <input type="checkbox" checked={series.includes(p.key)} onChange={() => toggle(p.key)} />
+            {p.label}{p.unit ? <span className="muted"> ({p.unit})</span> : null}
+          </label>
+        ))}
+      </div>
+
+      {series.length === 0 ? (
+        <p className="muted">Tick one or more parameters above to plot them over time.</p>
+      ) : data.length === 0 ? (
+        <p className="muted">No entries in the selected date range.</p>
+      ) : (
+        <>
+          <div style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {series.map((s, i) => (
+              <span key={s} onClick={() => toggle(s)} title="Click to remove" style={{ cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: '#fff', background: CHART_COLORS[i % CHART_COLORS.length], borderRadius: 999, padding: '0.1rem 0.55rem' }}>{seriesLabel(s)} ✕</span>
+            ))}
+          </div>
+          <ResponsiveContainer width="100%" height={360}>
+            <Chart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Legend />
+              {series.map((s, i) => chartType === 'bar'
+                ? <Bar key={s} dataKey={s} name={seriesLabel(s)} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                : <Line key={s} dataKey={s} name={seriesLabel(s)} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+              )}
+            </Chart>
+          </ResponsiveContainer>
+          <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
+            Tip: plot parameters with a similar scale together (e.g. the eight exhaust temps, or the pressures) — mixing RPM with pressures flattens the smaller values on a shared axis.
+          </p>
+        </>
+      )}
     </div>
   )
 }
