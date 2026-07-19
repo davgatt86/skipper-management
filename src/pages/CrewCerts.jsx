@@ -7,6 +7,10 @@ const BUCKET = 'crew-certs'
 const fmtDate = d => d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—'
 const safeName = n => String(n || 'cert').replace(/[^\w.\-]+/g, '_').slice(-80)
 
+// The buckets the fleet-wide matrix groups by. Tick one per certificate so the
+// many cert-name variants collapse to a clean set of columns.
+export const CERT_CATEGORIES = ['Medical', 'Fire Fighting', 'Sea Survival', 'First Aid', 'Safety Awareness', 'Deck Officer', 'Engineer Officer']
+
 function CertBadge({ expiry }) {
   const s = certStatus(expiry)
   return (
@@ -17,7 +21,7 @@ function CertBadge({ expiry }) {
   )
 }
 
-const blankDraft = () => ({ cert_type: '', cert_number: '', holder_name: '', issuer: '', issue_date: '', expiry_date: '', file_path: null, file_name: null })
+const blankDraft = () => ({ id: null, cert_type: '', category: '', cert_number: '', holder_name: '', issuer: '', issue_date: '', expiry_date: '', file_path: null, file_name: null })
 
 // ---------------- Per-crew certificates panel ----------------
 export function CrewCerts({ crew, canEdit }) {
@@ -52,12 +56,23 @@ export function CrewCerts({ crew, canEdit }) {
     setBusy('')
   }
 
+  function editCert(c) {
+    setError('')
+    setDraft({
+      id: c.id, cert_type: c.cert_type || '', category: c.category || '',
+      cert_number: c.cert_number || '', holder_name: c.holder_name || '', issuer: c.issuer || '',
+      issue_date: c.issue_date || '', expiry_date: c.expiry_date || '',
+      file_path: c.file_path, file_name: c.file_name,
+    })
+  }
+
   async function save() {
     if (!draft.cert_type.trim()) { setError('Give the certificate a type/name.'); return }
     setBusy('saving'); setError('')
     const row = {
       crew_id: crew.id, fleet_id: crew.fleet_id,
       cert_type: draft.cert_type.trim(),
+      category: draft.category || null,
       cert_number: draft.cert_number?.trim() || null,
       holder_name: draft.holder_name?.trim() || null,
       issuer: draft.issuer?.trim() || null,
@@ -65,14 +80,16 @@ export function CrewCerts({ crew, canEdit }) {
       expiry_date: draft.expiry_date || null,
       file_path: draft.file_path, file_name: draft.file_name,
     }
-    const { error } = await supabase.from('crew_certificates').insert(row)
+    const { error } = draft.id
+      ? await supabase.from('crew_certificates').update(row).eq('id', draft.id)
+      : await supabase.from('crew_certificates').insert(row)
     if (error) { setError(error.message); setBusy(''); return }
     setDraft(null); setBusy(''); await load()
   }
 
   async function cancelDraft() {
-    // if a file was uploaded for this unsaved draft, clean it up
-    if (draft?.file_path) await supabase.storage.from(BUCKET).remove([draft.file_path])
+    // if a NEW file was uploaded for this unsaved draft, clean it up (only when adding, not editing)
+    if (!draft?.id && draft?.file_path) await supabase.storage.from(BUCKET).remove([draft.file_path])
     setDraft(null); setError('')
   }
 
@@ -103,6 +120,7 @@ export function CrewCerts({ crew, canEdit }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
             <thead><tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
               <th style={{ padding: '0.3rem 0.4rem' }}>Certificate</th>
+              <th style={{ padding: '0.3rem 0.4rem' }}>Category</th>
               <th style={{ padding: '0.3rem 0.4rem' }}>Issued</th>
               <th style={{ padding: '0.3rem 0.4rem' }}>Expires</th>
               <th style={{ padding: '0.3rem 0.4rem' }}>Status</th>
@@ -116,11 +134,17 @@ export function CrewCerts({ crew, canEdit }) {
                     {c.cert_number && <span className="muted" style={{ fontSize: '0.78rem' }}> · {c.cert_number}</span>}
                     {c.issuer && <div className="muted" style={{ fontSize: '0.76rem' }}>{c.issuer}</div>}
                   </td>
+                  <td style={{ padding: '0.35rem 0.4rem' }}>
+                    {c.category
+                      ? <span style={{ fontSize: '0.76rem', fontWeight: 600, background: 'var(--grey-50)', border: '1px solid var(--border)', borderRadius: 999, padding: '0.05rem 0.5rem', whiteSpace: 'nowrap' }}>{c.category}</span>
+                      : <span className="muted" style={{ fontSize: '0.76rem' }}>—</span>}
+                  </td>
                   <td style={{ padding: '0.35rem 0.4rem' }}>{fmtDate(c.issue_date)}</td>
                   <td style={{ padding: '0.35rem 0.4rem' }}>{fmtDate(c.expiry_date)}</td>
                   <td style={{ padding: '0.35rem 0.4rem' }}><CertBadge expiry={c.expiry_date} /></td>
                   <td style={{ padding: '0.35rem 0.4rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {c.file_path && <button className="secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }} onClick={() => viewFile(c)}>View</button>}
+                    {canEdit && <button className="secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', marginLeft: '0.3rem' }} onClick={() => editCert(c)}>Edit</button>}
                     {canEdit && <button className="secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', marginLeft: '0.3rem' }} onClick={() => del(c)}>Delete</button>}
                   </td>
                 </tr>
@@ -143,11 +167,18 @@ export function CrewCerts({ crew, canEdit }) {
       {draft && (
         <div className="card" style={{ marginTop: '0.6rem', background: 'var(--bg-soft, #f8fafc)' }}>
           <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>
-            {draft.file_name ? 'Check the details we read, then save' : 'New certificate'}
+            {draft.id ? 'Edit certificate' : (draft.file_name ? 'Check the details we read, then save' : 'New certificate')}
             {draft.file_name && <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem' }}> · {draft.file_name}</span>}
           </div>
-          <label style={fld}><div style={lab}>Certificate type *</div>
-            <input value={draft.cert_type} onChange={e => setDraft({ ...draft, cert_type: e.target.value })} placeholder="e.g. ENG1 Medical" /></label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <label style={{ ...fld, flex: 2, minWidth: 180 }}><div style={lab}>Certificate type *</div>
+              <input value={draft.cert_type} onChange={e => setDraft({ ...draft, cert_type: e.target.value })} placeholder="e.g. ENG1 Medical" /></label>
+            <label style={{ ...fld, flex: 1, minWidth: 150 }}><div style={lab}>Category (for the matrix)</div>
+              <select value={draft.category} onChange={e => setDraft({ ...draft, category: e.target.value })}>
+                <option value="">— uncategorised —</option>
+                {CERT_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+              </select></label>
+          </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <label style={{ ...fld, flex: 1, minWidth: 140 }}><div style={lab}>Cert number</div>
               <input value={draft.cert_number || ''} onChange={e => setDraft({ ...draft, cert_number: e.target.value })} /></label>
@@ -161,7 +192,7 @@ export function CrewCerts({ crew, canEdit }) {
               <input type="date" value={draft.expiry_date || ''} onChange={e => setDraft({ ...draft, expiry_date: e.target.value })} /></label>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.3rem' }}>
-            <button onClick={save} disabled={busy === 'saving'}>{busy === 'saving' ? 'Saving…' : 'Save certificate'}</button>
+            <button onClick={save} disabled={busy === 'saving'}>{busy === 'saving' ? 'Saving…' : (draft.id ? 'Save changes' : 'Save certificate')}</button>
             <button className="secondary" onClick={cancelDraft} disabled={busy === 'saving'}>Cancel</button>
           </div>
         </div>
