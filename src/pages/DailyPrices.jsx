@@ -186,44 +186,130 @@ export default function DailyPrices() {
 // ---------------- Board ----------------
 function Board({ prices, days }) {
   const [source, setSource] = useState('PD')
-  const board = useMemo(() => buildBoard(prices, source), [prices, source])
-  const dayMeta = days.find(d => d.source === source && d.price_date === board.date)
+  const board = useMemo(() => (source === 'CMP' ? null : buildBoard(prices, source)), [prices, source])
+  const cmp = useMemo(() => (source === 'CMP' ? buildCompare(prices) : null), [prices, source])
+  const dayMeta = board ? days.find(d => d.source === source && d.price_date === board.date) : null
   return (
     <div className="card">
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-        {['PD', 'DK'].map(s => <button key={s} className={source === s ? '' : 'secondary'} onClick={() => setSource(s)}>{s === 'PD' ? 'Peterhead' : 'Denmark'}</button>)}
+        {['PD', 'DK', 'CMP'].map(s => <button key={s} className={source === s ? '' : 'secondary'} onClick={() => setSource(s)}>{s === 'PD' ? 'Peterhead' : s === 'DK' ? 'Denmark' : 'PD vs DK'}</button>)}
         <span className="muted" style={{ fontSize: '0.85rem' }}>
-          {board.date ? `latest: ${fmtDate(board.date)}` : 'no data'}
-          {dayMeta && source === 'PD' && dayMeta.total_boxes != null && ` · ${num0(dayMeta.total_boxes)} boxes, ${dayMeta.boats ?? '?'} boats`}
-          {dayMeta && source === 'DK' && dayMeta.total_kg != null && ` · ${num0(dayMeta.total_kg)} kg total`}
+          {source === 'CMP'
+            ? (cmp && cmp.date ? `Peterhead ${fmtDate(cmp.date)} vs Denmark ${fmtDate(cmp.dkDate)}` : 'need both boards')
+            : (board.date ? `latest: ${fmtDate(board.date)}` : 'no data')}
+          {board && dayMeta && source === 'PD' && dayMeta.total_boxes != null && ` · ${num0(dayMeta.total_boxes)} boxes, ${dayMeta.boats ?? '?'} boats`}
+          {board && dayMeta && source === 'DK' && dayMeta.total_kg != null && ` · ${num0(dayMeta.total_kg)} kg total`}
         </span>
       </div>
+      {source === 'CMP' ? <CompareBoard cmp={cmp} /> : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.86rem' }}>
+            <thead>
+              <tr>
+                <th style={th}>Species</th><th style={th}>Grade</th>
+                {source === 'PD' && <th style={thR}>Low</th>}
+                {source === 'PD' && <th style={thR}>High</th>}
+                <th style={thR}>Avg</th><th style={thR}>vs prev day</th><th style={thR}>vs 4-wk avg</th>
+              </tr>
+            </thead>
+            <tbody>
+              {board.items.map((r, i) => (
+                <tr key={i}>
+                  <td style={td}>{r.species}</td><td style={td}>{r.grade}</td>
+                  {source === 'PD' && <td style={tdR}>{gbp(r.low)}</td>}
+                  {source === 'PD' && <td style={tdR}>{gbp(r.high)}</td>}
+                  <td style={{ ...tdR, fontWeight: 700 }}>{gbp(r.ave)}</td>
+                  <td style={tdR}><Delta v={r.dDay} /></td>
+                  <td style={tdR}><Delta v={r.d4wk} /></td>
+                </tr>
+              ))}
+              {!board.items.length && <tr><td style={td} colSpan={7} className="muted">No prices for this market yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------- PD vs DK compare ----------------
+// PD is the benchmark. Similar grades are matched on the A-number; where the two
+// boards grade a species differently the sizes are blended to line up (e.g. a
+// single Peterhead U9 against Denmark's A0-A4, or haddock's sort tiers below).
+const HADDOCK_TIERS = [
+  { label: 'A1/A2 · Large',      pd: ['A1 Lge/Med', 'A2 Selected'], dk: ['A1'] },
+  { label: 'A3/A4 Chip · Medium', pd: ['A3 Seed', 'A4 Chipper'],    dk: ['A2'] },
+  { label: 'A4 Metro · Small',   pd: ['A4 Metro'],                  dk: ['A3', 'A4'] },
+]
+const SP_SYNONYM = { catfishes: 'catfish', wolffish: 'catfish', 'witch flounder': 'witch', coley: 'saithe', monk: 'monkfish', monks: 'monkfish', anglerfish: 'monkfish', lythe: 'pollack' }
+const canonSp = x => { const k = String(x || '').trim().toLowerCase(); return SP_SYNONYM[k] || k }
+const anum = g => { const m = String(g || '').match(/A(\d)/i); return m ? m[1] : null }
+const meanOf = arr => { const v = arr.filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null }
+
+function buildCompare(prices) {
+  const pd = buildBoard(prices, 'PD'), dk = buildBoard(prices, 'DK')
+  const pdBy = {}, dkBy = {}
+  for (const it of pd.items) (pdBy[canonSp(it.species)] = pdBy[canonSp(it.species)] || []).push(it)
+  for (const it of dk.items) (dkBy[canonSp(it.species)] = dkBy[canonSp(it.species)] || []).push(it)
+  const priceOf = (items, grades) => meanOf(items.filter(x => grades.includes(x.grade)).map(x => x.ave))
+  const groups = []
+  for (const sp of Object.keys(pdBy).filter(sp => dkBy[sp]).sort()) {
+    const pdItems = pdBy[sp], dkItems = dkBy[sp]
+    const rows = []
+    if (sp === 'haddock') {
+      for (const t of HADDOCK_TIERS) {
+        const p = priceOf(pdItems, t.pd), d = priceOf(dkItems, t.dk)
+        if (p != null && d != null) rows.push({ grade: t.label, pd: p, dk: d })
+      }
+    } else {
+      const pdUngraded = pdItems.every(x => anum(x.grade) == null)
+      const dkUngraded = dkItems.every(x => anum(x.grade) == null)
+      if (pdUngraded || dkUngraded) {
+        const p = meanOf(pdItems.map(x => x.ave)), d = meanOf(dkItems.map(x => x.ave))
+        if (p != null && d != null) rows.push({ grade: 'All sizes', pd: p, dk: d })
+      } else {
+        for (const n of [...new Set(pdItems.map(x => anum(x.grade)).filter(Boolean))].sort()) {
+          const p = meanOf(pdItems.filter(x => anum(x.grade) === n).map(x => x.ave))
+          const d = meanOf(dkItems.filter(x => anum(x.grade) === n).map(x => x.ave))
+          if (p != null && d != null) rows.push({ grade: 'A' + n, pd: p, dk: d })
+        }
+      }
+    }
+    if (rows.length) groups.push({ species: pdItems[0].species, rows })
+  }
+  return { date: pd.date, dkDate: dk.date, groups }
+}
+
+function CompareBoard({ cmp }) {
+  if (!cmp || !cmp.groups.length) return <p className="muted" style={{ margin: '0.4rem 0' }}>Need both a Peterhead and a Denmark board loaded to compare.</p>
+  return (
+    <>
+      <p className="muted" style={{ fontSize: '0.78rem', margin: '0 0 0.5rem' }}>
+        Denmark against Peterhead (the bench). <b style={{ color: 'var(--green)' }}>Green</b> = Denmark dearer, <b style={{ color: 'var(--red)' }}>red</b> = Denmark cheaper. Sizes blended where the two boards grade differently.
+      </p>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.86rem' }}>
           <thead>
-            <tr>
-              <th style={th}>Species</th><th style={th}>Grade</th>
-              {source === 'PD' && <th style={thR}>Low</th>}
-              {source === 'PD' && <th style={thR}>High</th>}
-              <th style={thR}>Avg</th><th style={thR}>vs prev day</th><th style={thR}>vs 4-wk avg</th>
-            </tr>
+            <tr><th style={th}>Species</th><th style={th}>Grade</th><th style={thR}>Peterhead</th><th style={thR}>Denmark</th><th style={thR}>Diff</th></tr>
           </thead>
           <tbody>
-            {board.items.map((r, i) => (
-              <tr key={i}>
-                <td style={td}>{r.species}</td><td style={td}>{r.grade}</td>
-                {source === 'PD' && <td style={tdR}>{gbp(r.low)}</td>}
-                {source === 'PD' && <td style={tdR}>{gbp(r.high)}</td>}
-                <td style={{ ...tdR, fontWeight: 700 }}>{gbp(r.ave)}</td>
-                <td style={tdR}><Delta v={r.dDay} /></td>
-                <td style={tdR}><Delta v={r.d4wk} /></td>
-              </tr>
-            ))}
-            {!board.items.length && <tr><td style={td} colSpan={7} className="muted">No prices for this market yet.</td></tr>}
+            {cmp.groups.map(g => g.rows.map((r, i) => {
+              const diff = r.dk - r.pd, pct = r.pd ? diff / r.pd * 100 : null
+              const col = diff > 0.005 ? 'var(--green)' : diff < -0.005 ? 'var(--red)' : 'var(--grey-400)'
+              return (
+                <tr key={g.species + i}>
+                  <td style={td}>{i === 0 ? g.species : ''}</td>
+                  <td style={td}>{r.grade}</td>
+                  <td style={{ ...tdR, fontWeight: 700 }}>{gbp(r.pd)}</td>
+                  <td style={{ ...tdR, fontWeight: 700, color: col }}>{gbp(r.dk)}</td>
+                  <td style={{ ...tdR, color: col, fontWeight: 600 }}>{pct == null ? '—' : (pct > 0 ? '+' : '') + pct.toFixed(0) + '%'}</td>
+                </tr>
+              )
+            }))}
           </tbody>
         </table>
       </div>
-    </div>
+    </>
   )
 }
 
