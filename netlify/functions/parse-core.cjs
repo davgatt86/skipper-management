@@ -517,9 +517,10 @@
       // "Supplier: BF83 - AUDACIOUS" -> "AUDACIOUS BF83" (same label as Don notes)
       let vm = ln.match(/Supplier:\s*(?:([A-Z]+)\s?(\d+)\s*-\s*)?([A-Z][A-Z .'&]+?)\s*$/);
       if (vm && !meta.vessel) meta.vessel = (vm[3].trim() + (vm[1] ? " " + vm[1] + vm[2] : "")).toUpperCase();
-      const tm = ln.match(/Total\s*:\s*(\d+)\s+([\d,]+\.?\d*)\s*Kg\s+([\d,]+\.\d{2})/i);
+      const tm = ln.match(/Total\s*:\s*(\d+)\s+([\d,]+\.?\d*)\s*Kg\s+([\d,]+\.\d{2})/i)
+        || ln.match(/^\s*(\d+)\s+([\d,]+\.?\d*)\s*Kg\s+([\d,]+\.\d{2})\s+Total\s*$/i);
       if (tm) exp = { boxes: num(tm[1]), weight: num(tm[2]), value: num(tm[3]) };
-      const dm = ln.match(/^(\d+)\s+(\d+)\s+([A-Z]{2,4})\s+(\d+)\s+(GH|WF)\s+(\d+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(\D.*)$/);
+      const dm = ln.match(/^(\d+)\s+(\d+)\s+([A-Z]{2,4})\s+(\d+)\s+(GH|WF)\s+(\d+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+([\d,.]+)\s+(\D.*)$/);
       if (dm) {
         const [, , , spec, gr, pres, nbox, boxwgt, totkg, prbox, prkg, totprice, buyer] = dm;
         rows.push({
