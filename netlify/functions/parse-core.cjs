@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.2.0";
+  const VERSION = "1.2.1";
   const round2 = n => Math.round(n * 100) / 100;
   const num = s => parseFloat(String(s).replace(/,/g, ""));
 
@@ -429,8 +429,43 @@
   /* ------------------------------------------------------------------ *
    * P&J Johnstone "Registered Seller Sales Note"
    * ------------------------------------------------------------------ */
-  function parsePJJ(allLines) {
+  // Coordinate-based buyer column (mirrors parseJSD). itemsToLines buckets
+  // words by y, but on these notes the Buyers-Name text is vertically CENTRED
+  // in each (often two-line) row, so on wrapped rows it lands ~1px off the
+  // numeric baseline and drops out of the merged data line entirely -> blank
+  // buyer. Here we anchor each row on the Withdrawn Y/N flag (exactly one per
+  // row, x~467) and take the buyer from the Name column (x 500-634) by nearest
+  // band, using only the primary (topmost) name line so the resulting string
+  // matches the historic single-line extraction. Returns one raw buyer per
+  // data row in reading order.
+  function pjjBuyersByRow(pages) {
+    const out = [];
+    for (const page of (pages || [])) {
+      const flags = page.words.filter(w => w.x >= 458 && w.x <= 478 && /^[NY]$/.test(w.str))
+        .map(w => w.y).sort((a, b) => a - b);
+      const names = page.words.filter(w => w.x >= 500 && w.x < 634);
+      for (let i = 0; i < flags.length; i++) {
+        const y = flags[i], yNext = i + 1 < flags.length ? flags[i + 1] : y + 40;
+        const band = names.filter(w => w.y >= y - 6 && w.y < yNext - 6);
+        if (!band.length) { out.push(""); continue; }
+        const topY = Math.min(...band.map(w => w.y));                 // primary name line
+        const line = band.filter(w => Math.abs(w.y - topY) <= 2).sort((a, b) => a.x - b.x);
+        out.push(line.map(w => w.str).join(" ").trim());
+      }
+    }
+    return out;
+  }
+
+  function parsePJJ(allLines, pages) {
     const rows = []; const meta = { port: "Peterhead" }; let exp = null;
+    // Precompute the column-derived buyer for each data row. Only trust it when
+    // its count matches the number of data rows the line-regex will find, so a
+    // layout we haven't seen can never mis-shift buyers (falls back to mm[11]).
+    const coordBuyers = pjjBuyersByRow(pages);
+    let rxCount = 0; { const _rx = /^(.+?)\s+(GH|WF)\s+([A-Z]?\d|U9)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([BL])\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})(?:\s+(.+))?$/;
+      for (const ln of allLines) if (_rx.test(ln)) rxCount++; }
+    const useCoord = coordBuyers.length === rxCount && rxCount > 0;
+    let ri = 0;
     const KNOWN = ["G T SEAFOODS", "A THOMPSON JNR LTD", "COLIN FRASER LTD", "A.G.D. DUFF & PARTNERS", "SUSTAINABLE SEAFOODS",
       "STEPHEN BUCHAN LTD", "WM MITCHELL", "SEAFOOD SOURCING", "DUTHIE AND SUMMERS", "WHITELINK", "SEAFOOD ECOSSE LTD",
       "FLATFISH LTD", "CALADERO SCOTLAND", "GEORGE DOWNIE", "SUPERDON LTD", "J S FISH", "SKATERAW FISHERIES", "JOHN H MILNE PD LTD",
@@ -442,8 +477,11 @@
       let best = null, bl = 0;
       for (const b of KNOWN) { if (r.startsWith(b) && b.length > bl) { best = b; bl = b.length; } }
       if (best) return best.replace(/\b\w+/g, w => w.length <= 3 && /^[A-Z.&]+$/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase());
+      // Address always follows the buyer name, so a leading number is part of
+      // the name ("1ST CHOICE FISH") — only stop on a number/address word once
+      // at least one name word has been taken.
       const words = (raw || "").split(" "); const out = [];
-      for (const w of words) { if (/^\d/.test(w) || ["UNIT", "HARBOUR", "RAIK", "STEAMBOAT", "CRAIGSHAW", "VOLLUM", "EAST", "BON", "OLD", "WILSON", "SEAGATE"].includes(w)) break; out.push(w); if (out.length >= 4) break; }
+      for (const w of words) { if (out.length && (/^\d/.test(w) || ["UNIT", "HARBOUR", "RAIK", "STEAMBOAT", "CRAIGSHAW", "VOLLUM", "EAST", "BON", "OLD", "WILSON", "SEAGATE"].includes(w))) break; out.push(w); if (out.length >= 4) break; }
       return out.join(" ");
     }
     function classifyMsc(B) {
@@ -489,7 +527,9 @@
       if (tot) exp = { boxes: num(tot[1]), weight: num(tot[2]), value: num(tot[3]) };
       const mm = ln.match(rx);
       if (!mm) continue;
-      const sptok = mm[1], pres = mm[2], grade = mm[3], nbox = mm[4], boxwt = mm[6], totwt = mm[7], up = mm[9], actual = mm[10], buyer = mm[11];
+      const sptok = mm[1], pres = mm[2], grade = mm[3], nbox = mm[4], boxwt = mm[6], totwt = mm[7], up = mm[9], actual = mm[10];
+      const buyer = useCoord ? (coordBuyers[ri] || mm[11] || "") : (mm[11] || "");
+      ri++;
       const isMsc = /MSC-F/.test(sptok);
       let species;
       if (isMsc) species = speciesMsc(allLines, i);
@@ -635,7 +675,7 @@
     else if (market === "Hanstholm") parsed = parseHanstholm(allLines);
     else if (market === "Shetland Auction") parsed = parseShetland(allLines);
     else if (market.startsWith("John S Duncan")) parsed = /Supplier Transactions/i.test(fullText) ? parseJSD(pages) : parseDon(allLines);
-    else if (market.startsWith("P&J Johnstone")) parsed = parsePJJ(allLines);
+    else if (market.startsWith("P&J Johnstone")) parsed = parsePJJ(allLines, pages);
     else if (market.startsWith("Don Fishing")) parsed = parseDon(allLines);
     else return { market, rows: [], meta: {}, reconcile: buildReconcile(null, []), filename };
     return { market, rows: parsed.rows, meta: parsed.meta, reconcile: parsed.reconcile, filename };
