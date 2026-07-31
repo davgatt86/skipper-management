@@ -620,27 +620,36 @@
   function dkkNum(s){ return parseFloat(String(s).replace(/\./g,"").replace(",",".")); }
   function parseAfregning(allLines){
     const rows=[]; const meta={ port:"Hanstholm", currency:"DKK", needsRate:true };
-    const M = { january:"01",february:"02",march:"03",april:"04",may:"05",june:"06",july:"07",august:"08",september:"09",october:"10",november:"11",december:"12" };
-    const RE=/^22\s+(\d+)\s+([\d.]+)\s+(.+?)\s+([A-Z])\s+(\d+)\s+([\d,]+)\s+([\d.,]+)$/;
-    let exp=null;
+    const M = { january:"01",february:"02",march:"03",april:"04",may:"05",june:"06",july:"07",august:"08",september:"09",october:"10",november:"11",december:"12",
+                januar:"01",februar:"02",marts:"03",maj:"05",juni:"06",juli:"07",oktober:"10" };
+    // pdf.js emits one row per line:
+    //   <boxType> <boxes> <kg> <species[, MSC]> <E|A> <sort> <DKK/kg> <DKK amount> <buyer#>
+    const RE=/^\d+\s+(\d+)\s+([\d.]+(?:,\d+)?)\s+(.+?)\s+([EA])\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)\s+\d+$/;
+    let subtotal=null;
     for(const ln of allLines){
       const m=ln.match(RE);
       if(m){
         const b=parseInt(m[1],10), tw=dkkNum(m[2]);
+        const rawSp=m[3].trim(), msc=/,?\s*MSC/i.test(rawSp), baseSp=rawSp.replace(/,?\s*MSC/ig,"").trim();
         rows.push({
-          species: m[3].trim(), species_canon: canonSpecies(m[3]),
+          species: baseSp, species_canon: canonSpecies(baseSp),
           presentation:"", grade: m[5], quality: m[4],
           boxes: b, box_weight: b? round2(tw/b):0, total_weight: tw,
           price_per_kg: dkkNum(m[6]), price_per_box:0, total_value: dkkNum(m[7]),
-          buyer:"Hanstholm Auction", msc:false, currency:"DKK"
+          buyer:"Hanstholm Auction", msc, currency:"DKK"
         });
         continue;
       }
-      if(!meta.vessel){ const vm=ln.match(/([A-Z]{2,4})\s?(\d{1,4})\s*"([^"]+)"/); if(vm) meta.vessel=vm[3].trim().toUpperCase()+" "+vm[1]+vm[2]; }
-      if(!meta.isoDate){ const dm=ln.match(/(\d{1,2})\.\s+([A-Za-z]+)\s+(\d{4})/); if(dm && M[dm[2].toLowerCase()]) meta.isoDate=`${dm[3]}-${M[dm[2].toLowerCase()]}-${dm[1].padStart(2,"0")}`; }
-      const sm=ln.match(/^(\d+)\s+([\d.]+)\s+([\d.,]+,\d{2})$/); if(sm) exp={boxes:parseInt(sm[1],10),weight:dkkNum(sm[2]),value:dkkNum(sm[3])};
+      // vessel: "<REG> "<NAME>""  — 1–4 letter port code so single-letter regs (e.g. H90) work
+      if(!meta.vessel){ const vm=ln.match(/([A-Z]{1,4})\s?(\d{1,4})\s*"([^"]+)"/); if(vm) meta.vessel=vm[3].trim().toUpperCase()+" "+vm[1]+vm[2]; }
+      if(!meta.isoDate){ const dm=ln.match(/(\d{1,2})\.\s+([A-Za-zæøå]+)\s+(\d{4})/i); if(dm && M[dm[2].toLowerCase()]) meta.isoDate=`${dm[3]}-${M[dm[2].toLowerCase()]}-${dm[1].padStart(2,"0")}`; }
+      // The auction charges Salær on the gross fish value — our reconcile target.
+      const sm=ln.match(/^Sal[æae]r\s+([\d.]+,\d{2})/i); if(sm) subtotal=dkkNum(sm[1]);
     }
-    meta.grossDkk = exp ? exp.value : round2(rows.reduce((s,r)=>s+r.total_value,0));
+    const actBoxes=rows.reduce((s,r)=>s+r.boxes,0);
+    const actWt=round2(rows.reduce((s,r)=>s+r.total_weight,0));
+    const exp = subtotal!=null ? { boxes:actBoxes, weight:actWt, value:subtotal } : null;
+    meta.grossDkk = subtotal!=null ? subtotal : round2(rows.reduce((s,r)=>s+r.total_value,0));
     return { rows, meta, reconcile: buildReconcile(exp, rows, 0.01) };
   }
 
