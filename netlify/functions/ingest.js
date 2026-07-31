@@ -255,21 +255,45 @@ export const handler = async (event) => {
 
         // Per-fleet dedup: (fleet_id, dedup_key) is unique after multi_tenancy.sql.
         const { data: dup } = await supabase.from('sales_landings')
-          .select('id').eq('fleet_id', sender.fleet_id).eq('dedup_key', dkey).maybeSingle()
-        if (dup) { results.push(`dup ${name}: already imported for ${sender.label || sender.fleet_id}`); continue }
+          .select('id, fx_rate').eq('fleet_id', sender.fleet_id).eq('dedup_key', dkey).maybeSingle()
 
-        const { data: ins, error: e1 } = await supabase.from('sales_landings').insert({
+        // Self-heal: re-sending a note that's already imported now RE-PARSES and
+        // replaces its rows in place (same landing id, so crew-landing links and
+        // any manual edits to the landing survive). This lets a corrected parser
+        // propagate just by re-forwarding the note — no manual delete/reload, and
+        // no need to hand the raw sales notes to anyone. The one thing we never
+        // overwrite is a DKK (Hanstholm) landing the skipper has already set a £
+        // day rate on: those rows carry a manual conversion, so leave them be.
+        if (dup && dup.fx_rate != null) {
+          results.push(`dup ${name}: already imported with a set £ rate — left unchanged`); continue
+        }
+
+        const landingFields = {
           fleet_id: sender.fleet_id,                       // <- explicit; service role has no current_fleet_id()
           dedup_key: dkey, vessel: res.meta.vessel || '', market: res.market || '', port: res.meta.port || '',
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: name,
           boxes: tot.boxes, weight_kg: tot.weight, value: dkk ? 0 : tot.value,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
           currency: res.meta.currency || null, fx_rate: null,
-        }).select('id').single()
-        if (e1) throw e1
+        }
+
+        let landingId
+        if (dup) {
+          // Replace: refresh the landing fields, wipe its rows, re-insert below.
+          landingId = dup.id
+          const { error: eu } = await supabase.from('sales_landings').update(landingFields).eq('id', landingId)
+          if (eu) throw eu
+          const { error: ed } = await supabase.from('sales_rows').delete().eq('landing_id', landingId)
+          if (ed) throw ed
+        } else {
+          const { data: ins, error: e1 } = await supabase.from('sales_landings')
+            .insert(landingFields).select('id').single()
+          if (e1) throw e1
+          landingId = ins.id
+        }
 
         const payload = res.rows.map(r => ({
-          fleet_id: sender.fleet_id, landing_id: ins.id,
+          fleet_id: sender.fleet_id, landing_id: landingId,
           buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
           presentation: r.presentation || '', grade: r.grade || '', boxes: r.boxes || 0, box_weight: r.box_weight || 0,
           weight_kg: r.total_weight || 0,
@@ -279,12 +303,14 @@ export const handler = async (event) => {
         }))
         for (let i = 0; i < payload.length; i += 500) {
           const { error: e2 } = await supabase.from('sales_rows').insert(payload.slice(i, i + 500))
-          if (e2) { await supabase.from('sales_landings').delete().eq('id', ins.id); throw e2 }
+          // Only unwind a brand-new landing on failure; a replaced one keeps its
+          // id (and crew links) and self-heals on the next re-send.
+          if (e2) { if (!dup) await supabase.from('sales_landings').delete().eq('id', landingId); throw e2 }
         }
         const warn = rec.found && !rec.ok ? ` ⚠ differs from printed TOTAL (£${rec.diffs?.value ?? '?'})` : ''
         const fed = await feedCrewLanding(supabase, sender.fleet_id, createdBy, res.meta.isoDate, tot.boxes, dkey)
         const grossTxt = dkk ? `${Math.round(res.meta.grossDkk || tot.value).toLocaleString()} DKK — set £ rate in app` : `£${tot.value}`
-        results.push(`ok ${name}: SALE ${res.market} ${res.meta.vessel || ''} ${res.meta.isoDate || ''} -> ${sender.label || sender.fleet_id} (${res.rows.length} rows, ${grossTxt})${warn}${fed}`)
+        results.push(`ok ${name}: SALE${dup ? ' ↻ re-parsed' : ''} ${res.market} ${res.meta.vessel || ''} ${res.meta.isoDate || ''} -> ${sender.label || sender.fleet_id} (${res.rows.length} rows, ${grossTxt})${warn}${fed}`)
 
       } else if (kind === 'price') {
         // Shared board — same logic as ingest-prices.js (replace day, insert prices+volumes).
