@@ -134,7 +134,7 @@ export default function Sales() {
     if (!files.length) return
     setBusy(true); setUploadLog([]); setError('')
     const log = []
-    const existing = new Set(landings.map(l => l.dedup_key))
+    const byKey = new Map(landings.map(l => [l.dedup_key, l.id]))
     for (const f of files) {
       try {
         let res = await parseSalesPdf(f)
@@ -149,19 +149,33 @@ export default function Sales() {
           res = applyFxRate(res, rate); fxRate = rate
         }
         const key = dedupKey(res)
-        if (existing.has(key)) { log.push(`– ${f.name}: already imported, skipped`); continue }
         const rec = res.reconcile || {}
         const tot = rec.actual || { boxes: 0, weight: 0, value: 0 }
-        const { data: ins, error: e1 } = await supabase.from('sales_landings').insert({
+        const landingFields = {
           dedup_key: key, vessel: res.meta.vessel || '', market: res.market || '', port: res.meta.port || '',
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: f.name,
           boxes: tot.boxes, weight_kg: tot.weight, value: tot.value,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
           currency: res.meta.currency || null, fx_rate: fxRate
-        }).select('id').single()
-        if (e1) throw e1
+        }
+        // Re-uploading a note that's already imported RE-PARSES and replaces its
+        // rows in place (keeps the landing id, so days-at-sea and crew links
+        // survive), so a parser fix propagates by just re-uploading — no delete.
+        const dupId = byKey.get(key)
+        let landingId
+        if (dupId) {
+          landingId = dupId
+          const { error: eu } = await supabase.from('sales_landings').update(landingFields).eq('id', landingId)
+          if (eu) throw eu
+          const { error: ed } = await supabase.from('sales_rows').delete().eq('landing_id', landingId)
+          if (ed) throw ed
+        } else {
+          const { data: ins, error: e1 } = await supabase.from('sales_landings').insert(landingFields).select('id').single()
+          if (e1) throw e1
+          landingId = ins.id; byKey.set(key, landingId)
+        }
         const payload = res.rows.map(r => ({
-          landing_id: ins.id, buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
+          landing_id: landingId, buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
           presentation: r.presentation || '', grade: r.grade || '', boxes: r.boxes || 0, box_weight: r.box_weight || 0,
           weight_kg: r.total_weight || 0, price_per_kg: r.price_per_kg || 0, price_per_box: r.price_per_box || 0,
           value: r.total_value || 0, msc: !!r.msc,
@@ -171,10 +185,9 @@ export default function Sales() {
           const { error: e2 } = await supabase.from('sales_rows').insert(payload.slice(i, i + 500))
           if (e2) throw e2
         }
-        existing.add(key)
         const warn = rec.found && !rec.ok ? `  ⚠ totals differ from the note's printed TOTAL (£ ${rec.diffs.value >= 0 ? '+' : ''}${rec.diffs.value})` : ''
         const fed = await feedCrewLanding(res.meta.isoDate, tot.boxes, key)
-        log.push(`✓ ${f.name}: ${res.meta.vessel} ${fmtDate(res.meta.isoDate)} — ${num(tot.boxes)} bx, ${gbp(tot.value)}${warn}${fed}`)
+        log.push(`✓ ${f.name}: ${res.meta.vessel} ${fmtDate(res.meta.isoDate)} — ${num(tot.boxes)} bx, ${gbp(tot.value)}${dupId ? ' ↻ re-parsed' : ''}${warn}${fed}`)
       } catch (err) {
         log.push(`✗ ${f.name}: ${err.message}`)
       }
