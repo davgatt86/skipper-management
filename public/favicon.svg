@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Skipper Management">
+  <!-- Solid hull cobalt with one angled white flash on the far right —
+       the same device as the vessel plate and the login mark. -->
+  <rect width="32" height="32" rx="3" fill="#1749A8"/>
+  <g fill="#FFFFFF" opacity="0.28">
+    <path d="M25.5 -2 L34 -2 L28 34 L19.5 34 Z"/>
+    <path d="M20 -2 L23 -2 L17 34 L14 34 Z"/>
+  </g>
+</svg>

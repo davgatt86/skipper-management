@@ -2,7 +2,9 @@
 // sheets, scoped to whatever the screen is showing.
 import { kpis, bySpecies, byBuyer, gradesFor, gradeLabel } from './salesAgg'
 
-const NAVY = 'FF1F3864', WHITE = 'FFFFFFFF', LIGHT = 'FFF2F6FB'
+// Hull cobalt and its pale wash, matching --hull / --hull-pale in index.css.
+// Exports are always on white, so these are the light-theme values.
+const NAVY = 'FF1749A8', WHITE = 'FFFFFFFF', LIGHT = 'FFE4EBF8'
 const GBP = '£#,##0.00', NUM = '#,##0', NUM2 = '#,##0.00'
 
 function head(ws, row = 1) {

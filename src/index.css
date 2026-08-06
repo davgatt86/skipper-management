@@ -1,22 +1,70 @@
+/* ============================================================
+   Skipper Management — design tokens (agreed Aug 2026)
+
+   The registration number is the identity. Cobalt is used for one
+   thing only: the vessel, and things running normally.
+
+   No repeating chevron pattern anywhere behind text — it was tried
+   and cut. Section rules are a hairline with a short cobalt tick.
+
+   The legacy token names (--navy, --green, --amber, --red, --grey-*)
+   are kept and remapped onto the new palette, so every page picks
+   up the rebrand without being individually rewritten. New work
+   should prefer the semantic names: --hull, --kelp, --brass, --rust.
+   ============================================================ */
+
 :root {
-  --navy: #1F3864;
-  --navy-light: #2E75B6;
-  --green: #70AD47;
-  --amber: #FFC000;
-  --red: #C00000;
-  --grey-50: #FAFAFA;
-  --grey-100: #F2F2F2;
-  --grey-200: #D9D9D9;
-  --grey-400: #808080;
-  --grey-700: #404040;
-  --bg: #ffffff;
-  --text: #1a1a1a;
-  --border: #d0d7de;
-  --surface: #ffffff;      /* cards, inputs, secondary buttons */
-  --surface-2: #f7f9fc;    /* subtle rows / table stripes */
-  --on-navy: #ffffff;      /* text on a navy button */
+  /* ---- core palette ---- */
+  --ink: #0A1D26;          /* deepest hull shadow — body text, trip bar */
+  --ink-2: #12313F;        /* lifted ink for captions and secondary bars */
+  --hull: #1749A8;         /* hull cobalt — the vessel, and "on track" */
+  --hull-bright: #2E74E6;  /* hover and focus rings */
+  --hull-pale: #E4EBF8;    /* cobalt wash for selected rows */
+  --paper: #ECEFEE;        /* the page itself */
+  --card-bg: #FFFFFF;
+
+  /* The plate is a large block of colour, so it gets its own tokens rather
+     than reusing --hull. At night the lifted cobalt would be a glare panel
+     in a dark wheelhouse, so the plate goes deeper instead of brighter. */
+  --plate-bg: var(--hull);
+  --plate-fg: #FFFFFF;
+  --plate-sub: #BBD2EC;
+
+  /* ---- signal colours ---- */
+  --rust: #C2342A;         /* short / over */
+  --brass: #A97614;        /* watch */
+  --kelp: #26654F;         /* on track */
+
+  /* ---- structure ---- */
+  --line: #D2DAD9;         /* card borders, section hairlines */
+  --line-2: #E3E8E7;       /* table row separators */
+  --mute: #5D7079;         /* secondary type */
+
+  /* ---- type ---- */
+  --font-display: 'Big Shoulders Display', 'Big Shoulders', Impact, sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /* ---- legacy names, remapped ---- */
+  --navy: var(--hull);
+  --navy-light: var(--hull-bright);
+  --green: var(--kelp);
+  --amber: var(--brass);
+  --red: var(--rust);
+  --grey-50: #F4F6F6;
+  --grey-100: var(--paper);
+  --grey-200: var(--line);
+  --grey-400: var(--mute);
+  --grey-700: #34505C;
+  --bg: var(--paper);
+  --text: var(--ink);
+  --border: var(--line);
+  --surface: var(--card-bg);   /* cards, inputs, secondary buttons */
+  --surface-2: #F6F8F7;        /* subtle rows / table stripes */
+  --on-navy: #ffffff;          /* text on a cobalt button */
+
   color-scheme: light;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+  font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.5;
   color: var(--text);
@@ -24,25 +72,39 @@
 }
 
 /* ---- Dark mode (night wheelhouse): dark surfaces, muted text, dimmed signal
-   colours so red/green don't glare and wreck night vision. Applied when
-   <html data-theme="dark">, which the app sets from the Day/Dark/Auto choice. ---- */
+   colours so red/green don't glare and wreck night vision. Cobalt is far too
+   dark to read on an unlit screen, so the hull colour is lifted rather than
+   used at face value. Applied when <html data-theme="dark">, which the app
+   sets from the Day/Dark/Auto choice. ---- */
 [data-theme="dark"] {
-  --navy: #7FA8DC;         /* headings/buttons: lifted so they read on dark */
-  --navy-light: #8FC0F0;
-  --green: #4E9A5F;        /* dimmed */
-  --amber: #C79A2E;        /* dimmed */
-  --red: #C0554F;          /* dimmed */
-  --grey-50: #1B2029;
-  --grey-100: #222834;
-  --grey-200: #2C3444;
-  --grey-400: #93A0B4;     /* .muted */
-  --grey-700: #C6CEDA;
-  --bg: #10141B;
-  --text: #DCE3EC;         /* not pure white */
-  --border: #2C3444;
-  --surface: #171C25;
-  --surface-2: #1D2430;
-  --on-navy: #0B0F16;      /* dark text on the lifted navy button */
+  --ink: #D6E2E7;          /* ink inverts to become the text colour */
+  --ink-2: #143039;
+  --hull: #6FA3EE;         /* lifted so it reads on dark */
+  --hull-bright: #8FBDF5;
+  --hull-pale: #16303F;
+  --paper: #071319;
+  --card-bg: #0E2129;
+
+  /* deep, not bright — the plate must not glare at night */
+  --plate-bg: #123A6B;
+  --plate-fg: #DCE8F5;
+  --plate-sub: #93B2D6;
+
+  --rust: #D9695F;         /* dimmed */
+  --brass: #C79A2E;        /* dimmed */
+  --kelp: #4E9C7E;         /* dimmed */
+
+  --line: #22414C;
+  --line-2: #1A353F;
+  --mute: #8CA3AC;
+
+  --grey-50: #0E2129;
+  --grey-100: #143039;
+  --grey-200: #22414C;
+  --grey-700: #B7C8CF;
+  --surface-2: #123039;
+  --on-navy: #06131A;      /* dark text on the lifted cobalt button */
+
   color-scheme: dark;
 }
 
@@ -57,42 +119,53 @@ body {
   -webkit-font-smoothing: antialiased;
   background: var(--bg);
   color: var(--text);
+  font-family: var(--font-body);
   transition: background 0.2s ease, color 0.2s ease;
 }
 
-a { color: var(--navy-light); text-decoration: none; }
+a { color: var(--hull); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+:focus-visible { outline: 3px solid var(--hull-bright); outline-offset: 2px; }
 
 button {
   font: inherit;
+  font-family: var(--font-body);
   cursor: pointer;
-  background: var(--navy);
+  background: var(--hull);
   color: var(--on-navy);
   border: none;
   padding: 0.6rem 1.2rem;
-  border-radius: 6px;
+  border-radius: 3px;
   font-weight: 600;
-  transition: opacity 0.15s;
+  transition: background 0.16s, opacity 0.15s;
 }
-button:hover { opacity: 0.9; }
+button:hover { background: var(--hull-bright); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.secondary {
   background: var(--surface);
-  color: var(--navy);
+  color: var(--hull);
   border: 1px solid var(--border);
 }
+button.secondary:hover { background: var(--hull-pale); }
 
 input, select, textarea {
   font: inherit;
+  font-family: var(--font-body);
   padding: 0.6rem 0.8rem;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 3px;
   background: var(--surface);
   color: var(--text);
   width: 100%;
 }
+/* figures line up in columns, so anything numeric is mono */
+input[type="number"], input[type="date"], input[inputmode="decimal"] {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
 input:focus, select:focus, textarea:focus {
-  outline: 2px solid var(--navy-light);
+  outline: 2px solid var(--hull-bright);
   outline-offset: -1px;
 }
 
@@ -109,17 +182,408 @@ input:focus, select:focus, textarea:focus {
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 1.5rem;
   margin-bottom: 1rem;
 }
 
-h1 { font-size: 1.75rem; color: var(--navy); margin-bottom: 1rem; }
-h2 { font-size: 1.25rem; color: var(--navy); margin-bottom: 0.75rem; }
+h1, h2 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
+  line-height: 1;
+  color: var(--hull);
+}
+h1 { font-size: 2.1rem; margin-bottom: 1rem; }
+h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 
-.muted { color: var(--grey-400); font-size: 0.9rem; }
-.error { color: var(--red); margin: 0.5rem 0; }
-.success { color: var(--green); margin: 0.5rem 0; }
+.muted { color: var(--mute); font-size: 0.9rem; }
+.error { color: var(--rust); margin: 0.5rem 0; }
+.success { color: var(--kelp); margin: 0.5rem 0; }
+
+/* ---- every figure is mono so columns align ---- */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ---- section rule: a hairline with a short cobalt tick.
+       Never a patterned bar. ---- */
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 26px 0 12px;
+}
+.rule h2 { margin: 0; font-size: 1.375rem; }
+.rule .tick {
+  width: 18px;
+  height: 3px;
+  background: var(--hull);
+  border-radius: 1px;
+  flex: none;
+}
+.rule .ln { flex: 1; height: 1px; background: var(--line); }
+.rule .side {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+
+/* ---- vessel plate: solid cobalt, one angled white flash on the far
+       right, well clear of the lettering. ---- */
+.plate {
+  position: relative;
+  overflow: hidden;
+  background: var(--plate-bg);
+  border-radius: 5px 5px 0 0;
+  min-height: 118px;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 16px 13px;
+}
+.plate::after {
+  content: "";
+  position: absolute;
+  right: -30px; top: 0; bottom: 0;
+  width: 150px;
+  background: #fff;
+  opacity: 0.10;
+  transform: skewX(-18deg);
+}
+.plate .reg {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.25rem;
+  line-height: 0.85;
+  color: var(--plate-fg);
+  text-transform: uppercase;
+  position: relative;
+}
+.plate .vessel {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--plate-sub);
+  margin-top: 5px;
+  position: relative;
+}
+
+/* ============================================================
+   Sidebar shell
+   ============================================================ */
+.shell { display: flex; min-height: 100vh; }
+
+.shell-side {
+  width: 232px;
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.shell-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--line-2);
+  text-decoration: none;
+}
+.shell-brand:hover { background: var(--surface-2); text-decoration: none; }
+.shell-mark {
+  position: relative;
+  width: 22px; height: 22px;
+  background: var(--hull);
+  border-radius: 2px;
+  flex: none;
+  overflow: hidden;
+}
+.shell-mark::after {
+  content: "";
+  position: absolute;
+  right: -4px; top: 0; bottom: 0;
+  width: 9px;
+  background: #fff;
+  opacity: 0.28;
+  transform: skewX(-18deg);
+}
+.shell-brandtxt {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--mute);
+  line-height: 1.3;
+}
+
+.shell-nav { flex: 1; padding: 10px 0 18px; }
+.nav-group { margin-bottom: 14px; }
+.nav-label {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mute);
+  padding: 6px 16px;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 16px;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+.nav-item:hover { background: var(--surface-2); text-decoration: none; }
+.nav-item.is-active {
+  color: var(--hull);
+  font-weight: 600;
+  border-left-color: var(--hull);
+  background: var(--hull-pale);
+}
+.nav-badge {
+  background: var(--rust);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 1px 7px;
+}
+.shell-foot { padding: 14px 16px; border-top: 1px solid var(--line-2); }
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1rem;
+  max-width: 1240px;
+}
+@media (min-width: 900px) { .shell-main { padding: 1.6rem 1.8rem 3rem; } }
+
+.shell-burger {
+  display: none;
+  position: fixed;
+  top: 10px; left: 10px;
+  z-index: 60;
+  background: var(--hull);
+  color: #fff;
+  border-radius: 3px;
+  padding: 7px 11px;
+  line-height: 1;
+}
+.shell-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 20, 27, 0.5);
+  z-index: 70;
+}
+
+@media (max-width: 899px) {
+  .shell-burger { display: block; }
+  .shell-scrim { display: block; }
+  .shell-side {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    z-index: 80;
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+    box-shadow: 0 0 30px rgba(6, 20, 27, 0.3);
+  }
+  .shell-side.is-open { transform: none; }
+  .shell-main { padding-top: 56px; }
+}
+
+/* ============================================================
+   Trip figures strip — dark bar directly under the plate
+   ============================================================ */
+.trip {
+  background: var(--ink-2);
+  border-radius: 0 0 5px 5px;
+  overflow: hidden;
+  color: #fff;
+}
+[data-theme="dark"] .trip { background: #0C2530; border: 1px solid var(--line); border-top: 0; }
+.trip-b {
+  padding: 16px 18px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 640px) { .trip-b { grid-template-columns: repeat(4, 1fr); gap: 10px; } }
+.tk .k {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7FA8C6;
+  margin-bottom: 5px;
+}
+.tk .v {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 2rem;
+  line-height: 0.9;
+  color: #fff;
+}
+.tk .n { font-family: var(--font-mono); font-size: 0.68rem; color: #8FA9B6; margin-top: 5px; }
+.trip-f {
+  border-top: 1px solid #1E4356;
+  padding: 10px 18px;
+  font-size: 0.82rem;
+  color: #B9CBD4;
+}
+
+/* ---- quota rows ---- */
+.qrow { padding: 11px 0; border-bottom: 1px solid var(--line-2); }
+.qrow:last-of-type { border-bottom: 0; }
+.qtop { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+.qname { font-weight: 600; font-size: 0.88rem; }
+.qname span { font-family: var(--font-mono); font-size: 0.66rem; color: var(--mute); font-weight: 400; margin-left: 6px; }
+.qfig { font-family: var(--font-mono); font-size: 0.75rem; color: var(--mute); }
+.qfig b { color: var(--text); font-weight: 600; }
+.bar { height: 12px; background: var(--line-2); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--kelp); }
+.bar i.warn { background: var(--brass); }
+.bar i.bad { background: var(--rust); }
+
+.grid { display: grid; gap: 12px; }
+@media (min-width: 760px) { .g2 { grid-template-columns: 1fr 1fr; } }
+.card .sub {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--mute);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+.big { font-family: var(--font-display); font-weight: 700; font-size: 2.4rem; line-height: 0.9; }
+.note { font-family: var(--font-mono); font-size: 0.7rem; color: var(--mute); line-height: 1.7; margin: 14px 0 0; }
+
+/* ---- status flags ---- */
+.flag {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 2px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.flag.bad  { background: #F7E2E0; color: var(--rust); }
+.flag.warn { background: #F8EEDA; color: var(--brass); }
+.flag.ok   { background: #DCEDE6; color: var(--kelp); }
+[data-theme="dark"] .flag.bad  { background: #3A1D1A; }
+[data-theme="dark"] .flag.warn { background: #33270E; }
+[data-theme="dark"] .flag.ok   { background: #103025; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+
+/* ============================================================
+   Page furniture — the header block and table styling every page
+   inside the shell uses.
+   ============================================================ */
+
+.pagehead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.pagehead h1 { margin: 0; }
+.pagehead .muted { margin-top: 4px; }
+.pagehead-a { display: flex; gap: 8px; flex-wrap: wrap; }
+.pagehead-a button { padding: 0.5rem 0.9rem; font-size: 0.85rem; }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin: 0 0 4px;
+}
+
+/* ---- tables ---- */
+.tw {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.tw table { width: 100%; border-collapse: collapse; min-width: 560px; }
+.tw th {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  white-space: nowrap;
+  font-weight: 500;
+}
+.tw td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+.tw tbody tr:last-child td { border-bottom: 0; }
+.tw td.r, .tw th.r { text-align: right; }
+.tw td.strong { font-weight: 600; }
+.tw td.g {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--mute);
+}
+.tw td.neg { color: var(--rust); font-weight: 600; }
+.tw tfoot td {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+  background: var(--surface-2);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+.tw tbody tr.rowlink:hover { background: var(--hull-pale); cursor: pointer; }
+
+/* ---- form grids ---- */
+.fgrid { display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 620px) { .fgrid { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 980px) { .fgrid { grid-template-columns: repeat(6, 1fr); } }
+.fgrid-3 { grid-template-columns: 1fr; }
+@media (min-width: 620px) { .fgrid-3 { grid-template-columns: repeat(3, 1fr); } }
+.fgrid label { display: block; }
+.fl {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin-bottom: 5px;
+}
 
 
 /* ---- Fish Sales print / save-as-PDF ---- */
@@ -127,7 +591,10 @@ h2 { font-size: 1.25rem; color: var(--navy); margin-bottom: 0.75rem; }
   /* always print on white, whatever the screen theme */
   :root, [data-theme="dark"] {
     --bg: #ffffff; --surface: #ffffff; --surface-2: #ffffff;
-    --text: #1a1a1a; --border: #d0d7de; --navy: #1F3864; --grey-400: #808080;
+    --card-bg: #ffffff; --paper: #ffffff;
+    --text: #0A1D26; --ink: #0A1D26; --border: #d0d7de; --line: #d0d7de;
+    --hull: #1749A8; --navy: #1749A8; --mute: #5D7079; --grey-400: #5D7079;
+    --rust: #C2342A; --brass: #A97614; --kelp: #26654F;
   }
   .no-print { display: none !important; }
   .print-only { display: block !important; }

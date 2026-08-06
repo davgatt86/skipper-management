@@ -1,4 +1,4 @@
 .squareup-root { -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
 .squareup-root input, .squareup-root textarea, .squareup-root select, .squareup-root button { font-family: inherit; }
 .squareup-root input[type="date"] { color-scheme: light; }
-.squareup-root input:focus, .squareup-root textarea:focus, .squareup-root select:focus { border-color: #2E75B6 !important; }
+.squareup-root input:focus, .squareup-root textarea:focus, .squareup-root select:focus { border-color: var(--hull-bright) !important; }

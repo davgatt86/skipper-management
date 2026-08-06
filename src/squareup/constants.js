@@ -1,19 +1,21 @@
-// App light theme (matches index.css). ink doubles as dark-on-light text
-// and the dark side of accent gradients, so navy keeps it on brand.
+// App light theme (matches index.css). These are literal values rather than
+// CSS variables because they are also used to draw the Square Up PDF, which
+// renders outside the DOM. Square Up always prints on white, so only the
+// light-theme palette applies here.
 export const C = {
   bg: '#ffffff',
-  bgDeep: '#F2F2F2',
-  panel: '#FAFAFA',
+  bgDeep: '#ECEFEE',   // paper
+  panel: '#F6F8F7',
   panel2: '#ffffff',
-  line: '#d0d7de',
-  ink: '#1F3864',
-  dim: '#6b7280',
-  brass: '#a8780f',
-  brassDk: '#7c5806',
-  sea: '#0f766e',
-  red: '#C00000',
-  green: '#15803d',
-  amber: '#b45309',
+  line: '#D2DAD9',
+  ink: '#1749A8',      // hull cobalt
+  dim: '#5D7079',      // mute
+  brass: '#A97614',
+  brassDk: '#7C5610',
+  sea: '#1C4D3B',      // deep kelp
+  red: '#C2342A',      // rust
+  green: '#26654F',    // kelp
+  amber: '#A97614',    // brass
 };
 
 export const SHARE_OPTIONS = [
