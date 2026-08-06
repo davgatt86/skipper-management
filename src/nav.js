@@ -48,7 +48,15 @@ export const NAV = [
       { to: '/crew-list', label: 'Crew List', access: 'skipper' },
       { to: '/crew-certs', label: 'Certificates', access: 'skipper' },
       { to: '/rota', label: 'Rota', access: 'fleetTools' },
+    ],
+  },
+  {
+    // The two ends of the same loop: the worksheet that goes to the office,
+    // and the settled sheet that comes back.
+    label: 'Settlement',
+    items: [
       { to: '/squareup', label: 'Square Up', access: 'fleetTools' },
+      { to: '/settlements', label: 'Settlements', access: 'skipper' },
     ],
   },
   {

@@ -522,6 +522,58 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
   margin: 0 0 4px;
 }
 
+/* ---- the three-step loop the settlement pages sit inside ---- */
+.flowbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+}
+.flow {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mute);
+}
+.flow.is-now {
+  color: var(--hull);
+  font-weight: 600;
+  background: var(--hull-pale);
+  padding: 4px 9px;
+  border-radius: 2px;
+}
+.flow-ar { color: var(--line); font-size: 0.8rem; }
+
+/* ---- boat picker: only rendered when more than one boat is visible ---- */
+.boatpick {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--surface-2);
+  margin-bottom: 16px;
+}
+.boatpick button {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  color: var(--mute);
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--line);
+}
+.boatpick button:last-child { border-right: 0; }
+.boatpick button.on { background: var(--ink-2); color: #fff; }
+[data-theme="dark"] .boatpick button.on { background: var(--hull); color: var(--on-navy); }
+
 /* ---- tables ---- */
 .tw {
   overflow-x: auto;

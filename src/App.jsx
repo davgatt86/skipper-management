@@ -30,6 +30,7 @@ const PriceVsFleet = lazy(() => import('./pages/PriceVsFleet'))
 const Alerts = lazy(() => import('./pages/Alerts'))
 const EngineLogs = lazy(() => import('./pages/EngineLogs'))
 const CrewCertsRegister = lazy(() => import('./pages/CrewCertsRegister'))
+const Settlements = lazy(() => import('./pages/Settlements'))
 
 function ProtectedRoute({ children }) {
   const { session, loading } = useAuth()
@@ -239,6 +240,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <CrewCertsRegister />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/settlements" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Settlements />
             </Suspense>
           </ProtectedRoute>
         } />
