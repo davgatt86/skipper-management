@@ -61,8 +61,32 @@ managing boat access it will appear to work and change nothing; visibility
 comes from `fleet_id` and `su_fleet_agents`.
 
 `su_parse_jobs` is deliberately still unscoped — the AI reader edge function
-inserts with the service-role key, so `current_fleet_id()` is null there.
-Scoping it needs the function changed too. See the note in that SQL file.
+inserts with the service-role key, so `current_fleet_id()` is null there, and
+the **client polls that table with its own session** to collect the result.
+Scoping it would hang every read until the six-minute deadline; it needs the
+edge function changed to set `fleet_id` from the caller's JWT first. See the
+notes in `supabase/su_fleet_isolation.sql` and `src/lib/su/parse.js`.
+
+### Settlements (stage 2, in progress)
+
+`Settlements.jsx` reads the `su_*` tables; `SettlementImport.jsx` adds one from
+the office PDF or a photo via the `su-parse-document` edge function, with the
+client in `src/lib/su/parse.js`.
+
+- No fleet filter is applied in those queries on purpose. RLS decides what comes
+  back; a client-side filter would hide where the boundary actually is.
+- The reader is a model reading a photo, so the review screen shows each total
+  **twice** — as printed on the sheet and as the lines add up — and a difference
+  must be acknowledged before saving. What gets stored is the line-derived
+  figure, so a settlement's own totals always add up from its own lines.
+- Two formats, driven off `su_boats.format`: the Audacious posting report
+  (income/expense/recovery) and the Beryl one-page sheet (all expense, plus
+  `boat_share` / `fuel_pct` / `commission`). Beryl sheets carry no reference, so
+  one is derived from the settling date — `su_settlements` is unique on
+  (boat_id, reference).
+- The Beryl **xlsx template reader is not carried over, and is not wanted**: it
+  was only used once, to load their historical settlements. Ongoing sheets
+  arrive as a PDF.
 
 **One vessel per fleet is currently baked into the schema.** `vessel_details`
 has `fleet_id` as its primary key, and no table anywhere carries a `vessel_id`.

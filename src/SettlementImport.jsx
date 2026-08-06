@@ -31,8 +31,11 @@ export default function SettlementImport({ boat, onSaved, onCancel }) {
   async function read(chosen) {
     setError('')
     setFiles(chosen)
+    // The Beryl spreadsheet template was only ever used to load their old
+    // settlements in one go. Ongoing sheets come as a PDF from the office or a
+    // photo of one, so the xlsx reader is deliberately not carried over.
     if (chosen.some(f => /\.(xlsx|xls)$/i.test(f.name))) {
-      setError('Spreadsheet templates are not read yet — that part of the Beryl flow has not been ported. Use the PDF or a photo.')
+      setError('Settlements come in as the PDF from the office, or a photo of it — not a spreadsheet.')
       return
     }
     setStage('working')
@@ -186,6 +189,7 @@ export default function SettlementImport({ boat, onSaved, onCancel }) {
             <input
               type="file"
               accept="application/pdf,image/*"
+              aria-label="Choose the settling sheet"
               multiple={!isBeryl}
               style={{ width: 'auto' }}
               onChange={e => { const f = Array.from(e.target.files || []); if (f.length) read(f) }}
