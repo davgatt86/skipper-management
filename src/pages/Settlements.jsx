@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import SectionRule from '../SectionRule'
+import SettlementImport from '../SettlementImport'
 
 // Settled sheets returned by the office — the other end of the Square Up loop.
 //
@@ -38,6 +39,8 @@ export default function Settlements() {
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [importing, setImporting] = useState(false)
+  const [reload, setReload] = useState(0)
 
   // 1. Which boats can this login see? RLS answers that.
   useEffect(() => {
@@ -85,7 +88,7 @@ export default function Settlements() {
       setLoading(false)
     })()
     return () => { cancel = true }
-  }, [boatId])
+  }, [boatId, reload])
 
   // 3. Lines and crew wages, loaded only when a settlement is opened.
   async function open(id) {
@@ -125,7 +128,11 @@ export default function Settlements() {
         eyebrow="Office → you"
         title="Settlements"
         sub={boat ? `${boat.name} ${boat.registration || ''}`.trim() : 'Settled sheets returned by the office'}
-      />
+      >
+        {boat && !importing && (
+          <button onClick={() => setImporting(true)}>+ Add settlement</button>
+        )}
+      </PageHeader>
 
       <div className="flowbar">
         <span className="flow">1 · You fill in Square Up</span>
@@ -157,9 +164,17 @@ export default function Settlements() {
         </div>
       )}
 
+      {importing && boat && (
+        <SettlementImport
+          boat={boat}
+          onCancel={() => setImporting(false)}
+          onSaved={id => { setImporting(false); setReload(n => n + 1); setOpenId(id) }}
+        />
+      )}
+
       {loading && <div className="card"><p className="muted" style={{ margin: 0 }}>Loading…</p></div>}
 
-      {!loading && boats.length > 0 && (
+      {!importing && !loading && boats.length > 0 && (
         <>
           <div className="tw">
             <table>
