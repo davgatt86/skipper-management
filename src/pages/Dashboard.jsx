@@ -36,6 +36,7 @@ export default function Dashboard() {
 
   const [unread, setUnread] = useState(0)
   const [landings, setLandings] = useState([])
+  const [error, setError] = useState('')
   const [quota, setQuota] = useState({ snapshot: null, lines: [] })
   const [loading, setLoading] = useState(true)
 
@@ -62,8 +63,12 @@ export default function Dashboard() {
 
       const year = new Date().getFullYear()
       const [lRes, sRes] = await Promise.all([
+        // sales_landings, NOT landings. They are different tables:
+        // `landings` is the crew/bonus record (date, boxes, who was aboard);
+        // `sales_landings` is the sales note — value, market, days at sea,
+        // reconcile_ok. Every figure on this page comes off the sales note.
         supabase
-          .from('landings')
+          .from('sales_landings')
           .select('id, landing_date, vessel, market, value, weight_kg, boxes, days_at_sea, reconcile_ok')
           .gte('landing_date', sinceStr)
           .order('landing_date', { ascending: false }),
@@ -77,7 +82,10 @@ export default function Dashboard() {
           : Promise.resolve({ data: [] }),
       ])
       if (cancel) return
-      if (lRes.error) console.error('Dashboard landings:', lRes.error)
+      // Surfaced, not just logged. A failed query returning [] is
+      // indistinguishable from a quiet month, and "No landings yet" is a
+      // convincing thing for a broken query to say.
+      if (lRes.error) setError(`Could not load landings: ${lRes.error.message}`)
       setLandings(lRes.data || [])
 
       const snap = (sRes.data || [])[0] || null
@@ -129,6 +137,8 @@ export default function Dashboard() {
 
   return (
     <AppShell badges={{ alerts: unread }}>
+      {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error" style={{ margin: 0 }}>{error}</p></div>}
+
       <VesselPlate vessel={vessel} loading={vesselLoading} />
 
       <div className="trip">
