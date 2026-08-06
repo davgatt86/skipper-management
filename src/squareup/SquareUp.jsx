@@ -7,9 +7,10 @@ import {
   Ship, Plus, Trash2, Users, Fuel, Truck, FileText,
   Bookmark, BookmarkPlus, Briefcase, Globe, X,
 } from 'lucide-react';
-import { C, SHARE_OPTIONS, QUOTA_OPTS } from './constants.js';
+import { SHARE_OPTIONS, QUOTA_OPTS } from './constants.js';
 import { uid, todayISO, shareValOf, fmtShares, fmtMoney } from './helpers.js';
 import { loadRoster, saveRoster, loadForeignRoster, saveForeignRoster, loadTrip, saveTrip } from './storage.js';
+import { getWorksheetBoat, saveWorksheet } from '../lib/su/worksheet.js';
 import { Section, IconBtn, MoneyInput, PercentInput, Label, selectStyle, inputStyle } from './ui.jsx';
 import BondSection from './BondSection.jsx';
 import { ForeignCrewRow, AddForeignMenu } from './ForeignCrewSection.jsx';
@@ -19,11 +20,11 @@ import Preview from './Preview.jsx';
 function CrewRow({ c, onUpdate, onRemove, onToggleSave }) {
   const saved = !!c.rosterId;
   return (
-    <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 11, padding: 11, marginBottom: 9 }}>
+    <div style={{ background: 'var(--surface-2)', border: '1px solid var(--line-2)', borderRadius: 4, padding: 11, marginBottom: 9 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
         <input value={c.name} onChange={(e) => onUpdate({ name: e.target.value })} placeholder="Crewman name"
           style={{ ...inputStyle, flex: 1, fontWeight: 500 }} />
-        <IconBtn onClick={onToggleSave} color={saved ? C.brass : C.dim}
+        <IconBtn onClick={onToggleSave} color={saved ? 'var(--brass)' : 'var(--mute)'}
           icon={saved ? Bookmark : BookmarkPlus}
           title={saved ? 'In roster — tap to remove' : 'Save to roster'} />
         <IconBtn onClick={onRemove} title="Remove from trip" />
@@ -51,14 +52,14 @@ function CrewRow({ c, onUpdate, onRemove, onToggleSave }) {
 // ── Add crew menu ──────────────────────────────────────────────────────
 function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRoster, onClose, onKitty, kittyAdded }) {
   return (
-    <div style={{ background: C.panel2, border: `1px solid ${C.brass}88`, borderRadius: 11, padding: 12, marginTop: 8 }}>
+    <div style={{ background: 'var(--surface-2)', border: '1px solid var(--hull)', borderRadius: 4, padding: 12, marginTop: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ flex: 1, color: C.brass, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.5 }}>Add crew</span>
-        <IconBtn onClick={onClose} color={C.dim} icon={X} title="Close" size={14} />
+        <span style={{ flex: 1, color: 'var(--hull)', fontFamily: 'var(--font-mono)', fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em' }}>Add crew</span>
+        <IconBtn onClick={onClose} color={'var(--mute)'} icon={X} title="Close" size={14} />
       </div>
       {roster.length > 0 ? (
         <>
-          <div style={{ color: C.dim, fontSize: 11, marginBottom: 6 }}>Self-employed crew (from the Crew page) — tap to add</div>
+          <div style={{ color: 'var(--mute)', fontSize: 11, marginBottom: 6 }}>Self-employed crew (from the Crew page) — tap to add</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 12 }}>
             {roster.map((r) => {
               const inTrip = existingRosterIds.includes(r.id);
@@ -67,9 +68,9 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
                   <button onClick={() => !inTrip && onPick(r)} disabled={inTrip}
                     style={{
                       flex: 1, textAlign: 'left',
-                      background: inTrip ? 'transparent' : C.panel,
-                      color: inTrip ? C.dim : C.ink,
-                      border: `1px solid ${C.line}`, borderRadius: 8, padding: '10px 12px',
+                      background: inTrip ? 'transparent' : 'var(--surface)',
+                      color: inTrip ? 'var(--mute)' : 'var(--text)',
+                      border: '1px solid var(--line)', borderRadius: 3, padding: '10px 12px',
                       cursor: inTrip ? 'default' : 'pointer', fontSize: 14, fontWeight: 500,
                       opacity: inTrip ? 0.5 : 1,
                     }}>
@@ -82,14 +83,14 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
           </div>
         </>
       ) : (
-        <div style={{ color: C.dim, fontSize: 13, marginBottom: 10, fontStyle: 'italic', lineHeight: 1.4 }}>
+        <div style={{ color: 'var(--mute)', fontSize: 13, marginBottom: 10, fontStyle: 'italic', lineHeight: 1.4 }}>
           No self-employed crew on the Crew page yet — add them there and they'll show here. Use "One-off name" for anyone else.
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={onKitty} disabled={kittyAdded} style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-          background: kittyAdded ? C.panel : C.ink, color: kittyAdded ? C.dim : C.bg,
+          background: kittyAdded ? 'var(--surface-2)' : 'var(--ink-2)', color: kittyAdded ? 'var(--mute)' : '#fff',
           border: 'none', borderRadius: 9, padding: '11px 14px',
           cursor: kittyAdded ? 'default' : 'pointer', fontSize: 14, fontWeight: 700, flex: 1, minWidth: 180,
         }}>
@@ -97,7 +98,7 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
         </button>
         <button onClick={onNew} style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-          background: `linear-gradient(180deg, ${C.brass}, ${C.brassDk})`, color: C.bg,
+          background: 'var(--hull)', color: 'var(--on-navy)',
           border: 'none', borderRadius: 9, padding: '11px 14px', cursor: 'pointer',
           fontSize: 14, fontWeight: 700, flex: 1, minWidth: 150,
         }}>
@@ -131,6 +132,13 @@ export default function SquareUp() {
   const [showAddForeign, setShowAddForeign] = useState(false);
   const [bondItems, setBondItems] = useState([]);
 
+  // Keeping the worksheet: localStorage stays the working copy, this is the
+  // deliberate save so it survives and can be reconciled later.
+  const [suBoat, setSuBoat] = useState(null);
+  const [worksheetId, setWorksheetId] = useState(null);
+  const [saveState, setSaveState] = useState('idle');   // idle | saving | saved | error
+  const [saveMsg, setSaveMsg] = useState('');
+
   // Load on mount
   useEffect(() => {
     setRosterState(loadRoster());
@@ -141,6 +149,9 @@ export default function SquareUp() {
         setAppCrew(rows.map(c => ({ id: 'app-' + c.id, name: c.full_name, fromApp: true })));
       });
     setForeignRosterState(loadForeignRoster());
+    // A fleet with no su_boats row cannot keep worksheets — the page stays
+    // local-only and says so rather than offering a button that fails.
+    getWorksheetBoat().then(setSuBoat);
     const t = loadTrip();
     if (t) {
       if (t.vessel !== undefined) setVessel(t.vessel);
@@ -165,6 +176,24 @@ export default function SquareUp() {
     }, 400);
     return () => clearTimeout(t);
   }, [vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew, bondItems, loaded]);
+
+  async function keepWorksheet() {
+    if (!suBoat) return;
+    setSaveState('saving'); setSaveMsg('');
+    try {
+      const id = await saveWorksheet(
+        { tripDate, quota, crew, fuel, haulage, haulageNote, labour, foreignCrew, bondItems },
+        suBoat.id,
+        worksheetId
+      );
+      setWorksheetId(id);
+      setSaveState('saved');
+      setSaveMsg('Kept. It will be here on any device you sign in from.');
+    } catch (e) {
+      setSaveState('error');
+      setSaveMsg(e.message || String(e));
+    }
+  }
 
   const persistRoster = (next) => {
     setRosterState(next);
@@ -351,7 +380,7 @@ export default function SquareUp() {
         <Section icon={Users} title="Crew & Shares"
           count={crew.length === 0 ? null : `${crew.length} crew · ${fmtShares(totalShares)} shares`}>
           {crew.length === 0 && !showAddCrew && (
-            <div style={{ color: C.dim, fontSize: 13.5, padding: '4px 0 10px', fontStyle: 'italic' }}>No crew added yet.</div>
+            <div style={{ color: 'var(--mute)', fontSize: 13.5, padding: '4px 0 10px', fontStyle: 'italic' }}>No crew added yet.</div>
           )}
           {crew.map((c) => (
             <CrewRow key={c.id} c={c}
@@ -374,7 +403,7 @@ export default function SquareUp() {
           ) : (
             <button onClick={() => setShowAddCrew(true)} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: `${C.brass}1a`, border: `1px dashed ${C.brass}88`, color: C.brass,
+              background: 'transparent', border: '1px dashed var(--line)', color: 'var(--hull)',
               borderRadius: 10, padding: '12px 16px', cursor: 'pointer',
               fontSize: 14, fontWeight: 600, width: '100%', marginTop: crew.length ? 8 : 0,
             }}>
@@ -396,7 +425,7 @@ export default function SquareUp() {
         {/* Fuel */}
         <Section icon={Fuel} title="Fuel" count={fuel.length === 0 ? null : `${fuel.length}`}>
           {fuel.map((f) => (
-            <div key={f.id} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+            <div key={f.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--line-2)', borderRadius: 4, padding: 10, marginBottom: 8 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input value={f.location} onChange={(e) => updateFuel(f.id, { location: e.target.value })} placeholder="Where (e.g. Egersund, Stickers)" style={{ ...inputStyle, flex: 1 }} />
                 <IconBtn onClick={() => removeFuel(f.id)} title="Remove" />
@@ -405,14 +434,14 @@ export default function SquareUp() {
                 <input type="date" value={f.date} onChange={(e) => updateFuel(f.id, { date: e.target.value })} style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
                 <div style={{ position: 'relative', width: 130 }}>
                   <input value={f.litres} onChange={(e) => updateFuel(f.id, { litres: e.target.value })} placeholder="Litres" inputMode="numeric" style={{ ...inputStyle, paddingRight: 26, textAlign: 'right' }} />
-                  <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: C.dim, fontSize: 12, pointerEvents: 'none' }}>lt</span>
+                  <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--mute)', fontSize: 12, pointerEvents: 'none' }}>lt</span>
                 </div>
               </div>
             </div>
           ))}
           <button onClick={addFuel} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            background: `${C.sea}1a`, border: `1px dashed ${C.sea}88`, color: C.sea,
+            background: 'transparent', border: '1px dashed var(--line)', color: 'var(--hull)',
             borderRadius: 9, padding: '10px 14px', cursor: 'pointer', fontSize: 13.5, fontWeight: 600, width: '100%',
           }}>
             <Plus size={15} /> {fuel.length === 0 ? 'Add fuel entry' : 'Add another'}
@@ -423,20 +452,20 @@ export default function SquareUp() {
             office prices it, same as fuel. */}
         <Section icon={Truck} title="Trucks & Haulage" count={haulage.length === 0 ? null : `${haulage.reduce((s, h) => s + (Number(h.loads) || 0), 0)} loads`}>
           {haulageNote?.trim() && (
-            <div style={{ background: `${C.brass}14`, border: `1px solid ${C.brass}55`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-              <div style={{ color: C.brass, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 5 }}>
+            <div style={{ background: 'var(--surface-2)', borderLeft: '3px solid var(--brass)', border: '1px solid var(--line)', borderRadius: 4, padding: 10, marginBottom: 10 }}>
+              <div style={{ color: 'var(--brass)', fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.14em', marginBottom: 5 }}>
                 Carried over from Logistics
               </div>
               <textarea value={haulageNote} onChange={(e) => setHaulageNote(e.target.value)} rows={3}
                 style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }} />
-              <div style={{ color: C.dim, fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
+              <div style={{ color: 'var(--mute)', fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
                 This was one free-text box before. Split it into rows below when you get a
                 chance, then clear this — it still goes on the sheet either way.
               </div>
             </div>
           )}
           {haulage.map((h) => (
-            <div key={h.id} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+            <div key={h.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--line-2)', borderRadius: 4, padding: 10, marginBottom: 8 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input value={h.haulier} onChange={(e) => updateHaulage(h.id, { haulier: e.target.value })} placeholder="Haulier (e.g. Grampian)" style={{ ...inputStyle, flex: 1 }} />
                 <IconBtn onClick={() => removeHaulage(h.id)} title="Remove" />
@@ -449,7 +478,7 @@ export default function SquareUp() {
           ))}
           <button onClick={addHaulage} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            background: `${C.sea}1a`, border: `1px dashed ${C.sea}88`, color: C.sea,
+            background: 'transparent', border: '1px dashed var(--line)', color: 'var(--hull)',
             borderRadius: 9, padding: '10px 14px', cursor: 'pointer', fontSize: 13.5, fontWeight: 600, width: '100%',
           }}>
             <Plus size={15} /> {haulage.length === 0 ? 'Add haulier' : 'Add another'}
@@ -459,7 +488,7 @@ export default function SquareUp() {
         {/* Labour — paid per box or at a flat rate. */}
         <Section icon={Briefcase} title="Labour" count={labour.length === 0 ? null : `${labour.length}`}>
           {labour.map((l) => (
-            <div key={l.id} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+            <div key={l.id} style={{ background: 'var(--surface-2)', border: '1px solid var(--line-2)', borderRadius: 4, padding: 10, marginBottom: 8 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input value={l.name} onChange={(e) => updateLabour(l.id, { name: e.target.value })} placeholder="Name (e.g. Alec Buchan, lumpers)" style={{ ...inputStyle, flex: 1 }} />
                 <IconBtn onClick={() => removeLabour(l.id)} title="Remove" />
@@ -482,7 +511,7 @@ export default function SquareUp() {
                 <div style={{ flex: 1 }}>
                   <MoneyInput value={l.rate} onChange={(v) => updateLabour(l.id, { rate: v })} placeholder={(l.basis || 'box') === 'box' ? 'Rate per box' : 'Amount'} />
                 </div>
-                <div style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: C.ink, fontSize: 15 }}>
+                <div style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--text)', fontSize: 15 }}>
                   {fmtMoney(l.amount || 0)}
                 </div>
               </div>
@@ -490,7 +519,7 @@ export default function SquareUp() {
           ))}
           <button onClick={addLabour} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-            background: `${C.sea}1a`, border: `1px dashed ${C.sea}88`, color: C.sea,
+            background: 'transparent', border: '1px dashed var(--line)', color: 'var(--hull)',
             borderRadius: 9, padding: '10px 14px', cursor: 'pointer', fontSize: 13.5, fontWeight: 600, width: '100%',
           }}>
             <Plus size={15} /> {labour.length === 0 ? 'Add labour entry' : 'Add another'}
@@ -500,7 +529,7 @@ export default function SquareUp() {
         {/* Foreign crew */}
         <Section icon={Globe} title="Foreign Crew Bonus" count={foreignCrew.length === 0 ? null : `${foreignCrew.length} crew`}>
           {foreignCrew.length === 0 && !showAddForeign && (
-            <div style={{ color: C.dim, fontSize: 13.5, padding: '4px 0 10px', fontStyle: 'italic' }}>No foreign crew added yet.</div>
+            <div style={{ color: 'var(--mute)', fontSize: 13.5, padding: '4px 0 10px', fontStyle: 'italic' }}>No foreign crew added yet.</div>
           )}
           {foreignCrew.map((c) => (
             <ForeignCrewRow key={c.id} c={c}
@@ -517,7 +546,7 @@ export default function SquareUp() {
           ) : (
             <button onClick={() => setShowAddForeign(true)} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              background: `${C.brass}1a`, border: `1px dashed ${C.brass}88`, color: C.brass,
+              background: 'transparent', border: '1px dashed var(--line)', color: 'var(--hull)',
               borderRadius: 10, padding: '12px 16px', cursor: 'pointer',
               fontSize: 14, fontWeight: 600, width: '100%', marginTop: foreignCrew.length ? 8 : 0,
             }}>
@@ -530,15 +559,32 @@ export default function SquareUp() {
         <div style={{ marginTop: 18 }}>
           <button onClick={() => setView('preview')} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-            background: `linear-gradient(180deg, ${C.brass}, ${C.brassDk})`, color: C.bg,
+            background: 'var(--hull)', color: 'var(--on-navy)',
             border: 'none', borderRadius: 12, padding: '15px 20px', cursor: 'pointer',
             fontSize: 16, fontWeight: 700, width: '100%',
-            boxShadow: `0 10px 28px ${C.brass}33`,
+            
           }}>
             <FileText size={18} /> Preview & Generate PDF
           </button>
-          <p style={{ textAlign: 'center', color: C.dim, fontSize: 11.5, marginTop: 10, letterSpacing: 0.3 }}>
-            Form auto-saves · Rosters persist across trips
+          {suBoat ? (
+            <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <button className="secondary" onClick={keepWorksheet} disabled={saveState === 'saving'}>
+                {saveState === 'saving' ? 'Keeping…' : worksheetId ? 'Update kept worksheet' : 'Keep this worksheet'}
+              </button>
+              {saveMsg && (
+                <span className={saveState === 'error' ? 'error' : 'muted'} style={{ fontSize: '0.82rem' }}>
+                  {saveMsg}
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="note" style={{ marginTop: 12 }}>
+              Kept on this device only — settlements are not set up for your boat yet,
+              so there is nowhere on the fleet record to store it.
+            </p>
+          )}
+          <p style={{ textAlign: 'center', color: 'var(--mute)', fontSize: 11.5, marginTop: 10, letterSpacing: 0.3 }}>
+            Form auto-saves on this device · Rosters persist across trips
           </p>
         </div>
       </div>
