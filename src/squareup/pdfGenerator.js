@@ -7,7 +7,7 @@ import { fmtDate, shareTextOf, fmtShares, fmtMoney, sumBondFor, todayISO } from 
  */
 export function generateSquareUpPDF({
   vessel, tripDate, crew, totalShares, quota,
-  fuel, labour, logistics, foreignCrew, bondItems,
+  fuel, labour, haulage = [], haulageNote = '', foreignCrew, bondItems,
 }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const PAGE_W = doc.internal.pageSize.getWidth();
@@ -215,17 +215,38 @@ export function generateSquareUpPDF({
   }
   y += 6;
 
-  // LOGISTICS
-  if (logistics?.trim()) {
-    sectionTitle('LOGISTICS / TRANSPORT');
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10.5);
-    setInk(INK);
-    const lines = doc.splitTextToSize(logistics, CONTENT_W);
-    for (const line of lines) {
-      ensureSpace(14);
-      doc.text(line, MARGIN, y);
-      y += 14;
+  // TRUCKS & HAULAGE — who carted, from where, how many loads. No money:
+  // the office prices it, same as fuel.
+  sectionTitle('TRUCKS & HAULAGE');
+  if (haulage.length === 0 && !haulageNote?.trim()) {
+    emptyLine('None.');
+  } else {
+    for (const h of haulage) {
+      ensureSpace(18);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      setInk(INK);
+      doc.text(h.haulier || '—', MARGIN, y);
+
+      doc.setFontSize(9.5);
+      setInk(DIM);
+      doc.text(h.from || '', MARGIN + 300, y, { align: 'right' });
+
+      doc.setFontSize(10.5);
+      setInk(INK);
+      doc.text(h.loads ? `${h.loads} loads` : '', MARGIN + CONTENT_W, y, { align: 'right' });
+      y += 18;
+    }
+    if (haulageNote?.trim()) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10.5);
+      setInk(INK);
+      const lines = doc.splitTextToSize(haulageNote, CONTENT_W);
+      for (const line of lines) {
+        ensureSpace(14);
+        doc.text(line, MARGIN, y);
+        y += 14;
+      }
     }
     y += 10;
   }
@@ -242,9 +263,16 @@ export function generateSquareUpPDF({
       setInk(INK);
       doc.text(l.name || '—', MARGIN, y);
 
+      // The office needs to see how a labour figure was arrived at, not just
+      // the total — per box at a rate, or a flat price.
       doc.setFontSize(9.5);
       setInk(DIM);
-      doc.text(l.boxes ? `${l.boxes} boxes` : '', MARGIN + 300, y, { align: 'right' });
+      doc.text(
+        (l.basis || 'box') === 'box'
+          ? (l.boxes ? `${l.boxes} boxes @ ${fmtMoney(l.rate || 0)}` : '')
+          : 'flat rate',
+        MARGIN + 300, y, { align: 'right' }
+      );
 
       doc.setFontSize(10.5);
       setInk(INK);

@@ -8,7 +8,7 @@ import { IconBtn } from './ui.jsx';
 export default function Preview(props) {
   const {
     vessel, tripDate, crew, totalShares, quota,
-    fuel, labour, logistics, foreignCrew, bondItems, onBack,
+    fuel, labour, haulage = [], haulageNote = '', foreignCrew, bondItems, onBack,
   } = props;
 
   const [busy, setBusy] = useState(false);
@@ -131,20 +131,35 @@ export default function Preview(props) {
           )}
         </DocSection>
 
-        {/* Logistics */}
-        {logistics?.trim() && (
-          <DocSection title="Logistics / Transport">
-            <div style={{ fontSize: 13.5, color: '#1a2a3c', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{logistics}</div>
-          </DocSection>
-        )}
+        {/* Trucks & haulage — quantities only, the office prices it */}
+        <DocSection title="Trucks & Haulage">
+          {haulage.length === 0 && !haulageNote?.trim() ? <DocEmpty>None.</DocEmpty> : (
+            <>
+              {haulage.map((h) => (
+                <div key={h.id} style={docRow}>
+                  <span style={{ flex: 1, fontWeight: 500 }}>{h.haulier || '—'}</span>
+                  <span style={{ width: 150, textAlign: 'right', color: '#5a6a7a' }}>{h.from || ''}</span>
+                  <span style={{ width: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{h.loads ? `${h.loads} loads` : ''}</span>
+                </div>
+              ))}
+              {haulageNote?.trim() && (
+                <div style={{ fontSize: 13.5, color: '#1a2a3c', whiteSpace: 'pre-wrap', lineHeight: 1.5, marginTop: haulage.length ? 8 : 0 }}>{haulageNote}</div>
+              )}
+            </>
+          )}
+        </DocSection>
 
-        {/* Labour */}
+        {/* Labour — per box or flat rate */}
         <DocSection title="Labour">
           {labour.length === 0 ? <DocEmpty>None.</DocEmpty> : (
             labour.map((l) => (
               <div key={l.id} style={docRow}>
                 <span style={{ flex: 1, fontWeight: 500 }}>{l.name || '—'}</span>
-                <span style={{ width: 110, textAlign: 'right', color: '#5a6a7a', fontVariantNumeric: 'tabular-nums' }}>{l.boxes ? `${l.boxes} boxes` : ''}</span>
+                <span style={{ width: 150, textAlign: 'right', color: '#5a6a7a', fontVariantNumeric: 'tabular-nums' }}>
+                  {(l.basis || 'box') === 'box'
+                    ? (l.boxes ? `${l.boxes} boxes @ ${fmtMoney(l.rate || 0)}` : '')
+                    : 'flat rate'}
+                </span>
                 <span style={{ width: 90, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{l.amount ? fmtMoney(l.amount) : ''}</span>
               </div>
             ))

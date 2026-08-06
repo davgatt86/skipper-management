@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import BackNav from '../BackNav';
+import AppShell from '../AppShell';
+import PageHeader from '../PageHeader';
 import { supabase } from '../supabaseClient';
 import './squareup.css';
 import {
-  Anchor, Ship, Plus, Trash2, Users, Fuel, Truck, FileText,
-  Bookmark, BookmarkPlus, Briefcase, Globe, RotateCcw, X,
+  Ship, Plus, Trash2, Users, Fuel, Truck, FileText,
+  Bookmark, BookmarkPlus, Briefcase, Globe, X,
 } from 'lucide-react';
 import { C, SHARE_OPTIONS, QUOTA_OPTS } from './constants.js';
-import { uid, todayISO, shareValOf, fmtShares } from './helpers.js';
+import { uid, todayISO, shareValOf, fmtShares, fmtMoney } from './helpers.js';
 import { loadRoster, saveRoster, loadForeignRoster, saveForeignRoster, loadTrip, saveTrip } from './storage.js';
 import { Section, IconBtn, MoneyInput, PercentInput, Label, selectStyle, inputStyle } from './ui.jsx';
 import BondSection from './BondSection.jsx';
@@ -122,7 +123,10 @@ export default function SquareUp() {
   const [quota, setQuota] = useState('10');
   const [fuel, setFuel] = useState([]);
   const [labour, setLabour] = useState([]);
-  const [logistics, setLogistics] = useState('');
+  const [haulage, setHaulage] = useState([]);
+  // Free text carried over from the old single Logistics box, kept verbatim
+  // because it cannot be split into columns without guessing.
+  const [haulageNote, setHaulageNote] = useState('');
   const [foreignCrew, setForeignCrew] = useState([]);
   const [showAddForeign, setShowAddForeign] = useState(false);
   const [bondItems, setBondItems] = useState([]);
@@ -145,7 +149,8 @@ export default function SquareUp() {
       if (t.quota !== undefined) setQuota(t.quota);
       if (Array.isArray(t.fuel)) setFuel(t.fuel);
       if (Array.isArray(t.labour)) setLabour(t.labour);
-      if (t.logistics !== undefined) setLogistics(t.logistics);
+      if (Array.isArray(t.haulage)) setHaulage(t.haulage);
+      if (t.haulageNote !== undefined) setHaulageNote(t.haulageNote);
       if (Array.isArray(t.foreignCrew)) setForeignCrew(t.foreignCrew);
       if (Array.isArray(t.bondItems)) setBondItems(t.bondItems);
     }
@@ -156,10 +161,10 @@ export default function SquareUp() {
   useEffect(() => {
     if (!loaded) return;
     const t = setTimeout(() => {
-      saveTrip({ vessel, tripDate, crew, quota, fuel, labour, logistics, foreignCrew, bondItems });
+      saveTrip({ vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew, bondItems });
     }, 400);
     return () => clearTimeout(t);
-  }, [vessel, tripDate, crew, quota, fuel, labour, logistics, foreignCrew, bondItems, loaded]);
+  }, [vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew, bondItems, loaded]);
 
   const persistRoster = (next) => {
     setRosterState(next);
@@ -281,7 +286,7 @@ export default function SquareUp() {
   const startNewTrip = () => {
     if (!window.confirm('Start a new trip? This clears the current form. Your saved crew rosters stay.')) return;
     setTripDate(todayISO()); setCrew([]); setQuota('10');
-    setFuel([]); setLabour([]); setLogistics(''); setForeignCrew([]); setBondItems([]);
+    setFuel([]); setLabour([]); setHaulage([]); setHaulageNote(''); setForeignCrew([]); setBondItems([]);
   };
 
   // ── Fuel/labour ──────────────────────────────────────────────────────
@@ -289,40 +294,51 @@ export default function SquareUp() {
   const updateFuel = (id, patch) => setFuel((p) => p.map((f) => (f.id === id ? { ...f, ...patch } : f)));
   const removeFuel = (id) => setFuel((p) => p.filter((f) => f.id !== id));
 
-  const addLabour = () => setLabour((p) => [...p, { id: uid(), name: '', boxes: '', amount: '' }]);
-  const updateLabour = (id, patch) => setLabour((p) => p.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  // basis 'box' -> cost is boxes x rate; basis 'flat' -> the rate IS the cost.
+  const addLabour = () => setLabour((p) => [...p, { id: uid(), name: '', basis: 'box', boxes: '', rate: '', amount: '' }]);
+  const updateLabour = (id, patch) => setLabour((p) => p.map((l) => {
+    if (l.id !== id) return l;
+    const next = { ...l, ...patch };
+    const n = (v) => Number(String(v ?? '').replace(/[^0-9.-]/g, '')) || 0;
+    next.amount = next.basis === 'box' ? n(next.boxes) * n(next.rate) : n(next.rate);
+    return next;
+  }));
   const removeLabour = (id) => setLabour((p) => p.filter((l) => l.id !== id));
+
+  // Haulage: who carted, from where, how many loads. No money — the office
+  // prices it, same as fuel.
+  const addHaulage = () => setHaulage((p) => [...p, { id: uid(), haulier: '', from: '', loads: '', note: '' }]);
+  const updateHaulage = (id, patch) => setHaulage((p) => p.map((h) => (h.id === id ? { ...h, ...patch } : h)));
+  const removeHaulage = (id) => setHaulage((p) => p.filter((h) => h.id !== id));
 
   if (view === 'preview') {
     return <Preview
       vessel={vessel} tripDate={tripDate} crew={crew} totalShares={totalShares}
-      quota={quota} fuel={fuel} labour={labour} logistics={logistics}
+      quota={quota} fuel={fuel} labour={labour} haulage={haulage} haulageNote={haulageNote}
       foreignCrew={foreignCrew} bondItems={bondItems}
       onBack={() => setView('edit')}
     />;
   }
 
   return (
-    <div className="squareup-root" style={{
-      minHeight: '100vh',
-      background: C.bg,
-      color: 'var(--text)', fontFamily: 'inherit',
-      padding: '22px 14px calc(110px + env(safe-area-inset-bottom))',
-    }}>
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
-        <div style={{ marginBottom: 10 }}><BackNav /></div>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-          <div style={{ display: 'grid', placeItems: 'center', width: 44, height: 44, borderRadius: 12, background: `linear-gradient(145deg, ${C.brass}, ${C.brassDk})`, boxShadow: `0 6px 18px ${C.brass}44` }}>
-            <Anchor size={22} color={C.bg} strokeWidth={2.5} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, lineHeight: 1.1 }}>Square-Up Sheet</h1>
-            <p style={{ margin: '1px 0 0', color: C.dim, fontSize: 12.5 }}>Generate a PDF for the office</p>
-          </div>
-          <IconBtn onClick={startNewTrip} icon={RotateCcw} color={C.dim} title="Start new trip" />
-        </div>
+    <AppShell maxWidth={760}>
+      <PageHeader
+        eyebrow="Worksheet → office"
+        title="Square Up"
+        sub="What the office needs to settle the trip"
+      >
+        <button className="secondary" onClick={startNewTrip}>Start new trip</button>
+      </PageHeader>
 
+      <div className="flowbar">
+        <span className="flow is-now">1 · You fill this in</span>
+        <span className="flow-ar">→</span>
+        <span className="flow">2 · Office settles</span>
+        <span className="flow-ar">→</span>
+        <span className="flow">3 · Settlement comes back</span>
+      </div>
+
+      <div className="squareup-root" style={{ color: 'var(--text)', fontFamily: 'inherit', paddingBottom: 'calc(40px + env(safe-area-inset-bottom))' }}>
         {/* Trip info */}
         <Section icon={Ship} title="Trip">
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10 }}>
@@ -403,13 +419,44 @@ export default function SquareUp() {
           </button>
         </Section>
 
-        {/* Logistics */}
-        <Section icon={Truck} title="Logistics / Transport">
-          <textarea value={logistics} onChange={(e) => setLogistics(e.target.value)} placeholder="Trucks, company, where, when..." rows={3}
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }} />
+        {/* Trucks & haulage — who carted and how many loads. No money: the
+            office prices it, same as fuel. */}
+        <Section icon={Truck} title="Trucks & Haulage" count={haulage.length === 0 ? null : `${haulage.reduce((s, h) => s + (Number(h.loads) || 0), 0)} loads`}>
+          {haulageNote?.trim() && (
+            <div style={{ background: `${C.brass}14`, border: `1px solid ${C.brass}55`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+              <div style={{ color: C.brass, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 5 }}>
+                Carried over from Logistics
+              </div>
+              <textarea value={haulageNote} onChange={(e) => setHaulageNote(e.target.value)} rows={3}
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.4 }} />
+              <div style={{ color: C.dim, fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
+                This was one free-text box before. Split it into rows below when you get a
+                chance, then clear this — it still goes on the sheet either way.
+              </div>
+            </div>
+          )}
+          {haulage.map((h) => (
+            <div key={h.id} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input value={h.haulier} onChange={(e) => updateHaulage(h.id, { haulier: e.target.value })} placeholder="Haulier (e.g. Grampian)" style={{ ...inputStyle, flex: 1 }} />
+                <IconBtn onClick={() => removeHaulage(h.id)} title="Remove" />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={h.from} onChange={(e) => updateHaulage(h.id, { from: e.target.value })} placeholder="From (e.g. Peterhead)" style={{ ...inputStyle, flex: 1, minWidth: 0 }} />
+                <input value={h.loads} onChange={(e) => updateHaulage(h.id, { loads: e.target.value })} placeholder="Loads" inputMode="numeric" style={{ ...inputStyle, width: 90, textAlign: 'right' }} />
+              </div>
+            </div>
+          ))}
+          <button onClick={addHaulage} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+            background: `${C.sea}1a`, border: `1px dashed ${C.sea}88`, color: C.sea,
+            borderRadius: 9, padding: '10px 14px', cursor: 'pointer', fontSize: 13.5, fontWeight: 600, width: '100%',
+          }}>
+            <Plus size={15} /> {haulage.length === 0 ? 'Add haulier' : 'Add another'}
+          </button>
         </Section>
 
-        {/* Labour */}
+        {/* Labour — paid per box or at a flat rate. */}
         <Section icon={Briefcase} title="Labour" count={labour.length === 0 ? null : `${labour.length}`}>
           {labour.map((l) => (
             <div key={l.id} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 8 }}>
@@ -417,9 +464,27 @@ export default function SquareUp() {
                 <input value={l.name} onChange={(e) => updateLabour(l.id, { name: e.target.value })} placeholder="Name (e.g. Alec Buchan, lumpers)" style={{ ...inputStyle, flex: 1 }} />
                 <IconBtn onClick={() => removeLabour(l.id)} title="Remove" />
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input value={l.boxes} onChange={(e) => updateLabour(l.id, { boxes: e.target.value })} placeholder="Boxes (opt.)" inputMode="numeric" style={{ ...inputStyle, flex: 1 }} />
-                <div style={{ flex: 1 }}><MoneyInput value={l.amount} onChange={(v) => updateLabour(l.id, { amount: v })} placeholder="Amount" /></div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <select value={l.basis || 'box'} onChange={(e) => updateLabour(l.id, { basis: e.target.value })} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
+                  <option value="box">£ per box</option>
+                  <option value="flat">Flat rate</option>
+                </select>
+                <input
+                  value={l.boxes}
+                  onChange={(e) => updateLabour(l.id, { boxes: e.target.value })}
+                  placeholder="Boxes"
+                  inputMode="numeric"
+                  disabled={(l.basis || 'box') === 'flat'}
+                  style={{ ...inputStyle, width: 100, textAlign: 'right', opacity: (l.basis || 'box') === 'flat' ? 0.4 : 1 }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1 }}>
+                  <MoneyInput value={l.rate} onChange={(v) => updateLabour(l.id, { rate: v })} placeholder={(l.basis || 'box') === 'box' ? 'Rate per box' : 'Amount'} />
+                </div>
+                <div style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 700, color: C.ink, fontSize: 15 }}>
+                  {fmtMoney(l.amount || 0)}
+                </div>
               </div>
             </div>
           ))}
@@ -477,6 +542,6 @@ export default function SquareUp() {
           </p>
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
