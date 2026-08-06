@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import SectionRule from '../SectionRule'
 import SettlementImport from '../SettlementImport'
+import FormatSampleUpload from '../FormatSampleUpload'
 
 // Settled sheets returned by the office — the other end of the Square Up loop.
 //
@@ -31,6 +33,8 @@ function statusFlag(status) {
 }
 
 export default function Settlements() {
+  const { appUser } = useAuth()
+  const [samples, setSamples] = useState([])
   const [boats, setBoats] = useState([])
   const [boatId, setBoatId] = useState('')
   const [rows, setRows] = useState([])
@@ -59,6 +63,22 @@ export default function Settlements() {
     })()
     return () => { cancel = true }
   }, [])
+
+  // 1b. Sheets other fleets have sent in, so a new format can be built.
+  //     RLS returns these to the app owner only — see su_format_samples.sql.
+  useEffect(() => {
+    if (!appUser?.is_owner) return
+    let cancel = false
+    ;(async () => {
+      const { data } = await supabase
+        .from('su_format_samples')
+        .select('id, fleet_id, uploader_email, agent, note, status, created_at, file_path, consent_at, consent_version')
+        .neq('status', 'supported')
+        .order('created_at', { ascending: false })
+      if (!cancel) setSamples(data || [])
+    })()
+    return () => { cancel = true }
+  }, [appUser?.is_owner, reload])
 
   // 2. Settlements and invoices for the selected boat.
   useEffect(() => {
@@ -104,6 +124,18 @@ export default function Settlements() {
         .eq('settlement_id', id).order('crew_name'),
     ])
     setDetail({ lines: lRes.data || [], crew: cRes.data || [], loading: false })
+  }
+
+  async function openSample(path) {
+    const { data, error } = await supabase.storage.from('su-format-samples').createSignedUrl(path, 3600)
+    if (error) { setError(error.message); return }
+    window.open(data.signedUrl, '_blank', 'noopener')
+  }
+
+  async function setSampleStatus(id, status) {
+    const { error } = await supabase.from('su_format_samples').update({ status }).eq('id', id)
+    if (error) { setError(error.message); return }
+    setReload(n => n + 1)
   }
 
   const boat = boats.find(b => b.id === boatId)
@@ -155,11 +187,46 @@ export default function Settlements() {
         </div>
       )}
 
-      {!loading && boats.length === 0 && (
-        <div className="card">
-          <p className="muted" style={{ margin: 0 }}>
-            No settlement boats are set up for your fleet. Settlements are currently
-            kept for Audacious and Beryl only.
+      {/* No boat set up means the reader has not been taught this fleet's sheet.
+          Offer a way in rather than a dead end. */}
+      {!loading && boats.length === 0 && <FormatSampleUpload />}
+
+      {/* Owner only: sheets other fleets have sent so their format can be built. */}
+      {appUser?.is_owner && samples.length > 0 && !importing && (
+        <div style={{ marginBottom: 22 }}>
+          <SectionRule side={`${samples.filter(s => s.status === 'pending').length} waiting`}>
+            Formats sent in
+          </SectionRule>
+          <div className="tw">
+            <table>
+              <thead><tr><th>Sent</th><th>From</th><th>Agent</th><th>Note</th><th>Status</th><th /></tr></thead>
+              <tbody>
+                {samples.map(s => (
+                  <tr key={s.id}>
+                    <td className="num">{(s.created_at || '').slice(0, 10)}</td>
+                    <td className="strong">{s.uploader_email || '—'}</td>
+                    <td>{s.agent || '—'}</td>
+                    <td className="muted">{s.note || '—'}</td>
+                    <td>
+                      <span className={'flag ' + (s.status === 'pending' ? 'warn' : 'ok')}>
+                        {s.status === 'in_progress' ? 'Building' : 'Waiting'}
+                      </span>
+                    </td>
+                    <td style={{ display: 'flex', gap: 6 }}>
+                      <button className="secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }} onClick={() => openSample(s.file_path)}>Open</button>
+                      {s.status === 'pending'
+                        ? <button className="secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }} onClick={() => setSampleStatus(s.id, 'in_progress')}>Start</button>
+                        : <button className="secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }} onClick={() => setSampleStatus(s.id, 'supported')}>Done</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="note">
+            Sent under a consent that says the sheet is deleted once the format is supported.
+            Marking one done hides it here — remember to delete the file from the
+            su-format-samples bucket as well.
           </p>
         </div>
       )}
