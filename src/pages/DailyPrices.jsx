@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ScatterChart, Scatter, ZAxis,
@@ -120,17 +121,11 @@ export default function DailyPrices() {
 
   const yearsAll = useMemo(() => [...new Set(prices.map(p => p.price_date.slice(0, 4)))].sort(), [prices])
 
-  if (loading) return <div className="container"><p className="muted">Loading…</p></div>
+  if (loading) return <AppShell><p className="muted">Loading…</p></AppShell>
 
   return (
-    <div className="container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Daily Prices</h1>
-          <p className="muted" style={{ marginBottom: 0 }}>Peterhead &amp; Denmark market board</p>
-        </div>
-        <Link to="/">← Dashboard</Link>
-      </header>
+    <AppShell>
+      <PageHeader title="Daily Prices" sub="Peterhead &amp; Denmark market board" />
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
       {!ready && <p style={{ color: '#c2410c', fontSize: '0.85rem' }}>The market tables aren't set up yet — run <code>supabase/market_prices.sql</code> in Supabase, then reload.</p>}
@@ -179,7 +174,7 @@ export default function DailyPrices() {
       {tab === 'prices' && <PriceTrends prices={prices} years={yearsAll} />}
       {tab === 'volume' && <VolumeTrends volumes={volumes} years={yearsAll} />}
       {tab === 'insights' && <Insights prices={prices} volumes={volumes} />}
-    </div>
+    </AppShell>
   )
 }
 

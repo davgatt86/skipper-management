@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 
 // Lets any signed-in user (skipper, viewer, crew) replace their
 // temporary password with their own. Uses the live session, so no
@@ -25,8 +26,7 @@ export default function Password() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: 480 }}>
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell maxWidth={480}>
       <h1>Change password</h1>
       <div className="card">
         {done ? (
@@ -46,6 +46,6 @@ export default function Password() {
           </form>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

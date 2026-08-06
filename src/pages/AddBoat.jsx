@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -21,10 +22,9 @@ export default function AddBoat() {
 
   if (!isOwner) {
     return (
-      <div className="container">
-        <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+      <AppShell>
         <div className="card"><p className="muted">Only the site owner can add a boat.</p></div>
-      </div>
+      </AppShell>
     )
   }
 
@@ -56,8 +56,7 @@ export default function AddBoat() {
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell>
 
       <div className="card" style={{ maxWidth: 520 }}>
         <h1 style={{ marginBottom: '0.25rem' }}>Add a boat</h1>
@@ -112,6 +111,6 @@ export default function AddBoat() {
           </form>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

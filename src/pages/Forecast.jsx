@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -154,18 +155,16 @@ export default function Forecast(){
   }
 
   if (!isSkipper) return (
-    <div className="container"><div style={{marginBottom:'1rem'}}><BackNav/></div>
-      <div className="card"><p className="muted">The market forecast is available to the skipper.</p></div></div>)
+    <AppShell>
+      <div className="card"><p className="muted">The market forecast is available to the skipper.</p></div>
+    </AppShell>)
 
   return (
-    <div className="container">
-      <div style={{marginBottom:'1rem'}}><BackNav/></div>
-      <div className="card">
-        <h1 style={{marginBottom:'0.3rem'}}>Peterhead Market Forecast</h1>
-        <p className="muted" style={{fontSize:'0.85rem', marginBottom:0}}>
-          Boats likely landing, projected from departures. A trip runs ~7-8 days: <b>+7</b> likely, <b>+8</b> possible. No auction Sat/Sun, so those days are skipped.
-        </p>
-      </div>
+    <AppShell>
+      <PageHeader
+        title="Peterhead Market Forecast"
+        sub="Boats likely landing, projected from departures. A trip runs ~7-8 days: +7 likely, +8 possible. No auction Sat/Sun, so those days are skipped."
+      />
       {error && <div className="card" style={{borderColor:'var(--red)'}}><p className="error">{error}</p></div>}
       {loading ? <div className="card"><p className="muted">Loading...</p></div> : (
         <>
@@ -243,7 +242,7 @@ export default function Forecast(){
             </div>
           </div>
         </>)}
-    </div>)
+    </AppShell>)
 }
 const lbl = { display:'flex', flexDirection:'column', gap:'0.25rem', fontSize:'0.8rem', fontWeight:600 }
 const inp = { padding:'0.45rem 0.55rem', borderRadius:7, border:'1px solid var(--border)', fontSize:'0.95rem', fontWeight:400 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import BackNav from "../BackNav";
+import AppShell from "../AppShell";
+import PageHeader from "../PageHeader";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "../AuthContext";
 
@@ -185,25 +186,22 @@ export default function StowagePlan(){
   const doPrint = () => { try { printRecord({ L, LAYERS, grid, SP, species, tripNo, meta, totals, haulAgg, maxHaul, TOTAL_CAP, existsFn:exists }); } catch(e){ setError("Print failed: "+e.message); } };
 
   if(!isSkipper) return (
-    <div className="container"><div style={{marginBottom:"1rem"}}><BackNav/></div>
-      <div className="card"><p className="muted">The stowage plan is available to the skipper.</p></div></div>);
+    <AppShell>
+      <div className="card"><p className="muted">The stowage plan is available to the skipper.</p></div>
+    </AppShell>);
 
   if(!layout) return (
-    <div className="container"><div style={{marginBottom:"1rem"}}><BackNav/></div>
+    <AppShell>
+      <PageHeader title="Fishroom Stowage" />
       <div className="card">
-        <h1 style={{marginBottom:"0.4rem"}}>Fishroom Stowage</h1>
         <p style={{marginBottom:"0.6rem"}}>Your vessel's fishroom layout hasn't been added yet — every boat's hold is different (tiers, widths, stack height), so the plan has to be built to your boat.</p>
         <p className="muted" style={{marginBottom:0}}>Send the host/owner a PDF copy of your stowage plan / fishroom layout and it'll be added in due course.</p>
       </div>
-    </div>);
+    </AppShell>);
 
   if(!planId) return (
-    <div className="container">
-      <div style={{marginBottom:"1rem"}}><BackNav/></div>
-      <div className="card">
-        <h1 style={{marginBottom:"0.3rem"}}>Fishroom Stowage — {L.vessel}</h1>
-        <p className="muted" style={{fontSize:"0.85rem",marginBottom:0}}>Pick a trip to open its plan, or start a new one.</p>
-      </div>
+    <AppShell>
+      <PageHeader title={`Fishroom Stowage — ${L.vessel}`} sub="Pick a trip to open its plan, or start a new one." />
       {error && <div className="card" style={{borderColor:"var(--red)"}}><p className="error">{error}</p></div>}
       <div className="card">
         <div style={{display:"flex",gap:"0.5rem",alignItems:"end",flexWrap:"wrap",marginBottom:"1rem"}}>
@@ -221,11 +219,10 @@ export default function StowagePlan(){
               </div>))}
           </div>)}
       </div>
-    </div>);
+    </AppShell>);
 
   return (
-    <div className="container">
-      <div style={{marginBottom:"1rem"}}><BackNav/></div>
+    <AppShell>
       <div style={{maxWidth:920,margin:"0 auto",padding:"0 2px 40px"}}>
         <div style={{display:"flex",alignItems:"baseline",gap:10,flexWrap:"wrap"}}>
           <button onClick={closePlan} style={{...tbtn,marginRight:4}}>← Trips</button>
@@ -354,7 +351,7 @@ export default function StowagePlan(){
 
         {section==="setup" && <SetupTab species={species} setSpecies={setSpecies}/>}
       </div>
-    </div>);
+    </AppShell>);
 }
 
 function TripDetails({trip,set}){

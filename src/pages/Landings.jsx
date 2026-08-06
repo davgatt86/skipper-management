@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -268,22 +268,15 @@ export default function Landings() {
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}>
-        <BackNav />
-      </div>
-
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Landings</h1>
-          <p className="muted" style={{ marginBottom: 0 }}>
-            This month: {monthLandings.length} landing{monthLandings.length === 1 ? '' : 's'}, {monthBoxes} boxes
-          </p>
-        </div>
+    <AppShell>
+      <PageHeader
+        title="Landings"
+        sub={`This month: ${monthLandings.length} landing${monthLandings.length === 1 ? '' : 's'}, ${monthBoxes} boxes`}
+      >
         {canEdit && !formOpen && (
           <button onClick={openAdd}>+ Add landing</button>
         )}
-      </header>
+      </PageHeader>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
@@ -442,6 +435,6 @@ export default function Landings() {
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

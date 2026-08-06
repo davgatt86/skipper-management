@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -38,10 +39,9 @@ export default function Settings() {
 
   if (!isSkipper) {
     return (
-      <div className="container">
-        <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+      <AppShell>
         <div className="card"><p className="muted">Bonus rates can only be changed by the skipper.</p></div>
-      </div>
+      </AppShell>
     )
   }
 
@@ -80,8 +80,7 @@ export default function Settings() {
   const boxPreview = (Number(box) || 0) * 1000
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell>
 
       <div className="card" style={{ maxWidth: 520 }}>
         <h1 style={{ marginBottom: '0.25rem' }}>Crew Bonus Settings</h1>
@@ -131,7 +130,7 @@ export default function Settings() {
           </form>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -268,17 +269,12 @@ export default function Contracts() {
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}>
-        <BackNav />
-      </div>
-
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h1 style={{ marginBottom: 0 }}>Contracts</h1>
+    <AppShell>
+      <PageHeader title="Contracts">
         {canEdit && !adding && (
           <button onClick={() => setAdding(true)}>+ New contract</button>
         )}
-      </header>
+      </PageHeader>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
@@ -369,6 +365,6 @@ export default function Contracts() {
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

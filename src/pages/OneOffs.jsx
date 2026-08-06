@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -77,14 +78,11 @@ export default function OneOffs() {
 
   if (!canView) {
     return (
-      <div className="container">
-        <div style={{ marginBottom: '1rem' }}>
-          <BackNav />
-        </div>
+      <AppShell>
         <div className="card">
           <p className="muted">This page is only available to the skipper.</p>
         </div>
-      </div>
+      </AppShell>
     )
   }
 
@@ -165,21 +163,14 @@ export default function OneOffs() {
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}>
-        <BackNav />
-      </div>
-
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>One-Off Bonuses</h1>
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Skipper only — not visible to office or crew.
-            {' '}Outstanding: <strong>{money(unpaidTotal, cur)}</strong> · Paid: {money(paidTotal, cur)}
-          </p>
-        </div>
+    <AppShell>
+      <PageHeader title="One-Off Bonuses">
         {!adding && <button onClick={() => setAdding(true)}>+ Add bonus</button>}
-      </header>
+      </PageHeader>
+      <p className="muted" style={{ marginTop: '-0.7rem', marginBottom: '1rem' }}>
+        Skipper only — not visible to office or crew.
+        {' '}Outstanding: <strong>{money(unpaidTotal, cur)}</strong> · Paid: {money(paidTotal, cur)}
+      </p>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
@@ -270,6 +261,6 @@ export default function OneOffs() {
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

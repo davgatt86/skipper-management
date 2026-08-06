@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
@@ -61,10 +62,9 @@ export default function Users() {
 
   if (!isSkipper) {
     return (
-      <div className="container">
-        <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+      <AppShell>
         <div className="card"><p className="muted">Only the skipper can manage users.</p></div>
-      </div>
+      </AppShell>
     )
   }
 
@@ -98,8 +98,7 @@ export default function Users() {
   const canDelete = (u) => u.id !== meId && !u.is_owner && u.role !== 'skipper'
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell>
 
       <div className="card" style={{ maxWidth: 640 }}>
         <h1 style={{ marginBottom: '0.25rem' }}>Manage Users</h1>
@@ -176,6 +175,6 @@ export default function Users() {
           </form>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

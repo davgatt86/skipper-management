@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
@@ -189,8 +190,7 @@ export default function EngineLogs() {
   const missingVessel = !vessel || !(vessel.vessel_name || vessel.pln)
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
         <div>
           <h1 style={{ marginBottom: 0 }}>Engine Log</h1>
@@ -316,7 +316,7 @@ export default function EngineLogs() {
           </div>
         ))
       ))}
-    </div>
+    </AppShell>
   )
 }
 

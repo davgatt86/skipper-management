@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { CrewCerts, CertAlerts } from './CrewCerts'
@@ -86,17 +86,12 @@ export default function Crew() {
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}>
-        <BackNav />
-      </div>
-
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h1 style={{ marginBottom: 0 }}>Crew</h1>
+    <AppShell>
+      <PageHeader title="Crew">
         {canEdit && !adding && (
           <button onClick={() => setAdding(true)}>+ Add crewman</button>
         )}
-      </header>
+      </PageHeader>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
@@ -242,6 +237,6 @@ export default function Crew() {
         )}
       </div>
       ))}
-    </div>
+    </AppShell>
   )
 }

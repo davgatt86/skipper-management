@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { useAuth } from '../AuthContext'
 import { parseAfpoXlsx } from '../lib/quota/afpoParse'
 import { parseTripPdf } from '../lib/quota/mcatchParse'
@@ -432,27 +433,20 @@ export default function Quota() {
     return rows
   }, [pos.rows, section])
 
-  if (loading) return <div className="container"><p className="muted">Loading…</p></div>
+  if (loading) return <AppShell><p className="muted">Loading…</p></AppShell>
   if (!isSkipper) {
     return (
-      <div className="container">
-        <p><Link to="/">← Dashboard</Link></p>
-        <p className="muted">Quota is skipper-only.</p>
-      </div>
+      <AppShell>
+        <div className="card"><p className="muted">Quota is skipper-only.</p></div>
+      </AppShell>
     )
   }
 
   const nothingYet = !snapshots.length && !trips.length && !manualStocks.length
 
   return (
-    <div className="container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Quota</h1>
-          <p className="muted" style={{ marginBottom: 0 }}>PO figures vs logbook catch</p>
-        </div>
-        <Link to="/">← Dashboard</Link>
-      </header>
+    <AppShell>
+      <PageHeader title="Quota" sub="PO figures vs logbook catch" />
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
       {!manualReady && (
@@ -795,6 +789,6 @@ export default function Quota() {
           </Scroll>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

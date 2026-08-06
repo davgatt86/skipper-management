@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2 } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
 } from 'recharts'
@@ -320,7 +321,7 @@ export default function Sales() {
   const speciesChart = useMemo(() => speciesTbl.slice(0, 10).map(s => ({ label: s.species, value: s.value, kg: r2(s.kg / 1000) })), [speciesTbl])
 
   if (!canView) {
-    return <div className="container"><p className="muted">Skipper access only. <Link to="/">← Back</Link></p></div>
+    return <AppShell><div className="card"><p className="muted">Skipper access only.</p></div></AppShell>
   }
 
   async function updateDkkRate(landing, newRate) {
@@ -347,17 +348,11 @@ export default function Sales() {
   }
 
   return (
-    <div className="container">
-      <header className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Fish Sales</h1>
-          <p className="muted"><Link to="/">← Dashboard</Link></p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button className="secondary" onClick={() => exportSalesExcel({ scopeLabel, rows, landings: scopeLandings, landingById })} disabled={!rows.length}>Excel</button>
-          <button className="secondary" onClick={() => window.print()} disabled={!rows.length}>PDF / Print</button>
-        </div>
-      </header>
+    <AppShell>
+      <PageHeader title="Fish Sales" sub={scopeLabel}>
+        <button className="secondary" onClick={() => exportSalesExcel({ scopeLabel, rows, landings: scopeLandings, landingById })} disabled={!rows.length}>Excel</button>
+        <button className="secondary" onClick={() => window.print()} disabled={!rows.length}>PDF / Print</button>
+      </PageHeader>
 
       {/* scope selector */}
       <div className="card no-print" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -420,7 +415,7 @@ export default function Sales() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="label" /><YAxis tickFormatter={v => '£' + (v / 1000) + 'k'} />
                 <Tooltip formatter={v => gbp0(v)} />
-                <Bar dataKey="value" name="£" fill="#1F3864" />
+                <Bar dataKey="value" name="£" fill="var(--hull)" />
               </BarChart>
             </ResponsiveContainer>
             <ResponsiveContainer width="100%" height={200}>
@@ -428,7 +423,7 @@ export default function Sales() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="label" /><YAxis />
                 <Tooltip formatter={v => v + ' t'} />
-                <Line dataKey="kg" name="tonnes" stroke="#2E75B6" strokeWidth={2} dot />
+                <Line dataKey="kg" name="tonnes" stroke="var(--hull-bright)" strokeWidth={2} dot />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -441,7 +436,7 @@ export default function Sales() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="label" /><YAxis tickFormatter={v => '£' + (v / 1000) + 'k'} />
                 <Tooltip formatter={v => gbp0(v)} />
-                <Bar dataKey="value" name="£" fill="#1F3864" />
+                <Bar dataKey="value" name="£" fill="var(--hull)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -455,7 +450,7 @@ export default function Sales() {
                 <XAxis type="number" tickFormatter={v => '£' + (v / 1000) + 'k'} />
                 <YAxis type="category" dataKey="label" width={90} />
                 <Tooltip formatter={v => gbp0(v)} />
-                <Bar dataKey="value" name="£" fill="#70AD47" />
+                <Bar dataKey="value" name="£" fill="var(--kelp)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -598,7 +593,7 @@ export default function Sales() {
       </div>}
 
       {loading && <p className="muted">Loading…</p>}
-    </div>
+    </AppShell>
   )
 }
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { useAuth } from '../AuthContext'
 import { supabase } from '../supabaseClient'
 
@@ -83,13 +85,8 @@ export default function CrewHub() {
   const onLeaveCount = visible.filter(c => c.status === 'on_leave').length
 
   return (
-    <div className="container">
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Crew</h1>
-          <p className="muted"><Link to="/">← Dashboard</Link></p>
-        </div>
-      </header>
+    <AppShell>
+      <PageHeader title="Crew" />
 
       <div className="card">
         <h2>Manage</h2>
@@ -154,6 +151,6 @@ export default function CrewHub() {
           </>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

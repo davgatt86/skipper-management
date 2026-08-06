@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, shortMarket, r2 } from '../lib/salesAgg'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const fmtDate = (iso) => { if (!iso) return ''; const [y,m,d] = iso.split('-'); return `${d}/${m}/${String(y).slice(2)}` }
@@ -126,19 +127,18 @@ export default function SalesCompare(){
     return out
   }, [aRows, bRows, openBuyer, openBuyerSp])
 
-  if (!isSkipper) return <div className="container"><p className="muted">Skipper access only. <Link to="/">← Back</Link></p></div>
+  if (!isSkipper) return <AppShell><div className="card"><p className="muted">Skipper access only.</p></div></AppShell>
   const aLabel = labelFor(landings, A), bLabel = labelFor(landings, B)
 
   const toggleSpecies = (r) => setOpenSp(v => v===r.key ? '' : r.key)
   const toggleBuyer = (r) => { if (r.level===0){ setOpenBuyer(v => v===r.key ? '' : r.key); setOpenBuyerSp('') } else if (r.level===1){ setOpenBuyerSp(v => v===r.key ? '' : r.key) } }
 
   return (
-    <div className="container" style={{ maxWidth: 1180 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:'0.5rem' }}>
-        <h1 style={{ marginBottom:'0.2rem' }}>Compare Sales</h1>
-        <p className="muted"><Link to="/sales">← Fish Sales</Link> · <Link to="/">Dashboard</Link></p>
-      </div>
-      <p className="muted" style={{ fontSize:'0.85rem', marginTop:0 }}>Set each side to a landing, month or year. Centre shows B − A. Click a species (or buyer) to drill into grades.</p>
+    <AppShell maxWidth={1180}>
+      <PageHeader
+        title="Compare Sales"
+        sub="Set each side to a landing, month or year. Centre shows B − A. Click a species (or buyer) to drill into grades."
+      />
 
       {loading ? <div className="card"><p className="muted">Loading…</p></div> : (<>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.8rem' }}>
@@ -170,7 +170,7 @@ export default function SalesCompare(){
           <button className="secondary" onClick={() => window.print()} disabled={!aRows.length && !bRows.length}>PDF / Print</button>
         </div>
       </>)}
-    </div>
+    </AppShell>
   )
 }
 
@@ -252,7 +252,7 @@ function SidePicker({ tint, tag, landings, years, vessels, sel, setSel }){
   )
 }
 
-function deltaColor(d){ return d>0 ? '#16A34A' : d<0 ? '#DC2626' : 'var(--grey-400)' }
+function deltaColor(d){ return d>0 ? 'var(--kelp)' : d<0 ? 'var(--rust)' : 'var(--mute)' }
 function deltaText(a, b, fmt){
   const d = r2((Number(b)||0) - (Number(a)||0))
   return <span style={{ color:deltaColor(d), fontWeight:600 }}>{d>0?'▲':d<0?'▼':'–'} {fmt(Math.abs(d))}</span>

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 
 // colour-mix keeps these readable in BOTH themes: a tint of the signal colour
 // over the current surface, so nothing glares on a night wheelhouse screen.
@@ -60,14 +61,11 @@ export default function Alerts(){
   }
   const setN = (k,v) => setCfg(c => ({ ...c, [k]: v }))
 
-  if (!isSkipper) return <div className="container"><p className="muted">Skipper access only. <Link to="/">← Back</Link></p></div>
+  if (!isSkipper) return <AppShell><div className="card"><p className="muted">Skipper access only.</p></div></AppShell>
 
   return (
-    <div className="container" style={{ maxWidth: 720 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:'0.5rem' }}>
-        <h1 style={{ marginBottom:'0.2rem' }}>Alerts{unread>0 && <span style={{ marginLeft:8, fontSize:'0.8rem', background:'var(--red)', color:'var(--on-navy)', borderRadius:20, padding:'1px 9px' }}>{unread}</span>}</h1>
-        <p className="muted"><Link to="/">← Dashboard</Link></p>
-      </div>
+    <AppShell maxWidth={720}>
+      <PageHeader title={<>Alerts{unread>0 && <span className="num" style={{ marginLeft:8, fontSize:'0.8rem', background:'var(--rust)', color:'#fff', borderRadius:20, padding:'1px 9px', verticalAlign:'middle' }}>{unread}</span>}</>} />
 
       <div className="card no-print" style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center' }}>
         <button className="secondary" onClick={markAllRead} disabled={!unread}>Mark all read</button>
@@ -109,7 +107,7 @@ export default function Alerts(){
           )
         })}
       <p className="muted" style={{ fontSize:'0.74rem' }}>Alerts cover your main species only, and won't repeat the same one twice in a day.</p>
-    </div>
+    </AppShell>
   )
 }
 

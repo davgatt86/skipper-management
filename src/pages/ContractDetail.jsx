@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import AppShell from '../AppShell'
 import { useAuth } from '../AuthContext'
 
 const STATUS_LABEL = { current: 'Current', pending_return: 'Gone Home', completed: 'Completed' }
@@ -105,23 +106,23 @@ export default function ContractDetail() {
 
   if (loading) {
     return (
-      <div className="container">
+      <AppShell>
         <div style={{ marginBottom: '1rem' }}>
           <Link to="/contracts" style={{ fontSize: '0.9rem' }}>← Back to Contracts</Link>
         </div>
         <div className="card"><p className="muted">Loading…</p></div>
-      </div>
+      </AppShell>
     )
   }
 
   if (!contract) {
     return (
-      <div className="container">
+      <AppShell>
         <div style={{ marginBottom: '1rem' }}>
           <Link to="/contracts" style={{ fontSize: '0.9rem' }}>← Back to Contracts</Link>
         </div>
         <div className="card"><p className="error">{error || 'Contract not found.'}</p></div>
-      </div>
+      </AppShell>
     )
   }
 
@@ -150,7 +151,7 @@ export default function ContractDetail() {
   const cellPad = { padding: '0.6rem 0.4rem' }
 
   return (
-    <div className="container">
+    <AppShell>
       <div style={{ marginBottom: '1rem' }}>
         <Link to="/contracts" style={{ fontSize: '0.9rem' }}>← Back to Contracts</Link>
       </div>
@@ -299,6 +300,6 @@ export default function ContractDetail() {
           </table>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }

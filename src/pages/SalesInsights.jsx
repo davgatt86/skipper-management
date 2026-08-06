@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { bySpecies, gradesFor, buyerLeague, priceTrendSeries, seasonalityGrid, gradeSeasonality } from '../lib/salesAgg'
@@ -86,16 +87,15 @@ export default function SalesInsights() {
 
   if (!isSkipper) {
     return (
-      <div className="container">
-        <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+      <AppShell>
         <div className="card"><p className="muted">Sales insights are available to the skipper.</p></div>
-      </div>
+      </AppShell>
     )
   }
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell>
+      <PageHeader title="Sales Insights" />
 
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem' }}>Sales Insights</h1>
@@ -126,7 +126,7 @@ export default function SalesInsights() {
             : tab === 'trends' ? <Trends rows={rows} landingById={landingById} />
               : tab === 'buyers' ? <BuyerLeague rows={monthRows} />
                 : <Seasonality rows={rows} landingById={landingById} />}
-    </div>
+    </AppShell>
   )
 }
 

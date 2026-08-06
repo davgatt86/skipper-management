@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 
 // Trip period palette — cycles as trips are added (red, blue, ...)
 const PALETTE = [
@@ -160,17 +161,16 @@ export default function Rota() {
   const upcoming = trips.filter(t => t.end_date >= today)
   const past = trips.filter(t => t.end_date < today)
 
-  if (loading) return <div className="container"><p className="muted">Loading…</p></div>
-  if (!canView) return <div className="container"><BackNav /><p className="muted" style={{ marginTop: '1rem' }}>The rota is skipper/viewer only.</p></div>
+  if (loading) return <AppShell><p className="muted">Loading…</p></AppShell>
+  if (!canView) return <AppShell><div className="card"><p className="muted">The rota is skipper/viewer only.</p></div></AppShell>
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
+    <AppShell>
+      <PageHeader
+        title="Trip Rota"
+        sub={isSkipper ? 'Tap a start day, then an end day, to plan a trip. Tap a coloured day to open that trip below.' : 'Planned trips and crew holidays.'}
+      />
       <header style={{ marginBottom: '1rem' }}>
-        <h1 style={{ marginBottom: 0 }}>Trip Rota</h1>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          {isSkipper ? 'Tap a start day, then an end day, to plan a trip. Tap a coloured day to open that trip below.' : 'Planned trips and crew holidays.'}
-        </p>
       </header>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error" style={{ marginBottom: 0 }}>{error}</p></div>}
@@ -313,6 +313,6 @@ export default function Rota() {
           </div>
         ))}
       </div>
-    </div>
+    </AppShell>
   )
 }

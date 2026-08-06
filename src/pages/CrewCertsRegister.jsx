@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import BackNav from '../BackNav'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
@@ -126,17 +127,8 @@ export default function CrewCertsRegister() {
   )
 
   return (
-    <div className="container">
-      <div style={{ marginBottom: '1rem' }}><BackNav /></div>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Crew Certificates</h1>
-          <p className="muted" style={{ marginTop: '0.2rem', fontSize: '0.85rem' }}>
-            Also: <Link to="/crew-list">Crew List</Link> · <Link to="/engine-logs">Engine Log</Link>
-          </p>
-        </div>
-        <Link to="/">← Dashboard</Link>
-      </header>
+    <AppShell>
+      <PageHeader title="Crew Certificates" />
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
@@ -269,7 +261,7 @@ export default function CrewCertsRegister() {
           Add, edit, categorise or upload certificates for each crewman on the <Link to="/crew">Crew page</Link>.
         </p>
       </div>
-    </div>
+    </AppShell>
   )
 }
 

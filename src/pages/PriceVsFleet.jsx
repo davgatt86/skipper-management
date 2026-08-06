@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const pkg = (n) => n == null ? '—' : '£' + Number(n).toFixed(2)
@@ -65,17 +66,16 @@ export default function PriceVsFleet(){
     }
   }
 
-  if (!isSkipper) return <div className="container"><p className="muted">Skipper access only. <Link to="/">← Back</Link></p></div>
+  if (!isSkipper) return <AppShell><div className="card"><p className="muted">Skipper access only.</p></div></AppShell>
 
   const years = [thisYear, thisYear-1, thisYear-2]
 
   return (
-    <div className="container" style={{ maxWidth: 760 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', flexWrap:'wrap', gap:'0.5rem' }}>
-        <h1 style={{ marginBottom:'0.2rem' }}>Your prices vs the fleet</h1>
-        <p className="muted"><Link to="/sales">← Fish Sales</Link> · <Link to="/">Dashboard</Link></p>
-      </div>
-      <p className="muted" style={{ fontSize:'0.85rem', marginTop:0 }}>Average £/kg you got for each species against the fleet average, anonymous — no boats, tonnage or dates. Tap a species for its grades. A species only shows a fleet figure once at least 3 boats are behind it.</p>
+    <AppShell maxWidth={760}>
+      <PageHeader
+        title="Your prices vs the fleet"
+        sub="Average £/kg you got for each species against the fleet average, anonymous — no boats, tonnage or dates. Tap a species for its grades. A species only shows a fleet figure once at least 3 boats are behind it."
+      />
 
       {/* period toggle */}
       <div className="card" style={{ display:'flex', alignItems:'center', gap:'0.6rem', flexWrap:'wrap' }}>
@@ -136,7 +136,7 @@ export default function PriceVsFleet(){
           })}
       </div>
       <p className="muted" style={{ fontSize:'0.75rem' }}>Value-weighted averages (total value ÷ total weight). Rate-pending Danish notes are left out until a rate is set.</p>
-    </div>
+    </AppShell>
   )
 }
 

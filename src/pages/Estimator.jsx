@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import BackNav from "../BackNav";
+import AppShell from "../AppShell";
+import PageHeader from "../PageHeader";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -17,11 +18,13 @@ import { buildEstimatorPrices } from "../lib/market/estimatorPrices";
 const FONT = `inherit`;
 const MONO = `ui-monospace, SFMono-Regular, monospace`;
 // App light theme (matches index.css): ink doubles as the primary button
-// colour, so navy keeps those buttons looking like the rest of the app.
+// colour, so hull cobalt keeps those buttons looking like the rest of the app.
+// pd is Peterhead in cobalt; dk is Denmark in dark brass, kept clear of the
+// brass used for "watch" so the two never read as the same signal.
 const C = {
-  bg: "#ffffff", panel: "#FAFAFA", panel2: "#F2F2F2", line: "#d0d7de",
-  ink: "#1F3864", dim: "#6b7280", pd: "#2E75B6", dk: "#c2410c",
-  good: "#15803d", warn: "#b45309", bad: "#C00000",
+  bg: "#ffffff", panel: "#F6F8F7", panel2: "#ECEFEE", line: "#D2DAD9",
+  ink: "#1749A8", dim: "#5D7079", pd: "#1749A8", dk: "#7C5610",
+  good: "#26654F", warn: "#A97614", bad: "#C2342A",
 };
 
 /* Name-based grade dictionary: species -> size token -> {pd grade, dk sort, conf}
@@ -648,44 +651,44 @@ export default function Estimator(){
 
   const STEPS=["Boat tally","Peterhead prices","Hanstholm prices","Check mapping","Estimated gross"];
   return(
-    <div style={{minHeight:"100vh",background:C.bg,color:C.ink,fontFamily:FONT,paddingBottom:80}}>
+    <AppShell>
+      {/* Scoped to .est — these were global selectors when the estimator owned
+          the whole page. Inside the shell they would leak into the sidebar. */}
+      <div className="est" style={{color:C.ink,fontFamily:FONT}}>
       <style>{`
-        *{box-sizing:border-box} input,select{font-family:${MONO}}
-        table{border-collapse:collapse;width:100%}
-        th,td{padding:7px 10px;border-bottom:1px solid ${C.line};text-align:left;font-size:13px}
-        th{color:${C.dim};font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
-        td.r,th.r{text-align:right}
-        .ci{width:70px;background:${C.panel2};border:1px solid ${C.line};color:${C.ink};padding:4px 6px;border-radius:5px;text-align:right}
-        .si{background:${C.panel2};border:1px solid ${C.line};color:${C.ink};padding:4px 6px;border-radius:5px}
-        tr:hover td{background:rgba(31,56,100,.04)}
+        .est input,.est select{font-family:${MONO}}
+        .est table{border-collapse:collapse;width:100%}
+        .est th,.est td{padding:7px 10px;border-bottom:1px solid ${C.line};text-align:left;font-size:13px}
+        .est th{color:${C.dim};font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+        .est td.r,.est th.r{text-align:right}
+        .est .ci{width:70px;background:${C.panel2};border:1px solid ${C.line};color:${C.ink};padding:4px 6px;border-radius:5px;text-align:right}
+        .est .si{background:${C.panel2};border:1px solid ${C.line};color:${C.ink};padding:4px 6px;border-radius:5px}
+        .est tr:hover td{background:rgba(23,73,168,.05)}
       `}</style>
 
-      <div style={{borderBottom:`1px solid ${C.line}`,padding:"18px 22px",background:C.panel,position:"sticky",top:0,zIndex:10}}>
-        <div style={{display:"flex",alignItems:"baseline",gap:14,flexWrap:"wrap"}}>
-          <BackNav />
-          <div style={{fontSize:22,fontWeight:800,letterSpacing:"-.02em"}}>Where to Land</div>
-          <div style={{color:C.dim,fontSize:13}}>Peterhead vs Hanstholm</div>
-          <button onClick={loadBoardPrices} style={{background:"transparent",border:`1px solid ${C.line}`,color:C.ink,padding:"5px 11px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>↻ Latest board prices</button>
-          <div style={{marginLeft:"auto",display:"flex",gap:18}}>
-            <Tot label="Peterhead" val={fmtGBP(totals.pd)} col={C.pd}/>
-            <Tot label="Hanstholm" val={fmtGBP(totals.dk)} col={C.dk}/>
-            <Tot label="Difference" val={(totals.diff>=0?"+":"")+fmtGBP(totals.diff)} col={totals.diff>=0?C.dk:C.pd}/>
-          </div>
-        </div>
-        <div style={{display:"flex",gap:8,marginTop:16,flexWrap:"wrap"}}>
-          {STEPS.map((s,i)=>(<button key={i} onClick={()=>setStep(i)} style={{background:i===step?C.ink:"transparent",color:i===step?C.bg:C.dim,border:`1px solid ${i===step?C.ink:C.line}`,padding:"6px 13px",borderRadius:20,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>{i+1}. {s}</button>))}
-        </div>
-        {boardMsg&&<div style={{fontSize:12,color:C.dim,marginTop:10}}>{boardMsg}</div>}
-      </div>
+      <PageHeader title="Where to Land" sub="Peterhead vs Hanstholm">
+        <button onClick={loadBoardPrices} className="secondary">↻ Latest board prices</button>
+      </PageHeader>
 
-      <div style={{maxWidth:1180,margin:"0 auto",padding:"26px 22px"}}>
+      <div style={{display:"flex",gap:18,flexWrap:"wrap",marginBottom:16}}>
+        <Tot label="Peterhead" val={fmtGBP(totals.pd)} col={C.pd}/>
+        <Tot label="Hanstholm" val={fmtGBP(totals.dk)} col={C.dk}/>
+        <Tot label="Difference" val={(totals.diff>=0?"+":"")+fmtGBP(totals.diff)} col={totals.diff>=0?C.dk:C.pd}/>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+        {STEPS.map((s,i)=>(<button key={i} onClick={()=>setStep(i)} style={{background:i===step?C.ink:"transparent",color:i===step?"#fff":C.dim,border:`1px solid ${i===step?C.ink:C.line}`,padding:"6px 13px",borderRadius:20,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:FONT}}>{i+1}. {s}</button>))}
+      </div>
+      {boardMsg&&<div style={{fontSize:12,color:C.dim,marginBottom:10}}>{boardMsg}</div>}
+
+      <div style={{paddingTop:14}}>
         {step===0&&<BoatStep tally={tally} setTally={setTally} setMap={setMap} mode={tallyMode} setMode={setTallyMode} effW={effW} onUpload={parseBoat} busy={busy.boat} msg={msg.boat} next={()=>setStep(1)}/>}
         {step===1&&<PriceStep which="pd" title="Peterhead price sheet" accent={C.pd} prices={pd} setPrices={setPd} onUpload={(f)=>parsePrice(f,"pd")} busy={busy.pd} msg={msg.pd} next={()=>setStep(2)}/>}
         {step===2&&<PriceStep which="dk" title="Hanstholm price sheet" accent={C.dk} prices={dk} setPrices={setDk} onUpload={(f)=>parsePrice(f,"dk")} busy={busy.dk} msg={msg.dk} next={()=>setStep(3)}/>}
         {step===3&&<MapStep tally={tally} map={map} setMap={setMap} pd={pd} dk={dk} pdHigh={pdHigh} setPdHigh={setPdHigh} priceOv={priceOv} setPriceOv={setPriceOv} next={()=>setStep(4)}/>}
         {step===4&&<ResultStep rows={rows} totals={totals} summary={summary} fillMissing={fillMissing} setFillMissing={setFillMissing} tallyMode={tallyMode} exportPDF={exportPDF} nett={nett} nettCfg={nettCfg} setNettCfg={setNettCfg} tallyBoxes={tallyBoxes} boxesOverride={boxesOverride} setBoxesOverride={setBoxesOverride}/>}
       </div>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

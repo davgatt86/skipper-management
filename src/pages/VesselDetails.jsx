@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 
 const FIELDS = [
   { key: 'vessel_name', label: 'Vessel name', ph: 'AUDACIOUS' },
@@ -57,11 +58,8 @@ export default function VesselDetails() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '1rem' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem' }}>
-        <h1 style={{ marginBottom: 0 }}>Vessel Details</h1>
-        <Link to="/">← Dashboard</Link>
-      </div>
+    <AppShell maxWidth={640}>
+      <PageHeader title="Vessel Details" />
       <p style={{ color: 'var(--grey-400)', marginTop: '0.4rem' }}>
         Enter your vessel’s constants once — they’ll fill in automatically on every crew list.
       </p>
@@ -101,6 +99,6 @@ export default function VesselDetails() {
           <p style={{ marginTop: '1rem', color: 'var(--grey-400)' }}>Only the skipper can edit vessel details.</p>
         )}
       </div>
-    </div>
+    </AppShell>
   )
 }
