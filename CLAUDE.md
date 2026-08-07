@@ -580,10 +580,21 @@ Also agreed, not yet scheduled:
 
 - **Garbage log.** A Garbage Record Book is a MARPOL requirement at Audacious's
   size. Confirm whether one is being kept elsewhere before assuming it is not.
-- **Vessel/crew alerts kept SEPARATE from market alerts.** Certificates,
-  passports, bonuses due and out-of-range engine parameters must not land in
-  the same feed as price alerts and get lost. Same Alerts page, separate
-  stream — the price alerts are frequent and would bury a passport expiry.
+- ~~**Vessel/crew alerts kept SEPARATE from market alerts.**~~ — **done Aug
+  2026.** `supabase/compliance_alerts.sql` adds
+  `generate_compliance_alerts(lead_days default 60)`, raising `crew_passport`,
+  `crew_cert` and `vessel_cert` alerts into the existing `alerts` table.
+  `Alerts.jsx` renders two streams: **Vessel & crew** first, then Market.
+  "Clear price alerts" is scoped so it can never take an expiry with it.
+  Idempotent — `(fleet_id, dedup_key)` is unique and the key carries the
+  expiry date *and* the bucket, so a cert re-alerts when it crosses due →
+  expired, and a renewed one only when its new expiry comes into range. The
+  page calls it on every visit.
+  First run raised 8, of which two were unknown: **Elizer Tano's ENG 1**
+  (due 19-09-2026) and the Portable Fire Extinguisher certificate.
+  **Nothing schedules it yet** — an expiry falling due while nobody opens the
+  app goes unnoticed. A daily cron calling the function is the obvious next
+  step. Engine-parameter and bonus-due alerts can join the same stream.
 - **Familiarisation** — 42 items in Aegir. The list itself has not been seen
   yet; look at a crewman's page (read-only) before building. Permission given.
 - **Dedicated pair-team fish sales analysis.** Sandy and Gavin tow one net

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
@@ -11,7 +12,18 @@ const SEV = {
   warn: { bg:'color-mix(in srgb, var(--red) 12%, var(--surface))',   bd:'var(--red)',   dot:'var(--red)' },
   info: { bg:'color-mix(in srgb, var(--navy) 12%, var(--surface))',  bd:'var(--navy)',  dot:'var(--navy)' },
 }
-const TYPE_LABEL = { daily:'Daily jump', fourweek:'4-week', pd_dk:'PD vs DK', own_spike:'Your sales', forecast:'Forecast' }
+const TYPE_LABEL = {
+  daily:'Daily jump', fourweek:'4-week', pd_dk:'PD vs DK', own_spike:'Your sales', forecast:'Forecast',
+  crew_passport:'Passport', crew_cert:'Crew ticket', vessel_cert:'Vessel cert',
+}
+
+// Vessel and crew expiries are kept in their own stream. There are thousands
+// of price alerts on this database and a handful of expiries — in one feed a
+// passport expiry is buried by lunchtime. Same table, same page, separate
+// list, and "clear all" on one never touches the other.
+const COMPLIANCE_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert']
+const isCompliance = (a) => COMPLIANCE_TYPES.includes(a.type)
+const LINK_OF = { crew_passport:'/crew', crew_cert:'/crew-certs', vessel_cert:'/vessel-certs' }
 const DEFAULTS = { daily_jump_pct:15, four_week_pct:25, pd_dk_gap_pct:20, own_spike_pct:20,
   enable_daily:true, enable_four_week:true, enable_pd_dk:true, enable_own:true }
 
@@ -23,6 +35,7 @@ export default function Alerts(){
   const [showSettings, setShowSettings] = useState(false)
   const [cfg, setCfg] = useState(DEFAULTS)
   const [saving, setSaving] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [note, setNote] = useState('')
 
   async function load(){
@@ -33,9 +46,17 @@ export default function Alerts(){
     if (s?.data) setCfg({ ...DEFAULTS, ...s.data })
     setLoading(false)
   }
-  useEffect(() => { if (isSkipper) load(); else setLoading(false) }, [isSkipper])
+  useEffect(() => {
+    if (!isSkipper) { setLoading(false); return }
+    // Raise any new expiries first, then read. Idempotent, so this is safe to
+    // do on every visit.
+    supabase.rpc('generate_compliance_alerts', { lead_days: 60 }).then(load, load)
+  }, [isSkipper])
 
+  const compliance = useMemo(() => rows.filter(isCompliance), [rows])
+  const market = useMemo(() => rows.filter(r => !isCompliance(r)), [rows])
   const unread = useMemo(() => rows.filter(r => !r.read_at).length, [rows])
+  const complianceUnread = useMemo(() => compliance.filter(r => !r.read_at).length, [compliance])
 
   async function markAllRead(){
     const ids = rows.filter(r => !r.read_at).map(r => r.id)
@@ -47,11 +68,23 @@ export default function Alerts(){
     await supabase.from('alerts').update({ dismissed_at: new Date().toISOString() }).eq('id', id)
     setRows(rs => rs.filter(r => r.id !== id))
   }
-  async function clearAll(){
-    const ids = rows.map(r => r.id)
+  // Scoped to one stream on purpose. Clearing a day's price alerts must never
+  // take an expired certificate with it.
+  async function clearMarket(){
+    const ids = market.map(r => r.id)
     if (!ids.length) return
     await supabase.from('alerts').update({ dismissed_at: new Date().toISOString() }).in('id', ids)
-    setRows([])
+    setRows(rs => rs.filter(isCompliance))
+  }
+  // Checking expiries is cheap and idempotent, so it runs on every load as
+  // well as on demand — an expiry that falls due while nobody is looking
+  // still turns up the next time the page is opened.
+  async function checkExpiries(){
+    setChecking(true)
+    const { error } = await supabase.rpc('generate_compliance_alerts', { lead_days: 60 })
+    setChecking(false)
+    if (error) { setNote(error.message); return }
+    load()
   }
   async function saveCfg(){
     setSaving(true); setNote('')
@@ -69,7 +102,8 @@ export default function Alerts(){
 
       <div className="card no-print" style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', alignItems:'center' }}>
         <button className="secondary" onClick={markAllRead} disabled={!unread}>Mark all read</button>
-        <button className="secondary" onClick={clearAll} disabled={!rows.length}>Clear all</button>
+        <button className="secondary" onClick={clearMarket} disabled={!market.length}>Clear price alerts</button>
+        <button className="secondary" onClick={checkExpiries} disabled={checking}>{checking?'Checking…':'Check expiries'}</button>
         <button className="secondary" onClick={()=>setShowSettings(s=>!s)} style={{ marginLeft:'auto' }}>{showSettings?'Hide settings':'⚙ Alert settings'}</button>
       </div>
 
@@ -88,26 +122,56 @@ export default function Alerts(){
         </div>
       )}
 
-      {loading ? <p className="muted">Loading…</p>
-       : rows.length === 0 ? <div className="card"><p className="muted" style={{ margin:0 }}>No alerts right now. New ones appear here as board prices and your sales come in.</p></div>
-       : rows.map(a => {
-          const s = SEV[a.severity] || SEV.info
-          return (
-            <div key={a.id} className="card" style={{ background:s.bg, border:`1px solid ${s.bd}`, padding:'0.65rem 0.85rem', marginBottom:'0.5rem', display:'flex', alignItems:'flex-start', gap:'0.6rem' }}>
-              <span style={{ width:9, height:9, borderRadius:9, background: a.read_at?'transparent':s.dot, border:`2px solid ${s.dot}`, marginTop:5, flex:'0 0 auto' }} />
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:'flex', gap:'0.5rem', alignItems:'baseline', flexWrap:'wrap' }}>
-                  <b style={{ color:'var(--text)' }}>{a.title}</b>
-                  <span className="muted" style={{ fontSize:'0.68rem', textTransform:'uppercase', letterSpacing:'0.03em' }}>{TYPE_LABEL[a.type] || a.type}</span>
-                </div>
-                {a.body && <div className="muted" style={{ fontSize:'0.83rem', marginTop:2 }}>{a.body}</div>}
-              </div>
-              <button onClick={()=>dismiss(a.id)} title="Dismiss" style={{ border:'none', background:'none', cursor:'pointer', color:'var(--grey-400)', fontSize:'1.1rem', lineHeight:1, padding:'0 2px' }}>×</button>
-            </div>
-          )
-        })}
-      <p className="muted" style={{ fontSize:'0.74rem' }}>Alerts cover your main species only, and won't repeat the same one twice in a day.</p>
+      {loading ? <p className="muted">Loading…</p> : (
+        <>
+          {/* ---- Vessel & crew. First, and never cleared with the prices. ---- */}
+          <h2 style={{ marginBottom:'0.4rem' }}>
+            Vessel &amp; crew
+            {complianceUnread > 0 && (
+              <span className="num" style={{ marginLeft:8, fontSize:'0.72rem', background:'var(--rust)', color:'#fff', borderRadius:20, padding:'1px 9px', verticalAlign:'middle' }}>{complianceUnread}</span>
+            )}
+          </h2>
+          {compliance.length === 0 ? (
+            <div className="card"><p className="muted" style={{ margin:0 }}>
+              Nothing expiring in the next 60 days. Certificates, passports and vessel papers are
+              checked each time this page opens.
+            </p></div>
+          ) : compliance.map(a => <AlertCard key={a.id} a={a} onDismiss={dismiss} />)}
+
+          {/* ---- Market. ---- */}
+          <h2 style={{ marginBottom:'0.4rem', marginTop:'1.4rem' }}>
+            Market <span className="muted" style={{ fontWeight:400, fontSize:'0.85rem' }}>({market.length})</span>
+          </h2>
+          {market.length === 0 ? (
+            <div className="card"><p className="muted" style={{ margin:0 }}>No price alerts right now. New ones appear as board prices and your sales come in.</p></div>
+          ) : market.map(a => <AlertCard key={a.id} a={a} onDismiss={dismiss} />)}
+
+          <p className="muted" style={{ fontSize:'0.74rem' }}>
+            Price alerts cover your main species only and won&rsquo;t repeat the same one twice in a day.
+            Expiries are raised once per certificate per expiry date, and again if one lapses.
+          </p>
+        </>
+      )}
     </AppShell>
+  )
+}
+
+function AlertCard({ a, onDismiss }){
+  const s = SEV[a.severity] || SEV.info
+  const link = LINK_OF[a.type]
+  return (
+    <div className="card" style={{ background:s.bg, border:`1px solid ${s.bd}`, padding:'0.65rem 0.85rem', marginBottom:'0.5rem', display:'flex', alignItems:'flex-start', gap:'0.6rem' }}>
+      <span style={{ width:9, height:9, borderRadius:9, background: a.read_at?'transparent':s.dot, border:`2px solid ${s.dot}`, marginTop:5, flex:'0 0 auto' }} />
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', gap:'0.5rem', alignItems:'baseline', flexWrap:'wrap' }}>
+          <b style={{ color:'var(--text)' }}>{a.title}</b>
+          <span className="muted" style={{ fontSize:'0.68rem', textTransform:'uppercase', letterSpacing:'0.03em' }}>{TYPE_LABEL[a.type] || a.type}</span>
+        </div>
+        {a.body && <div className="muted" style={{ fontSize:'0.83rem', marginTop:2 }}>{a.body}</div>}
+        {link && <Link to={link} style={{ fontSize:'0.8rem' }}>Open →</Link>}
+      </div>
+      <button onClick={()=>onDismiss(a.id)} title="Dismiss" style={{ border:'none', background:'none', cursor:'pointer', color:'var(--grey-400)', fontSize:'1.1rem', lineHeight:1, padding:'0 2px' }}>×</button>
+    </div>
   )
 }
 
