@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
-import { TeamsPanel, TripLandings, LandingsLedger } from './RotaLandings'
+import { TeamsPanel, PairsPanel, TripLandings, LandingsLedger } from './RotaLandings'
 
 // Section 4 of the crew page: the rota planner.
 //
@@ -56,6 +56,7 @@ export default function Rota() {
   const [teamMembers, setTeamMembers] = useState({})   // team_id -> [crew_id]
   const [landings, setLandings] = useState([])         // rota_trip_landings
   const [landingCrew, setLandingCrew] = useState({})   // rota_landing_id -> [crew_id]
+  const [pairs, setPairs] = useState([])              // back-to-back berths
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -73,7 +74,7 @@ export default function Rota() {
   const [hNote, setHNote] = useState('')
 
   async function loadAll() {
-    const [t, tc, h, c, tm, tmm, tl, lc] = await Promise.all([
+    const [t, tc, h, c, tm, tmm, tl, lc, bb] = await Promise.all([
       supabase.from('rota_trips').select('*').order('start_date'),
       supabase.from('rota_trip_crew').select('*'),
       supabase.from('rota_holidays').select('*').order('start_date'),
@@ -82,8 +83,9 @@ export default function Rota() {
       supabase.from('rota_team_members').select('*'),
       supabase.from('rota_trip_landings').select('*').order('seq'),
       supabase.from('rota_landing_crew').select('*'),
+      supabase.from('rota_back_to_back').select('*').order('sort'),
     ])
-    const err = t.error || tc.error || h.error || c.error || tm.error || tmm.error || tl.error || lc.error
+    const err = t.error || tc.error || h.error || c.error || tm.error || tmm.error || tl.error || lc.error || bb.error
     if (err) { setError(err.message); return }
     const crewByTrip = {}
     for (const r of tc.data || []) (crewByTrip[r.trip_id] = crewByTrip[r.trip_id] || []).push(r.crew_id)
@@ -98,6 +100,7 @@ export default function Rota() {
     const byLanding = {}
     for (const r of lc.data || []) (byLanding[r.rota_landing_id] = byLanding[r.rota_landing_id] || []).push(r.crew_id)
     setLandingCrew(byLanding)
+    setPairs(bb.data || [])
   }
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
 
@@ -372,6 +375,7 @@ export default function Rota() {
                     landingCrew={landingCrew}
                     teamMembers={teamMembers}
                     teams={teams}
+                    pairs={pairs}
                     rotaCrew={rotaCrew}
                     crewName={crewName}
                     pal={pal}
@@ -435,6 +439,16 @@ export default function Rota() {
         teams={teams}
         teamMembers={teamMembers}
         rotaCrew={rotaCrew}
+        isSkipper={isSkipper}
+        onChange={loadAll}
+        setError={setError}
+      />
+
+      <PairsPanel
+        pairs={pairs}
+        teams={teams}
+        rotaCrew={rotaCrew}
+        crewName={crewName}
         isSkipper={isSkipper}
         onChange={loadAll}
         setError={setError}

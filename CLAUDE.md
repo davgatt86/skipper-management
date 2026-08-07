@@ -409,6 +409,20 @@ In the order agreed:
      The 29 existing trips were **not** backfilled with landings. We do not
      know how many each actually ran, and inventing two apiece would be
      making up history.
+
+     **Back-to-back pairs** (`supabase/rota_back_to_back.sql`). Two men share
+     a berth — when one is on, the other is off. `crew_a_id` is the Crew A
+     man, `crew_b_id` the Crew B man, so both watches fill from the pairs in
+     one action, and a swap on a landing is one tap because the man who
+     covers David is always Barry.
+     Seeded: Skipper `David Gatt ⇄ Barry Reid` and Cook
+     `Jackson Gatt ⇄ Alfie Reid` are David's own pairings. Chief Engineer
+     `David Henderson ⇄ Norman Wood` is **inferred** — the only two chief
+     engineers, on opposite watches — and is worth confirming.
+     **The six deckhands are deliberately unpaired**: Andrew Smith, Duncan
+     Cruikshank, Paul Craib and Ronald Beagrie are aboard against Gregor
+     Smith and James Napier ashore, which is four to two and does not pair
+     one-to-one. The page lists them as "not yet paired".
    - **Section 5** (Certificates) is still its own page. It carries the tab
      strip but has not been rebuilt.
 

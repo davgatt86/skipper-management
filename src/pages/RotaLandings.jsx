@@ -29,6 +29,17 @@ export function effectiveCrewIds(landing, trip, teamMembers, tripCrewIds, landin
   return tripCrewIds || []
 }
 
+// Two men who share a berth: when one is on, the other is off. The whole
+// point of knowing this is that a swap has an obvious answer — if David
+// cannot do landing 2, the man who covers him is Barry.
+export function partnerOf(crewId, pairs) {
+  for (const p of pairs) {
+    if (p.crew_a_id === crewId) return p.crew_b_id
+    if (p.crew_b_id === crewId) return p.crew_a_id
+  }
+  return null
+}
+
 const chipStyle = (on, pal) => ({
   padding: '0.2rem 0.55rem', borderRadius: 14, fontSize: '0.8rem', cursor: 'pointer',
   border: on ? `2px solid ${pal.dot}` : '1px solid var(--border)',
@@ -123,9 +134,122 @@ export function TeamsPanel({ teams, teamMembers, rotaCrew, isSkipper, onChange, 
   )
 }
 
+/* ---------------- back-to-back pairs ---------------- */
+
+export function PairsPanel({ pairs, teams, rotaCrew, crewName, isSkipper, onChange, setError }) {
+  const [a, setA] = useState('')
+  const [b, setB] = useState('')
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const paired = new Set(pairs.flatMap((p) => [p.crew_a_id, p.crew_b_id]))
+  const free = rotaCrew.filter((c) => !paired.has(c.id))
+
+  async function addPair() {
+    if (!a || !b || a === b) return
+    setBusy(true)
+    const sort = (pairs.reduce((m, p) => Math.max(m, p.sort || 0), 0) || 0) + 10
+    const { error } = await supabase.from('rota_back_to_back')
+      .insert({ name: name.trim() || null, sort, crew_a_id: a, crew_b_id: b })
+    setBusy(false)
+    if (error) setError(error.message)
+    else { setA(''); setB(''); setName(''); onChange() }
+  }
+
+  async function removePair(p) {
+    const { error } = await supabase.from('rota_back_to_back').delete().eq('id', p.id)
+    if (error) setError(error.message); else onChange()
+  }
+
+  // Crew A gets every A-side man, Crew B every B-side man. This is the whole
+  // reason for recording the pairs, so it is one button rather than a dozen
+  // taps that can be got wrong.
+  async function fillWatches() {
+    const [teamA, teamB] = teams
+    if (!teamA || !teamB) { setError('Two watches are needed before they can be filled.'); return }
+    if (!confirm(`Set ${teamA.name} and ${teamB.name} from the ${pairs.length} pairs? This replaces their current members.`)) return
+    setBusy(true)
+    for (const [team, side] of [[teamA, 'crew_a_id'], [teamB, 'crew_b_id']]) {
+      const { error: delErr } = await supabase.from('rota_team_members').delete().eq('team_id', team.id)
+      if (delErr) { setError(delErr.message); setBusy(false); return }
+      const rows = pairs.map((p) => ({ team_id: team.id, crew_id: p[side] }))
+      if (rows.length) {
+        const { error } = await supabase.from('rota_team_members').insert(rows)
+        if (error) { setError(error.message); setBusy(false); return }
+      }
+    }
+    setBusy(false)
+    onChange()
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Back to back</h2>
+      <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+        Two men to a berth — when one is on, the other is off. Recording it means a swap has an
+        obvious answer, and the watches can be filled in one go.
+      </p>
+
+      {pairs.length === 0 && <p className="muted">No pairs set.</p>}
+
+      {pairs.map((p) => (
+        <div key={p.id} style={{ borderTop: '1px solid var(--border)', padding: '0.5rem 0', display: 'flex', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'baseline' }}>
+          <span>
+            {p.name && <strong style={{ marginRight: '0.5rem' }}>{p.name}</strong>}
+            <span>{crewName[p.crew_a_id] || '—'}</span>
+            <span className="muted" style={{ margin: '0 0.4rem' }}>⇄</span>
+            <span>{crewName[p.crew_b_id] || '—'}</span>
+          </span>
+          {isSkipper && <button className="secondary" onClick={() => removePair(p)} style={{ padding: '0.1rem 0.45rem', fontSize: '0.75rem' }}>delete</button>}
+        </div>
+      ))}
+
+      {isSkipper && (
+        <>
+          <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', marginTop: '0.8rem', alignItems: 'end' }}>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              Berth (optional)
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Deckhand" />
+            </label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {teams[0]?.name || 'Watch A'}
+              <select value={a} onChange={(e) => setA(e.target.value)}>
+                <option value="">—</option>
+                {free.map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              </select>
+            </label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {teams[1]?.name || 'Watch B'}
+              <select value={b} onChange={(e) => setB(e.target.value)}>
+                <option value="">—</option>
+                {free.filter((c) => c.id !== a).map((c) => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+              </select>
+            </label>
+            <button className="secondary" onClick={addPair} disabled={busy || !a || !b} style={{ height: 'fit-content' }}>+ Add pair</button>
+          </div>
+
+          {free.length > 0 && (
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: '0.6rem', marginBottom: 0 }}>
+              Not yet paired: {free.map((c) => c.full_name).join(', ')}.
+            </p>
+          )}
+
+          {pairs.length > 0 && teams.length >= 2 && (
+            <div style={{ marginTop: '0.9rem' }}>
+              <button onClick={fillWatches} disabled={busy}>
+                Fill {teams[0].name} and {teams[1].name} from these pairs
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ---------------- per-trip landings ---------------- */
 
-export function TripLandings({ trip, landings, landingCrew, teamMembers, teams, rotaCrew, crewName, pal, isSkipper, onChange, setError }) {
+export function TripLandings({ trip, landings, landingCrew, teamMembers, teams, pairs, rotaCrew, crewName, pal, isSkipper, onChange, setError }) {
   const mine = landings.filter((l) => l.trip_id === trip.id).sort((a, b) => a.seq - b.seq)
 
   async function setTeam(teamId) {
@@ -163,6 +287,19 @@ export function TripLandings({ trip, landings, landingCrew, teamMembers, teams, 
         .insert(next.map((id) => ({ rota_landing_id: l.id, crew_id: id })))
       if (error) { setError(error.message); return }
     }
+    onChange()
+  }
+
+  // Swap a man for his back-to-back in one tap — the normal way a landing
+  // changes hands, rather than deselecting one man and hunting for the other.
+  async function swapForPartner(l, crewId, partnerId) {
+    const current = effectiveCrewIds(l, trip, teamMembers, trip.crew_ids, landingCrew)
+    const next = current.map((id) => (id === crewId ? partnerId : id))
+    const { error: delErr } = await supabase.from('rota_landing_crew').delete().eq('rota_landing_id', l.id)
+    if (delErr) { setError(delErr.message); return }
+    const { error } = await supabase.from('rota_landing_crew')
+      .insert(next.map((id) => ({ rota_landing_id: l.id, crew_id: id })))
+    if (error) { setError(error.message); return }
     onChange()
   }
 
@@ -215,6 +352,28 @@ export function TripLandings({ trip, landings, landingCrew, teamMembers, teams, 
                     <span key={id} style={{ ...chipStyle(true, pal), cursor: 'default' }}>{crewName[id] || 'Unknown'}</span>
                   ))}
             </div>
+
+            {isSkipper && (() => {
+              const swaps = eff
+                .map((id) => ({ id, partner: partnerOf(id, pairs || []) }))
+                .filter((s) => s.partner && !eff.includes(s.partner))
+              if (!swaps.length) return null
+              return (
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginTop: '0.35rem', alignItems: 'center' }}>
+                  <span className="muted" style={{ fontSize: '0.72rem' }}>swap:</span>
+                  {swaps.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => swapForPartner(l, s.id, s.partner)}
+                      title={`Put ${crewName[s.partner]} on this landing in place of ${crewName[s.id]}`}
+                      style={{ padding: '0.12rem 0.45rem', borderRadius: 12, fontSize: '0.72rem', cursor: 'pointer', border: '1px dashed var(--border)', background: 'transparent' }}
+                    >
+                      {crewName[s.id]?.split(/\s+/)[0]} ⇄ {crewName[s.partner]?.split(/\s+/)[0]}
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
           </div>
         )
       })}
