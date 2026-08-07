@@ -10,6 +10,7 @@ import FormatSampleUpload from '../FormatSampleUpload'
 import StatsTab from '../settlements/StatsTab'
 import CrewTab from '../settlements/CrewTab'
 import InvoicesTab from '../settlements/InvoicesTab'
+import Reconcile from '../settlements/Reconcile'
 import { computeMetrics, money, money2, pct, qty } from '../lib/su/metrics'
 
 // The settled sheets that come back from the office.
@@ -394,6 +395,8 @@ export default function Settlements() {
             <p className="note" style={{ marginBottom: 0 }}>No original sheet on file — this one predates the upload.</p>
           )}
         </div>
+
+        <Reconcile settlement={s} stLines={openLines} stCrew={openCrew} format={format} />
       </>
     )
   }
