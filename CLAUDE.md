@@ -281,6 +281,39 @@ several spellings of the same certificate and ours does not. Keep that.
 The reader itself still needs firming up; Aegir stores the original photo/PDF
 against each certificate, which is worth copying.
 
+### Action list — agreed, not yet built (Aug 2026)
+
+In the order agreed:
+
+1. **Crew record fields** — rank, nationality, passport number + expiry,
+   embarked date. Everything else sits on this.
+2. **Migrate the Aegir passport data** for the 10 crew aboard.
+3. **The five crew sections** (see above).
+4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
+   `Sales.jsx`, only the input is missing from the single-landing view.
+5. **Vessel certificates page.**
+6. **Logs** — fuel/oil log, plus the fuel loop across three systems.
+
+Also agreed, not yet scheduled:
+
+- **Garbage log.** A Garbage Record Book is a MARPOL requirement at Audacious's
+  size. Confirm whether one is being kept elsewhere before assuming it is not.
+- **Vessel/crew alerts kept SEPARATE from market alerts.** Certificates,
+  passports, bonuses due and out-of-range engine parameters must not land in
+  the same feed as price alerts and get lost. Same Alerts page, separate
+  stream — the price alerts are frequent and would bury a passport expiry.
+- **Familiarisation** — 42 items in Aegir. The list itself has not been seen
+  yet; look at a crewman's page (read-only) before building. Permission given.
+- **Dedicated pair-team fish sales analysis.** Sandy and Gavin tow one net
+  between two boats: sum gross and boxes, never sum days at sea (both boats
+  fished the same days, so the pair rate is pair gross ÷ the trip's days),
+  never combine crew shares or quota. Blocked on the vessels schema.
+- **Certificate reader** — firm it up; store the original photo/PDF against
+  each certificate as Aegir does.
+
+Explicitly NOT wanted: hours of rest, PLB tracking, crew schedule (the rota
+planner covers it), inspection pack, AI audit, and Aegir's own landings page.
+
 ## Outstanding work
 
 - **Vessels are not in the schema.** The pair-team and vessel-picker design
