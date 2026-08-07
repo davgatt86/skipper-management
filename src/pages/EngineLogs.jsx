@@ -64,6 +64,35 @@ export const ENGINE_TEMPLATE = [
 
 const MAIN_HOURS = { group: 'Main Engine 1', param: 'Running Hours' }
 
+// How far off the rolling average a reading has to be before it is queried.
+// 60% is wide enough that normal running never trips it — the real slips in
+// this data were out by a factor of 10 to 100.
+const OUTLIER_PCT = 0.6
+const MIN_HISTORY = 3   // below this there is no meaningful average yet
+
+// Compare each reading against the mean of that parameter's previous values.
+// Returns [{ group, label, value, avg, times }] for anything wildly off.
+export function outliers(readings, priorLogs) {
+  const out = []
+  for (const group of Object.keys(readings || {})) {
+    for (const label of Object.keys(readings[group] || {})) {
+      const v = Number(readings[group][label])
+      if (!Number.isFinite(v)) continue
+      const hist = (priorLogs || [])
+        .map((l) => Number(l.readings?.[group]?.[label]))
+        .filter((n) => Number.isFinite(n))
+      if (hist.length < MIN_HISTORY) continue
+      const avg = hist.reduce((a, b) => a + b, 0) / hist.length
+      if (!avg) continue
+      const drift = Math.abs(v - avg) / Math.abs(avg)
+      if (drift > OUTLIER_PCT) {
+        out.push({ group, label, value: v, avg: Math.round(avg * 100) / 100, times: Math.round((v / avg) * 10) / 10 })
+      }
+    }
+  }
+  return out
+}
+
 // Flattened list of every parameter, for the chart picker.
 const FLAT_PARAMS = ENGINE_TEMPLATE.flatMap((g) => g.params.map((p) => ({ group: g.group, label: p.label, unit: p.unit, key: `${g.group}||${p.label}` })))
 const seriesLabel = (key) => { const f = FLAT_PARAMS.find((x) => x.key === key); return f ? `${f.group.replace('Main Engine 1', 'ME1').replace('Generator ', 'GEN').replace('Gearbox ', 'GB')} · ${f.label}` : key }
@@ -94,6 +123,8 @@ export default function EngineLogs() {
   const [editingId, setEditingId] = useState(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [outlierWarn, setOutlierWarn] = useState(null)
+  const [confirmedOutliers, setConfirmedOutliers] = useState(false)
 
   async function loadAll() {
     setLoading(true); setError('')
@@ -124,7 +155,9 @@ export default function EngineLogs() {
     setMsg('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  async function cancel() { setDraft(null); setEditingId(null) }
+  // Clearing the acknowledgement matters: without it, one "save anyway" would
+  // silently wave through every later entry in the same session.
+  async function cancel() { setDraft(null); setEditingId(null); setOutlierWarn(null); setConfirmedOutliers(false) }
 
   const summary = useMemo(() => {
     const latest = logs.find((l) => l.running_hours != null)
@@ -152,6 +185,23 @@ export default function EngineLogs() {
     }
     const running = readings[MAIN_HOURS.group]?.[MAIN_HOURS.param] ?? null
 
+    // Range check against this vessel's own history before saving. Aegir has
+    // "parameter limits" and they did not catch a Charge Air Pressure of 175
+    // Bar where the series runs 1.8–2.3, or a Lube Oil Pressure of 42 where it
+    // runs 4.6 — both plain decimal slips. A limit that only decorates the
+    // form is no use, so this blocks until it is acknowledged.
+    //
+    // It is deliberately a QUESTION, not a rule: the same reading that means
+    // a mis-key can mean a genuine engine problem, and the man on the boat is
+    // the one who can tell the difference.
+    const odd = outliers(readings, logs)
+    if (odd.length && !confirmedOutliers) {
+      setOutlierWarn(odd)
+      setSaving(false)
+      setMsg('')
+      return
+    }
+
     const base = {
       fleet_id: appUser.fleet_id,
       log_date: draft.log_date,
@@ -175,7 +225,7 @@ export default function EngineLogs() {
       if (error) { setMsg(`Couldn’t save: ${error.message}`); return }
       setLogs((p) => [data, ...p].sort((a, b) => (b.log_date || '').localeCompare(a.log_date || '')))
     }
-    setDraft(null); setEditingId(null)
+    setDraft(null); setEditingId(null); setOutlierWarn(null); setConfirmedOutliers(false)
     setMsg('Engine log saved ✓')
     setTimeout(() => setMsg(''), 2500)
   }
@@ -256,6 +306,34 @@ export default function EngineLogs() {
           <div style={{ marginTop: '1rem' }}>
             <Field label="Notes"><textarea rows={2} value={draft.notes} onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))} placeholder="Oil change due, minor leak, filter changed…" style={{ resize: 'vertical' }} /></Field>
           </div>
+
+          {outlierWarn && (
+            <div className="card" style={{ borderColor: 'var(--brass)', marginTop: '1rem' }}>
+              <h3 style={{ marginTop: 0 }}>
+                {outlierWarn.length === 1 ? 'One reading is' : `${outlierWarn.length} readings are`} well off the usual
+              </h3>
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {outlierWarn.map((o, i) => (
+                  <li key={i} style={{ padding: '0.35rem 0', borderTop: '1px solid var(--border)', fontSize: '0.88rem' }}>
+                    <strong>{o.group} · {o.label}</strong>{' '}
+                    <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: 'var(--brass)' }}>{o.value}</span>
+                    <span className="muted"> — usually about {o.avg}{o.times ? `, this is ${o.times}×` : ''}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="muted" style={{ fontSize: '0.85rem' }}>
+                This is usually a decimal in the wrong place — but it can be a real engine problem,
+                and only you can tell which. Check the figures, then either fix them above or save
+                them as they stand.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="secondary" onClick={() => setOutlierWarn(null)}>Go back and check</button>
+                <button onClick={() => { setConfirmedOutliers(true); setOutlierWarn(null); setTimeout(save, 0) }}>
+                  These are right — save anyway
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={{ marginTop: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
             <button onClick={save} disabled={saving}>{saving ? 'Saving…' : (editingId ? 'Save changes' : 'Save engine log')}</button>

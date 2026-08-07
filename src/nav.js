@@ -75,6 +75,7 @@ export const NAV = [
       { to: '/stowage', label: 'Stowage Plan', access: 'skipper' },
       { to: '/engine-logs', label: 'Engine Logs', access: 'skipper' },
       { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'skipper' },
+      { to: '/garbage-log', label: 'Garbage Record Book', access: 'skipper' },
     ],
   },
   {
