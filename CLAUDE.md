@@ -208,6 +208,79 @@ None of this is buildable until the schema carries vessels. See Outstanding work
   screen, so `--hull` lifts to `#6FA3EE` and the signal colours are dimmed so
   red/green don't wreck night vision.
 
+## Agreed next build (Aug 2026) — crew, logs and vessel certs
+
+Aegir (`aegirfleet.com`) is a paid vessel-management subscription David uses.
+It was explored Aug 2026 to decide what to copy. **Wanted**: crew page rebuild,
+familiarisation, rota planner, log page, vessel certs, days-at-sea repair.
+**Not wanted**: hours of rest, PLB tracking, crew schedule (same as rota
+planner), inspection pack, AI audit.
+
+### Crew — one page, five sections
+Replaces the crew-hub tile wall (a second menu duplicating the sidebar).
+1. **Crew status** — all crew, both types. Status changed here and nowhere else.
+2. **Contracted crew** — merges what are now five separate tiles (Contracts,
+   Landings, Month Closeout, One-Off Bonuses, Bonus Settings). They are all
+   contracted-crew-only and are one workflow: contract runs → boxes land →
+   month closes → bonus falls due.
+3. **Crew list** — generated from the status just set, then asks only for the
+   voyage bits. Aim for the IMO FAL 5 form, which is what Aegir exports.
+4. **Rota planner** — renamed from Rota, rebuilt for legibility.
+5. **Certificates** — largely kept; it is the strongest page in the app.
+
+The crew record must gain **rank, nationality, passport number + expiry and
+embarked date** first, or the crew list cannot be produced. Aegir holds all of
+it for the 10 crew aboard and it can be migrated.
+
+Self-employed crew must stop being shown contract language ("no ended contract
+on record") — contracts only apply to contracted crew.
+
+### Known defects found Aug 2026
+- Money renders as `GBP192.30` — the currency setting is concatenated raw
+  instead of a `£` symbol (CrewHub).
+- Every crewman shows "no passport on file"; rank defaults to Deckhand on every
+  voyage because it is not stored on the crewman.
+- The certificates page tells the user to "run the `crew_cert_categories.sql`
+  backfill" — SQL surfaced to a skipper.
+- Three current contracts have no going-home bonus set.
+- `Sales.jsx` single-landing view still does not expose the days-at-sea input,
+  though `updateDaysAtSea` already exists. Days at sea currently only arrive
+  via logbook/quota uploads.
+
+### Deliberately kept as test data
+Andrew Smith's passport (expired 25-02-2026) and the Certificate of Insurance
+(expired 31-03-2026) are **left expired on purpose**, to prove out how notices
+and alerts look. Do not "fix" them.
+
+Alerts should go through the **existing** Alerts page and `generate_alerts`
+RPC rather than a new mechanism — it already exists for price alerts.
+
+### Logs
+Copy Aegir's fuel/oil log. Its structure: fuel, lube oil, dirty oil discharged,
+oil waste — each entry litres, grade, date, location, supplier, recorded by.
+
+**Fuel is recorded in three places and nothing reconciles them**: the Aegir
+fuel log, the Square Up worksheet (litres taken, where) and the settlement
+(`fuel_used`). Close that loop — fuel is 49.7% of Audacious's expenses. Derive
+average consumption per day at sea per trip.
+
+Engine logs: permission granted (Aug 2026) to correct clear clerical errors in
+the imported data — decimal slips such as Charge Air Pressure 150/175 Bar
+(normally ~2), Lube Oil Pressure 42 Bar (normally 4.6), Gearbox Oil Press 28
+bar (normally 2.8), and a duplicated 25-05-2026 entry.
+
+Going forward, keep a rolling average per parameter and flag an entry outside a
+set percentage as a possible mis-key **or a genuine engine problem**. Aegir has
+"parameter limits" and they do not catch any of the above, so limits must
+actually block or flag on entry rather than decorate the form.
+
+### Certificate reader
+Ours already beats Aegir's on one point: a cert is filed against a **type**
+chosen on entry, where Aegir keys off the typed name — so their matrix carries
+several spellings of the same certificate and ours does not. Keep that.
+The reader itself still needs firming up; Aegir stores the original photo/PDF
+against each certificate, which is worth copying.
+
 ## Outstanding work
 
 - **Vessels are not in the schema.** The pair-team and vessel-picker design
