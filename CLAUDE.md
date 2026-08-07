@@ -366,9 +366,22 @@ In the order agreed:
      to live: `crew_list_members.place_of_birth` and
      `vessel_details.flag_state` (editable on the Vessel page, deliberately
      not defaulted — a crew list should not guess its own flag).
-   - **Sections 4–5** (Rota planner, Certificates) are still their own pages.
-     They carry the tab strip, so the five read as one page, but they have not
-     been rebuilt.
+   - **Section 4, Rota planner** — `Rota.jsx`, rebuilt for legibility. A trip
+     now reads as one continuous band across the days it covers, rounded at
+     the ends and squared at the joins, labelled with its crew count — it was
+     a run of separate coloured squares you had to count by eye. Band edges
+     compare **trip id**, not just "is there a trip", so two trips back to
+     back do not merge into one. Crew are chips rather than a comma string
+     that ran off the row, a holiday clash during a trip is called out by
+     name, and the calendar has a caption (days at sea this month) and an
+     "at sea now" strip showing which day of the trip you are on.
+     Its categorical palette stays literal — the documented exception.
+     **Bug fixed:** the holidays empty state tested *all* holidays but
+     rendered only upcoming ones, so once every holiday was in the past the
+     section showed neither a row nor a message. There are 4 on record, 2
+     already past.
+   - **Section 5** (Certificates) is still its own page. It carries the tab
+     strip but has not been rebuilt.
 
    The one crew list saved before the migration is junk — no passports, no
    dates of birth, a nationality of "Engineer", and "Andrejs Gundravos"
@@ -382,7 +395,7 @@ In the order agreed:
    takes its rank options from `crew_ranks`, so a voyage is no longer a list of
    Deckhands.
 
-   Still to do here: rebuild sections 4 and 5, and the certificates page still
+   Still to do here: rebuild section 5, and the certificates page still
    tells the skipper to run a `.sql` backfill.
 4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
    `Sales.jsx`, only the input is missing from the single-landing view.
