@@ -52,6 +52,7 @@ export const NAV = [
       { to: '/crew-list', label: 'Crew List', access: 'skipper' },
       { to: '/rota', label: 'Rota Planner', access: 'fleetTools' },
       { to: '/crew-certs', label: 'Certificates', access: 'skipper' },
+      { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },
     ],
   },
   {

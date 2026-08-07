@@ -13,6 +13,19 @@ const FIELDS = [
   // FAL 5 field 4. Blank until set — a crew list should not guess the flag it
   // sails under.
   { key: 'flag_state', label: 'Flag State', ph: 'United Kingdom' },
+  // Off the Certificate of Registry. Official forms ask for these by name, so
+  // they are columns rather than a note.
+  { key: 'imo_number', label: 'IMO number', ph: '9785342' },
+  { key: 'official_number', label: 'Official number', ph: 'C21004' },
+  { key: 'length_registered', label: 'Registered length (m)', ph: '23.96' },
+  { key: 'length_overall', label: 'Overall length (m)', ph: '29.80' },
+  { key: 'breadth', label: 'Breadth (m)', ph: '10.50' },
+  { key: 'depth', label: 'Depth (m)', ph: '7.20' },
+  { key: 'gross_tonnage', label: 'Gross tonnage', ph: '498.00' },
+  { key: 'net_tonnage', label: 'Net tonnage', ph: '289.00' },
+  { key: 'year_built', label: 'Year built', ph: '2017' },
+  { key: 'engine_make', label: 'Engine make and model', ph: 'MAK 8M20C' },
+  { key: 'engine_kw', label: 'Engine power (kW)', ph: '1060' },
   { key: 'owner', label: 'Owner', ph: '' },
   { key: 'skipper_name', label: 'Skipper', ph: '' },
   { key: 'length_m', label: 'Registered length (m)', ph: '29.80', type: 'number' },

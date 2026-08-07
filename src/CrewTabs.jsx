@@ -17,6 +17,10 @@ const SECTIONS = [
   { to: '/crew-list', label: 'Crew list', access: 'skipper' },
   { to: '/rota', label: 'Rota planner', access: 'fleetTools' },
   { to: '/crew-certs', label: 'Certificates', access: 'skipper' },
+  // A sixth, added Aug 2026. The agreed design was five sections;
+  // familiarisation was a separate item on the list and it belongs with the
+  // crew rather than anywhere else.
+  { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },
 ]
 
 function allowed(access, appUser) {
