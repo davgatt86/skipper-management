@@ -511,7 +511,50 @@ In the order agreed:
    Suppression (20-07-2026), Inflatable Liferaft Service (24-07-2026),
    Liferaft Inspection (31-07-2026) — with the Portable Fire Extinguisher
    certificate due 26-08-2026. They sat in Aegir where nothing chased them.
-6. **Logs** — fuel/oil log, plus the fuel loop across three systems.
+6. **Logs** — fuel/oil log **done Aug 2026**; the fuel loop is *visible* but
+   not yet closed. `FuelLog.jsx` at `/fuel-log`, under Vessel.
+   `supabase/vessel_fuel_log.sql`. One table for all four kinds — they share
+   every column that matters and differ only in direction: fuel and lube oil
+   come aboard, dirty oil and waste go ashore.
+   All 34 Audacious entries migrated from Aegir; each kind's total matches
+   Aegir's own to the litre.
+
+   **`su_settlements.fuel_used` is LITRES, not pounds.** Settle this before
+   trusting anything fuel-related. It averages **74%** of `total_expenses`
+   (range 54–92%) across the twelve settlements carrying it — impossible for
+   a cost that is about half the expense bill — and `fuel_used ÷ days_at_sea`
+   gives 3,945–7,233, a working day's burn. The "fuel is 49.7% of expenses"
+   figure is a *cost* share from elsewhere and is a different quantity.
+
+   **Average consumption: 5,846 L per day at sea** (12 settlements, Jan–Jul
+   2026). The page flags any trip more than 25% off that.
+
+   **The loop does not balance.** Over 08-01-2026 → 29-07-2026 the settlements
+   say 1,093,158 L used; this log says 821,432 L bunkered — a gap of
+   **−271,726 L**, about 46 days of burn. Timing explains some of it (fuel
+   bunkered at the end of a period burns in the next, and tank levels are
+   recorded nowhere) but not that much. Either bunkerings are missing from
+   the Aegir log, or `fuel_used` is overstated, or fuel is being bought and
+   burned outside both records. **Not resolvable from the data — it needs the
+   paper.**
+
+   **The third leg is still missing.** `su_worksheets` and
+   `su_worksheet_lines` are both **empty**, so "litres taken, where" cannot be
+   compared. That leg closes with the stage-2 worksheet rework.
+
+   **Seven spellings of one fuel supplier** — "Smith & Sons", "Smith's",
+   "Smith", "Smith & sons", "Smiths &sons", "Smith's & Sons",
+   "John a smith &sons" — 12 entries and 559,938 L split across names that
+   are almost certainly one firm, which makes "who do we buy most fuel from"
+   unanswerable. Also "Maropa 150" vs "Meropa 150" on the lube side. The page
+   groups and shows these rather than correcting the log silently; a supplier
+   lookup is the real fix, same lesson as `crew_ranks`.
+
+   Still to do: the itemised engine-parameter range checks (rolling average
+   per parameter, flag outside a set percentage — Aegir's "parameter limits"
+   do not catch the known decimal slips), and the **garbage log** — Aegir has
+   one in Beta, so the MARPOL Garbage Record Book question is answered: it is
+   being kept there, not on paper only.
 
 Also agreed, not yet scheduled:
 

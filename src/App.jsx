@@ -23,6 +23,8 @@ const Rota = lazy(() => import('./pages/Rota'))
 const Password = lazy(() => import('./pages/Password'))
 const VesselDetails = lazy(() => import('./pages/VesselDetails'))
 const VesselCerts = lazy(() => import('./pages/VesselCerts'))
+const FuelLog = lazy(() => import('./pages/FuelLog'))
+const FuelLog = lazy(() => import('./pages/FuelLog'))
 const CrewList = lazy(() => import('./pages/CrewList'))
 const Forecast = lazy(() => import('./pages/Forecast'))
 const StowagePlan = lazy(() => import('./pages/StowagePlan'))
@@ -190,6 +192,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <VesselDetails />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/fuel-log" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <FuelLog />
             </Suspense>
           </ProtectedRoute>
         } />

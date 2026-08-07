@@ -73,6 +73,7 @@ export const NAV = [
       { to: '/vessel-certs', label: 'Vessel Certificates', access: 'skipper' },
       { to: '/stowage', label: 'Stowage Plan', access: 'skipper' },
       { to: '/engine-logs', label: 'Engine Logs', access: 'skipper' },
+      { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'skipper' },
     ],
   },
   {
