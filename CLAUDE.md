@@ -297,28 +297,35 @@ In the order agreed:
    Read from Aegir → Team → Members (20 profiles) and Team → Crew List
    (the only place Aegir shows an embarked date, so only the 10 aboard have one).
 
-   **Six things it deliberately did not do** — each needs a decision:
-   - **Andrejs Gundarovs** — Chief Engineer, Latvian, passport LZ4181918 exp
-     07-09-2033, embarked 13-07-2026. Aegir has him **on board right now** and
-     we have no crew row for him at all. Not created, because `crew_type`
-     (contracted vs self-employed) drives contracts, closeout and bonuses.
-   - **Ian Anderson** (2nd Engineer) and **Bryan Reid** (rank "Other", a
-     donfishing.com address) are in Aegir but not in our crew, and hold no
-     passport, nationality or DOB in Aegir either. Bryan Reid reads as an
-     office login rather than crew.
-   - **"John Binggan"** (ours, on leave) and **"John Gabriel"** (ours, former,
-     archived 06-06-2026) look like one man split across two rows. Aegir holds
-     exactly one "John Gabriel Binggan", and its shift log moves him to on_leave
-     on 02-07-2026 — after our "John Gabriel" was archived. The passport went to
-     "John Binggan" only. Merging is irreversible, so it was not done.
-   - **William Gatt** (ours, on leave) and **Arnel Nobel** (ours, former) are
-     not in Aegir. No passport available for either.
-   - **Aegir and this app disagree about who is aboard.** Aegir has Andrejs
-     Gundarovs and James Napier on board; we have Duncan Cruikshank and Paul
-     Craib. Status was not touched — it is set on the crew status page and
-     nowhere else.
-   - Aegir spells Gundarovs's nationality "Lativan". If his record is created,
-     it should read Latvian.
+   All six open questions were then resolved by David and applied in
+   `supabase/crew_gundarovs_and_dedupe.sql`:
+   - **Andrejs Gundarovs — added.** Contracted, aboard, Chief Engineer,
+     embarked 13-07-2026. The vessel had **eleven** aboard and this app knew
+     about ten. His nationality is **Russian**, from the passport itself —
+     Aegir's "Lativan" is wrong twice over. The issuing country is still
+     Aegir's word (Latvia) and is worth a glance.
+   - **John Binggan / John Gabriel — confirmed one man, duplicate deleted.**
+     No merge was needed: the "John Gabriel" row referenced nothing at all,
+     while all the history (3 contracts, 81 landings, 24 closeouts, 2 bonuses,
+     30 payments) was already on "John Binggan". He is still recorded under the
+     short name; Aegir has him as "John Gabriel Binggan", which is what a
+     passport and a crew list want.
+   - **William Gatt — deleted.** Referenced nothing.
+   - **Arnel Nobel — asked for, NOT deleted.** He carries 3 contracts, 95
+     landing_crew, 29 month closeouts, 34 payments and 1 certificate, and those
+     FKs are `ON DELETE RESTRICT`, so the delete would be refused anyway.
+     Forcing it would destroy his settled share of real landings and part of
+     already-reported months. He is `former` and archived, which is how this
+     app retires a crewman while keeping the books. Erasing him properly is a
+     separate, deliberate job.
+   - **Ian Anderson and Bryan Reid — to be deleted in Aegir, by David.** They
+     exist only there, so there is nothing in this database to remove.
+   - **Status:** Aegir's shift list is stale, not ours — no status was changed
+     except Gundarovs joining as aboard.
+
+   **`crew` has three CASCADE children — `crew_certificates`, `rota_holidays`,
+   `rota_trip_crew`.** Deleting any crewman silently takes their certificates
+   with them. Check references before deleting crew, always.
 
    Also worth knowing: Aegir labels David Gatt and Barry Reid "Captain" on the
    member card but "Master" on its own crew list — the same free-text drift our
