@@ -354,9 +354,27 @@ In the order agreed:
      tiles are now one ordered workflow (contract runs → boxes land → month
      closes → bonus falls due), each step carrying the figure that says
      whether it needs attention. Self-employed crew never appear.
-   - **Sections 3–5** (Crew list, Rota planner, Certificates) are still their
-     own pages. They carry the tab strip, so the five read as one page, but
-     they have not been rebuilt.
+   - **Section 3, Crew list** — `CrewList.jsx`, rebuilt. It is now *generated*
+     from the status set in section 1 rather than asking you to tick everyone
+     off again; the only thing it asks for is the voyage (date, port of
+     departure, last port, next port). A "papers missing" panel names exactly
+     who would print blank on the form, because a crew list is a border
+     document. Adjusting who sailed is possible but framed as a one-off, and
+     says so — status belongs to section 1.
+     Output is a proper **IMO FAL Form 5** (landscape, numbered fields).
+     `supabase/crew_list_fal5_fields.sql` adds the two fields that had nowhere
+     to live: `crew_list_members.place_of_birth` and
+     `vessel_details.flag_state` (editable on the Vessel page, deliberately
+     not defaulted — a crew list should not guess its own flag).
+   - **Sections 4–5** (Rota planner, Certificates) are still their own pages.
+     They carry the tab strip, so the five read as one page, but they have not
+     been rebuilt.
+
+   The one crew list saved before the migration is junk — no passports, no
+   dates of birth, a nationality of "Engineer", and "Andrejs Gundravos"
+   misspelled with a null `crew_id`. It is left exactly as saved, as a record
+   of what the page used to produce. Anything generated now comes off the crew
+   records.
 
    `CrewDetails.jsx` now edits rank (from `crew_ranks`), place of birth,
    embarked date and passport issued-at, so the migrated data is reachable in
@@ -364,9 +382,8 @@ In the order agreed:
    takes its rank options from `crew_ranks`, so a voyage is no longer a list of
    Deckhands.
 
-   Still to do here: rebuild sections 3–5; `crew_list_members` needs a
-   `place_of_birth` column before the generated list can print it; and the
-   certificates page still tells the skipper to run a `.sql` backfill.
+   Still to do here: rebuild sections 4 and 5, and the certificates page still
+   tells the skipper to run a `.sql` backfill.
 4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
    `Sales.jsx`, only the input is missing from the single-landing view.
 5. **Vessel certificates page.**

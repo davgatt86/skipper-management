@@ -10,6 +10,9 @@ const FIELDS = [
   { key: 'call_sign', label: 'Call sign', ph: 'MBJM6' },
   { key: 'mmsi', label: 'MMSI', ph: '232009468' },
   { key: 'home_port', label: 'Home port', ph: 'Peterhead' },
+  // FAL 5 field 4. Blank until set — a crew list should not guess the flag it
+  // sails under.
+  { key: 'flag_state', label: 'Flag State', ph: 'United Kingdom' },
   { key: 'owner', label: 'Owner', ph: '' },
   { key: 'skipper_name', label: 'Skipper', ph: '' },
   { key: 'length_m', label: 'Registered length (m)', ph: '29.80', type: 'number' },
