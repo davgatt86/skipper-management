@@ -13,7 +13,11 @@ const safeName = n => String(n || 'cert').replace(/[^\w.\-]+/g, '_').slice(-80)
 // Radio was added Aug 2026: GMDSS and the Long Range Radiotelephone ticket had
 // no bucket at all, so four certificates sat uncategorised with nowhere sensible
 // to go.
-export const CERT_CATEGORIES = ['Medical', 'Fire Fighting', 'Sea Survival', 'First Aid', 'Safety Awareness', 'Radio', 'Deck Officer', 'Engineer Officer']
+// 'Other' is a real, pickable category — not just the bucket the matrix used
+// to sweep unfiled certificates into. Without it a ticket that genuinely fits
+// none of the above could never be filed, so it stayed "uncategorised" and the
+// register nagged about it forever.
+export const CERT_CATEGORIES = ['Medical', 'Fire Fighting', 'Sea Survival', 'First Aid', 'Safety Awareness', 'Radio', 'Deck Officer', 'Engineer Officer', 'Other']
 
 // Suggestions for the categoriser on the register page. First match wins, so
 // the order matters — "GMDSS General Certificate of Competence" must be caught

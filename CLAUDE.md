@@ -467,6 +467,11 @@ In the order agreed:
      `suggestCategory()` in `CrewCerts.jsx`, and nothing is filed without the
      skipper confirming — a regex does not know his tickets better than he
      does. Viewers see a plain count instead.
+     **`Other` added Aug 2026.** It was only ever the bucket the matrix swept
+     unfiled certificates into, never a pickable category — so a ticket that
+     genuinely fits none of the others could not be filed and the register
+     nagged about it forever. `catOf()` still falls back to `Other` for
+     anything unfiled, and the matrix guards against adding the column twice.
      **`Radio` added to `CERT_CATEGORIES`.** GMDSS and the Long Range
      Radiotelephone ticket had no bucket at all, which is why four
      certificates were stranded. 16 were uncategorised in total.

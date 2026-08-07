@@ -189,7 +189,11 @@ export default function CrewCertsRegister() {
       if (!cell[cat] || certUrgency(r.expiry_date) < certUrgency(cell[cat].expiry_date)) cell[cat] = r
     }
     const cols = [...CERT_CATEGORIES]
-    if (held.has('Other')) cols.push('Other')
+    // 'Other' is a real category now, so it is already in the list — without
+    // this guard it would be added a second time and the matrix would carry
+    // two identical columns. The guard stays in case it is ever taken back
+    // out, since catOf() still falls back to 'Other' for anything unfiled.
+    if (held.has('Other') && !cols.includes('Other')) cols.push('Other')
     const people = [...byCrew.keys()].sort((a, b) => a.localeCompare(b))
     return { types: cols, people, byCrew }
   }, [rows, crew])
