@@ -7,6 +7,10 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
+import { parseVesselCertFile } from '../lib/certs/parseCert'
+
+const BUCKET = 'vessel-certs'
+const safeName = (s) => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
 
 // The vessel's own certificates, as distinct from the crew's.
 //
@@ -22,7 +26,7 @@ import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus
 export const VESSEL_CERT_CATEGORIES = ['Statutory', 'Insurance', 'Safety', 'Equipment', 'Other']
 
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
-const blank = () => ({ cert_type: '', category: 'Statutory', cert_number: '', issuer: '', issue_date: '', expiry_date: '', notes: '' })
+const blank = () => ({ cert_type: '', category: 'Statutory', cert_number: '', issuer: '', issue_date: '', expiry_date: '', notes: '', file_path: null, file_name: null })
 
 function Badge({ expiry }) {
   const s = certStatus(expiry)
@@ -57,6 +61,7 @@ export default function VesselCerts() {
   const [draft, setDraft] = useState(blank())
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [reading, setReading] = useState('')
 
   async function load() {
     setLoading(true); setError('')
@@ -102,6 +107,35 @@ export default function VesselCerts() {
       .concat(Object.entries(g).filter(([k]) => !VESSEL_CERT_CATEGORIES.includes(k)))
   }, [visible])
 
+  // Upload the original FIRST, so a photo is kept even if the reader fails or
+  // the skipper walks away — same order as the crew certificate page.
+  async function onFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !appUser?.fleet_id) return
+    setError(''); setReading('uploading')
+    const path = `${appUser.fleet_id}/${Date.now()}-${safeName(file.name)}`
+    const up = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined })
+    if (up.error) { setError('Upload failed: ' + up.error.message); setReading(''); return }
+    setReading('reading')
+    let fields = {}
+    try { fields = await parseVesselCertFile(file) }
+    catch (err) { setError('Saved the file, but couldn’t auto-read it (' + err.message + '). Fill the details in by hand.') }
+    setDraft({
+      ...blank(),
+      ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v != null)),
+      file_path: path, file_name: file.name,
+    })
+    setEditing(null); setAdding(true); setReading('')
+  }
+
+  async function viewFile(r) {
+    if (!r.file_path) return
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(r.file_path, 3600)
+    if (error) { setError(error.message); return }
+    window.open(data.signedUrl, '_blank', 'noopener')
+  }
+
   async function save(e) {
     e.preventDefault()
     if (!draft.cert_type.trim()) return
@@ -114,6 +148,8 @@ export default function VesselCerts() {
       issue_date: draft.issue_date || null,
       expiry_date: draft.expiry_date || null,
       notes: draft.notes.trim() || null,
+      file_path: draft.file_path || null,
+      file_name: draft.file_name || null,
       updated_at: new Date().toISOString(),
     }
     const { error } = editing
@@ -130,6 +166,7 @@ export default function VesselCerts() {
       cert_type: r.cert_type || '', category: r.category || 'Statutory',
       cert_number: r.cert_number || '', issuer: r.issuer || '',
       issue_date: r.issue_date || '', expiry_date: r.expiry_date || '', notes: r.notes || '',
+      file_path: r.file_path || null, file_name: r.file_name || null,
     })
     setEditing(r.id); setAdding(true)
   }
@@ -137,7 +174,11 @@ export default function VesselCerts() {
   async function remove(r) {
     if (!confirm(`Delete "${r.cert_type}"? This can't be undone.`)) return
     const { error } = await supabase.from('vessel_certificates').delete().eq('id', r.id)
-    if (error) setError(error.message); else load()
+    if (error) { setError(error.message); return }
+    // Take the stored document with it, or the bucket fills with files nothing
+    // points at.
+    if (r.file_path) await supabase.storage.from(BUCKET).remove([r.file_path])
+    load()
   }
 
   const th = { padding: '0.5rem 0.4rem', textAlign: 'left' }
@@ -146,7 +187,15 @@ export default function VesselCerts() {
   return (
     <AppShell>
       <PageHeader title="Vessel Certificates" sub={title || 'The vessel’s own papers'}>
-        {canEdit && !adding && <button onClick={() => { setDraft(blank()); setEditing(null); setAdding(true) }}>+ Add certificate</button>}
+        {canEdit && !adding && (
+          <>
+            <label className="secondary" style={{ padding: '0.45rem 0.9rem', borderRadius: 7, cursor: reading ? 'wait' : 'pointer', border: '1px solid var(--border)', marginRight: '0.4rem', display: 'inline-block' }}>
+              {reading === 'uploading' ? 'Uploading…' : reading === 'reading' ? 'Reading…' : '📷 Photo or PDF'}
+              <input type="file" accept="image/*,application/pdf" onChange={onFile} disabled={!!reading} style={{ display: 'none' }} />
+            </label>
+            <button onClick={() => { setDraft(blank()); setEditing(null); setAdding(true) }}>+ Add by hand</button>
+          </>
+        )}
       </PageHeader>
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
@@ -199,6 +248,8 @@ export default function VesselCerts() {
             </div>
             <p className="muted" style={{ fontSize: '0.8rem', marginBottom: 0 }}>
               Leave Expires blank for a certificate that does not run out.
+              {draft.file_name && <> Document attached: <strong>{draft.file_name}</strong>.</>}
+              {' '}Everything read off a photo is a suggestion — check it against the paper before saving.
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.9rem' }}>
               <button type="submit" disabled={busy}>{busy ? 'Saving…' : editing ? 'Save changes' : 'Add'}</button>
@@ -250,6 +301,15 @@ export default function VesselCerts() {
                           <td style={{ ...th, fontWeight: 600 }}>
                             {r.cert_type}
                             {r.notes && <div className="muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>{r.notes}</div>}
+                            {r.file_path ? (
+                              <button onClick={() => viewFile(r)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'var(--hull)', fontWeight: 400, fontSize: '0.75rem', textDecoration: 'underline' }}>
+                                📄 {r.file_name || 'view document'}
+                              </button>
+                            ) : r.file_name ? (
+                              <div className="muted" style={{ fontWeight: 400, fontSize: '0.72rem' }} title="Recorded in Aegir; the file itself was never carried over">
+                                {r.file_name} — in Aegir only
+                              </div>
+                            ) : null}
                           </td>
                           <td style={th} className="muted">{r.issuer || '—'}</td>
                           <td style={{ ...th, fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8rem' }}>{r.cert_number || '—'}</td>

@@ -51,16 +51,21 @@ export default function FuelLog() {
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [suppliers, setSuppliers] = useState([])
+  const [addingSupplier, setAddingSupplier] = useState(false)
+  const [newSupplier, setNewSupplier] = useState('')
 
   async function load() {
     setLoading(true); setError('')
-    const [lRes, sRes] = await Promise.all([
+    const [lRes, sRes, supRes] = await Promise.all([
       supabase.from('vessel_fuel_log').select('*').order('entry_date', { ascending: false }),
       supabase.from('su_settlements').select('reference, settling_date, days_at_sea, trips, fuel_used, total_expenses').not('fuel_used', 'is', null).order('settling_date'),
+      supabase.from('fuel_suppliers').select('*').order('name'),
     ])
     if (lRes.error) setError(lRes.error.message)
     setRows(lRes.data || [])
     setSettlements(sRes.data || [])
+    setSuppliers(supRes.data || [])
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -122,6 +127,7 @@ export default function FuelLog() {
       grade: draft.grade.trim() || null,
       location: draft.location.trim() || null,
       counterparty: draft.counterparty.trim() || null,
+      supplier_id: suppliers.find((s) => s.name === draft.counterparty.trim())?.id || null,
       method: draft.method.trim() || null,
       running_hours: draft.running_hours === '' ? null : Number(draft.running_hours),
       consumption_l: draft.consumption_l === '' ? null : Number(draft.consumption_l),
@@ -271,9 +277,9 @@ export default function FuelLog() {
         <div className="card" style={{ borderColor: 'var(--brass)' }}>
           <h2 style={{ marginTop: 0 }}>One supplier, several spellings</h2>
           <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
-            These are almost certainly the same firm typed differently, which makes "who do we buy
-            most fuel from" unanswerable. Left exactly as recorded — correcting the log silently
-            would be worse than showing the problem.
+            These look like the same firm entered more than one way. Suppliers are now picked from a
+            list rather than typed, so this should not recur — but anything already in the log, or
+            added as a new name by mistake, still shows here.
           </p>
           {supplierVariants.map((v, i) => (
             <div key={i} style={{ padding: '0.35rem 0', borderTop: '1px solid var(--border)', fontSize: '0.88rem' }}>
@@ -310,12 +316,48 @@ export default function FuelLog() {
               <Field label="Litres"><input type="number" min="0" step="1" value={draft.litres} onChange={(e) => setDraft((p) => ({ ...p, litres: e.target.value }))} required /></Field>
               <Field label="Grade"><input value={draft.grade} onChange={(e) => setDraft((p) => ({ ...p, grade: e.target.value }))} placeholder="MGO" /></Field>
               <Field label={isDisposal ? 'Disposal location' : 'Location'}><input value={draft.location} onChange={(e) => setDraft((p) => ({ ...p, location: e.target.value }))} placeholder="Peterhead" /></Field>
-              <Field label={isDisposal ? 'Contractor' : 'Supplier'}><input value={draft.counterparty} onChange={(e) => setDraft((p) => ({ ...p, counterparty: e.target.value }))} /></Field>
+              <Field label={isDisposal ? 'Contractor' : 'Supplier'}>
+                <select
+                  value={draft.counterparty}
+                  onChange={(e) => {
+                    if (e.target.value === '__new') { setAddingSupplier(true); return }
+                    setDraft((p) => ({ ...p, counterparty: e.target.value }))
+                  }}
+                >
+                  <option value="">—</option>
+                  {suppliers
+                    .filter((s) => (isDisposal ? s.kind === 'contractor' : s.kind === 'supplier'))
+                    .map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+                  <option value="__new">+ Add a new one…</option>
+                </select>
+              </Field>
               {isDisposal && <Field label="Method"><input value={draft.method} onChange={(e) => setDraft((p) => ({ ...p, method: e.target.value }))} placeholder="Shore Facility" /></Field>}
               {draft.kind === 'fuel' && <Field label="Running hours"><input type="number" min="0" value={draft.running_hours} onChange={(e) => setDraft((p) => ({ ...p, running_hours: e.target.value }))} /></Field>}
               {draft.kind === 'fuel' && <Field label="Used since last bunker"><input type="number" min="0" value={draft.consumption_l} onChange={(e) => setDraft((p) => ({ ...p, consumption_l: e.target.value }))} /></Field>}
               <Field label="Recorded by"><input value={draft.recorded_by} onChange={(e) => setDraft((p) => ({ ...p, recorded_by: e.target.value }))} /></Field>
             </div>
+            {addingSupplier && (
+              <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <Field label={`New ${isDisposal ? 'contractor' : 'supplier'} — saved for next time`}>
+                  <input value={newSupplier} onChange={(e) => setNewSupplier(e.target.value)} placeholder="Name as you want it to read" autoFocus />
+                </Field>
+                <button
+                  type="button" className="secondary"
+                  disabled={!newSupplier.trim()}
+                  onClick={async () => {
+                    const name = newSupplier.trim()
+                    const { data, error } = await supabase.from('fuel_suppliers')
+                      .insert({ name, kind: isDisposal ? 'contractor' : 'supplier' })
+                      .select().single()
+                    if (error) { setError(error.message); return }
+                    setSuppliers((p) => [...p, data].sort((a, b) => a.name.localeCompare(b.name)))
+                    setDraft((p) => ({ ...p, counterparty: name }))
+                    setNewSupplier(''); setAddingSupplier(false)
+                  }}
+                >Save</button>
+                <button type="button" className="secondary" onClick={() => { setAddingSupplier(false); setNewSupplier('') }}>Cancel</button>
+              </div>
+            )}
             <div style={{ marginTop: '0.6rem' }}>
               <Field label="Notes"><input value={draft.notes} onChange={(e) => setDraft((p) => ({ ...p, notes: e.target.value }))} /></Field>
             </div>
