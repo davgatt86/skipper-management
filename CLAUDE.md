@@ -638,6 +638,24 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 - `Sales.jsx` single-landing view doesn't expose the days-at-sea input.
 - Buyer league table — best-paying buyer per species/grade.
 
+## Reading the boat certificates on this machine
+
+There is **no poppler**, so `Read` cannot render a PDF page, and **no Node**,
+so no build or esbuild check either. Both are worth installing.
+
+Most of the boat certificates in `iCloudDrive\Audacious_\Boat Certs` are
+**photographs**: a single-page PDF wrapping one JPEG, zero fonts, no text
+layer. Word extraction gets nothing from them and hangs on the PDF-reflow
+dialog — don't bother. What works is pulling the JPEG straight out of the PDF
+in PowerShell (scan for `FF D8 FF` … `FF D9`, write those bytes to `.jpg`) and
+reading that as an image.
+
+Check first with a byte scan for `/Font` and `/DCTDecode`: no fonts plus one
+`DCTDecode` means it is a photo and the JPEG trick applies. `L.S.A Certs.pdf`
+(98 pages) and `UKFVC.pdf` (66) are **bundles** of many certificates in one
+file, which the one-file-per-certificate model in `crew_certificates` and
+`vessel_certificates` does not fit. Decide that before building cert upload.
+
 ## Working style
 
 - Validate against real files before shipping. Nothing goes live on a guess.
