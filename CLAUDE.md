@@ -238,8 +238,11 @@ on record") — contracts only apply to contracted crew.
 ### Known defects found Aug 2026
 - Money renders as `GBP192.30` — the currency setting is concatenated raw
   instead of a `£` symbol (CrewHub).
-- Every crewman shows "no passport on file"; rank defaults to Deckhand on every
-  voyage because it is not stored on the crewman.
+- ~~Every crewman shows "no passport on file"~~ — fixed Aug 2026 by the Aegir
+  migration; 17 of Audacious's 20 crew now carry a passport. **Rank still
+  defaults to Deckhand on every voyage**: it is now stored on the crewman
+  (`crew.rank_code`) but `CrewList.jsx` does not read it, and its free-text
+  `RANKS` list does not use the `crew_ranks` codes. Wire it up in section 3.
 - The certificates page tells the user to "run the `crew_cert_categories.sql`
   backfill" — SQL surfaced to a skipper.
 - Three current contracts have no going-home bonus set.
@@ -285,10 +288,45 @@ against each certificate, which is worth copying.
 
 In the order agreed:
 
-1. **Crew record fields** — rank, nationality, passport number + expiry,
-   embarked date. Everything else sits on this.
-2. **Migrate the Aegir passport data** for the 10 crew aboard.
-3. **The five crew sections** (see above).
+1. ~~**Crew record fields**~~ — **done and applied Aug 2026.**
+   `supabase/crew_voyage_fields.sql`, plus `place_of_birth` added by the
+   migration below because FAL 5 asks for place as well as date of birth.
+2. ~~**Migrate the Aegir passport data**~~ — **done and applied Aug 2026.**
+   `supabase/crew_aegir_migration.sql`. It covers all 17 matchable crew, not
+   just the 10 aboard, since it was one trip to the same source.
+   Read from Aegir → Team → Members (20 profiles) and Team → Crew List
+   (the only place Aegir shows an embarked date, so only the 10 aboard have one).
+
+   **Six things it deliberately did not do** — each needs a decision:
+   - **Andrejs Gundarovs** — Chief Engineer, Latvian, passport LZ4181918 exp
+     07-09-2033, embarked 13-07-2026. Aegir has him **on board right now** and
+     we have no crew row for him at all. Not created, because `crew_type`
+     (contracted vs self-employed) drives contracts, closeout and bonuses.
+   - **Ian Anderson** (2nd Engineer) and **Bryan Reid** (rank "Other", a
+     donfishing.com address) are in Aegir but not in our crew, and hold no
+     passport, nationality or DOB in Aegir either. Bryan Reid reads as an
+     office login rather than crew.
+   - **"John Binggan"** (ours, on leave) and **"John Gabriel"** (ours, former,
+     archived 06-06-2026) look like one man split across two rows. Aegir holds
+     exactly one "John Gabriel Binggan", and its shift log moves him to on_leave
+     on 02-07-2026 — after our "John Gabriel" was archived. The passport went to
+     "John Binggan" only. Merging is irreversible, so it was not done.
+   - **William Gatt** (ours, on leave) and **Arnel Nobel** (ours, former) are
+     not in Aegir. No passport available for either.
+   - **Aegir and this app disagree about who is aboard.** Aegir has Andrejs
+     Gundarovs and James Napier on board; we have Duncan Cruikshank and Paul
+     Craib. Status was not touched — it is set on the crew status page and
+     nowhere else.
+   - Aegir spells Gundarovs's nationality "Lativan". If his record is created,
+     it should read Latvian.
+
+   Also worth knowing: Aegir labels David Gatt and Barry Reid "Captain" on the
+   member card but "Master" on its own crew list — the same free-text drift our
+   `crew_ranks` lookup exists to prevent. Both were mapped to `master`.
+   `crew_list_members` has no `place_of_birth`, so the generated crew list still
+   cannot print it even though we now hold it.
+3. **The five crew sections** (see above). Includes wiring `crew.rank_code`
+   into `CrewList.jsx`, which still defaults every voyage to Deckhand.
 4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
    `Sales.jsx`, only the input is missing from the single-landing view.
 5. **Vessel certificates page.**
