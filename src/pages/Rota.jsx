@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import CrewTabs from '../CrewTabs'
 
 // Trip period palette — cycles as trips are added (red, blue, ...)
 const PALETTE = [
@@ -167,11 +168,11 @@ export default function Rota() {
   return (
     <AppShell>
       <PageHeader
-        title="Trip Rota"
+        title="Rota Planner"
         sub={isSkipper ? 'Tap a start day, then an end day, to plan a trip. Tap a coloured day to open that trip below.' : 'Planned trips and crew holidays.'}
       />
-      <header style={{ marginBottom: '1rem' }}>
-      </header>
+
+      <CrewTabs />
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error" style={{ marginBottom: 0 }}>{error}</p></div>}
 

@@ -3,8 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import CrewHub from './pages/CrewHub'
 import Crew from './pages/Crew'
+import ContractedCrew from './pages/ContractedCrew'
 import Contracts from './pages/Contracts'
 import ContractDetail from './pages/ContractDetail'
 import Landings from './pages/Landings'
@@ -119,11 +119,16 @@ export default function App() {
             <Users />
           </ProtectedRoute>
         } />
-        <Route path="/crew-hub" element={
+        <Route path="/contracted-crew" element={
           <ProtectedRoute>
-            <CrewHub />
+            <ContractedCrew />
           </ProtectedRoute>
         } />
+        {/* The crew hub was a tile wall duplicating the sidebar. Its five
+            contracted-crew tiles are now the one workflow at /contracted-crew,
+            and its status list is section 1 at /crew. Old links still land
+            somewhere sensible. */}
+        <Route path="/crew-hub" element={<Navigate to="/crew" replace />} />
         <Route path="/estimator" element={
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>

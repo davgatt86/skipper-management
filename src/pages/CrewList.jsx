@@ -3,15 +3,25 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import CrewTabs from '../CrewTabs'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 
-const RANKS = ['Skipper', 'Mate', 'Engineer', 'Deckhand', 'Cook', 'Trainee']
+// Fallback only. The real list comes from the crew_ranks lookup so the same
+// rank cannot be spelled three ways — the mistake Aegir's certificate matrix
+// makes by keying off a typed name.
+const FALLBACK_RANKS = [
+  { code: 'master', label: 'Master' }, { code: 'skipper', label: 'Skipper' },
+  { code: 'mate', label: 'Mate' }, { code: 'chief_engineer', label: 'Chief Engineer' },
+  { code: 'second_engineer', label: '2nd Engineer' }, { code: 'bosun', label: 'Bosun' },
+  { code: 'deckhand', label: 'Deckhand' }, { code: 'cook', label: 'Cook' },
+  { code: 'trainee', label: 'Trainee' }, { code: 'other', label: 'Other' },
+]
 const today = () => new Date().toISOString().slice(0, 10)
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '')
 
-const blankManual = () => ({ full_name: '', rank: 'Skipper', nationality: '', date_of_birth: '', passport_number: '', passport_country: '', passport_expiry: '' })
+const blankManual = () => ({ full_name: '', rank: 'Master', nationality: '', date_of_birth: '', passport_number: '', passport_country: '', passport_expiry: '' })
 
 export default function CrewList() {
   const { appUser } = useAuth()
@@ -19,6 +29,7 @@ export default function CrewList() {
 
   const [vessel, setVessel] = useState(null)
   const [crew, setCrew] = useState([])
+  const [ranks, setRanks] = useState(FALLBACK_RANKS)
   const [lists, setLists] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -33,18 +44,24 @@ export default function CrewList() {
 
   async function loadAll() {
     setLoading(true); setError('')
-    const [v, c, l] = await Promise.all([
+    const [v, c, l, r] = await Promise.all([
       supabase.from('vessel_details').select('*').maybeSingle(),
       supabase.from('crew').select('*').is('archived_at', null).neq('status', 'former').order('full_name'),
       supabase.from('crew_lists').select('*').order('departure_date', { ascending: false }).order('created_at', { ascending: false }),
+      supabase.from('crew_ranks').select('code, label').order('sort'),
     ])
     if (v.data) setVessel(v.data)
     const cr = c.data || []
+    const rk = (r.data && r.data.length) ? r.data : FALLBACK_RANKS
     setCrew(cr)
+    setRanks(rk)
     setLists(l.data || [])
-    // default-select everyone currently On Boat
+    // Default-select everyone currently On Boat, at the rank held on their own
+    // record. Only fall back to Deckhand where no rank has been set — every
+    // voyage used to start as a list of deckhands regardless of who they were.
+    const byCode = Object.fromEntries(rk.map((x) => [x.code, x.label]))
     const s = {}
-    for (const m of cr) s[m.id] = { on: m.status === 'on_boat', rank: 'Deckhand' }
+    for (const m of cr) s[m.id] = { on: m.status === 'on_boat', rank: byCode[m.rank_code] || 'Deckhand' }
     setSel(s)
     if (c.error) setError(c.error.message)
     setLoading(false)
@@ -131,6 +148,8 @@ export default function CrewList() {
     <AppShell>
       <PageHeader title="Crew List" />
 
+      <CrewTabs />
+
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
       {missingVessel && (
@@ -174,7 +193,7 @@ export default function CrewList() {
                         <td style={{ padding: '0.4rem', width: 140 }}>
                           {on && (
                             <select value={sel[c.id]?.rank || 'Deckhand'} onChange={(e) => setRank(c.id, e.target.value)} style={{ width: '100%', padding: '0.25rem 0.4rem', fontSize: '0.85rem' }}>
-                              {RANKS.map((r) => <option key={r}>{r}</option>)}
+                              {ranks.map((r) => <option key={r.code}>{r.label}</option>)}
                             </select>
                           )}
                         </td>
@@ -195,7 +214,7 @@ export default function CrewList() {
               ))}
               <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginTop: '0.5rem', alignItems: 'end' }}>
                 <Field label="Name"><input value={draftPerson.full_name} onChange={(e) => setDraftPerson((p) => ({ ...p, full_name: e.target.value }))} placeholder="David Gatt" /></Field>
-                <Field label="Rank"><select value={draftPerson.rank} onChange={(e) => setDraftPerson((p) => ({ ...p, rank: e.target.value }))}>{RANKS.map((r) => <option key={r}>{r}</option>)}</select></Field>
+                <Field label="Rank"><select value={draftPerson.rank} onChange={(e) => setDraftPerson((p) => ({ ...p, rank: e.target.value }))}>{ranks.map((r) => <option key={r.code}>{r.label}</option>)}</select></Field>
                 <Field label="Nationality"><input value={draftPerson.nationality} onChange={(e) => setDraftPerson((p) => ({ ...p, nationality: e.target.value }))} placeholder="British" /></Field>
                 <Field label="Date of birth"><input type="date" value={draftPerson.date_of_birth} onChange={(e) => setDraftPerson((p) => ({ ...p, date_of_birth: e.target.value }))} /></Field>
                 <Field label="Passport no."><input value={draftPerson.passport_number} onChange={(e) => setDraftPerson((p) => ({ ...p, passport_number: e.target.value }))} /></Field>

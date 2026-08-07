@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import CrewTabs from '../CrewTabs'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
@@ -129,6 +130,8 @@ export default function CrewCertsRegister() {
   return (
     <AppShell>
       <PageHeader title="Crew Certificates" />
+
+      <CrewTabs />
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 

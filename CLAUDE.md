@@ -236,8 +236,16 @@ Self-employed crew must stop being shown contract language ("no ended contract
 on record") — contracts only apply to contracted crew.
 
 ### Known defects found Aug 2026
-- Money renders as `GBP192.30` — the currency setting is concatenated raw
-  instead of a `£` symbol (CrewHub).
+- ~~Money renders as `GBP192.30`~~ — fixed. `settings.currency` really is the
+  string `GBP`, so it was being concatenated raw. Both crew pages now map a
+  currency **code** to its symbol and only pass through something already short
+  enough to be one. Other pages may still do this; grep for `settings.currency`.
+- **The going-home-bonus figure was always wrong** (found Aug 2026). CrewHub
+  queried a table called `wage_payments`, which does not exist — it is
+  `payments` — and it never checked that query's error. So "GHB on return"
+  showed the **full** bonus even where half had already been paid. Fixed in the
+  rebuilt `Crew.jsx`. Worth checking whether anything else reads `wage_payments`
+  or silently drops a `.error`.
 - ~~Every crewman shows "no passport on file"~~ — fixed Aug 2026 by the Aegir
   migration; 17 of Audacious's 20 crew now carry a passport. **Rank still
   defaults to Deckhand on every voyage**: it is now stored on the crewman
@@ -332,8 +340,33 @@ In the order agreed:
    `crew_ranks` lookup exists to prevent. Both were mapped to `master`.
    `crew_list_members` has no `place_of_birth`, so the generated crew list still
    cannot print it even though we now hold it.
-3. **The five crew sections** (see above). Includes wiring `crew.rank_code`
-   into `CrewList.jsx`, which still defaults every voyage to Deckhand.
+3. **The five crew sections** — *shell and sections 1–2 built Aug 2026.*
+
+   `CrewTabs.jsx` is the tab strip carrying the five sections; it appears on
+   every crew page and **must be kept in step with the Crew group in
+   `nav.js`** — same five destinations, same role gating.
+
+   - **Section 1, Crew status** — `Crew.jsx`, rebuilt. Absorbed the old
+     `CrewHub.jsx`, which is deleted; `/crew-hub` now redirects to `/crew`.
+     Shows rank, nationality and passport state, counts who has no passport
+     and whose has expired, and is still the only place status is changed.
+   - **Section 2, Contracted crew** — `ContractedCrew.jsx`, new. The five
+     tiles are now one ordered workflow (contract runs → boxes land → month
+     closes → bonus falls due), each step carrying the figure that says
+     whether it needs attention. Self-employed crew never appear.
+   - **Sections 3–5** (Crew list, Rota planner, Certificates) are still their
+     own pages. They carry the tab strip, so the five read as one page, but
+     they have not been rebuilt.
+
+   `CrewDetails.jsx` now edits rank (from `crew_ranks`), place of birth,
+   embarked date and passport issued-at, so the migrated data is reachable in
+   the app. `CrewList.jsx` defaults each man to the rank on his own record and
+   takes its rank options from `crew_ranks`, so a voyage is no longer a list of
+   Deckhands.
+
+   Still to do here: rebuild sections 3–5; `crew_list_members` needs a
+   `place_of_birth` column before the generated list can print it; and the
+   certificates page still tells the skipper to run a `.sql` backfill.
 4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
    `Sales.jsx`, only the input is missing from the single-landing view.
 5. **Vessel certificates page.**

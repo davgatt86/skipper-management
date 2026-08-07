@@ -42,12 +42,16 @@ export const NAV = [
     ],
   },
   {
+    // The five crew sections. These match CrewTabs.jsx exactly — the tab strip
+    // on the crew pages and this menu group are the same five destinations,
+    // so keep them in step.
     label: 'Crew',
     items: [
-      { to: '/crew-hub', label: 'Crew', access: 'all' },
+      { to: '/crew', label: 'Crew Status', access: 'all', end: true },
+      { to: '/contracted-crew', label: 'Contracted Crew', access: 'all' },
       { to: '/crew-list', label: 'Crew List', access: 'skipper' },
+      { to: '/rota', label: 'Rota Planner', access: 'fleetTools' },
       { to: '/crew-certs', label: 'Certificates', access: 'skipper' },
-      { to: '/rota', label: 'Rota', access: 'fleetTools' },
     ],
   },
   {
