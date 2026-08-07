@@ -128,9 +128,18 @@ create policy su_crew_allowed on public.su_crew
   with check  (public.su_is_allowed() and boat_id is not null and public.su_visible_boat(boat_id));
 
 -- 3. Storage. Files live at "{boat_id}/{filename}" — verified across all
---    36 objects, every prefix matching a real boat. The folder is compared
---    as text against su_boats.id, never cast, so a stray folder name can
---    only fail to match; it cannot error the policy.
+--    objects (45 as at Aug 2026), every prefix matching a real boat except
+--    two "test/" uploads that belong to nothing. The folder is compared as
+--    text against su_boats.id, never cast, so a stray folder name can only
+--    fail to match; it cannot error the policy.
+--
+--    NOTE, learned the hard way: the object column MUST be written
+--    `storage.objects.name`, never bare `name`. Inside the EXISTS the inner
+--    relation is su_boats, which has its own `name`, and an unqualified
+--    reference binds to THAT. pg_policies then prints it back as
+--    `storage.foldername(b.name)`, which is the only visible symptom.
+--    The bare version was live until Aug 2026 and denied every authenticated
+--    read, insert and delete on su-documents.
 drop policy if exists su_docs_read on storage.objects;
 create policy su_docs_read on storage.objects
   for select to authenticated
@@ -139,7 +148,12 @@ create policy su_docs_read on storage.objects
     and public.su_is_allowed()
     and exists (
       select 1 from public.su_boats b
-       where b.id::text = (storage.foldername(name))[1]
+       -- MUST be qualified. su_boats has a `name` column of its own, so an
+       -- unqualified `name` here binds to su_boats.name — the boat's name,
+       -- not the object's path — and "Audacious" never equals a uuid, so the
+       -- whole EXISTS is silently always false. That shipped and denied every
+       -- authenticated read of su-documents until Aug 2026.
+       where b.id::text = (storage.foldername(storage.objects.name))[1]
          and public.su_visible_boat(b.id)
     )
   );
@@ -152,7 +166,12 @@ create policy su_docs_insert on storage.objects
     and public.su_is_allowed()
     and exists (
       select 1 from public.su_boats b
-       where b.id::text = (storage.foldername(name))[1]
+       -- MUST be qualified. su_boats has a `name` column of its own, so an
+       -- unqualified `name` here binds to su_boats.name — the boat's name,
+       -- not the object's path — and "Audacious" never equals a uuid, so the
+       -- whole EXISTS is silently always false. That shipped and denied every
+       -- authenticated read of su-documents until Aug 2026.
+       where b.id::text = (storage.foldername(storage.objects.name))[1]
          and public.su_visible_boat(b.id)
     )
   );
@@ -165,7 +184,12 @@ create policy su_docs_delete on storage.objects
     and public.su_is_allowed()
     and exists (
       select 1 from public.su_boats b
-       where b.id::text = (storage.foldername(name))[1]
+       -- MUST be qualified. su_boats has a `name` column of its own, so an
+       -- unqualified `name` here binds to su_boats.name — the boat's name,
+       -- not the object's path — and "Audacious" never equals a uuid, so the
+       -- whole EXISTS is silently always false. That shipped and denied every
+       -- authenticated read of su-documents until Aug 2026.
+       where b.id::text = (storage.foldername(storage.objects.name))[1]
          and public.su_visible_boat(b.id)
     )
   );

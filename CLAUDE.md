@@ -56,6 +56,21 @@ Audacious holds one grant over Beryl. David's decision (Aug 2026) is to **keep
 it until every stage of the settlements integration is complete**, then break
 away with `delete from public.su_fleet_agents;` — no schema change, no redeploy.
 
+**Storage policy bug, found and fixed Aug 2026.** The three `su_docs_*`
+policies on `storage.objects` were written with a bare `name` inside
+`exists (select 1 from su_boats b where b.id::text =
+(storage.foldername(name))[1] ...)`. `su_boats` has its own `name` column, so
+the inner relation shadowed the outer one and the expression read the **boat's
+name** rather than the object's path. "Audacious" never equals a uuid, so the
+EXISTS was always false and **every authenticated read, insert and delete on
+`su-documents` was denied** — 45 objects, 32 of them referenced by a
+settlement. `pg_policies` printing it back as `storage.foldername(b.name)` is
+the only visible symptom.
+
+Always write `storage.objects.name` in these policies. The same shape is safe
+in `crew_certs_*` and `su_samples_*` only because their `foldername(name)`
+sits at the top level of the policy, not inside a subquery.
+
 `su_user_boat_access` is now inert. If the Netlify app offers a screen for
 managing boat access it will appear to work and change nothing; visibility
 comes from `fleet_id` and `su_fleet_agents`.
