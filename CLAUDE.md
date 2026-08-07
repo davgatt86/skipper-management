@@ -484,7 +484,33 @@ In the order agreed:
    **79 of Audacious's 118 landings still have no days at sea** (average on
    the 39 that do: 4.48 days), so `£/day` is unreliable until those are filled
    in. They only ever arrived via logbook/quota uploads before this.
-5. **Vessel certificates page.**
+5. ~~**Vessel certificates page.**~~ — **done Aug 2026.** `VesselCerts.jsx`
+   at `/vessel-certs`, under Vessel in the sidebar (kept apart from crew
+   certificates on purpose — they expire on different clocks and are chased
+   from different places). `supabase/vessel_certificates.sql`.
+   Same column shape and the same `certStatus` helper as `crew_certificates`,
+   so "expired" means the same thing on both pages. Filed against a category
+   chosen on entry, not guessed from the name — the point where this beats
+   Aegir. Grouped by category, filterable, searchable, with a PDF export.
+
+   **All 15 of Audacious's vessel certificates were migrated from Aegir.**
+   Two of their oddities are recorded in `notes` rather than silently
+   corrected: the ILO 188 certificate number is a UUID (a system id entered
+   by mistake), and Certificate of Measurement is filed by Aegir under Safety
+   when it is Statutory.
+
+   **`file_path` is null for all of them.** `file_name` records what Aegir
+   holds, but the images are still only in Aegir — storing the original
+   photo/PDF needs a bucket with the same fleet isolation and is still on the
+   list.
+
+   **What it surfaced, which is the argument for the page existing:** five
+   certificates are expired and only **one** is the test data recorded below.
+   The wreck-removal cover shares that date so is likely the same renewal.
+   The other three look like genuine lapses on safety gear — Gaseous Fire
+   Suppression (20-07-2026), Inflatable Liferaft Service (24-07-2026),
+   Liferaft Inspection (31-07-2026) — with the Portable Fire Extinguisher
+   certificate due 26-08-2026. They sat in Aegir where nothing chased them.
 6. **Logs** — fuel/oil log, plus the fuel loop across three systems.
 
 Also agreed, not yet scheduled:

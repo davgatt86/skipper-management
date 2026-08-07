@@ -67,6 +67,10 @@ export const NAV = [
     label: 'Vessel',
     items: [
       { to: '/vessel', label: 'Vessel Details', access: 'skipper' },
+      // The vessel's own papers. Crew tickets live under Crew — keeping the
+      // two apart is the point, since they expire on different clocks and
+      // are chased from different places.
+      { to: '/vessel-certs', label: 'Vessel Certificates', access: 'skipper' },
       { to: '/stowage', label: 'Stowage Plan', access: 'skipper' },
       { to: '/engine-logs', label: 'Engine Logs', access: 'skipper' },
     ],
