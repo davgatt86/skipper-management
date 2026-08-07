@@ -253,14 +253,20 @@ on record") — contracts only apply to contracted crew.
   `RANKS` list does not use the `crew_ranks` codes. Wire it up in section 3.
 - ~~The certificates page tells the user to run a `.sql` backfill~~ — fixed
   Aug 2026 by the in-app categoriser. **But it was not the only one.** The
-  same defect is in two more places:
-  - **`Quota.jsx:454` is live.** `quota_manual` does not exist in the
-    database, so the manual stock section is right now telling David to "run
-    `supabase/quota_manual.sql` in the Supabase SQL editor, then reload".
-    Either apply that migration or replace the message.
+  same defect is in two more places, though **both are dead code today**:
+  - `Quota.jsx:454` offers to have the skipper run
+    `supabase/quota_manual.sql`. That migration **is** applied —
+    `quota_manual_stocks` and `quota_manual_entries` both exist with the
+    right grants and both policies. `manualReady` only goes false if the
+    query errors, so the message cannot currently show.
+    (The tables are named `quota_manual_stocks` / `quota_manual_entries`, not
+    `quota_manual` — checking the filename as a table name gives a false
+    negative.)
   - `DailyPrices.jsx:131` says the same about `supabase/market_prices.sql`.
-    That table **does** exist, so the message is unreachable dead code — but
-    it will surface for any new tenant whose tables are not set up.
+    That table exists too.
+
+  Both will surface for a **new tenant** whose tables are not set up, which
+  is exactly when a skipper is least able to act on them.
 
   The general rule: a missing table is an operator problem, not something to
   hand to a skipper. Grep for `.sql` in `src/pages/` before assuming it is
@@ -469,8 +475,15 @@ In the order agreed:
    certificate reader (firm it up; store the original photo/PDF as Aegir
    does), the itemised 42-point familiarisation list, and `place_of_birth`
    on the generated crew list document.
-4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
-   `Sales.jsx`, only the input is missing from the single-landing view.
+4. ~~**Days-at-sea repair**~~ — **done Aug 2026.** The single-landing view now
+   carries a days-at-sea input under the KPIs. The handler is called
+   `saveDays`, not `updateDaysAtSea`, and it rounds to the nearest quarter day
+   exactly as the list views do, so a trip typed in either place lands on the
+   same figure. The `£/day at sea` KPI used to read "add days below" in a view
+   that has no table below it.
+   **79 of Audacious's 118 landings still have no days at sea** (average on
+   the 39 that do: 4.48 days), so `£/day` is unreliable until those are filled
+   in. They only ever arrived via logbook/quota uploads before this.
 5. **Vessel certificates page.**
 6. **Logs** — fuel/oil log, plus the fuel loop across three systems.
 

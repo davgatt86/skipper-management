@@ -402,8 +402,16 @@ export default function Sales() {
             <Kpi label="Boxes" value={num(k.boxes)} />
             <Kpi label="Average £/kg" value={gbp(k.pkg)} />
             <Kpi label="Landings" value={num(k.landings)} />
-            <Kpi label="£/day at sea" value={perDay != null ? gbp0(perDay) : '—'} sub={daysTotal > 0 ? num(r2(daysTotal)) + ' days' : 'add days below'} />
+            <Kpi label="£/day at sea" value={perDay != null ? gbp0(perDay) : '—'} sub={daysTotal > 0 ? num(r2(daysTotal)) + ' days' : (mode === 'landing' ? 'set days below' : 'add days below')} />
           </div>
+          {/* The list views let you type days against each landing, but the
+              single-landing view never did — so the one place you are actually
+              looking at a trip was the one place you could not record how long
+              it took. Days at sea otherwise only arrive via logbook/quota
+              uploads. */}
+          {mode === 'landing' && landingId && landingById[landingId] && (
+            <DaysAtSea landing={landingById[landingId]} canEdit={isSkipper} onSave={saveDays} />
+          )}
         </div>
 
         {/* charts */}
@@ -663,6 +671,44 @@ function SpRows({ buyer, sp, rows, open, onToggle }) {
         </tr>
       ))}
     </>
+  )
+}
+
+// Days at sea for a single landing. Stored to the nearest quarter day by
+// saveDays, which is what the list views already do — so a trip typed here
+// and a trip typed there land on the same figure.
+function DaysAtSea({ landing, canEdit, onSave }) {
+  const [v, setV] = useState(landing.days_at_sea ?? '')
+  const [saved, setSaved] = useState(false)
+  useEffect(() => { setV(landing.days_at_sea ?? ''); setSaved(false) }, [landing.id, landing.days_at_sea])
+
+  async function save() {
+    await onSave(landing.id, v)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  if (!canEdit) {
+    return (
+      <div className="muted" style={{ marginTop: '0.7rem', fontSize: '0.85rem' }}>
+        Days at sea: {landing.days_at_sea ?? '—'}
+      </div>
+    )
+  }
+
+  return (
+    <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.7rem', fontSize: '0.85rem' }}>
+      <span className="muted">Days at sea for this trip:</span>
+      <input
+        type="number" min="0" step="0.25" value={v}
+        onChange={e => setV(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save() }}
+        style={{ width: 80, textAlign: 'right' }}
+      />
+      <button className="secondary" onClick={save} style={{ padding: '2px 10px' }}>Save</button>
+      {saved && <span style={{ color: 'var(--kelp)', fontWeight: 700 }}>Saved ✓</span>}
+      <span className="muted">quarter days · sets £/day above</span>
+    </div>
   )
 }
 
