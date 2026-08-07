@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
+import { TeamsPanel, TripLandings, LandingsLedger } from './RotaLandings'
 
 // Section 4 of the crew page: the rota planner.
 //
@@ -51,6 +52,10 @@ export default function Rota() {
   const [trips, setTrips] = useState([])
   const [holidays, setHolidays] = useState([])
   const [crew, setCrew] = useState([])
+  const [teams, setTeams] = useState([])
+  const [teamMembers, setTeamMembers] = useState({})   // team_id -> [crew_id]
+  const [landings, setLandings] = useState([])         // rota_trip_landings
+  const [landingCrew, setLandingCrew] = useState({})   // rota_landing_id -> [crew_id]
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -68,19 +73,31 @@ export default function Rota() {
   const [hNote, setHNote] = useState('')
 
   async function loadAll() {
-    const [t, tc, h, c] = await Promise.all([
+    const [t, tc, h, c, tm, tmm, tl, lc] = await Promise.all([
       supabase.from('rota_trips').select('*').order('start_date'),
       supabase.from('rota_trip_crew').select('*'),
       supabase.from('rota_holidays').select('*').order('start_date'),
       supabase.from('crew').select('id, full_name, status, archived_at, crew_type'),
+      supabase.from('rota_teams').select('*').order('sort'),
+      supabase.from('rota_team_members').select('*'),
+      supabase.from('rota_trip_landings').select('*').order('seq'),
+      supabase.from('rota_landing_crew').select('*'),
     ])
-    const err = t.error || tc.error || h.error || c.error
+    const err = t.error || tc.error || h.error || c.error || tm.error || tmm.error || tl.error || lc.error
     if (err) { setError(err.message); return }
     const crewByTrip = {}
     for (const r of tc.data || []) (crewByTrip[r.trip_id] = crewByTrip[r.trip_id] || []).push(r.crew_id)
     setTrips((t.data || []).map((x) => ({ ...x, crew_ids: crewByTrip[x.id] || [] })))
     setHolidays(h.data || [])
     setCrew((c.data || []).filter((x) => !x.archived_at))
+    setTeams(tm.data || [])
+    const byTeam = {}
+    for (const r of tmm.data || []) (byTeam[r.team_id] = byTeam[r.team_id] || []).push(r.crew_id)
+    setTeamMembers(byTeam)
+    setLandings(tl.data || [])
+    const byLanding = {}
+    for (const r of lc.data || []) (byLanding[r.rota_landing_id] = byLanding[r.rota_landing_id] || []).push(r.crew_id)
+    setLandingCrew(byLanding)
   }
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
 
@@ -346,32 +363,52 @@ export default function Rota() {
                 </p>
               )}
 
-              {open && isSkipper && (
-                <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px dashed var(--border)' }}>
-                  <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.4rem' }}>
-                    Tap to add or remove. Rotation crew only — contracted crew are handled through contracts.
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {rotaCrew.map((c) => {
-                      const onTrip = t.crew_ids.includes(c.id)
-                      const onHol = onHolidayDuring(c.id, t.start_date, t.end_date)
-                      return (
-                        <button
-                          key={c.id}
-                          onClick={() => toggleTripCrew(t, c.id)}
-                          style={{
-                            ...chip(onTrip ? pal.bg : 'transparent', onTrip ? pal.fg : 'inherit', onTrip),
-                            cursor: 'pointer',
-                            border: onTrip ? `2px solid ${pal.dot}` : '1px solid var(--border)',
-                          }}
-                        >
-                          {c.full_name}{onHol ? ' ⚠ holiday' : ''}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {rotaCrew.length === 0 && <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>No self-employed rotation crew on the books.</p>}
-                </div>
+              {open && (
+                <>
+                  {/* Per-landing crew: where a mid-trip swap lives. */}
+                  <TripLandings
+                    trip={t}
+                    landings={landings}
+                    landingCrew={landingCrew}
+                    teamMembers={teamMembers}
+                    teams={teams}
+                    rotaCrew={rotaCrew}
+                    crewName={crewName}
+                    pal={pal}
+                    isSkipper={isSkipper}
+                    onChange={loadAll}
+                    setError={setError}
+                  />
+
+                  {isSkipper && (
+                    <div style={{ marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '1px dashed var(--border)' }}>
+                      <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.4rem' }}>
+                        Crew for the whole trip — used only where a landing has no watch and no crew of
+                        its own. Rotation crew only; contracted crew are handled through contracts.
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {rotaCrew.map((c) => {
+                          const onTrip = t.crew_ids.includes(c.id)
+                          const onHol = onHolidayDuring(c.id, t.start_date, t.end_date)
+                          return (
+                            <button
+                              key={c.id}
+                              onClick={() => toggleTripCrew(t, c.id)}
+                              style={{
+                                ...chip(onTrip ? pal.bg : 'transparent', onTrip ? pal.fg : 'inherit', onTrip),
+                                cursor: 'pointer',
+                                border: onTrip ? `2px solid ${pal.dot}` : '1px solid var(--border)',
+                              }}
+                            >
+                              {c.full_name}{onHol ? ' ⚠ holiday' : ''}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {rotaCrew.length === 0 && <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>No self-employed rotation crew on the books.</p>}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )
@@ -392,6 +429,26 @@ export default function Rota() {
           </details>
         )}
       </div>
+
+      {/* ---------- watches and the landings ledger ---------- */}
+      <TeamsPanel
+        teams={teams}
+        teamMembers={teamMembers}
+        rotaCrew={rotaCrew}
+        isSkipper={isSkipper}
+        onChange={loadAll}
+        setError={setError}
+      />
+
+      <LandingsLedger
+        trips={trips}
+        landings={landings}
+        landingCrew={landingCrew}
+        teamMembers={teamMembers}
+        teams={teams}
+        rotaCrew={rotaCrew}
+        crewName={crewName}
+      />
 
       {/* ---------- holidays ---------- */}
       <div className="card">

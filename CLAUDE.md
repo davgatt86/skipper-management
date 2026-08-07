@@ -380,6 +380,35 @@ In the order agreed:
      rendered only upcoming ones, so once every holiday was in the past the
      section showed neither a row nor a message. There are 4 on record, 2
      already past.
+
+     **The rota unit is the LANDING, not the day** (Aug 2026,
+     `supabase/rota_landings_and_teams.sql`). David works 2 landings on,
+     2 landings off in two watches, and a man can swap in the *middle* of a
+     trip to cover a holiday — which one crew list per trip cannot express:
+
+         Crew A  david/david  2/0     Crew A  david/barry  3/3
+         Crew B  barry/barry  2/2     Crew B  barry/david  4/4
+
+     New tables: `rota_teams` + `rota_team_members` (fixed watches),
+     `rota_trip_landings` (normally two per trip, not fixed at two, with an
+     optional `landing_id` link to the real landing once it happens), and
+     `rota_landing_crew` (where a swap actually lives). `rota_trips` gains
+     `team_id`.
+
+     **A landing's crew resolves in this order** — explicit per-landing
+     override → the trip's watch → the trip-level `rota_trip_crew`. The last
+     is how the 29 older trips were recorded, so they keep reading as before.
+     An empty override means *inherit*, not "nobody aboard".
+
+     **The tally cannot come from `landing_crew`.** That table is only
+     populated for contracted agency crew because it drives the box bonus —
+     across 164 landings, David, Barry and every self-employed rotation man
+     have none. So the rota counts its own per-landing crew. If those two
+     ever need to agree, that is a reconciliation job, not a join.
+
+     The 29 existing trips were **not** backfilled with landings. We do not
+     know how many each actually ran, and inventing two apiece would be
+     making up history.
    - **Section 5** (Certificates) is still its own page. It carries the tab
      strip but has not been rebuilt.
 
