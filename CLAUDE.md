@@ -251,8 +251,20 @@ on record") — contracts only apply to contracted crew.
   defaults to Deckhand on every voyage**: it is now stored on the crewman
   (`crew.rank_code`) but `CrewList.jsx` does not read it, and its free-text
   `RANKS` list does not use the `crew_ranks` codes. Wire it up in section 3.
-- The certificates page tells the user to "run the `crew_cert_categories.sql`
-  backfill" — SQL surfaced to a skipper.
+- ~~The certificates page tells the user to run a `.sql` backfill~~ — fixed
+  Aug 2026 by the in-app categoriser. **But it was not the only one.** The
+  same defect is in two more places:
+  - **`Quota.jsx:454` is live.** `quota_manual` does not exist in the
+    database, so the manual stock section is right now telling David to "run
+    `supabase/quota_manual.sql` in the Supabase SQL editor, then reload".
+    Either apply that migration or replace the message.
+  - `DailyPrices.jsx:131` says the same about `supabase/market_prices.sql`.
+    That table **does** exist, so the message is unreachable dead code — but
+    it will surface for any new tenant whose tables are not set up.
+
+  The general rule: a missing table is an operator problem, not something to
+  hand to a skipper. Grep for `.sql` in `src/pages/` before assuming it is
+  clean.
 - Three current contracts have no going-home bonus set.
 - `Sales.jsx` single-landing view still does not expose the days-at-sea input,
   though `updateDaysAtSea` already exists. Days at sea currently only arrive
@@ -423,8 +435,23 @@ In the order agreed:
      Cruikshank, Paul Craib and Ronald Beagrie are aboard against Gregor
      Smith and James Napier ashore, which is four to two and does not pair
      one-to-one. The page lists them as "not yet paired".
-   - **Section 5** (Certificates) is still its own page. It carries the tab
-     strip but has not been rebuilt.
+   - **Section 5, Certificates** — kept, as agreed; it was already the
+     strongest page. Two things changed.
+     **The SQL nag is gone.** It told the skipper to "run the
+     `crew_cert_categories.sql` backfill" — a filename and a database console
+     put in front of a man on a boat. In its place is a categoriser that
+     works in the app, grouped by cert **type** rather than by row: filing
+     "Man Overboard Awareness" files all six at once, which is the whole
+     point of filing against a type. Each type gets a suggested category from
+     `suggestCategory()` in `CrewCerts.jsx`, and nothing is filed without the
+     skipper confirming — a regex does not know his tickets better than he
+     does. Viewers see a plain count instead.
+     **`Radio` added to `CERT_CATEGORIES`.** GMDSS and the Long Range
+     Radiotelephone ticket had no bucket at all, which is why four
+     certificates were stranded. 16 were uncategorised in total.
+     Hint order matters: Engineer is tested before Deck, and Radio before
+     everything, or "GMDSS General Certificate of **Competence**" drifts into
+     an officer ticket.
 
    The one crew list saved before the migration is junk — no passports, no
    dates of birth, a nationality of "Engineer", and "Andrejs Gundravos"
@@ -438,8 +465,10 @@ In the order agreed:
    takes its rank options from `crew_ranks`, so a voyage is no longer a list of
    Deckhands.
 
-   Still to do here: rebuild section 5, and the certificates page still
-   tells the skipper to run a `.sql` backfill.
+   **All five sections are built.** What remains against them is the
+   certificate reader (firm it up; store the original photo/PDF as Aegir
+   does), the itemised 42-point familiarisation list, and `place_of_birth`
+   on the generated crew list document.
 4. **Days-at-sea repair** — small: `updateDaysAtSea` already exists in
    `Sales.jsx`, only the input is missing from the single-landing view.
 5. **Vessel certificates page.**

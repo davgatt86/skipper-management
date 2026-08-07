@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
-import { CERT_CATEGORIES } from './CrewCerts'
+import { CERT_CATEGORIES, suggestCategory } from './CrewCerts'
 
 const BUCKET = 'crew-certs'
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
@@ -30,8 +30,103 @@ function CertBadge({ expiry }) {
 // Survival, First Aid, Safety Awareness, Deck Officer, Engineer Officer) so the
 // many Ægir name-variants collapse to a clean set of columns. Set each cert's
 // category on the Crew page (Edit → Category); anything left shows under "Other".
+// Sorting uncategorised certificates into buckets, in the app.
+//
+// This used to be a note telling the skipper to "run the
+// crew_cert_categories.sql backfill" — a filename and a database console are
+// not something to put in front of a man on a boat. It works by cert TYPE
+// rather than by row, because the whole point of filing against a type is
+// that every certificate of that type belongs in the same bucket: six Man
+// Overboard Awareness tickets are one decision, not six.
+function Categoriser({ rows, onDone, setError }) {
+  const [choice, setChoice] = useState({})   // cert_type -> category
+  const [busy, setBusy] = useState('')
+
+  const groups = useMemo(() => {
+    const by = {}
+    for (const r of rows) {
+      if (CERT_CATEGORIES.includes(r.category)) continue
+      ;(by[r.cert_type] = by[r.cert_type] || []).push(r)
+    }
+    return Object.entries(by).sort((a, b) => b[1].length - a[1].length)
+  }, [rows])
+
+  if (!groups.length) return null
+
+  async function apply(certType, ids) {
+    const cat = choice[certType] ?? suggestCategory(certType)
+    if (!cat) return
+    setBusy(certType)
+    const { error } = await supabase.from('crew_certificates').update({ category: cat }).in('id', ids)
+    setBusy('')
+    if (error) setError(error.message); else onDone()
+  }
+
+  async function applyAll() {
+    const ready = groups.filter(([t]) => (choice[t] ?? suggestCategory(t)))
+    if (!ready.length) return
+    if (!confirm(`File ${ready.reduce((n, [, r]) => n + r.length, 0)} certificates into the categories shown?`)) return
+    setBusy('all')
+    for (const [t, rs] of ready) {
+      const cat = choice[t] ?? suggestCategory(t)
+      const { error } = await supabase.from('crew_certificates').update({ category: cat }).in('id', rs.map((r) => r.id))
+      if (error) { setError(error.message); setBusy(''); return }
+    }
+    setBusy('')
+    onDone()
+  }
+
+  const total = groups.reduce((n, [, r]) => n + r.length, 0)
+
+  return (
+    <div className="card" style={{ borderColor: 'var(--brass)' }}>
+      <h2 style={{ marginTop: 0 }}>Sort {total} certificate{total === 1 ? '' : 's'} into categories</h2>
+      <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+        These show under <em>Other</em> in the matrix. A category is suggested from the
+        certificate's name — check each one and file it. Filing by type does every
+        certificate of that name at once.
+      </p>
+
+      {groups.map(([certType, rs]) => {
+        const value = choice[certType] ?? suggestCategory(certType)
+        return (
+          <div key={certType} style={{ borderTop: '1px solid var(--border)', padding: '0.55rem 0', display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <strong style={{ fontSize: '0.9rem' }}>{certType || '(no name)'}</strong>
+              <span className="muted" style={{ fontSize: '0.78rem' }}> · {rs.length} held</span>
+            </span>
+            <select
+              value={value}
+              onChange={(e) => setChoice((p) => ({ ...p, [certType]: e.target.value }))}
+              style={{ width: 'auto', padding: '0.25rem 0.45rem', fontSize: '0.85rem' }}
+            >
+              <option value="">— pick a category —</option>
+              {CERT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button
+              className="secondary"
+              disabled={!value || busy === certType}
+              onClick={() => apply(certType, rs.map((r) => r.id))}
+              style={{ padding: '0.25rem 0.7rem', fontSize: '0.82rem' }}
+            >
+              {busy === certType ? 'Filing…' : `File ${rs.length}`}
+            </button>
+          </div>
+        )
+      })}
+
+      <div style={{ marginTop: '0.9rem' }}>
+        <button onClick={applyAll} disabled={busy === 'all'}>
+          {busy === 'all' ? 'Filing…' : 'File them all as shown'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function CrewCertsRegister() {
   const { appUser } = useAuth()
+  const canEdit = appUser?.role === 'skipper'
   const [rows, setRows] = useState([])
   const [crew, setCrew] = useState([])
   const [loading, setLoading] = useState(true)
@@ -146,12 +241,13 @@ export default function CrewCertsRegister() {
         </div>
       </div>
 
-      {uncategorised > 0 && (
-        <div className="card" style={{ borderColor: 'var(--amber)' }}>
+      {uncategorised > 0 && canEdit && (
+        <Categoriser rows={enriched} onDone={load} setError={setError} />
+      )}
+      {uncategorised > 0 && !canEdit && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
           <p style={{ margin: 0, fontSize: '0.9rem' }}>
             <strong>{uncategorised}</strong> certificate{uncategorised === 1 ? '' : 's'} not yet categorised — they show under <em>Other</em> in the matrix.
-            Set each one's category on the <Link to="/crew">Crew page</Link> (open a crewman → Edit → Category), or run the
-            <code style={{ margin: '0 0.25rem' }}>crew_cert_categories.sql</code> backfill to auto-sort them first.
           </p>
         </div>
       )}

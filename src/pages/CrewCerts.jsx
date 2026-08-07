@@ -9,7 +9,33 @@ const safeName = n => String(n || 'cert').replace(/[^\w.\-]+/g, '_').slice(-80)
 
 // The buckets the fleet-wide matrix groups by. Tick one per certificate so the
 // many cert-name variants collapse to a clean set of columns.
-export const CERT_CATEGORIES = ['Medical', 'Fire Fighting', 'Sea Survival', 'First Aid', 'Safety Awareness', 'Deck Officer', 'Engineer Officer']
+//
+// Radio was added Aug 2026: GMDSS and the Long Range Radiotelephone ticket had
+// no bucket at all, so four certificates sat uncategorised with nowhere sensible
+// to go.
+export const CERT_CATEGORIES = ['Medical', 'Fire Fighting', 'Sea Survival', 'First Aid', 'Safety Awareness', 'Radio', 'Deck Officer', 'Engineer Officer']
+
+// Suggestions for the categoriser on the register page. First match wins, so
+// the order matters — "GMDSS General Certificate of Competence" must be caught
+// as Radio before "Competence" pulls it toward an officer ticket.
+//
+// These are only suggestions. Nothing is filed without the skipper confirming
+// it, because he knows his own tickets better than a regex does.
+export const CATEGORY_HINTS = [
+  [/gmdss|radiotele|radio|\bvhf\b|src\b/i, 'Radio'],
+  [/medical|eng\s?1/i, 'Medical'],
+  [/fire/i, 'Fire Fighting'],
+  [/survival|life\s?raft|liferaft/i, 'Sea Survival'],
+  [/first aid|elementary first/i, 'First Aid'],
+  [/man overboard|social responsibilit|security awareness|safety awareness|safety cert|personal safety/i, 'Safety Awareness'],
+  [/engineer|engine/i, 'Engineer Officer'],
+  [/stability|bridge watch|navigation|deck|skipper|mate|fishing vessel/i, 'Deck Officer'],
+]
+
+export function suggestCategory(certType) {
+  for (const [re, cat] of CATEGORY_HINTS) if (re.test(certType || '')) return cat
+  return ''
+}
 
 function CertBadge({ expiry }) {
   const s = certStatus(expiry)
