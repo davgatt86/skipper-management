@@ -513,6 +513,16 @@ In the order agreed:
      know how many each actually ran, and inventing two apiece would be
      making up history.
 
+     ⚠️ **Those 29 trips are now 4, and all 60 `rota_trip_crew` rows are gone**
+     (noticed Aug 2026 during the vessels migration). The 4 survivors all
+     belong to the HANSTHOLM fleet; every deleted trip was Audacious.
+     A deletion scoped to exactly one fleet is what the **app** does under
+     RLS — the Rota page's delete button in David's session — not a migration,
+     which runs as service role and would have hit all fleets alike.
+     **`audit_log` does not cover the rota tables** (only contracts, crew,
+     landings, one_off_bonuses, payments), so there is no trail to confirm it.
+     Worth adding a trigger if rota history matters.
+
      **Back-to-back pairs** (`supabase/rota_back_to_back.sql`). Two men share
      a berth — when one is on, the other is off. `crew_a_id` is the Crew A
      man, `crew_b_id` the Crew B man, so both watches fill from the pairs in
@@ -679,14 +689,24 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 
 ## Outstanding work
 
-- **Vessels are not in the schema — but sales no longer need them.** The pair
-  vessel picker and all four pair comparisons were built Aug 2026 off
-  `sales_landings.vessel`, because a pair is one fleet with two vessel labels.
-  What still needs a `vessels` table is **crew, quota and rota**, which have no
-  vessel column at all: `vessel_details.fleet_id` is a primary key and those
-  tables key on `fleet_id`. That means a `vessels` table, a `vessel_id` on each,
-  backfill, and the fleet-isolation policies extended — a migration, not a
-  restyle.
+- **Vessels — stage 1 DONE Aug 2026** (`supabase/vessels_schema.sql`).
+  A `vessels` table, 16 vessels across 12 fleets, and a nullable `vessel_id`
+  on the 16 tables that are genuinely per-vessel. **Deliberately additive:
+  nothing reads `vessel_id` yet**, so no page changed behaviour.
+
+  `vessels.label` matches `sales_landings.vessel` exactly, which made that
+  backfill a real join — **316 of 316 landings filled**. Single-vessel fleets
+  are fully backfilled everywhere. **Pair fleets are left NULL on purpose**:
+  which boat a crewman, rota trip or quota line belongs to is not knowable
+  from the data, and guessing would put a man on the wrong boat.
+
+  Fleet-level tables deliberately have no `vessel_id` — settings, alerts,
+  `sales_buyer_flags`, `fuel_suppliers`, `app_users`, `ingest_senders`.
+
+  **Stage 2, not done:** pages reading `vessel_id` rather than matching on the
+  vessel text; `vessel_details` moving off `fleet_id` as its primary key (the
+  disruptive one — do it alone); a vessel picker on crew, quota and rota; and
+  the pair fleets assigning their NULL rows.
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:
