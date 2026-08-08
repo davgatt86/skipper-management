@@ -119,7 +119,23 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 `parse-core.cjs` (this repo, Netlify Functions) and `parse-core.js` (in
 `davgatt86/fish-sales-tracker`) are **identical files**. Any fix must be applied
-to both, and the version bumped. Currently 1.3.0.
+to both, and the version bumped. Now **1.3.1**.
+
+⚠️ **The two copies may already have drifted.** Before the Aug 2026 buyer-alias
+change this file read `VERSION = "1.2.1"` while this document claimed 1.3.0.
+Either the sister repo is ahead, or the note was wrong. Diff them before
+trusting either.
+
+⚠️ **`fish-sales-tracker` is not on this machine**, so the Aug 2026 change to
+`BUYER_CANON` is applied **here only**. Until the same edit lands there, the
+two parsers disagree about buyer names.
+
+**Buyer names are canonicalised in `BUYER_CANON` / `canonBuyer()`**, which the
+Don Fishing parser applies to every row. That is the only durable fix for the
+name-variant problem, because buyer names arrive from the note rather than a
+pick-list. Note `canonBuyer` is **not** applied by the P&J (JSD) or Shetland
+parsers — they use their own `cleanBuyer`/`CANON` — so a variant appearing on
+those notes needs handling separately.
 
 Supported sales notes: Peterhead / Don (P&J Johnstone), Hanstholm Afregning
 (DKK → GBP via ECB cross-rate), Hanstholm GBP Invoice, Shetland (LHD + SSA),

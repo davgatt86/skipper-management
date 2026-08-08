@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.2.1";
+  const VERSION = "1.3.1";
   const round2 = n => Math.round(n * 100) / 100;
   const num = s => parseFloat(String(s).replace(/,/g, ""));
 
@@ -142,7 +142,15 @@
     "WHITELINK SEAFOODS LTD": "Whitelink Seafoods",
     "GT SUSTAINABLE": "GT Sustainable Seafoods", // safety net if the wrapped "Seafoods" fragment is lost
     "TOPSAIL FISH PRODUCTS": "Topsail Fish Products Ltd",
-    "TOP SAIL": "Top Sail"
+    "TOP SAIL": "Top Sail",
+    // One firm printed two ways on Don Fishing notes. Left split, it cost
+    // about a third of their volume in any buyer analysis AND understated
+    // their price, because the short-name rows were the strongest of the lot.
+    // Merged in the database Aug 2026; this is what stops the next note
+    // reintroducing it.
+    "J SMITH": "Messrs J Smith Ltd",
+    "J SMITH LTD": "Messrs J Smith Ltd",
+    "MESSRS J SMITH": "Messrs J Smith Ltd"
   };
   function canonBuyer(raw) {
     const r = String(raw || "").replace(/\s+/g, " ").trim();
