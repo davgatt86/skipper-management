@@ -632,14 +632,18 @@ In the order agreed:
    **Average consumption: 5,846 L per day at sea** (12 settlements, Jan–Jul
    2026). The page flags any trip more than 25% off that.
 
-   **The loop does not balance.** Over 08-01-2026 → 29-07-2026 the settlements
-   say 1,093,158 L used; this log says 821,432 L bunkered — a gap of
-   **−271,726 L**, about 46 days of burn. Timing explains some of it (fuel
-   bunkered at the end of a period burns in the next, and tank levels are
-   recorded nowhere) but not that much. Either bunkerings are missing from
-   the Aegir log, or `fuel_used` is overstated, or fuel is being bought and
-   burned outside both records. **Not resolvable from the data — it needs the
-   paper.**
+   **The loop was out by −271,726 L, and missing bunkerings were most of it.**
+   The first reading (08-01 → 29-07-2026) had 1,093,158 L used against
+   821,432 L bunkered. David then added the outstanding bunkerings in Aegir;
+   re-reading them Aug 2026 brought the log to 1,016,806 L over the same
+   window and the gap to **−76,352 L** — roughly 13 days of burn rather than
+   46. So about **72% of the discrepancy was simply five unrecorded
+   bunkerings.**
+
+   What is left is the size timing alone would explain: fuel bunkered before
+   08-01 burning in January, and the 05-08 Haugesund lift burning in August.
+   Tank levels are still recorded nowhere, so it cannot be closed exactly —
+   but it no longer looks like anything is wrong.
 
    **The third leg is still missing.** `su_worksheets` and
    `su_worksheet_lines` are both **empty**, so "litres taken, where" cannot be

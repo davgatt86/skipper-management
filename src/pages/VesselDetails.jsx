@@ -28,8 +28,11 @@ const FIELDS = [
   { key: 'engine_kw', label: 'Engine power (kW)', ph: '1060' },
   { key: 'owner', label: 'Owner', ph: '' },
   { key: 'skipper_name', label: 'Skipper', ph: '' },
-  { key: 'length_m', label: 'Registered length (m)', ph: '29.80', type: 'number' },
-  { key: 'gross_tonnage', label: 'Gross tonnage (GT)', ph: '498', type: 'number' },
+  // length_m predates the Certificate of Registry fields above and is what
+  // VesselPlate reads, so it stays — but it is the OVERALL length, and having
+  // it labelled "Registered length" next to a real length_registered was
+  // asking for the wrong number to be typed.
+  { key: 'length_m', label: 'Length shown on the plate (m)', ph: '29.80', type: 'number' },
 ]
 
 const blank = () => FIELDS.reduce((o, f) => ((o[f.key] = ''), o), {})
@@ -43,33 +46,48 @@ export default function VesselDetails() {
   const [msg, setMsg] = useState('')
   const [heroPath, setHeroPath] = useState(null)
   const [heroBusy, setHeroBusy] = useState(false)
+  // The owner administers branding across tenants, so he picks which fleet the
+  // photo is for. Everyone else only ever sees their own.
+  const isOwner = !!appUser?.is_owner
+  const [fleets, setFleets] = useState([])
+  const [photoFleet, setPhotoFleet] = useState(appUser?.fleet_id || '')
+
+  useEffect(() => { setPhotoFleet(appUser?.fleet_id || '') }, [appUser?.fleet_id])
 
   useEffect(() => {
-    if (!appUser?.fleet_id) return
-    supabase.from('fleets').select('hero_path').eq('id', appUser.fleet_id).maybeSingle()
+    if (!isOwner) return
+    supabase.from('fleets').select('id, name').order('name').then(({ data }) => setFleets(data || []))
+  }, [isOwner])
+
+  useEffect(() => {
+    if (!photoFleet) return
+    supabase.from('fleets').select('hero_path').eq('id', photoFleet).maybeSingle()
       .then(({ data }) => setHeroPath(data?.hero_path || null))
-  }, [appUser?.fleet_id])
+  }, [photoFleet])
 
   // One photo per fleet: the old file is removed rather than left orphaned in
   // the bucket, the way an abandoned certificate upload was.
   async function onHero(e) {
     const file = e.target.files?.[0]
     e.target.value = ''
-    if (!file || !appUser?.fleet_id) return
+    if (!file || !photoFleet) return
     setHeroBusy(true); setMsg('')
-    const path = `${appUser.fleet_id}/${Date.now()}-${String(file.name).replace(/[^\w.\-]+/g, '_').slice(-60)}`
+    // Folder MUST be the fleet the photo is for, not the uploader's own — the
+    // read policy is fleet-scoped, so a file in the wrong folder would upload
+    // fine and then be invisible to the boat it belongs to.
+    const path = `${photoFleet}/${Date.now()}-${String(file.name).replace(/[^\w.\-]+/g, '_').slice(-60)}`
     const up = await supabase.storage.from('fleet-photos').upload(path, file, { contentType: file.type || undefined })
     if (up.error) { setMsg('Upload failed: ' + up.error.message); setHeroBusy(false); return }
-    const { error } = await supabase.from('fleets').update({ hero_path: path }).eq('id', appUser.fleet_id)
+    const { error } = await supabase.from('fleets').update({ hero_path: path }).eq("id", photoFleet)
     if (error) { setMsg(error.message); setHeroBusy(false); return }
     if (heroPath) await supabase.storage.from('fleet-photos').remove([heroPath])
     setHeroPath(path); setHeroBusy(false); setMsg('Photo saved ✓')
   }
 
   async function clearHero() {
-    if (!heroPath || !appUser?.fleet_id) return
+    if (!heroPath || !photoFleet) return
     setHeroBusy(true)
-    await supabase.from('fleets').update({ hero_path: null }).eq('id', appUser.fleet_id)
+    await supabase.from('fleets').update({ hero_path: null }).eq("id", photoFleet)
     await supabase.storage.from('fleet-photos').remove([heroPath])
     setHeroPath(null); setHeroBusy(false); setMsg('Photo removed — the plate is solid cobalt again.')
   }
@@ -120,6 +138,17 @@ export default function VesselDetails() {
             lettering stays readable. Leave it empty and the plate is solid cobalt — that is the
             designed look, not a gap.
           </p>
+          {isOwner && fleets.length > 1 && (
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.6rem' }}>
+              Which boat
+              <select value={photoFleet} onChange={(e) => setPhotoFleet(e.target.value)} style={{ maxWidth: 320 }}>
+                {fleets.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+              <span className="muted" style={{ fontWeight: 400, fontSize: '0.78rem' }}>
+                You own the app, so you can set any fleet&rsquo;s photo. Each skipper still only sees his own.
+              </span>
+            </label>
+          )}
           <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <label className="secondary" style={{ padding: '0.45rem 0.9rem', borderRadius: 7, cursor: heroBusy ? 'wait' : 'pointer', border: '1px solid var(--border)', display: 'inline-block' }}>
               {heroBusy ? 'Uploading…' : heroPath ? 'Replace photo' : '📷 Choose a photo'}
