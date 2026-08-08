@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2 } from '../lib/salesAgg'
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2,
+  withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
@@ -52,6 +53,11 @@ export default function Sales() {
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [month, setMonth] = useState(String(new Date().getMonth() + 1).padStart(2, '0'))
   const [landingId, setLandingId] = useState('')
+  // Danish sales come through Hanstholm with no buyer names and in DKK, so
+  // whether they are in or out has to be a choice, not an assumption.
+  const [scope, setScope] = useState('all')         // 'all' | 'uk' | 'dk'
+  // What the percentages are a share OF. £ answers "what drove the gross".
+  const [basis, setBasis] = useState('value')       // 'value' | 'kg' | 'boxes'
 
   // drill-downs
   const [openSpecies, setOpenSpecies] = useState('')
@@ -90,6 +96,12 @@ export default function Sales() {
   }, [landings, mode, year, month, landingId])
 
   const landingById = useMemo(() => Object.fromEntries(landings.map(l => [l.id, l])), [landings])
+
+  // Everything downstream works off the SCOPED rows, so a percentage is always
+  // a share of what is on screen. Change UK/Denmark and every denominator —
+  // and every KPI — moves with it.
+  const inScope = useMemo(() => scopeRows(rows, landingById, scope), [rows, landingById, scope])
+  const landingsInScope = useMemo(() => scopeLandingIds(scopeLandings, scope), [scopeLandings, scope])
 
   const scopeLabel = useMemo(() => {
     if (mode === 'landing') {
@@ -305,8 +317,8 @@ export default function Sales() {
   }
 
   /* ---------------- derived ---------------- */
-  const k = useMemo(() => kpis(rows, scopeLandings.length), [rows, scopeLandings])
-  const daysTotal = useMemo(() => scopeLandings.reduce((s, l) => s + (Number(l.days_at_sea) || 0), 0), [scopeLandings])
+  const k = useMemo(() => kpis(inScope, landingsInScope.length), [inScope, landingsInScope])
+  const daysTotal = useMemo(() => landingsInScope.reduce((s, l) => s + (Number(l.days_at_sea) || 0), 0), [landingsInScope])
   const perDay = daysTotal > 0 ? k.value / daysTotal : null
   async function saveDays(id, val) {
     const v = val === '' ? null : Math.round(Number(val) * 4) / 4   // nearest 0.25 day
@@ -314,8 +326,14 @@ export default function Sales() {
     if (error) { setError(error.message); return }
     setLandings(landings.map(l => l.id === id ? { ...l, days_at_sea: v } : l))
   }
-  const speciesTbl = useMemo(() => bySpecies(rows), [rows])
-  const buyersTbl = useMemo(() => byBuyer(rows), [rows])
+  const speciesTbl = useMemo(() => withShares(bySpecies(inScope), basis), [inScope, basis])
+  const buyersTbl = useMemo(() => withShares(byBuyer(inScope), basis), [inScope, basis])
+
+  // Pair teams: two boats in one fleet, told apart by the landing's vessel
+  // label. Only shown when there is genuinely more than one.
+  const vesselTbl = useMemo(() => withShares(byVessel(inScope, landingById), basis), [inScope, landingById, basis])
+  const pairInfo = useMemo(() => pairedDays(landingsInScope), [landingsInScope])
+  const isPair = vesselTbl.length > 1
   const monthly = useMemo(() => mode === 'year' ? monthlySeries(rows, landingById, year) : [], [rows, mode, year, landingById])
   const perLanding = useMemo(() => mode === 'month' ? landingSeries(scopeLandings) : [], [mode, scopeLandings])
   const speciesChart = useMemo(() => speciesTbl.slice(0, 10).map(s => ({ label: s.species, value: s.value, kg: r2(s.kg / 1000) })), [speciesTbl])
@@ -381,6 +399,14 @@ export default function Sales() {
             ))}
           </select>
         )}
+        <select value={scope} onChange={e => setScope(e.target.value)} style={{ width: 'auto' }} title="Danish sales come through Hanstholm with no buyer names">
+          {SALES_SCOPES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+        <select value={basis} onChange={e => setBasis(e.target.value)} style={{ width: 'auto' }} title="What the percentages are a share of">
+          <option value="value">% of £</option>
+          <option value="kg">% of kg</option>
+          <option value="boxes">% of boxes</option>
+        </select>
         {rowsLoading && <span className="muted">loading…</span>}
       </div>
 
@@ -413,6 +439,56 @@ export default function Sales() {
             <DaysAtSea landing={landingById[landingId]} canEdit={isSkipper} onSave={saveDays} />
           )}
         </div>
+
+        {/* ---- pair side by side ---- */}
+        {isPair && (
+          <div className="card">
+            <h2>Boat against boat</h2>
+            <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+              {pairInfo.together} day{pairInfo.together === 1 ? '' : 's'} both boats landed together
+              {pairInfo.alone > 0 && `, ${pairInfo.alone} where only one did`}. Gross and boxes are
+              each boat&rsquo;s own; days at sea are <strong>not</strong> summed — the pair fished the
+              same days, so the pair rate is pair gross ÷ the trip&rsquo;s days.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '2px solid var(--border)' }}>
+                    <th style={{ padding: '0.5rem 0.4rem' }}>Vessel</th>
+                    <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Landings</th>
+                    <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Gross</th>
+                    <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Share</th>
+                    <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Boxes</th>
+                    <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>Tonnes</th>
+                    <th style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>£/kg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vesselTbl.map(v => (
+                    <tr key={v.vessel} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '0.5rem 0.4rem', fontWeight: 600 }}>{v.vessel}</td>
+                      <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{num(v.landings)}</td>
+                      <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{gbp0(v.value)}</td>
+                      <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right', fontWeight: 700 }}>{v.share}%</td>
+                      <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{num(v.boxes)}</td>
+                      <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{num(r2(v.kg / 1000))}</td>
+                      <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{gbp(v.pkg)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 700 }}>
+                    <td style={{ padding: '0.5rem 0.4rem' }}>Pair</td>
+                    <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{num(landingsInScope.length)}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{gbp0(k.value)}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>100%</td>
+                    <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{num(k.boxes)}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{num(r2(k.kg / 1000))}</td>
+                    <td style={{ padding: '0.5rem 0.4rem', textAlign: 'right' }}>{gbp(k.pkg)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* charts */}
         {mode === 'year' && rows.length > 0 && (
@@ -469,11 +545,11 @@ export default function Sales() {
           <h2>Species <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>(tap a species for grade breakdown)</span></h2>
           <Scroll>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-              <thead><tr><th style={th}>Species</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={thR}>£/kg</th></tr></thead>
+              <thead><tr><th style={th}>Species</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={thR}>{BASIS_LABEL[basis]}</th><th style={thR}>£/kg</th></tr></thead>
               <tbody>
                 {speciesTbl.map(s => (
                   <SpeciesRow key={s.species} s={s} open={openSpecies === s.species}
-                    onToggle={() => setOpenSpecies(openSpecies === s.species ? '' : s.species)} rows={rows} />
+                    onToggle={() => setOpenSpecies(openSpecies === s.species ? '' : s.species)} rows={inScope} basis={basis} />
                 ))}
               </tbody>
             </table>
@@ -485,11 +561,11 @@ export default function Sales() {
           <h2>Buyers <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>(tap a buyer for what they bought)</span></h2>
           <Scroll>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-              <thead><tr><th style={th}>Buyer</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={thR}>£/kg</th><th style={th}>Top species</th></tr></thead>
+              <thead><tr><th style={th}>Buyer</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={thR}>{BASIS_LABEL[basis]}</th><th style={thR}>£/kg</th><th style={th}>Top species</th></tr></thead>
               <tbody>
                 {buyersTbl.map(b => (
                   <BuyerRow key={b.buyer} b={b} open={openBuyer === b.buyer}
-                    onToggle={() => setOpenBuyer(openBuyer === b.buyer ? '' : b.buyer)} rows={rows} />
+                    onToggle={() => setOpenBuyer(openBuyer === b.buyer ? '' : b.buyer)} rows={inScope} />
                 ))}
               </tbody>
             </table>
@@ -605,7 +681,13 @@ export default function Sales() {
   )
 }
 
-function SpeciesRow({ s, open, onToggle, rows }) {
+const BASIS_LABEL = { value: '% £', kg: '% kg', boxes: '% box' }
+
+function SpeciesRow({ s, open, onToggle, rows, basis }) {
+  // Grade shares are of the SPECIES, not of the whole trip — "what drove the
+  // haddock" is a different question from "what drove the gross", and rolling
+  // them into one number answers neither.
+  const grades = open ? withShares(gradesFor(rows, s.species), basis || 'value') : []
   return (
     <>
       <tr onClick={onToggle} style={{ cursor: 'pointer' }}>
@@ -613,14 +695,16 @@ function SpeciesRow({ s, open, onToggle, rows }) {
         <td style={tdR}>{num(s.boxes)}</td>
         <td style={tdR}>{num(s.kg)}</td>
         <td style={tdR}>{gbp0(s.value)}</td>
+        <td style={{ ...tdR, fontWeight: 700 }}>{s.share}%</td>
         <td style={tdR}>{gbp(s.pkg)}</td>
       </tr>
-      {open && gradesFor(rows, s.species).map(g => (
+      {open && grades.map(g => (
         <tr key={g.grade} style={{ background: 'var(--grey-50)' }}>
           <td style={{ ...td, paddingLeft: '1.8rem' }}>{g.grade}</td>
           <td style={tdR}>{num(g.boxes)}</td>
           <td style={tdR}>{num(g.kg)}</td>
           <td style={tdR}>{gbp0(g.value)}</td>
+          <td style={{ ...tdR, color: 'var(--mute)' }}>{g.share}%</td>
           <td style={tdR}>{gbp(g.pkg)}</td>
         </tr>
       ))}
@@ -633,10 +717,17 @@ function BuyerRow({ b, open, onToggle, rows }) {
   return (
     <>
       <tr onClick={() => { onToggle(); setOpenSp('') }} style={{ cursor: 'pointer' }}>
-        <td style={{ ...td, fontWeight: 600, color: 'var(--navy)' }}>{open ? '▾ ' : '▸ '}{b.buyer}</td>
+        <td style={{ ...td, fontWeight: 600, color: 'var(--navy)' }}>
+          {open ? '▾ ' : '▸ '}{b.buyer}
+          {/* Hanstholm print no buyer names, so the parser files every Danish
+              row against the auction itself. Saying so beats letting it sit at
+              the top of the table looking like the biggest customer. */}
+          {/auction/i.test(b.buyer) && <span className="muted" style={{ fontWeight: 400, fontSize: '0.7rem' }}> · auction, not a buyer</span>}
+        </td>
         <td style={tdR}>{num(b.boxes)}</td>
         <td style={tdR}>{num(b.kg)}</td>
         <td style={tdR}>{gbp0(b.value)}</td>
+        <td style={{ ...tdR, fontWeight: 700 }}>{b.share}%</td>
         <td style={tdR}>{gbp(b.pkg)}</td>
         <td style={td} className="muted">{b.top}</td>
       </tr>
@@ -657,6 +748,7 @@ function SpRows({ buyer, sp, rows, open, onToggle }) {
         <td style={tdR}>{num(sp.boxes)}</td>
         <td style={tdR}>{num(sp.kg)}</td>
         <td style={tdR}>{gbp0(sp.value)}</td>
+        <td style={tdR}></td>
         <td style={tdR}>{gbp(sp.pkg)}</td>
         <td style={td}></td>
       </tr>
@@ -666,6 +758,7 @@ function SpRows({ buyer, sp, rows, open, onToggle }) {
           <td style={tdR}>{num(g.boxes)}</td>
           <td style={tdR}>{num(g.kg)}</td>
           <td style={tdR}>{gbp0(g.value)}</td>
+          <td style={tdR}></td>
           <td style={tdR}>{gbp(g.pkg)}</td>
           <td style={td}></td>
         </tr>

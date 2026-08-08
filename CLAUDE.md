@@ -168,7 +168,27 @@ Sandy and Gavin each run two boats towing one net. Two boats, one trip.
 - Never combine quota. Separate businesses, separate allocations — summing hides
   one boat running short behind one that isn't.
 
-None of this is buildable until the schema carries vessels. See Outstanding work.
+**CORRECTION (Aug 2026): a pair is ONE fleet, not two.** The earlier note that
+"a pair team is two fleets today" is wrong for sales. `BOY JOHN INS110 +
+ROSEBLOOM INS353` and `GUIDING LIGHT H90 + FAITHLIE FR220` are each a single
+fleet, and the two boats are told apart by `sales_landings.vessel`. So a
+side-by-side comparison needed no `vessels` table at all — it is
+`byVessel(rows, landingById)` in `src/lib/salesAgg.js`, shown on Fish Sales
+whenever a fleet has more than one vessel label in scope.
+
+The vessels schema is still needed for crew, quota and rota, which have no
+vessel column. It is not needed for sales.
+
+**Vessel labels split the same boat.** `BOYJOHN INS110` (no space) held 6
+landings and £556,164 apart from `BOY JOHN INS110`, making the boat look like
+it landed 25 trips against Rosebloom's 31. Merged Aug 2026 — both now read 31
+landings, £3,566,572 vs £3,533,893, within 1%, which is what a pair towing one
+net should look like. Third instance of the same pattern after `crew_ranks`
+and fuel suppliers: **anything typed rather than picked will drift.**
+
+Still open: `FAITHFUL II`, one landing on 03-03-2026 worth £24,755 in the
+Guiding Light fleet. Either a third boat or a misread of FAITHLIE — not
+guessed either way.
 
 ## Design system (agreed Aug 2026, shipped Aug 2026)
 
@@ -638,10 +658,17 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 - `Sales.jsx` single-landing view doesn't expose the days-at-sea input.
 - Buyer league table — best-paying buyer per species/grade.
 
-## Reading the boat certificates on this machine
+## Toolchain
 
-There is **no poppler**, so `Read` cannot render a PDF page, and **no Node**,
-so no build or esbuild check either. Both are worth installing.
+**Node 24.19.0 is installed** (Aug 2026, winget `OpenJS.NodeJS.LTS`, user
+scope). `npm run build` works and is the check to run before handing anything
+over. If a shell has a stale PATH, prefix it:
+
+    $env:Path = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\OpenJS.NodeJS.LTS_Microsoft.Winget.Source_8wekyb3d8bbwe\node-v24.19.0-win-x64;" + $env:Path
+
+There is still **no poppler**, so `Read` cannot render a PDF page.
+
+## Reading the boat certificates on this machine
 
 Most of the boat certificates in `iCloudDrive\Audacious_\Boat Certs` are
 **photographs**: a single-page PDF wrapping one JPEG, zero fonts, no text

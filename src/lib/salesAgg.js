@@ -341,3 +341,84 @@ export function gradeSeasonality(rows, landingById, species, metric = 'pkg') {
   }
   return { grades, cells, max: r2(max), metric }
 }
+
+/* ---------------- shares ----------------
+ * Percentages answer "what drove the gross". They are always computed against
+ * the rows actually in scope, so a % is a share of what you are looking at —
+ * change the scope and the denominator changes with it. That is the point.
+ *
+ * basis: 'value' (£ — what drove the gross), 'kg', or 'boxes'.
+ */
+export function withShares(list, basis = 'value') {
+  const total = list.reduce((s, o) => s + Number(o[basis] || 0), 0)
+  return list.map((o) => ({
+    ...o,
+    share: total ? r2((Number(o[basis] || 0) / total) * 100) : 0,
+    shareBasis: basis,
+    shareTotal: r2(total),
+  }))
+}
+
+/* ---------------- UK / Denmark scope ----------------
+ * Danish sales come through Hanstholm with no buyer names and in DKK, so
+ * mixing them into a buyer breakdown is misleading and mixing them into a
+ * species one is only sometimes wanted. The scope is explicit rather than
+ * assumed either way.
+ */
+export const SALES_SCOPES = [
+  { id: 'all', label: 'All landings' },
+  { id: 'uk', label: 'UK only' },
+  { id: 'dk', label: 'Denmark only' },
+]
+
+const isDanish = (l) => !!l && (l.market === 'Hanstholm' || l.currency === 'DKK')
+
+export function scopeRows(rows, landingById, scope) {
+  if (!scope || scope === 'all') return rows
+  return rows.filter((r) => {
+    const l = landingById?.[r.landing_id]
+    return scope === 'dk' ? isDanish(l) : !isDanish(l)
+  })
+}
+
+export function scopeLandingIds(landings, scope) {
+  if (!scope || scope === 'all') return landings
+  return landings.filter((l) => (scope === 'dk' ? isDanish(l) : !isDanish(l)))
+}
+
+/* ---------------- per vessel ----------------
+ * A pair team is two boats in ONE fleet, told apart by the vessel label on the
+ * landing — not two fleets, and not something that needs a vessels table.
+ * Sum gross and boxes; never sum days at sea, because both boats fished the
+ * same days.
+ */
+export function byVessel(rows, landingById) {
+  const m = {}
+  for (const r of rows) {
+    const l = landingById?.[r.landing_id]
+    const k = l?.vessel || '?'
+    const o = (m[k] = m[k] || { vessel: k, value: 0, kg: 0, boxes: 0, landings: new Set() })
+    o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
+    if (r.landing_id) o.landings.add(r.landing_id)
+  }
+  return Object.values(m).map((o) => ({
+    ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes),
+    landings: o.landings.size, pkg: o.kg ? r2(o.value / o.kg) : 0,
+  })).sort((a, b) => b.value - a.value)
+}
+
+// Trips the pair fished together — the same day, both boats. This is the unit
+// a pair actually works in, and it is what makes a side-by-side fair.
+export function pairedDays(landings) {
+  const byDate = {}
+  for (const l of landings || []) {
+    if (!l.landing_date) continue
+    ;(byDate[l.landing_date] = byDate[l.landing_date] || new Set()).add(l.vessel)
+  }
+  const days = Object.entries(byDate).map(([date, set]) => ({ date, vessels: [...set] }))
+  return {
+    days,
+    together: days.filter((d) => d.vessels.length > 1).length,
+    alone: days.filter((d) => d.vessels.length === 1).length,
+  }
+}
