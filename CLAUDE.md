@@ -694,6 +694,33 @@ Also agreed, not yet scheduled:
 Explicitly NOT wanted: hours of rest, PLB tracking, crew schedule (the rota
 planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 
+## Landings vs settlements
+
+`Reconcile.jsx` at `/reconcile`, under Settlement. Compares what the sales
+notes say the fish made against what the office actually paid — two records
+that had never been put side by side.
+
+**The settlement does not say which landings it covers.** `su_settlement_lines`
+carries a single `Fish Sales` line and no breakdown, so there is no exact join
+to be had. The window is inferred: every landing after the previous settling
+date, up to and including this one.
+
+That is right more often than not — **three of twelve reconcile to the penny**
+and several more land within £1,500 — but it cannot be right always, because a
+trip landed either side of a settling date can appear on either sheet. So a
+big difference usually means a boundary, not missing money. The page shows the
+landings in the window and the next one outside it, with the arithmetic of
+including it, so it can be judged rather than guessed.
+
+**Danish sales ARE settled by Don Fishing.** Excluding Hanstholm landings was
+tried on the assumption that fiskeauktion settles them separately; it made the
+reconciliation dramatically worse (three settlements went from near-exact to
+six figures out). Don Fishing is the selling agent for Hanstholm too.
+
+Two settlements are genuinely out and offset each other, which is the boundary
+problem in its clearest form: 26-05 is £168,392 short and 12-06 is £95,740
+over. The 27-05 Hanstholm landing (£171,423) sits between them.
+
 ## Outstanding work
 
 - **Vessels — stage 1 DONE Aug 2026** (`supabase/vessels_schema.sql`).

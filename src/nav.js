@@ -63,6 +63,8 @@ export const NAV = [
     items: [
       { to: '/squareup', label: 'Square Up', access: 'fleetTools' },
       { to: '/settlements', label: 'Settlements', access: 'skipper' },
+      // The two ends of the loop compared: sales notes against what came back.
+      { to: '/reconcile', label: 'Landings vs Settlements', access: 'fleetTools' },
     ],
   },
   {
