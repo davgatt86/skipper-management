@@ -690,15 +690,25 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
   `buyerPremiumLeague()` is the day-relative one behind the new page. Do not
   merge them.
 
-  First run on Audacious 2026: **Messrs J Smith Ltd, 100,640 kg over 39 days
-  at +£0.854/kg** — roughly £86,000 more than the board paid on those days.
-  GT Sustainable Seafoods and Pindarus follow on volume.
+  **Merged Aug 2026: "J Smith" → "Messrs J Smith Ltd".** The fourth instance
+  of the name-variant pattern, and the merge changed the answer materially:
 
-  **A fourth name-variant case surfaced.** "Messrs J Smith Ltd" (£268,456) and
-  "J Smith" (£90,516) are almost certainly one firm, and the split matters
-  here because volume decides whether a buyer clears the threshold at all.
-  Not merged — buyer names come off the sales note as parsed — but the page
-  lists suspected duplicates via `similarBuyers()`.
+      before   100,640 kg · 39 days · +£0.854/kg · worth  £86,000
+      after    128,337 kg · 47 days · +£0.949/kg · worth £121,745
+
+  The split was hiding a third of their volume *and* understating their rate,
+  because the "J Smith" rows were the strongest of the lot. Verified as the
+  only such case across every fleet.
+
+  Bells Seafood technically tops the rate at +£0.989/kg, but on 6,762 kg over
+  9 days — worth £6,686. That is exactly why the page carries a **worth**
+  column beside the rate, and why days sits next to both.
+
+  **The merge is recorded, not just applied.** `sales_buyer_flags` gained
+  `canonical_name` and `aliases`. The one-off UPDATE fixes history; the alias
+  is what stops the next sales note reintroducing the variant — **but nothing
+  reads it at ingest yet.** Wiring that into the parser is the remaining step,
+  and it needs both copies of `parse-core` changed and the version bumped.
 
 ## Toolchain
 
