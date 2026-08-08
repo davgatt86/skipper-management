@@ -513,15 +513,18 @@ In the order agreed:
      know how many each actually ran, and inventing two apiece would be
      making up history.
 
-     ⚠️ **Those 29 trips are now 4, and all 60 `rota_trip_crew` rows are gone**
-     (noticed Aug 2026 during the vessels migration). The 4 survivors all
-     belong to the HANSTHOLM fleet; every deleted trip was Audacious.
-     A deletion scoped to exactly one fleet is what the **app** does under
-     RLS — the Rota page's delete button in David's session — not a migration,
-     which runs as service role and would have hit all fleets alike.
-     **`audit_log` does not cover the rota tables** (only contracts, crew,
-     landings, one_off_bonuses, payments), so there is no trail to confirm it.
-     Worth adding a trigger if rota history matters.
+     **Those 29 trips are now 4 — David deleted them deliberately** (Aug 2026).
+     Noticed during the vessels migration; the 4 survivors are all HANSTHOLM,
+     every deleted one was Audacious, which is what a delete scoped by RLS in
+     the app looks like.
+
+     It could only be established by asking, because the rota had **no audit
+     trail at all**. That is now fixed — `supabase/rota_audit_triggers.sql`
+     covers all eight rota tables. Note `audit_trigger()` needs an `id`
+     column, and `rota_trip_crew` / `rota_team_members` /
+     `rota_landing_crew` have none, so they use `audit_trigger_link()` which
+     anchors `record_id` on the parent. Verified to capture CASCADE deletes —
+     the exact case that lost the 60 crew assignments.
 
      **Back-to-back pairs** (`supabase/rota_back_to_back.sql`). Two men share
      a berth — when one is on, the other is off. `crew_a_id` is the Crew A
