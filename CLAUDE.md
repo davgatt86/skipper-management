@@ -103,10 +103,14 @@ client in `src/lib/su/parse.js`.
   was only used once, to load their historical settlements. Ongoing sheets
   arrive as a PDF.
 
-**One vessel per fleet is currently baked into the schema.** `vessel_details`
-has `fleet_id` as its primary key, and no table anywhere carries a `vessel_id`.
-A pair team is therefore two fleets today, not two vessels in one fleet. See
-Outstanding work before promising any multi-vessel behaviour.
+**One vessel per fleet is baked into `vessel_details`**, whose primary key is
+`fleet_id`, and no table carries a `vessel_id`.
+
+But **a pair team is ONE fleet, not two** — `BOY JOHN INS110 + ROSEBLOOM
+INS353` is a single fleet whose two boats are told apart by
+`sales_landings.vessel`. Sales therefore needed no schema change at all; see
+Pair teams. What still needs a `vessels` table is crew, quota and rota, which
+have no vessel column of any kind.
 
 ## Live modules
 
@@ -119,12 +123,13 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 `parse-core.cjs` (this repo, Netlify Functions) and `parse-core.js` (in
 `davgatt86/fish-sales-tracker`) are **identical files**. Any fix must be applied
-to both, and the version bumped. Now **1.3.1**.
+to both, and the version bumped. Now **1.3.2**.
 
 **Checked Aug 2026 by diffing the two files: they were genuinely identical, at
 1.2.1.** This document's claim of 1.3.0 was simply wrong — the identical-files
-rule was being honoured. Both are now 1.3.1 with the same `BUYER_CANON`
-change, verified line for line and by running `canonBuyer` on each.
+rule was being honoured. Both are now 1.3.2 with the same `BUYER_CANON` and
+`VESSEL_CANON` changes, verified line for line and by running the functions on
+each copy.
 
 The `fish-sales-tracker` copy is **not in this repo**, so it has to be updated
 by hand each time. Diff before assuming, rather than trusting a version note.
@@ -673,15 +678,17 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 
 ## Outstanding work
 
-- **Vessels are not in the schema.** The pair-team and vessel-picker design
-  cannot be built as a front-end change: `vessel_details.fleet_id` is a primary
-  key and every feature table (landings, sales, quota, crew, rota) keys on
-  `fleet_id`. Multi-vessel needs a `vessels` table, a `vessel_id` on each of
-  those tables, backfill, and the fleet-isolation policies extended. That is a
-  migration, not a restyle.
+- **Vessels are not in the schema — but sales no longer need them.** The pair
+  vessel picker and all four pair comparisons were built Aug 2026 off
+  `sales_landings.vessel`, because a pair is one fleet with two vessel labels.
+  What still needs a `vessels` table is **crew, quota and rota**, which have no
+  vessel column at all: `vessel_details.fleet_id` is a primary key and those
+  tables key on `fleet_id`. That means a `vessels` table, a `vessel_id` on each,
+  backfill, and the fleet-isolation policies extended — a migration, not a
+  restyle.
 - Login hero is JPEG only. WebP would cut roughly a third off both files, but
-  Windows has no WebP encoder and the machine this was built on had no Node, so
-  the pair was produced with System.Drawing at q70. Re-encode from
+  the pair was produced with System.Drawing at q70 when this machine had no
+  Node. **Node is installed now, so this is unblocked** — `sharp` will do it. Re-encode from
   `IMG_1629.jpg` (3090×2075) with `cwebp` or `sharp` when there is a toolchain.
 - `SquareUp.jsx` is the last page still on `.container` + `BackNav`. It was
   held back deliberately: the worksheet is being reworked in stage 2 alongside
@@ -699,7 +706,6 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 - P&J buyer coordinate fix — written and validated, but do not ship without the
   3 Feb Guiding Light PDF to test against. 147 blank-buyer rows across 11
   landings currently carry `reconcile_ok = false`.
-- `Sales.jsx` single-landing view doesn't expose the days-at-sea input.
 - ~~Buyer league table~~ — **done Aug 2026.** `BuyerLeague.jsx` at
   `/buyer-league`, under Sales.
 
