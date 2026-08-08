@@ -700,26 +700,33 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 notes say the fish made against what the office actually paid — two records
 that had never been put side by side.
 
-**The settlement does not say which landings it covers.** `su_settlement_lines`
-carries a single `Fish Sales` line and no breakdown, so there is no exact join
-to be had. The window is inferred: every landing after the previous settling
-date, up to and including this one.
+**Compare against the `Fish Sales` income line, NEVER `total_income`.** Some
+settlements carry income that never came from a sales note — **Towage of
+£73,347 on 12-06 and £24,448 on 26-06**. Against `total_income` the boat looks
+as though it earned fish it never landed; 26-06 read £24,448 out and is
+exactly nil once towage is set aside. `su_settlement_lines` has the split.
 
-That is right more often than not — **three of twelve reconcile to the penny**
-and several more land within £1,500 — but it cannot be right always, because a
-trip landed either side of a settling date can appear on either sheet. So a
-big difference usually means a boundary, not missing money. The page shows the
-landings in the window and the next one outside it, with the arithmetic of
-including it, so it can be judged rather than guessed.
+**The window carries two days' grace.** A trip landed the day after a settling
+date is still settled on that sheet — the 27-05 Hanstholm landing belongs to
+the 26-05 settlement. Two days covers every case in the data without reaching
+the following trip.
+
+With both corrections every settlement reconciles within **£3,400**, four of
+twelve to the penny, on six-figure sheets. Before them, 26-05 read £168,392
+short and 12-06 £95,740 over.
 
 **Danish sales ARE settled by Don Fishing.** Excluding Hanstholm landings was
 tried on the assumption that fiskeauktion settles them separately; it made the
-reconciliation dramatically worse (three settlements went from near-exact to
-six figures out). Don Fishing is the selling agent for Hanstholm too.
+reconciliation dramatically worse. Don Fishing is the selling agent there too.
 
-Two settlements are genuinely out and offset each other, which is the boundary
-problem in its clearest form: 26-05 is £168,392 short and 12-06 is £95,740
-over. The 27-05 Hanstholm landing (£171,423) sits between them.
+**The settlement still does not say which landings it covers** — one `Fish
+Sales` line, no breakdown — so the window remains inferred. If the office's
+posting report itemises the sales notes behind a settlement, that turns
+inference into a real join and every row becomes exact. Worth asking.
+
+Both corrections came from David, not from the data: the towage line and the
+26-05/27-05 pairing. The arithmetic could show something was wrong but not
+what.
 
 ## Outstanding work
 

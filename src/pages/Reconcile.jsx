@@ -22,6 +22,19 @@ import { useAuth } from '../AuthContext'
 //   usually a boundary, not missing money, and the page shows the landings on
 //   both sides so that can be judged rather than guessed.
 //
+// COMPARE AGAINST THE FISH SALES LINE, NOT total_income.
+//   total_income is the settlement's whole income side, and some settlements
+//   carry income that never came from a sales note — Towage of £73,347 on
+//   12-06 and £24,448 on 26-06. Comparing landings against total_income
+//   charged the boat with earning fish it never landed. Against the Fish
+//   Sales line, 26-06 goes from £24,448 out to exactly nothing.
+//
+// THE WINDOW HAS TWO DAYS' GRACE.
+//   A trip landed the day after a settling date is still settled on that
+//   sheet — the 27-05 Hanstholm landing belongs to the 26-05 settlement. Two
+//   days is enough for every case in the data and small enough not to pull in
+//   the following trip.
+//
 // Danish sales ARE included: Don Fishing is the selling agent for Hanstholm
 // too. Excluding them was tried and made the reconciliation worse.
 
@@ -32,6 +45,11 @@ const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleD
 // What counts as agreement. Under £50 is rounding; under £2,000 on a
 // six-figure settlement is a rounding-and-adjustments band worth seeing but
 // not chasing; beyond that something needs explaining.
+// Days of slack either side of a settling date. Two covers every case in the
+// data (the 27-05 landing settled on the 26-05 sheet) without reaching far
+// enough to pull in the following trip.
+const GRACE = 2
+
 const band = (d) => {
   const a = Math.abs(d)
   if (a < 50) return { key: 'exact', label: 'Matches', color: 'var(--kelp)' }
@@ -44,6 +62,7 @@ export default function Reconcile() {
   const canView = ['skipper', 'viewer'].includes(appUser?.role)
 
   const [settlements, setSettlements] = useState([])
+  const [income, setIncome] = useState({})
   const [days, setDays] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,14 +72,24 @@ export default function Reconcile() {
     if (!canView) { setLoading(false); return }
     async function load() {
       setLoading(true); setError('')
-      const [sRes, lRes, rRes] = await Promise.all([
+      const [sRes, lRes, rRes, slRes] = await Promise.all([
         supabase.from('su_settlements')
           .select('id, reference, settling_date, period, trips, days_at_sea, total_income, weight_landed')
           .not('total_income', 'is', null).order('settling_date'),
         supabase.from('sales_landings').select('id, landing_date, market, vessel'),
         supabase.from('sales_rows').select('landing_id, value, weight_kg'),
+        supabase.from('su_settlement_lines').select('settlement_id, section, label, amount').eq('section', 'income'),
       ])
       if (sRes.error || lRes.error || rRes.error) setError((sRes.error || lRes.error || rRes.error).message)
+
+      // Split the income side: fish, and everything that is not fish.
+      const inc = {}
+      for (const r of slRes.data || []) {
+        const o = (inc[r.settlement_id] = inc[r.settlement_id] || { fish: 0, other: 0, otherLabels: [] })
+        if (/fish/i.test(r.label || '')) o.fish += Number(r.amount || 0)
+        else { o.other += Number(r.amount || 0); o.otherLabels.push(r.label) }
+      }
+      setIncome(inc)
 
       // Roll rows up to one figure per landing, then per landing DAY — a
       // settlement settles a day's selling, not an individual sales note.
@@ -87,22 +116,31 @@ export default function Reconcile() {
     // Only settlements that carry a trip figure are the Audacious posting
     // report; the Beryl one-page sheet has no landings behind it here.
     const list = settlements.filter((s) => s.weight_landed != null)
+    const shift = (d, n) => {
+      const x = new Date(String(d).slice(0, 10) + 'T00:00:00')
+      x.setDate(x.getDate() + n)
+      return x.toISOString().slice(0, 10)
+    }
     return list.map((s, i) => {
       const prev = i > 0 ? list[i - 1].settling_date : null
-      const from = prev || s.settling_date
-      const inWindow = days.filter((d) => (prev ? d.date > prev : d.date >= from) && d.date <= s.settling_date)
+      // Two days' grace at both ends, so a trip landed just after a settling
+      // date sits on the sheet that actually settled it.
+      const lo = prev ? shift(prev, GRACE) : shift(s.settling_date, -21)
+      const hi = shift(s.settling_date, GRACE)
+      const inWindow = days.filter((d) => d.date > lo && d.date <= hi)
       const gross = inWindow.reduce((a, d) => a + d.value, 0)
       const kg = inWindow.reduce((a, d) => a + d.kg, 0)
-      const diff = gross - Number(s.total_income)
-      // The nearest day either side, so a boundary case is visible.
-      const after = days.find((d) => d.date > s.settling_date)
-      const before = [...days].reverse().find((d) => prev && d.date <= prev)
-      return { s, from: prev, inWindow, gross, kg, diff, band: band(diff), after, before }
+      const inc = income[s.id] || { fish: 0, other: 0, otherLabels: [] }
+      // Fall back to total_income only if the settlement has no income lines.
+      const fish = inc.fish || Number(s.total_income)
+      const diff = gross - fish
+      const after = days.find((d) => d.date > hi)
+      return { s, from: prev, inWindow, gross, kg, fish, inc, diff, band: band(diff), after }
     })
-  }, [settlements, days])
+  }, [settlements, days, income])
 
   const totals = useMemo(() => rows.reduce((a, r) => ({
-    sett: a.sett + Number(r.s.total_income),
+    sett: a.sett + r.fish,
     gross: a.gross + r.gross,
     exact: a.exact + (r.band.key === 'exact' ? 1 : 0),
     off: a.off + (r.band.key === 'off' ? 1 : 0),
@@ -134,11 +172,12 @@ export default function Reconcile() {
 
       <div className="card">
         <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
-          A settlement does not say which landings it covers — it carries one <em>Fish Sales</em> line
-          and no breakdown. So each is matched to every landing after the previous settling date up to
-          its own. That reconciles several to the penny, but a trip landed either side of a settling
-          date can be settled on either sheet, so <strong>a large difference is usually a boundary
-          rather than missing money</strong>. Open a row to see the landings either side and judge it.
+          Compared against the settlement&rsquo;s <strong>Fish Sales</strong> line, not its total income —
+          some settlements carry money that never came from a sales note, and towage is shown beside
+          the figure where it does. The settlement does not say <em>which</em> landings it covers, so
+          each is matched to the landings in its own window, with two days&rsquo; grace either side
+          because a trip landed just after a settling date is still settled on that sheet. Open a row
+          to see the landings and the next one outside the window.
         </p>
       </div>
 
@@ -152,7 +191,7 @@ export default function Reconcile() {
                 <tr>
                   <th style={th}>Settled</th>
                   <th style={th}>Ref</th>
-                  <th style={{ ...th, ...num }}>Office paid</th>
+                  <th style={{ ...th, ...num }}>Fish on the settlement</th>
                   <th style={{ ...th, ...num }}>Sales notes</th>
                   <th style={{ ...th, ...num }}>Difference</th>
                   <th style={th}></th>
@@ -165,7 +204,14 @@ export default function Reconcile() {
                     <tr key={r.s.id}>
                       <td style={td}>{fmt(r.s.settling_date)}</td>
                       <td style={{ ...td, fontFamily: 'var(--font-mono, monospace)', fontSize: '0.82rem' }}>{r.s.reference}</td>
-                      <td style={{ ...td, ...num }}>{money2(r.s.total_income)}</td>
+                      <td style={{ ...td, ...num }}>
+                        {money2(r.fish)}
+                        {r.inc.other > 0 && (
+                          <div className="muted" style={{ fontSize: '0.72rem' }}>
+                            + {money(r.inc.other)} {r.inc.otherLabels.join(', ').toLowerCase()}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ ...td, ...num }}>{money2(r.gross)}</td>
                       <td style={{ ...td, ...num, fontWeight: 700, color: r.band.color }}>
                         {r.diff > 0 ? '+' : ''}{money2(r.diff)}
@@ -211,7 +257,7 @@ export default function Reconcile() {
                               <p style={{ marginBottom: 0, marginTop: '0.6rem', color: 'var(--brass)' }}>
                                 Next landing outside this window is <strong>{fmt(r.after.date)}</strong>,
                                 {' '}{money2(r.after.value)}. If that trip was settled on this sheet, the
-                                difference becomes {money2(r.gross + r.after.value - Number(r.s.total_income))}.
+                                difference becomes {money2(r.gross + r.after.value - r.fish)}.
                               </p>
                             )}
                           </div>
