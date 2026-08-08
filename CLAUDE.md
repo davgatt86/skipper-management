@@ -356,9 +356,10 @@ on record") — contracts only apply to contracted crew.
   hand to a skipper. Grep for `.sql` in `src/pages/` before assuming it is
   clean.
 - Three current contracts have no going-home bonus set.
-- `Sales.jsx` single-landing view still does not expose the days-at-sea input,
-  though `updateDaysAtSea` already exists. Days at sea currently only arrive
-  via logbook/quota uploads.
+- ~~`Sales.jsx` single-landing view does not expose the days-at-sea input~~ —
+  fixed Aug 2026 (action list item 4). The handler is `saveDays`, not
+  `updateDaysAtSea`. **79 of 118 landings still have none**, so `£/day` stays
+  unreliable until they are filled in.
 
 ### Deliberately kept as test data
 Andrew Smith's passport (expired 25-02-2026) and the Certificate of Insurance
