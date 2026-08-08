@@ -706,27 +706,46 @@ settlements carry income that never came from a sales note — **Towage of
 as though it earned fish it never landed; 26-06 read £24,448 out and is
 exactly nil once towage is set aside. `su_settlement_lines` has the split.
 
-**The window carries two days' grace.** A trip landed the day after a settling
-date is still settled on that sheet — the 27-05 Hanstholm landing belongs to
-the 26-05 settlement. Two days covers every case in the data without reaching
-the following trip.
-
-With both corrections every settlement reconciles within **£3,400**, four of
-twelve to the penny, on six-figure sheets. Before them, 26-05 read £168,392
-short and 12-06 £95,740 over.
-
 **Danish sales ARE settled by Don Fishing.** Excluding Hanstholm landings was
 tried on the assumption that fiskeauktion settles them separately; it made the
 reconciliation dramatically worse. Don Fishing is the selling agent there too.
 
-**The settlement still does not say which landings it covers** — one `Fish
-Sales` line, no breakdown — so the window remains inferred. If the office's
-posting report itemises the sales notes behind a settlement, that turns
-inference into a real join and every row becomes exact. Worth asking.
+**The settlement does not say which landings it covers** — one `Fish Sales`
+line, no breakdown — and confirmed Aug 2026 that the office does not supply
+one. So the boundary has to be inferred, and a fixed date window was the wrong
+way to do it: a trip landed the day after a settling date can still be on that
+sheet (27-05 belongs to the 26-05 settlement), but so can a trip landed three
+days before the next one.
 
-Both corrections came from David, not from the data: the towage line and the
-26-05/27-05 pairing. The arithmetic could show something was wrong but not
-what.
+**`solveSettlementRuns()` in `salesAgg.js` infers the boundaries instead.**
+Landing days are sorted and cut into consecutive runs, one per settlement, by
+dynamic programming over the cut positions — the split chosen is the one
+minimising combined relative value **and** weight error across the whole year,
+not settlement by settlement. Two things it must keep doing:
+
+- **Leading and trailing landings may go unassigned.** Landings settled on a
+  sheet we do not hold are not ours to place. An earlier version forced every
+  landing into some settlement and dragged two December landings into the
+  January sheet, throwing the first four settlements out by up to £191,038.
+- **A run must be plausible in time**: its last landing within 3 days after and
+  45 days before the settling date. Without that the solver reaches back months
+  to make the arithmetic fit.
+
+Verified against the real 36 landing days / 12 settlements: **9 of 12 confirm
+on both value and weight**, worst difference £3,359 on six-figure sheets. The
+fixed two-day window managed 4. `test-solver.mjs` in the repo root holds that
+data and is the check to re-run if the solver is touched.
+
+**Weight is the stronger signal, and `matchConfidence()` reports both.** Six
+settlements match to the exact kilo. 26-06 matches value to the penny
+(£327,886.69) but is 18,348 kg over — since the value is exact the landings
+must be right, so that is a weight-basis difference on the settlement, not a
+matching error. A row that agrees on one and not the other is information, so
+never collapse the two into a single pass/fail.
+
+Both of the corrections that made this work came from David, not from the
+data: the towage line and the 26-05/27-05 pairing. The arithmetic could show
+something was wrong but not what.
 
 ## Outstanding work
 

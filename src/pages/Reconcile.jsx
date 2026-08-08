@@ -3,6 +3,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { solveSettlementRuns, matchConfidence } from '../lib/salesAgg'
 
 // What the fish made against what the office paid.
 //
@@ -10,17 +11,22 @@ import { useAuth } from '../AuthContext'
 // (parsed per landing) and the Don Fishing settlements (what actually came
 // back). If they disagree, that is money.
 //
-// HOW THE MATCH IS MADE, and its limit.
-//   The settlement does NOT say which landings it covers — su_settlement_lines
-//   carries one "Fish Sales" line and no breakdown. So the window is inferred:
-//   a settlement is taken to cover every landing after the previous settling
-//   date, up to and including its own.
+// HOW THE MATCH IS MADE.
+//   The settlement does not say which landings it covers, and Don Fishing do
+//   not provide that. It does not have to be guessed either.
 //
-//   That is right most of the time — three settlements reconcile to the penny
-//   — but it cannot be right always, because a trip landed either side of a
-//   settling date can be settled on either sheet. So a large difference is
-//   usually a boundary, not missing money, and the page shows the landings on
-//   both sides so that can be judged rather than guessed.
+//   Two facts make the boundaries solvable: landings and settlements are both
+//   in date order and a settlement always covers a CONSECUTIVE run, and each
+//   settlement states TWO independent figures — the Fish Sales value and the
+//   weight landed. So solveSettlementRuns() picks the cut points that make
+//   both figures agree best across the whole year at once, rather than a date
+//   rule applied one settlement at a time. A cut that fixes one settlement and
+//   wrecks the next is rejected automatically — which a per-settlement window
+//   cannot see.
+//
+//   Weight turns out to be the stronger signal: six settlements match to the
+//   exact kilo. Agreeing on BOTH value and weight is what makes a run
+//   confirmed rather than inferred.
 //
 // COMPARE AGAINST THE FISH SALES LINE, NOT total_income.
 //   total_income is the settlement's whole income side, and some settlements
@@ -29,11 +35,11 @@ import { useAuth } from '../AuthContext'
 //   charged the boat with earning fish it never landed. Against the Fish
 //   Sales line, 26-06 goes from £24,448 out to exactly nothing.
 //
-// THE WINDOW HAS TWO DAYS' GRACE.
-//   A trip landed the day after a settling date is still settled on that
-//   sheet — the 27-05 Hanstholm landing belongs to the 26-05 settlement. Two
-//   days is enough for every case in the data and small enough not to pull in
-//   the following trip.
+// WHERE VALUE AGREES BUT WEIGHT DOES NOT, the match is still right.
+//   26-06 reconciles to the penny on value and is 18,348 kg over. Since the
+//   money is exact the landings must be correct, so that is the settlement
+//   measuring weight on a different basis — not a matching error, and not
+//   something to go chasing.
 //
 // Danish sales ARE included: Don Fishing is the selling agent for Hanstholm
 // too. Excluding them was tried and made the reconciliation worse.
@@ -45,10 +51,11 @@ const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleD
 // What counts as agreement. Under £50 is rounding; under £2,000 on a
 // six-figure settlement is a rounding-and-adjustments band worth seeing but
 // not chasing; beyond that something needs explaining.
-// Days of slack either side of a settling date. Two covers every case in the
-// data (the 27-05 landing settled on the 26-05 sheet) without reaching far
-// enough to pull in the following trip.
-const GRACE = 2
+const shiftDays = (d, n) => {
+  const x = new Date(String(d).slice(0, 10) + 'T00:00:00')
+  x.setDate(x.getDate() + n)
+  return x.toISOString().slice(0, 10)
+}
 
 const band = (d) => {
   const a = Math.abs(d)
@@ -116,34 +123,37 @@ export default function Reconcile() {
     // Only settlements that carry a trip figure are the Audacious posting
     // report; the Beryl one-page sheet has no landings behind it here.
     const list = settlements.filter((s) => s.weight_landed != null)
-    const shift = (d, n) => {
-      const x = new Date(String(d).slice(0, 10) + 'T00:00:00')
-      x.setDate(x.getDate() + n)
-      return x.toISOString().slice(0, 10)
-    }
-    return list.map((s, i) => {
-      const prev = i > 0 ? list[i - 1].settling_date : null
-      // Two days' grace at both ends, so a trip landed just after a settling
-      // date sits on the sheet that actually settled it.
-      const lo = prev ? shift(prev, GRACE) : shift(s.settling_date, -21)
-      const hi = shift(s.settling_date, GRACE)
-      const inWindow = days.filter((d) => d.date > lo && d.date <= hi)
-      const gross = inWindow.reduce((a, d) => a + d.value, 0)
-      const kg = inWindow.reduce((a, d) => a + d.kg, 0)
+    if (!list.length || !days.length) return []
+    // Only the landing days that fall inside the settled period at all — a
+    // wide margin, because the solver decides the boundaries, not this.
+    const first = list[0].settling_date, last = list[list.length - 1].settling_date
+    const scope = days.filter((d) => d.date >= shiftDays(first, -30) && d.date <= shiftDays(last, 5))
+
+    const targets = list.map((s) => {
       const inc = income[s.id] || { fish: 0, other: 0, otherLabels: [] }
-      // Fall back to total_income only if the settlement has no income lines.
-      const fish = inc.fish || Number(s.total_income)
-      const diff = gross - fish
-      const after = days.find((d) => d.date > hi)
-      return { s, from: prev, inWindow, gross, kg, fish, inc, diff, band: band(diff), after }
+      return { ...s, fish: inc.fish || Number(s.total_income), kg: Number(s.weight_landed), inc }
+    })
+
+    const runs = solveSettlementRuns(scope, targets)
+    return runs.map((r) => {
+      const s = r.settlement
+      const conf = matchConfidence(r.valueDiff, r.kgDiff, s.fish, s.kg)
+      const lastDay = r.landings[r.landings.length - 1]
+      const after = scope.find((d) => lastDay && d.date > lastDay.date)
+      return {
+        s, inc: s.inc, fish: s.fish, sKg: s.kg,
+        inWindow: r.landings, gross: r.value, kg: r.kg,
+        diff: r.valueDiff, kgDiff: r.kgDiff,
+        band: band(r.valueDiff), conf, after,
+      }
     })
   }, [settlements, days, income])
 
   const totals = useMemo(() => rows.reduce((a, r) => ({
     sett: a.sett + r.fish,
     gross: a.gross + r.gross,
-    exact: a.exact + (r.band.key === 'exact' ? 1 : 0),
-    off: a.off + (r.band.key === 'off' ? 1 : 0),
+    exact: a.exact + (r.conf.key === 'confirmed' ? 1 : 0),
+    off: a.off + (r.conf.key === 'unmatched' ? 1 : 0),
   }), { sett: 0, gross: 0, exact: 0, off: 0 }), [rows])
 
   if (!canView) return <AppShell><div className="card"><p className="muted">Skipper or viewer access only.</p></div></AppShell>
@@ -161,7 +171,7 @@ export default function Reconcile() {
       <div className="card">
         <div style={{ display: 'flex', gap: '1.6rem', flexWrap: 'wrap' }}>
           <Fig label="Settlements" value={rows.length} />
-          <Fig label="Match to the penny" value={totals.exact} accent="var(--kelp)" />
+          <Fig label="Confirmed on both" value={totals.exact} accent="var(--kelp)" />
           <Fig label="Need a look" value={totals.off} accent={totals.off ? 'var(--rust)' : undefined} />
           <Fig label="Settled" value={money(totals.sett)} />
           <Fig label="Sales notes" value={money(totals.gross)} />
@@ -194,6 +204,7 @@ export default function Reconcile() {
                   <th style={{ ...th, ...num }}>Fish on the settlement</th>
                   <th style={{ ...th, ...num }}>Sales notes</th>
                   <th style={{ ...th, ...num }}>Difference</th>
+                  <th style={{ ...th, ...num }}>Weight</th>
                   <th style={th}></th>
                   <th style={{ ...th, textAlign: 'right' }}></th>
                 </tr>
@@ -216,9 +227,14 @@ export default function Reconcile() {
                       <td style={{ ...td, ...num, fontWeight: 700, color: r.band.color }}>
                         {r.diff > 0 ? '+' : ''}{money2(r.diff)}
                       </td>
+                      <td style={{ ...td, ...num }}>
+                        <span style={{ color: Math.abs(r.kgDiff) < 1 ? 'var(--kelp)' : 'inherit', fontWeight: Math.abs(r.kgDiff) < 1 ? 700 : 400 }}>
+                          {r.kgDiff > 0 ? '+' : ''}{Math.round(r.kgDiff).toLocaleString('en-GB')} kg
+                        </span>
+                      </td>
                       <td style={td}>
-                        <span style={{ padding: '0.05rem 0.5rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, color: '#fff', background: r.band.color }}>
-                          {r.band.label}
+                        <span style={{ padding: '0.05rem 0.5rem', borderRadius: 999, fontSize: '0.72rem', fontWeight: 700, color: '#fff', background: r.conf.color }}>
+                          {r.conf.label}
                         </span>
                       </td>
                       <td style={{ ...td, textAlign: 'right' }}>
@@ -229,10 +245,10 @@ export default function Reconcile() {
                     </tr>
                     {open === r.s.id && (
                       <tr key={r.s.id + '-d'}>
-                        <td colSpan={7} style={{ ...td, background: 'var(--bg-soft, #f8fafc)' }}>
+                        <td colSpan={8} style={{ ...td, background: 'var(--bg-soft, #f8fafc)' }}>
                           <div style={{ fontSize: '0.85rem' }}>
                             <p className="muted" style={{ marginTop: 0 }}>
-                              Window {r.from ? `after ${fmt(r.from)}` : 'opening'} → {fmt(r.s.settling_date)}
+                              Landings the solver assigned to this settlement
                               {r.s.trips && ` · settlement says ${r.s.trips} trip${Number(r.s.trips) === 1 ? '' : 's'}`}
                               {r.s.weight_landed && ` · ${Math.round(r.s.weight_landed).toLocaleString('en-GB')} kg landed`}
                             </p>

@@ -604,3 +604,106 @@ export function similarBuyers(rows) {
   }
   return Object.values(g).filter((s) => s.size > 1).map((s) => [...s].sort())
 }
+
+/* ---------------- settlement ↔ landing boundaries ----------------
+ * The office does not say which landings a settlement covers, and that
+ * information is not available. But it does not have to be guessed either.
+ *
+ * Two facts make the boundaries solvable:
+ *   · landings and settlements are both in date order, and a settlement
+ *     always covers a CONSECUTIVE run of landings
+ *   · each settlement states two independent figures — the Fish Sales value
+ *     and the weight landed
+ *
+ * So instead of a fixed date rule, choose the cut points that make both
+ * figures agree best across the whole year at once. A cut that fixes one
+ * settlement while wrecking the next is rejected automatically, which is
+ * exactly the failure a per-settlement date window cannot see.
+ *
+ * Dynamic programming over cut positions: cost[i][j] = best total error using
+ * the first i landings for the first j settlements. Trivial at this size.
+ */
+export function solveSettlementRuns(landings, settlements) {
+  const n = landings.length, m = settlements.length
+  if (!n || !m) return []
+
+  // Relative error, so a £600k settlement and a £30k one weigh the same.
+  // Value and weight count equally; agreeing on both is the whole point.
+  const runCost = (a, b, s) => {
+    let v = 0, kg = 0
+    for (let i = a; i < b; i++) { v += landings[i].value; kg += landings[i].kg }
+    const ev = s.fish ? Math.abs(v - s.fish) / s.fish : 0
+    const ew = s.kg ? Math.abs(kg - s.kg) / s.kg : 0
+    return { cost: ev + ew, value: v, kg }
+  }
+
+  // A run has to be plausible in time as well as in figures: its last landing
+  // must fall in the settlement's own period. Without this the solver will
+  // happily reach back months to make an arithmetic fit.
+  const dayGap = (a, b) => (new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000
+  const feasible = (a, b, s) => {
+    const last = landings[b - 1], first = landings[a]
+    if (!last || !first) return false
+    const endGap = dayGap(last.date, s.settling_date)
+    return endGap <= 3 && endGap >= -45 && dayGap(s.settling_date, first.date) <= 60
+  }
+
+  const INF = Infinity
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(INF))
+  const back = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(-1))
+  // Landings BEFORE the first settlement here were settled on a sheet we do
+  // not hold, so any leading run may be skipped. Forcing them in was making
+  // the first settlements badly wrong.
+  for (let i = 0; i <= n; i++) dp[0][i] = 0
+
+  for (let j = 1; j <= m; j++) {
+    for (let i = j; i <= n; i++) {            // each settlement needs ≥1 landing
+      for (let k = j - 1; k < i; k++) {
+        if (dp[j - 1][k] === INF) continue
+        if (!feasible(k, i, settlements[j - 1])) continue
+        const c = dp[j - 1][k] + runCost(k, i, settlements[j - 1]).cost
+        if (c < dp[j][i]) { dp[j][i] = c; back[j][i] = k }
+      }
+    }
+  }
+
+  // Landings after the last settlement are equally not ours to assign, so take
+  // the best end point rather than insisting on the final landing.
+  let end = -1, best = INF
+  for (let i = m; i <= n; i++) if (dp[m][i] < best) { best = dp[m][i]; end = i }
+  if (end < 0) return []
+
+  const cuts = new Array(m + 1)
+  cuts[m] = end
+  for (let j = m; j >= 1; j--) cuts[j - 1] = back[j][cuts[j]]
+
+  return settlements.map((s, j) => {
+    const a = cuts[j], b = cuts[j + 1]
+    const { value, kg } = runCost(a, b, s)
+    return {
+      settlement: s,
+      landings: landings.slice(a, b),
+      value: r2(value),
+      kg: r2(kg),
+      valueDiff: r2(value - (s.fish || 0)),
+      kgDiff: r2(kg - (s.kg || 0)),
+    }
+  })
+}
+
+/* How much to trust a matched run.
+ *   confirmed — value AND weight both agree; the run is right, not inferred
+ *   value     — value agrees but weight does not, which in this data means the
+ *               settlement measures weight differently, NOT a wrong match
+ *   weight    — weight agrees but value does not; usually money on the sheet
+ *               that did not come from fish
+ *   unmatched — neither; the boundary or the paperwork needs looking at
+ */
+export function matchConfidence(valueDiff, kgDiff, fish, kg) {
+  const vOk = fish ? Math.abs(valueDiff) / fish < 0.01 : false
+  const wOk = kg ? Math.abs(kgDiff) / kg < 0.01 : false
+  if (vOk && wOk) return { key: 'confirmed', label: 'Confirmed', color: 'var(--kelp)' }
+  if (vOk) return { key: 'value', label: 'Value agrees', color: 'var(--brass)' }
+  if (wOk) return { key: 'weight', label: 'Weight agrees', color: 'var(--brass)' }
+  return { key: 'unmatched', label: 'Needs a look', color: 'var(--rust)' }
+}
