@@ -186,9 +186,12 @@ landings, £3,566,572 vs £3,533,893, within 1%, which is what a pair towing one
 net should look like. Third instance of the same pattern after `crew_ranks`
 and fuel suppliers: **anything typed rather than picked will drift.**
 
-Still open: `FAITHFUL II`, one landing on 03-03-2026 worth £24,755 in the
-Guiding Light fleet. Either a third boat or a misread of FAITHLIE — not
-guessed either way.
+`FAITHFUL II` — **deleted Aug 2026 as a failed parse, not a boat.** One
+landing, 03-03-2026, £24,755 over 41 rows, `reconcile_ok = false`. Both real
+boats already had a clean reconciled landing that same day at that same
+market, and the name appears nowhere else. Its rows went with it on CASCADE;
+`sales_rows` is the only table referencing `sales_landings`.
+The pair now reads Faithlie 37 / Guiding Light 36.
 
 **Pair analysis on Fish Sales (Aug 2026).** A vessel picker appears only when
 a fleet has more than one vessel in scope; it drives the whole page, so you
