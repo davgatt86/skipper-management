@@ -775,19 +775,53 @@ login-hero WebP · `SquareUp.jsx` (on `AppShell`, no `BackNav`) · vessel photo
 including the `ITQ CATCHES` dispatcher) · A4 haddock manual totals
 (`splitA4ByTotals` + UI) · `crew_list_members.place_of_birth` on the FAL 5.
 
-- **P&J blank buyers — the fix SHIPPED; the old rows just need re-parsing.**
-  The coordinate logic is in `parse-core` (Withdrawn flag x≈467, Name column
-  x 500–634). What remains is data, not code: **136 blank-buyer rows across
-  10 landings**, all `reconcile_ok = false`, were parsed *before* it shipped
-  and will not change until those notes are re-uploaded. All ten belong to
+- ~~P&J blank buyers~~ — **closed Aug 2026 as permanent, not pending.** The
+  coordinate fix is in `parse-core` (Withdrawn flag x≈467, Name column
+  x 500–634) and works. The **136 blank-buyer rows across 10 landings** were
+  parsed before it shipped, and David confirmed the notes are not obtainable
+  from P&J, so re-uploading is not an option. All ten belong to
   `GUIDING LIGHT H90 + FAITHLIE FR220`:
 
       08-01 Faithlie · 08-01 Guiding Light · 20-01 Guiding Light
       03-02 Guiding Light · 16-02 both · 23-02 both
       12-03 Faithlie · 22-04 Faithlie
 
-  Re-upload those ten sales notes and the count should go to zero. If it does
-  not, *then* the parser needs looking at.
+  **The damage is narrower than it looks.** All 136 rows carry species, grade,
+  weight and value — only the buyer is missing. So gross, tonnage, £/kg,
+  species mix and grade analysis are all sound; the hole is confined to buyer
+  attribution, and to one fleet: £109,131 of £3,666,761, **3.0% of value**
+  (5.1% of rows).
+
+  `buyerCoverage()` in `salesAgg.js` measures it and Buyer League shows it as
+  a panel. Blank-buyer rows were being dropped from the league silently, which
+  made an incomplete table look complete — a quiet buyer and a missing one
+  looked identical. Now the gap is stated, with the landings named.
+
+### `reconcile_ok` does NOT mean the money is wrong
+
+Worth knowing before chasing one. The flag compares the parsed rows against
+the **TOTAL line printed on the note**. But `sales_landings.boxes/weight_kg/
+value` are written from `rec.actual` — the **row sum** — so querying a landing
+against its own `sales_rows` compares the parse against itself and returns
+zero every time. That is not a reconciliation and it proves nothing.
+
+The printed total was never stored, so a flagged landing was unreadable after
+the fact. `sales_landings.reconcile_diff` (jsonb, `supabase/sales_reconcile_diff.sql`,
+applied Aug 2026) now holds `expected` / `actual` / `diffs` / `basis` from the
+parser, written by **both** ingest paths — `netlify/functions/ingest.js` and
+`Sales.jsx`. Landings before that carry null and cannot be recovered without
+the original note; `reconcileNote()` in `Sales.jsx` says so rather than showing
+a bare ⚠.
+
+Note P&J's box diff is informational — it prints a *physical* box count that
+never ties to the fractional column, so `reconcilePJJ()` scores on weight and
+value only and sets `basis: 'physical'`.
+
+**16 landings currently carry `reconcile_ok = false`** — the 10 P&J ones above,
+plus 06-16 Rosebloom, 06-16 Boy John, 06-30 / 07-13 / 07-21 Beryl and 08-03
+Boy Andrew. Those six have **no** blank buyers, so they failed for some other
+reason, and with no `reconcile_diff` on them there is currently no way to tell
+what. Re-uploading any of those notes will fill it in.
 - ~~Buyer league table~~ — **done Aug 2026.** `BuyerLeague.jsx` at
   `/buyer-league`, under Sales.
 
