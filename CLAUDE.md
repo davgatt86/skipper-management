@@ -687,26 +687,27 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
   tables key on `fleet_id`. That means a `vessels` table, a `vessel_id` on each,
   backfill, and the fleet-isolation policies extended — a migration, not a
   restyle.
-- Login hero is JPEG only. WebP would cut roughly a third off both files, but
-  the pair was produced with System.Drawing at q70 when this machine had no
-  Node. **Node is installed now, so this is unblocked** — `sharp` will do it. Re-encode from
-  `IMG_1629.jpg` (3090×2075) with `cwebp` or `sharp` when there is a toolchain.
-- `SquareUp.jsx` is the last page still on `.container` + `BackNav`. It was
-  held back deliberately: the worksheet is being reworked in stage 2 alongside
-  the settlements page, so restyling it first would be thrown away.
-- Vessel photo inside the app comes from the signed-in fleet. Needs a
-  `hero_path` column on `fleets` and a storage bucket with the same fleet
-  isolation. Falls back to the solid plate when null.
-- `parseTripXlsx` for mcatch Excel trip exports — reads 'trip summary' and
-  'catch by zone' sheets, reconciles to 'Catch by species', apportions
-  year-straddling trips by haul date. Dispatcher: AFPO has 'ITQ CATCHES' in A1,
-  mcatch-xlsx has a 'trip summary' sheet. Trip uploader must accept .xlsx.
-- A4 haddock manual-totals auto-allocation in Sales — skipper enters trip totals
-  for mini/metro/chipper, app allocates across that trip's A4 rows by price rank,
-  residual to metro, flag if the gap is over 2–3 boxes.
-- P&J buyer coordinate fix — written and validated, but do not ship without the
-  3 Feb Guiding Light PDF to test against. 147 blank-buyer rows across 11
-  landings currently carry `reconcile_ok = false`.
+**This section was audited against the code Aug 2026 and SIX entries were
+already built.** Check before starting anything here — a stale to-do already
+cost real effort twice in one session. Verified done and removed:
+login-hero WebP · `SquareUp.jsx` (on `AppShell`, no `BackNav`) · vessel photo
+(`fleets.hero_path` + `fleet-photos` bucket) · `parseTripXlsx` (241 lines,
+including the `ITQ CATCHES` dispatcher) · A4 haddock manual totals
+(`splitA4ByTotals` + UI) · `crew_list_members.place_of_birth` on the FAL 5.
+
+- **P&J blank buyers — the fix SHIPPED; the old rows just need re-parsing.**
+  The coordinate logic is in `parse-core` (Withdrawn flag x≈467, Name column
+  x 500–634). What remains is data, not code: **136 blank-buyer rows across
+  10 landings**, all `reconcile_ok = false`, were parsed *before* it shipped
+  and will not change until those notes are re-uploaded. All ten belong to
+  `GUIDING LIGHT H90 + FAITHLIE FR220`:
+
+      08-01 Faithlie · 08-01 Guiding Light · 20-01 Guiding Light
+      03-02 Guiding Light · 16-02 both · 23-02 both
+      12-03 Faithlie · 22-04 Faithlie
+
+  Re-upload those ten sales notes and the count should go to zero. If it does
+  not, *then* the parser needs looking at.
 - ~~Buyer league table~~ — **done Aug 2026.** `BuyerLeague.jsx` at
   `/buyer-league`, under Sales.
 
