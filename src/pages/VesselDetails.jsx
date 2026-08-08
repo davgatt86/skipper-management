@@ -145,7 +145,8 @@ export default function VesselDetails() {
                 {fleets.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
               <span className="muted" style={{ fontWeight: 400, fontSize: '0.78rem' }}>
-                You own the app, so you can set any fleet&rsquo;s photo. Each skipper still only sees his own.
+                You own the app, so you can set any boat&rsquo;s photo here. Each skipper still only sees
+                his own. <strong>Only the photo</strong> — the details below are always your own vessel.
               </span>
             </label>
           )}
