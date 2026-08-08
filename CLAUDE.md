@@ -121,14 +121,13 @@ Price vs Fleet · Alerts · Forecast · Crew List
 `davgatt86/fish-sales-tracker`) are **identical files**. Any fix must be applied
 to both, and the version bumped. Now **1.3.1**.
 
-⚠️ **The two copies may already have drifted.** Before the Aug 2026 buyer-alias
-change this file read `VERSION = "1.2.1"` while this document claimed 1.3.0.
-Either the sister repo is ahead, or the note was wrong. Diff them before
-trusting either.
+**Checked Aug 2026 by diffing the two files: they were genuinely identical, at
+1.2.1.** This document's claim of 1.3.0 was simply wrong — the identical-files
+rule was being honoured. Both are now 1.3.1 with the same `BUYER_CANON`
+change, verified line for line and by running `canonBuyer` on each.
 
-⚠️ **`fish-sales-tracker` is not on this machine**, so the Aug 2026 change to
-`BUYER_CANON` is applied **here only**. Until the same edit lands there, the
-two parsers disagree about buyer names.
+The `fish-sales-tracker` copy is **not in this repo**, so it has to be updated
+by hand each time. Diff before assuming, rather than trusting a version note.
 
 **Buyer names are canonicalised in `BUYER_CANON` / `canonBuyer()`**, which the
 Don Fishing parser applies to every row. That is the only durable fix for the
