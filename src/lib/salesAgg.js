@@ -511,3 +511,96 @@ export function vesselMarketSplit(rows, landingById) {
     landings: o.landings.size, pkg: o.kg ? r2(o.value / o.kg) : 0,
   })).sort((a, b) => a.vessel.localeCompare(b.vessel) || b.value - a.value)
 }
+
+/* ---------------- buyer league ----------------
+ * "Who pays best for my haddock" cannot be answered by averaging each buyer's
+ * £/kg over a year. Prices move week to week, so that mostly measures WHEN a
+ * buyer happened to be bidding, not whether they pay well.
+ *
+ * The fair comparison is against the board on the same day for the same fish:
+ * for every (species, grade, day) work out the volume-weighted average price
+ * across all buyers, then score each buyer on how far above or below it they
+ * bought. A day with only one buyer tells you nothing and is dropped.
+ *
+ * The result is a premium in £/kg — "this buyer pays 85p a kilo more than the
+ * rest of the market did, on the days they were buying".
+ */
+const isAuctionName = (b) => /auction/i.test(b || '')
+
+export function buyerPremiumLeague(rows, landingById, opts = {}) {
+  const minKg = opts.minKg ?? 1000
+  const species = opts.species || null      // null = all species together
+  const byGrade = !!opts.byGrade
+
+  const usable = rows.filter((r) => {
+    if (!r.buyer || isAuctionName(r.buyer)) return false
+    if (!(Number(r.weight_kg) > 0) || !(Number(r.value) > 0)) return false
+    if (species && (r.species_canon || r.species) !== species) return false
+    return !!landingById?.[r.landing_id]?.landing_date
+  })
+
+  // Volume-weighted market price per species/grade/day.
+  const key = (r) => {
+    const sp = r.species_canon || r.species || '?'
+    const g = byGrade ? '||' + gradeLabel(r) : ''
+    return sp + g + '||' + landingById[r.landing_id].landing_date
+  }
+  const market = {}
+  for (const r of usable) {
+    const k = key(r)
+    const m = (market[k] = market[k] || { value: 0, kg: 0, buyers: new Set() })
+    m.value += Number(r.value); m.kg += Number(r.weight_kg); m.buyers.add(r.buyer)
+  }
+
+  const agg = {}
+  for (const r of usable) {
+    const m = market[key(r)]
+    // One buyer on the day is not a market — nothing to compare against.
+    if (!m || m.buyers.size < 2 || !m.kg) continue
+    const avg = m.value / m.kg
+    const kg = Number(r.weight_kg)
+    const pkg = Number(r.value) / kg
+    const a = (agg[r.buyer] = agg[r.buyer] || {
+      buyer: r.buyer, kg: 0, value: 0, weighted: 0, days: new Set(), species: {},
+    })
+    a.kg += kg
+    a.value += Number(r.value)
+    a.weighted += (pkg - avg) * kg          // kg-weighted, so a big lift on a
+    a.days.add(landingById[r.landing_id].landing_date)   // big parcel counts more
+    const sp = r.species_canon || r.species || '?'
+    a.species[sp] = (a.species[sp] || 0) + Number(r.value)
+  }
+
+  return Object.values(agg)
+    .filter((a) => a.kg >= minKg)
+    .map((a) => ({
+      buyer: a.buyer,
+      kg: r2(a.kg),
+      value: r2(a.value),
+      days: a.days.size,
+      pkg: r2(a.value / a.kg),
+      premium: r2(a.weighted / a.kg),
+      // What the premium is worth on the volume they actually took.
+      worth: r2((a.weighted / a.kg) * a.kg),
+      top: Object.entries(a.species).sort((x, y) => y[1] - x[1])[0]?.[0] || '',
+    }))
+    .sort((a, b) => b.premium - a.premium)
+}
+
+// Buyers whose names differ only by punctuation, case or a company suffix.
+// Same failure as crew ranks, fuel suppliers and vessel labels: buyer names
+// come off the sales note as typed, so one firm can appear several ways and
+// split its own record.
+export function similarBuyers(rows) {
+  const strip = (b) => (b || '').toLowerCase()
+    .replace(/\b(ltd|limited|co|company|messrs|and|&|the)\b/g, '')
+    .replace(/[^a-z0-9]/g, '')
+  const g = {}
+  for (const r of rows) {
+    if (!r.buyer || isAuctionName(r.buyer)) continue
+    const k = strip(r.buyer)
+    if (!k) continue
+    ;(g[k] = g[k] || new Set()).add(r.buyer)
+  }
+  return Object.values(g).filter((s) => s.size > 1).map((s) => [...s].sort())
+}

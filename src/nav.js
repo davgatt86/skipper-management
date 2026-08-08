@@ -23,6 +23,7 @@ export const NAV = [
     items: [
       { to: '/sales', label: 'Fish Sales', access: 'fleetTools' },
       { to: '/sales-insights', label: 'Sales Insights', access: 'skipper' },
+      { to: '/buyer-league', label: 'Buyer League', access: 'fleetTools' },
       { to: '/sales-compare', label: 'Compare Sales', access: 'skipper' },
       { to: '/price-vs-fleet', label: 'Price vs Fleet', access: 'skipper' },
     ],

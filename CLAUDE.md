@@ -674,7 +674,31 @@ planner covers it), inspection pack, AI audit, and Aegir's own landings page.
   3 Feb Guiding Light PDF to test against. 147 blank-buyer rows across 11
   landings currently carry `reconcile_ok = false`.
 - `Sales.jsx` single-landing view doesn't expose the days-at-sea input.
-- Buyer league table — best-paying buyer per species/grade.
+- ~~Buyer league table~~ — **done Aug 2026.** `BuyerLeague.jsx` at
+  `/buyer-league`, under Sales.
+
+  **The method is the point.** Averaging a buyer's £/kg over a year mostly
+  measures *when* they were bidding, because prices move week to week. So
+  every row is scored against the volume-weighted average for the same
+  species, same grade, **same day**, and the score is how far over the board
+  they bought. Days with only one buyer are dropped — one bid is not a market.
+  Auctions are excluded throughout.
+
+  Note there are now **two** functions and they answer different questions.
+  `buyerLeague()` (older, used by `SalesInsights.jsx`) ranks buyers on raw
+  £/kg within a species and grade — "who paid most for this grade".
+  `buyerPremiumLeague()` is the day-relative one behind the new page. Do not
+  merge them.
+
+  First run on Audacious 2026: **Messrs J Smith Ltd, 100,640 kg over 39 days
+  at +£0.854/kg** — roughly £86,000 more than the board paid on those days.
+  GT Sustainable Seafoods and Pindarus follow on volume.
+
+  **A fourth name-variant case surfaced.** "Messrs J Smith Ltd" (£268,456) and
+  "J Smith" (£90,516) are almost certainly one firm, and the split matters
+  here because volume decides whether a buyer clears the threshold at all.
+  Not merged — buyer names come off the sales note as parsed — but the page
+  lists suspected duplicates via `similarBuyers()`.
 
 ## Toolchain
 
