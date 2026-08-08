@@ -18,6 +18,24 @@ const gbp0 = n => '£' + Math.round(Number(n || 0)).toLocaleString('en-GB')
 const num = n => Number(n || 0).toLocaleString('en-GB')
 const fmtDate = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : '—'
 
+// What a failed parse actually got wrong. Landings ingested before Aug 2026
+// carry no reconcile_diff, and there is no way to recover it without the
+// original note — so say that rather than showing a bare warning triangle.
+// P&J prints a physical box count that never ties to the fractional column, so
+// its box gap is information, not a failure (see reconcilePJJ in parse-core).
+function reconcileNote(l) {
+  if (l?.reconcile_ok !== false) return ''
+  const d = l.reconcile_diff?.diffs
+  if (!d) return 'This note did not match its own printed total. Detail was not recorded at the time, so it cannot be narrowed down without the original.'
+  const parts = []
+  if (d.value) parts.push(`value out by ${gbp(d.value)}`)
+  if (d.weight) parts.push(`weight out by ${num(d.weight)} kg`)
+  if (d.boxes && l.reconcile_diff.basis !== 'physical') parts.push(`boxes out by ${num(d.boxes)}`)
+  return parts.length
+    ? `Parsed rows against the note's printed total: ${parts.join(', ')}.`
+    : 'Flagged, but the parsed rows agree with the printed total.'
+}
+
 const th = { textAlign: 'left', padding: '0.45rem 0.6rem', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap', color: 'var(--navy)' }
 const td = { padding: '0.45rem 0.6rem', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }
 const tdR = { ...td, textAlign: 'right' }
@@ -194,6 +212,11 @@ export default function Sales() {
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: f.name,
           boxes: tot.boxes, weight_kg: tot.weight, value: tot.value,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
+          // See supabase/sales_reconcile_diff.sql — the landing totals are the
+          // row sum, so the note's printed TOTAL is the only real check.
+          reconcile_diff: rec.found
+            ? { expected: rec.expected, actual: rec.actual, diffs: rec.diffs, basis: rec.boxBasis || null }
+            : null,
           currency: res.meta.currency || null, fx_rate: fxRate
         }
         // Re-uploading a note that's already imported RE-PARSES and replaces its
@@ -728,7 +751,12 @@ export default function Sales() {
                     <tr key={l.id}>
                       <td style={td}>{fmtDate(l.landing_date)}{l.consigned ? ' (consigned)' : ''}</td>
                       <td style={td}>{l.vessel}</td>
-                      <td style={td}>{l.market}{l.reconcile_ok === false ? ' ⚠' : ''}</td>
+                      <td style={td}>
+                        {l.market}
+                        {l.reconcile_ok === false && (
+                          <span title={reconcileNote(l)} style={{ color: 'var(--brass)', cursor: 'help' }}> ⚠</span>
+                        )}
+                      </td>
                       <td style={tdR}>{num(l.boxes)}</td>
                       <td style={tdR}>{num(l.weight_kg)}</td>
                       <td style={tdR}>{gbp0(l.value)}</td>

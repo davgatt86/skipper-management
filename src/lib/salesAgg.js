@@ -587,6 +587,37 @@ export function buyerPremiumLeague(rows, landingById, opts = {}) {
     .sort((a, b) => b.premium - a.premium)
 }
 
+/* How much of the fish in scope has no buyer against it.
+ *
+ * Rows with no buyer are dropped from every buyer breakdown — correctly, since
+ * you cannot score a bid you cannot attribute. But dropping them silently
+ * makes the league look complete when it is not, and the reader has no way to
+ * tell a quiet buyer from a missing one.
+ *
+ * These rows are otherwise whole: species, grade, weight and value are all
+ * there. So gross, tonnage, £/kg and species mix are unaffected — the hole is
+ * confined to buyer attribution, and that is worth saying on the page. */
+export function buyerCoverage(rows, landingById) {
+  let blankRows = 0, blankValue = 0, blankKg = 0, totalValue = 0
+  const byLanding = {}
+  for (const r of rows) {
+    const v = Number(r.value) || 0
+    totalValue += v
+    if (String(r.buyer || '').trim()) continue
+    blankRows++; blankValue += v; blankKg += Number(r.weight_kg) || 0
+    const l = landingById?.[r.landing_id]
+    const o = (byLanding[r.landing_id] = byLanding[r.landing_id] ||
+      { date: l?.landing_date || '', vessel: l?.vessel || '', market: l?.market || '', value: 0, rows: 0 })
+    o.value += v; o.rows++
+  }
+  const landings = Object.values(byLanding).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  return {
+    blankRows, blankValue: r2(blankValue), blankKg: r2(blankKg), totalValue: r2(totalValue),
+    pct: totalValue ? r2((100 * blankValue) / totalValue) : 0,
+    landings,
+  }
+}
+
 // Buyers whose names differ only by punctuation, case or a company suffix.
 // Same failure as crew ranks, fuel suppliers and vessel labels: buyer names
 // come off the sales note as typed, so one firm can appear several ways and

@@ -274,6 +274,13 @@ export const handler = async (event) => {
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: name,
           boxes: tot.boxes, weight_kg: tot.weight, value: dkk ? 0 : tot.value,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
+          // Keep WHAT differed, not just that something did. The landing's own
+          // totals are the row sum, so they can never disagree with the rows —
+          // the printed TOTAL is the only independent check and it lived
+          // nowhere. See supabase/sales_reconcile_diff.sql.
+          reconcile_diff: rec.found
+            ? { expected: rec.expected, actual: rec.actual, diffs: rec.diffs, basis: rec.boxBasis || null }
+            : null,
           currency: res.meta.currency || null, fx_rate: null,
         }
 

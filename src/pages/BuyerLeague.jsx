@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext'
 // buyerLeague that ranks buyers on raw £/kg within a species and grade. That
 // answers "who paid most for this grade". This answers "who consistently pays
 // over the board", which is a different question, so both are kept.
-import { buyerPremiumLeague, similarBuyers, bySpecies, scopeRows, scopeLandingIds, SALES_SCOPES } from '../lib/salesAgg'
+import { buyerPremiumLeague, similarBuyers, buyerCoverage, bySpecies, scopeRows, scopeLandingIds, SALES_SCOPES } from '../lib/salesAgg'
 
 // Who actually pays best.
 //
@@ -74,6 +74,7 @@ export default function BuyerLeague() {
     [inScope, landingById, minKg, species, byGrade]
   )
   const variants = useMemo(() => similarBuyers(inScope), [inScope])
+  const coverage = useMemo(() => buyerCoverage(inScope, landingById), [inScope, landingById])
 
   if (!canView) return <AppShell><div className="card"><p className="muted">Skipper or viewer access only.</p></div></AppShell>
 
@@ -117,6 +118,41 @@ export default function BuyerLeague() {
           excluded throughout: Hanstholm print no buyer names.
         </p>
       </div>
+
+      {coverage.blankRows > 0 && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
+          <h2 style={{ marginTop: 0 }}>Fish with no buyer against it</h2>
+          <p style={{ marginTop: 0, fontSize: '0.9rem' }}>
+            <strong>{gbp0(coverage.blankValue)}</strong> over {num(coverage.blankRows)} rows
+            {' '}({coverage.pct}% of the value in scope) has no buyer recorded, so it cannot appear
+            in the table below. Everything else about those rows is intact — species, grade, weight
+            and value — so gross, tonnage and £/kg are unaffected. It is only the attribution that
+            is missing.
+          </p>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+              <thead>
+                <tr><th style={th}>Landing</th><th style={th}>Vessel</th><th style={thR}>Rows</th><th style={thR}>Value</th></tr>
+              </thead>
+              <tbody>
+                {coverage.landings.map((l, i) => (
+                  <tr key={i}>
+                    <td style={td}>{l.date ? `${l.date.slice(8, 10)}/${l.date.slice(5, 7)}/${l.date.slice(0, 4)}` : '—'}</td>
+                    <td style={td}>{l.vessel}</td>
+                    <td style={tdR}>{num(l.rows)}</td>
+                    <td style={tdR}>{gbp0(l.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 0 }}>
+            These were parsed before the P&amp;J buyer-column fix shipped. Re-uploading the note
+            fills the buyers in; where the note is no longer available, the gap is permanent and
+            this panel is the record of it.
+          </p>
+        </div>
+      )}
 
       {variants.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--brass)' }}>
