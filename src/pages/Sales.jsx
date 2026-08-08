@@ -3,7 +3,8 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2,
-  withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays } from '../lib/salesAgg'
+  withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
+  samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
@@ -58,6 +59,8 @@ export default function Sales() {
   const [scope, setScope] = useState('all')         // 'all' | 'uk' | 'dk'
   // What the percentages are a share OF. £ answers "what drove the gross".
   const [basis, setBasis] = useState('value')       // 'value' | 'kg' | 'boxes'
+  // '' = the pair combined. Otherwise one boat, and the WHOLE page follows it.
+  const [vessel, setVessel] = useState('')
 
   // drill-downs
   const [openSpecies, setOpenSpecies] = useState('')
@@ -100,8 +103,30 @@ export default function Sales() {
   // Everything downstream works off the SCOPED rows, so a percentage is always
   // a share of what is on screen. Change UK/Denmark and every denominator —
   // and every KPI — moves with it.
-  const inScope = useMemo(() => scopeRows(rows, landingById, scope), [rows, landingById, scope])
-  const landingsInScope = useMemo(() => scopeLandingIds(scopeLandings, scope), [scopeLandings, scope])
+  const scopedRows = useMemo(() => scopeRows(rows, landingById, scope), [rows, landingById, scope])
+  const scopedLandings = useMemo(() => scopeLandingIds(scopeLandings, scope), [scopeLandings, scope])
+
+  // Every vessel in scope, so the picker only appears for a real pair.
+  const vesselNames = useMemo(
+    () => [...new Set(scopedLandings.map(l => l.vessel).filter(Boolean))].sort(),
+    [scopedLandings]
+  )
+  const isPair = vesselNames.length > 1
+
+  // The pair comparison always works off BOTH boats — narrowing to one and
+  // then comparing it with itself would be meaningless.
+  const pairRows = scopedRows
+  const pairLandings = scopedLandings
+
+  // Everything else follows the vessel picker.
+  const inScope = useMemo(
+    () => (vessel ? scopedRows.filter(r => landingById[r.landing_id]?.vessel === vessel) : scopedRows),
+    [scopedRows, vessel, landingById]
+  )
+  const landingsInScope = useMemo(
+    () => (vessel ? scopedLandings.filter(l => l.vessel === vessel) : scopedLandings),
+    [scopedLandings, vessel]
+  )
 
   const scopeLabel = useMemo(() => {
     if (mode === 'landing') {
@@ -330,10 +355,13 @@ export default function Sales() {
   const buyersTbl = useMemo(() => withShares(byBuyer(inScope), basis), [inScope, basis])
 
   // Pair teams: two boats in one fleet, told apart by the landing's vessel
-  // label. Only shown when there is genuinely more than one.
-  const vesselTbl = useMemo(() => withShares(byVessel(inScope, landingById), basis), [inScope, landingById, basis])
-  const pairInfo = useMemo(() => pairedDays(landingsInScope), [landingsInScope])
-  const isPair = vesselTbl.length > 1
+  // label. These always use both boats, whatever the picker says.
+  const vesselTbl = useMemo(() => withShares(byVessel(pairRows, landingById), basis), [pairRows, landingById, basis])
+  const pairInfo = useMemo(() => pairedDays(pairLandings), [pairLandings])
+  const priceGaps = useMemo(() => (isPair ? samedayPriceGap(pairRows, landingById) : []), [isPair, pairRows, landingById])
+  const mixSpread = useMemo(() => (isPair ? speciesMixDivergence(pairRows, landingById, basis) : []), [isPair, pairRows, landingById, basis])
+  const marketSplit = useMemo(() => (isPair ? vesselMarketSplit(pairRows, landingById) : []), [isPair, pairRows, landingById])
+  const avgGap = priceGaps.length ? r2(priceGaps.reduce((s, g) => s + g.gap, 0) / priceGaps.length) : 0
   const monthly = useMemo(() => mode === 'year' ? monthlySeries(rows, landingById, year) : [], [rows, mode, year, landingById])
   const perLanding = useMemo(() => mode === 'month' ? landingSeries(scopeLandings) : [], [mode, scopeLandings])
   const speciesChart = useMemo(() => speciesTbl.slice(0, 10).map(s => ({ label: s.species, value: s.value, kg: r2(s.kg / 1000) })), [speciesTbl])
@@ -399,6 +427,13 @@ export default function Sales() {
             ))}
           </select>
         )}
+        {/* Only a real pair gets a picker — a single-vessel fleet never sees one. */}
+        {isPair && (
+          <select value={vessel} onChange={e => setVessel(e.target.value)} style={{ width: 'auto' }} title="Whole page follows this">
+            <option value="">Both boats</option>
+            {vesselNames.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        )}
         <select value={scope} onChange={e => setScope(e.target.value)} style={{ width: 'auto' }} title="Danish sales come through Hanstholm with no buyer names">
           {SALES_SCOPES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
@@ -449,6 +484,7 @@ export default function Sales() {
               {pairInfo.alone > 0 && `, ${pairInfo.alone} where only one did`}. Gross and boxes are
               each boat&rsquo;s own; days at sea are <strong>not</strong> summed — the pair fished the
               same days, so the pair rate is pair gross ÷ the trip&rsquo;s days.
+              {vessel && <> This comparison always shows both boats, whatever the picker is set to.</>}
             </p>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -487,6 +523,104 @@ export default function Sales() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ---- 1. same-day price gap ---- */}
+        {isPair && priceGaps.length > 0 && (
+          <div className="card">
+            <h2>Same-day price gap</h2>
+            <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+              Both boats landed on these days. Average gap <strong>{gbp(avgGap)}/kg</strong> across{' '}
+              {priceGaps.length} day{priceGaps.length === 1 ? '' : 's'}. A gap that keeps falling the
+              same way is grading or a market split, not luck.
+            </p>
+            <Scroll>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead><tr>
+                  <th style={th}>Date</th><th style={th}>Better</th><th style={thR}>£/kg</th>
+                  <th style={th}>Other</th><th style={thR}>£/kg</th><th style={thR}>Gap</th><th style={th}></th>
+                </tr></thead>
+                <tbody>
+                  {priceGaps.slice(0, 20).map(g => {
+                    const best = g.sides[0], worst = g.sides[g.sides.length - 1]
+                    return (
+                      <tr key={g.date}>
+                        <td style={td}>{fmtDate(g.date)}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{best.vessel}</td>
+                        <td style={tdR}>{gbp(best.pkg)}</td>
+                        <td style={td} className="muted">{worst.vessel}</td>
+                        <td style={tdR}>{gbp(worst.pkg)}</td>
+                        <td style={{ ...tdR, fontWeight: 700, color: g.gapPct > 10 ? 'var(--rust)' : 'inherit' }}>
+                          {gbp(g.gap)}{g.gapPct ? ` (${g.gapPct}%)` : ''}
+                        </td>
+                        <td style={td} className="muted">{g.splitMarket ? 'split market' : ''}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </Scroll>
+          </div>
+        )}
+
+        {/* ---- 2. species mix divergence ---- */}
+        {isPair && mixSpread.length > 0 && (
+          <div className="card">
+            <h2>Species mix — where the boats differ</h2>
+            <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+              Each boat&rsquo;s share of its own {BASIS_WORD[basis]}, biggest difference first. Towing
+              one net they should land much the same mix, so a wide spread is a gear or stowage
+              question.
+            </p>
+            <Scroll>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead><tr>
+                  <th style={th}>Species</th>
+                  {mixSpread[0].shares.map(s => <th key={s.vessel} style={thR}>{s.vessel}</th>)}
+                  <th style={thR}>Spread</th>
+                </tr></thead>
+                <tbody>
+                  {mixSpread.slice(0, 12).map(m => (
+                    <tr key={m.species}>
+                      <td style={{ ...td, fontWeight: 600 }}>{m.species}</td>
+                      {m.shares.map(s => <td key={s.vessel} style={tdR}>{s.share}%</td>)}
+                      <td style={{ ...tdR, fontWeight: 700, color: m.spread >= 5 ? 'var(--brass)' : 'inherit' }}>{m.spread} pts</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Scroll>
+          </div>
+        )}
+
+        {/* ---- 3. which boat sold where ---- */}
+        {isPair && marketSplit.length > 0 && (
+          <div className="card">
+            <h2>Which boat sold where</h2>
+            <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+              Splitting a pair&rsquo;s catch across two markets is a decision. This is what it came to.
+            </p>
+            <Scroll>
+              <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <thead><tr>
+                  <th style={th}>Vessel</th><th style={th}>Market</th><th style={thR}>Landings</th>
+                  <th style={thR}>£</th><th style={thR}>Tonnes</th><th style={thR}>£/kg</th>
+                </tr></thead>
+                <tbody>
+                  {marketSplit.map(s => (
+                    <tr key={s.vessel + s.market}>
+                      <td style={{ ...td, fontWeight: 600 }}>{s.vessel}</td>
+                      <td style={td}>{shortMarket(s.market)}</td>
+                      <td style={tdR}>{num(s.landings)}</td>
+                      <td style={tdR}>{gbp0(s.value)}</td>
+                      <td style={tdR}>{num(r2(s.kg / 1000))}</td>
+                      <td style={tdR}>{gbp(s.pkg)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Scroll>
           </div>
         )}
 
@@ -559,6 +693,16 @@ export default function Sales() {
         {/* buyers */}
         <div className="card">
           <h2>Buyers <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>(tap a buyer for what they bought)</span></h2>
+          {/* The Denmark rule stated rather than implied: Hanstholm print no
+              buyer names, so their sales can only ever appear as the auction
+              itself. Which scope you are in decides whether they count. */}
+          <p className="muted" style={{ marginTop: 0, fontSize: '0.8rem' }}>
+            {scope === 'dk'
+              ? 'Denmark only — Hanstholm print no buyer names, so there is one auction row and no real buyers to rank.'
+              : scope === 'uk'
+                ? 'UK only — Danish sales are out, so every row here is a named buyer.'
+                : 'All landings — Danish sales count towards these totals, but they can only show as the auction, not a buyer.'}
+          </p>
           <Scroll>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead><tr><th style={th}>Buyer</th><th style={thR}>Boxes</th><th style={thR}>Kg</th><th style={thR}>£</th><th style={thR}>{BASIS_LABEL[basis]}</th><th style={thR}>£/kg</th><th style={th}>Top species</th></tr></thead>
@@ -682,6 +826,7 @@ export default function Sales() {
 }
 
 const BASIS_LABEL = { value: '% £', kg: '% kg', boxes: '% box' }
+const BASIS_WORD = { value: 'gross', kg: 'kilos', boxes: 'boxes' }
 
 function SpeciesRow({ s, open, onToggle, rows, basis }) {
   // Grade shares are of the SPECIES, not of the whole trip — "what drove the

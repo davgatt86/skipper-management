@@ -422,3 +422,92 @@ export function pairedDays(landings) {
     alone: days.filter((d) => d.vessels.length === 1).length,
   }
 }
+
+/* ---------------- pair analysis ----------------
+ * A pair tows one net between two boats, so they land the same fish on the
+ * same day. That makes them directly comparable in a way two unrelated boats
+ * never are, and it is what these three answer.
+ */
+
+// 1. Same-day price gap. Both boats landed the same day — did one get a
+//    better £/kg? A persistent gap is grading or a market split, and it is
+//    money rather than noise.
+export function samedayPriceGap(rows, landingById) {
+  const byDay = {}
+  for (const r of rows) {
+    const l = landingById?.[r.landing_id]
+    if (!l?.landing_date || !l.vessel) continue
+    const d = (byDay[l.landing_date] = byDay[l.landing_date] || {})
+    const v = (d[l.vessel] = d[l.vessel] || { value: 0, kg: 0, markets: new Set() })
+    v.value += Number(r.value || 0); v.kg += Number(r.weight_kg || 0)
+    if (l.market) v.markets.add(l.market)
+  }
+  const out = []
+  for (const [date, vessels] of Object.entries(byDay)) {
+    const names = Object.keys(vessels)
+    if (names.length < 2) continue
+    const sides = names.map((n) => ({
+      vessel: n,
+      value: r2(vessels[n].value),
+      kg: r2(vessels[n].kg),
+      pkg: vessels[n].kg ? r2(vessels[n].value / vessels[n].kg) : 0,
+      markets: [...vessels[n].markets],
+    })).sort((a, b) => b.pkg - a.pkg)
+    const best = sides[0], worst = sides[sides.length - 1]
+    const gap = r2(best.pkg - worst.pkg)
+    out.push({
+      date, sides, gap,
+      gapPct: worst.pkg ? r2((gap / worst.pkg) * 100) : 0,
+      // Different markets on the same day is a decision, not an accident —
+      // worth separating from a gap that happened in one market.
+      splitMarket: new Set(sides.flatMap((s) => s.markets)).size > 1,
+    })
+  }
+  return out.sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// 2. Species mix divergence. If one boat's share of a species drifts from the
+//    other's while towing the same net, that is a gear or stowage question.
+export function speciesMixDivergence(rows, landingById, basis = 'value') {
+  const per = {}
+  const totals = {}
+  for (const r of rows) {
+    const l = landingById?.[r.landing_id]
+    if (!l?.vessel) continue
+    const sp = r.species_canon || r.species || '?'
+    const amt = Number(r[basis === 'value' ? 'value' : basis === 'kg' ? 'weight_kg' : 'boxes'] || 0)
+    per[l.vessel] = per[l.vessel] || {}
+    per[l.vessel][sp] = (per[l.vessel][sp] || 0) + amt
+    totals[l.vessel] = (totals[l.vessel] || 0) + amt
+  }
+  const vessels = Object.keys(per)
+  if (vessels.length < 2) return []
+  const species = [...new Set(vessels.flatMap((v) => Object.keys(per[v])))]
+  return species.map((sp) => {
+    const shares = vessels.map((v) => ({
+      vessel: v,
+      share: totals[v] ? r2(((per[v][sp] || 0) / totals[v]) * 100) : 0,
+    }))
+    const vals = shares.map((s) => s.share)
+    return { species: sp, shares, spread: r2(Math.max(...vals) - Math.min(...vals)) }
+  }).sort((a, b) => b.spread - a.spread)
+}
+
+// 3. Which boat sold where. Splitting a pair's catch across two markets on one
+//    day is a decision, and it should be reviewable.
+export function vesselMarketSplit(rows, landingById) {
+  const m = {}
+  for (const r of rows) {
+    const l = landingById?.[r.landing_id]
+    if (!l?.vessel) continue
+    const market = l.market || '?'
+    const k = l.vessel + '||' + market
+    const o = (m[k] = m[k] || { vessel: l.vessel, market, value: 0, kg: 0, landings: new Set() })
+    o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0)
+    if (r.landing_id) o.landings.add(r.landing_id)
+  }
+  return Object.values(m).map((o) => ({
+    ...o, value: r2(o.value), kg: r2(o.kg),
+    landings: o.landings.size, pkg: o.kg ? r2(o.value / o.kg) : 0,
+  })).sort((a, b) => a.vessel.localeCompare(b.vessel) || b.value - a.value)
+}

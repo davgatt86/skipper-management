@@ -190,6 +190,21 @@ Still open: `FAITHFUL II`, one landing on 03-03-2026 worth £24,755 in the
 Guiding Light fleet. Either a third boat or a misread of FAITHLIE — not
 guessed either way.
 
+**Pair analysis on Fish Sales (Aug 2026).** A vessel picker appears only when
+a fleet has more than one vessel in scope; it drives the whole page, so you
+get pair-combined figures or one boat's. The four pair panels always use both
+boats regardless, since comparing a boat with itself is meaningless:
+- **Boat against boat** — landings, gross, share, boxes, tonnes, £/kg + pair
+  total. Days at sea are never summed.
+- **Same-day price gap** — `samedayPriceGap()`. Baseline for Boy John /
+  Rosebloom: 29 paired days, average gap £0.151/kg (4.8%), worst £0.786. But
+  **15 days one boat, 14 the other, mean difference £0.000** — the gap is
+  noise, not bias. Treat a big single day as its own event, not a trend.
+- **Species mix divergence** — `speciesMixDivergence()`, share of each boat's
+  own total, widest spread first. Towing one net they should match.
+- **Which boat sold where** — `vesselMarketSplit()`. A split market on one day
+  is a decision worth reviewing.
+
 ## Design system (agreed Aug 2026, shipped Aug 2026)
 
 - Type: Big Shoulders Display for vessel names, registrations and headings,
