@@ -27,6 +27,7 @@ const FuelLog = lazy(() => import('./pages/FuelLog'))
 const Familiarisation = lazy(() => import('./pages/Familiarisation'))
 const GarbageLog = lazy(() => import('./pages/GarbageLog'))
 const BuyerLeague = lazy(() => import('./pages/BuyerLeague'))
+const Activity = lazy(() => import('./pages/Activity'))
 const CrewList = lazy(() => import('./pages/CrewList'))
 const Forecast = lazy(() => import('./pages/Forecast'))
 const StowagePlan = lazy(() => import('./pages/StowagePlan'))
@@ -194,6 +195,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <VesselDetails />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/activity" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Activity />
             </Suspense>
           </ProtectedRoute>
         } />

@@ -84,6 +84,9 @@ export const NAV = [
     items: [
       { to: '/alerts', label: 'Alerts', access: 'skipper', badge: 'alerts' },
       { to: '/users', label: 'Users', access: 'skipper' },
+      // Under Admin on purpose, not the dashboard. The dashboard is for the
+      // boat; this is for going back and finding out who changed something.
+      { to: '/activity', label: 'Activity', access: 'skipper' },
       { to: '/add-boat', label: 'Add Boat', access: 'owner' },
     ],
   },

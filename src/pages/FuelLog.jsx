@@ -31,7 +31,22 @@ const KINDS = [
 const fmtDate = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
 const L = (n) => (n == null ? '—' : Number(n).toLocaleString('en-GB') + ' L')
 const n0 = (n) => (n == null ? '—' : Math.round(Number(n)).toLocaleString('en-GB'))
-const blank = (kind) => ({ kind, entry_date: new Date().toISOString().slice(0, 10), litres: '', grade: '', location: '', counterparty: '', method: '', running_hours: '', consumption_l: '', recorded_by: '', notes: '' })
+const blank = (kind) => ({ kind, entry_date: new Date().toISOString().slice(0, 10), litres: '', grade: '', location: '', counterparty: '', method: '', running_hours: '', consumption_l: '', recorded_by: '', notes: '', price_per_litre: '', total_cost: '', currency: 'GBP' })
+
+// Either figure implies the other, so only one has to be typed. Storing both
+// and letting them disagree would be worse than deriving.
+const unitPrice = (r) => {
+  const p = Number(r.price_per_litre)
+  if (Number.isFinite(p) && p > 0) return p
+  const t = Number(r.total_cost), l = Number(r.litres)
+  return t > 0 && l > 0 ? t / l : null
+}
+const lineCost = (r) => {
+  const t = Number(r.total_cost)
+  if (Number.isFinite(t) && t > 0) return t
+  const p = unitPrice(r), l = Number(r.litres)
+  return p && l ? p * l : null
+}
 
 // "Smith & Sons", "Smith's", "Smiths &sons", "John a smith &sons" are one
 // supplier typed seven ways. Normalising for comparison only — what was typed
@@ -106,6 +121,27 @@ export default function FuelLog() {
     return { from, to, bunkered, used, gap: bunkered - used }
   }, [rows, burn])
 
+  // Who actually charges what. Only sterling bunkerings are compared — the
+  // log carries Egersund, Haugesund and Hanstholm, and averaging a NOK or DKK
+  // price in with pounds would be meaningless.
+  const bySupplier = useMemo(() => {
+    const m = {}
+    for (const r of rows) {
+      if (r.kind !== 'fuel' || !r.counterparty) continue
+      if ((r.currency || 'GBP') !== 'GBP') continue
+      const price = unitPrice(r)
+      const o = (m[r.counterparty] = m[r.counterparty] || { supplier: r.counterparty, litres: 0, cost: 0, priced: 0, n: 0 })
+      o.n++; o.litres += Number(r.litres || 0)
+      if (price) { o.priced += Number(r.litres || 0); o.cost += price * Number(r.litres || 0) }
+    }
+    return Object.values(m)
+      .map((o) => ({ ...o, avg: o.priced ? o.cost / o.priced : null }))
+      .sort((a, b) => (a.avg == null) - (b.avg == null) || (a.avg ?? 0) - (b.avg ?? 0))
+  }, [rows])
+
+  const pricedLitres = bySupplier.reduce((s, o) => s + o.priced, 0)
+  const allLitres = bySupplier.reduce((s, o) => s + o.litres, 0)
+
   // Suppliers that differ only by spelling.
   const supplierVariants = useMemo(() => {
     const g = {}
@@ -128,6 +164,9 @@ export default function FuelLog() {
       location: draft.location.trim() || null,
       counterparty: draft.counterparty.trim() || null,
       supplier_id: suppliers.find((s) => s.name === draft.counterparty.trim())?.id || null,
+      price_per_litre: draft.price_per_litre === '' ? null : Number(draft.price_per_litre),
+      total_cost: draft.total_cost === '' ? null : Number(draft.total_cost),
+      currency: draft.currency || 'GBP',
       method: draft.method.trim() || null,
       running_hours: draft.running_hours === '' ? null : Number(draft.running_hours),
       consumption_l: draft.consumption_l === '' ? null : Number(draft.consumption_l),
@@ -149,6 +188,8 @@ export default function FuelLog() {
       grade: r.grade || '', location: r.location || '', counterparty: r.counterparty || '',
       method: r.method || '', running_hours: r.running_hours ?? '', consumption_l: r.consumption_l ?? '',
       recorded_by: r.recorded_by || '', notes: r.notes || '',
+      price_per_litre: r.price_per_litre ?? '', total_cost: r.total_cost ?? '',
+      currency: r.currency || 'GBP',
     })
     setEditing(r.id); setAdding(true)
   }
@@ -273,6 +314,62 @@ export default function FuelLog() {
         </div>
       )}
 
+      {/* ---------- who charges what ---------- */}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>What the fuel costs</h2>
+        {pricedLitres === 0 ? (
+          <p className="muted" style={{ marginTop: 0 }}>
+            No prices entered yet. Add a price per litre or an invoice total to a bunkering and this
+            works out who actually charges what — fuel is about half the expense bill, and the log
+            can already say who supplies most of it but not whether they are the cheapest.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+              Sterling bunkerings only — the log carries Egersund, Haugesund and Hanstholm, and a
+              NOK or DKK price averaged in with pounds would mean nothing.
+              Priced so far: {n0(pricedLitres)} of {n0(allLitres)} L.
+            </p>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                    <th style={th}>Supplier</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Bunkerings</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Litres</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Priced</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Avg £/L</th>
+                    <th style={{ ...th, textAlign: 'right' }}>Spend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bySupplier.map((s) => (
+                    <tr key={s.supplier} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ ...th, fontWeight: 600 }}>{s.supplier}</td>
+                      <td style={{ ...th, textAlign: 'right' }}>{s.n}</td>
+                      <td style={{ ...th, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>{n0(s.litres)}</td>
+                      <td style={{ ...th, textAlign: 'right' }} className="muted">
+                        {s.priced ? `${Math.round((s.priced / s.litres) * 100)}%` : '—'}
+                      </td>
+                      <td style={{ ...th, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}>
+                        {s.avg ? '£' + s.avg.toFixed(3) : '—'}
+                      </td>
+                      <td style={{ ...th, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>
+                        {s.cost ? '£' + Math.round(s.cost).toLocaleString('en-GB') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted" style={{ fontSize: '0.78rem', marginBottom: 0 }}>
+              Cheapest first. Read the <strong>priced</strong> column with it — a supplier whose
+              average rests on 20% of their litres is not yet a fair comparison.
+            </p>
+          </>
+        )}
+      </div>
+
       {supplierVariants.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--brass)' }}>
           <h2 style={{ marginTop: 0 }}>One supplier, several spellings</h2>
@@ -332,6 +429,15 @@ export default function FuelLog() {
                 </select>
               </Field>
               {isDisposal && <Field label="Method"><input value={draft.method} onChange={(e) => setDraft((p) => ({ ...p, method: e.target.value }))} placeholder="Shore Facility" /></Field>}
+              {!isDisposal && <Field label="Price per litre"><input type="number" min="0" step="0.001" value={draft.price_per_litre} onChange={(e) => setDraft((p) => ({ ...p, price_per_litre: e.target.value }))} placeholder="0.685" /></Field>}
+              {!isDisposal && <Field label="Invoice total"><input type="number" min="0" step="0.01" value={draft.total_cost} onChange={(e) => setDraft((p) => ({ ...p, total_cost: e.target.value }))} placeholder="either one" /></Field>}
+              {!isDisposal && (
+                <Field label="Currency">
+                  <select value={draft.currency} onChange={(e) => setDraft((p) => ({ ...p, currency: e.target.value }))}>
+                    <option>GBP</option><option>NOK</option><option>DKK</option><option>EUR</option>
+                  </select>
+                </Field>
+              )}
               {draft.kind === 'fuel' && <Field label="Running hours"><input type="number" min="0" value={draft.running_hours} onChange={(e) => setDraft((p) => ({ ...p, running_hours: e.target.value }))} /></Field>}
               {draft.kind === 'fuel' && <Field label="Used since last bunker"><input type="number" min="0" value={draft.consumption_l} onChange={(e) => setDraft((p) => ({ ...p, consumption_l: e.target.value }))} /></Field>}
               <Field label="Recorded by"><input value={draft.recorded_by} onChange={(e) => setDraft((p) => ({ ...p, recorded_by: e.target.value }))} /></Field>
