@@ -49,7 +49,28 @@ export function useVessel() {
   return { vessel, loading }
 }
 
+// The fleet's own photo behind the plate, when one has been set. Null falls
+// back to the solid cobalt plate — that is the designed default, not a gap.
+// Signed URL rather than public: the bucket is fleet-isolated like the others.
+export function useFleetHero() {
+  const [url, setUrl] = useState(null)
+  useEffect(() => {
+    let cancel = false
+    ;(async () => {
+      const { data: me } = await supabase.from('app_users').select('fleet_id').eq('id', (await supabase.auth.getUser()).data.user?.id).maybeSingle()
+      if (!me?.fleet_id) return
+      const { data: fleet } = await supabase.from('fleets').select('hero_path').eq('id', me.fleet_id).maybeSingle()
+      if (cancel || !fleet?.hero_path) return
+      const { data } = await supabase.storage.from('fleet-photos').createSignedUrl(fleet.hero_path, 3600)
+      if (!cancel && data?.signedUrl) setUrl(data.signedUrl)
+    })()
+    return () => { cancel = true }
+  }, [])
+  return url
+}
+
 export default function VesselPlate({ vessel, loading, children }) {
+  const hero = useFleetHero()
   // Nothing to show yet — hold the space rather than flashing an empty plate.
   const reg = formatPln(vessel?.pln)
   const name = vessel?.vessel_name || ''
@@ -60,8 +81,18 @@ export default function VesselPlate({ vessel, loading, children }) {
     vessel?.home_port || null
   ].filter(Boolean).join(' · ')
 
+  // The photo sits UNDER a cobalt veil, never raw: the registration is the
+  // identity and has to stay readable over whatever the photo happens to be.
+  const heroStyle = hero
+    ? {
+        backgroundImage: `linear-gradient(90deg, color-mix(in srgb, var(--hull) 88%, transparent) 0%, color-mix(in srgb, var(--hull) 62%, transparent) 100%), url("${hero}")`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
+    : undefined
+
   return (
-    <div className="plate">
+    <div className="plate" style={heroStyle}>
       <div>
         <div className="reg">{loading ? ' ' : (reg || name.toUpperCase() || 'Vessel')}</div>
         {!loading && sub && <div className="vessel">{sub}</div>}

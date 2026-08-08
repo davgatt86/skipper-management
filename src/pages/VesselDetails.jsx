@@ -41,6 +41,38 @@ export default function VesselDetails() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  const [heroPath, setHeroPath] = useState(null)
+  const [heroBusy, setHeroBusy] = useState(false)
+
+  useEffect(() => {
+    if (!appUser?.fleet_id) return
+    supabase.from('fleets').select('hero_path').eq('id', appUser.fleet_id).maybeSingle()
+      .then(({ data }) => setHeroPath(data?.hero_path || null))
+  }, [appUser?.fleet_id])
+
+  // One photo per fleet: the old file is removed rather than left orphaned in
+  // the bucket, the way an abandoned certificate upload was.
+  async function onHero(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !appUser?.fleet_id) return
+    setHeroBusy(true); setMsg('')
+    const path = `${appUser.fleet_id}/${Date.now()}-${String(file.name).replace(/[^\w.\-]+/g, '_').slice(-60)}`
+    const up = await supabase.storage.from('fleet-photos').upload(path, file, { contentType: file.type || undefined })
+    if (up.error) { setMsg('Upload failed: ' + up.error.message); setHeroBusy(false); return }
+    const { error } = await supabase.from('fleets').update({ hero_path: path }).eq('id', appUser.fleet_id)
+    if (error) { setMsg(error.message); setHeroBusy(false); return }
+    if (heroPath) await supabase.storage.from('fleet-photos').remove([heroPath])
+    setHeroPath(path); setHeroBusy(false); setMsg('Photo saved ✓')
+  }
+
+  async function clearHero() {
+    if (!heroPath || !appUser?.fleet_id) return
+    setHeroBusy(true)
+    await supabase.from('fleets').update({ hero_path: null }).eq('id', appUser.fleet_id)
+    await supabase.storage.from('fleet-photos').remove([heroPath])
+    setHeroPath(null); setHeroBusy(false); setMsg('Photo removed — the plate is solid cobalt again.')
+  }
 
   useEffect(() => {
     let live = true
@@ -79,6 +111,29 @@ export default function VesselDetails() {
       <p style={{ color: 'var(--grey-400)', marginTop: '0.4rem' }}>
         Enter your vessel’s constants once — they’ll fill in automatically on every crew list.
       </p>
+
+      {isSkipper && (
+        <div className="card" style={{ marginTop: '1rem' }}>
+          <h2 style={{ marginTop: 0 }}>Vessel photo</h2>
+          <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+            Shown behind the registration plate on the dashboard, under a cobalt veil so the
+            lettering stays readable. Leave it empty and the plate is solid cobalt — that is the
+            designed look, not a gap.
+          </p>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label className="secondary" style={{ padding: '0.45rem 0.9rem', borderRadius: 7, cursor: heroBusy ? 'wait' : 'pointer', border: '1px solid var(--border)', display: 'inline-block' }}>
+              {heroBusy ? 'Uploading…' : heroPath ? 'Replace photo' : '📷 Choose a photo'}
+              <input type="file" accept="image/*" disabled={heroBusy} style={{ display: 'none' }} onChange={onHero} />
+            </label>
+            {heroPath && (
+              <button className="secondary" onClick={clearHero} disabled={heroBusy} style={{ fontSize: '0.85rem' }}>
+                Remove
+              </button>
+            )}
+            {heroPath && <span className="muted" style={{ fontSize: '0.8rem' }}>A photo is set.</span>}
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: '1rem' }}>
         {loading ? (
