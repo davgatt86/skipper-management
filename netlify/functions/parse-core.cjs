@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.1";
+  const VERSION = "1.3.2";
   const round2 = n => Math.round(n * 100) / 100;
   const num = s => parseFloat(String(s).replace(/,/g, ""));
 
@@ -155,6 +155,27 @@
   function canonBuyer(raw) {
     const r = String(raw || "").replace(/\s+/g, " ").trim();
     return BUYER_CANON[r.toUpperCase()] || r;
+  }
+
+  /* Vessel labels. Same failure as buyers: the label is built from whatever
+   * the note printed, so one boat can end up under two names and split its own
+   * record. "BOYJOHN INS110" — the space dropped — held 6 landings and
+   * £556,164 apart from "BOY JOHN INS110", which made a pair boat look like it
+   * landed 25 trips against its partner's 31 when both ran 31.
+   *
+   * The convention is NAME REG ("AUDACIOUS BF83"). Notes that print only the
+   * name are mapped up to the full label so they cannot drift apart later. */
+  const VESSEL_CANON = {
+    "BOYJOHN INS110": "BOY JOHN INS110",
+    "BOY JOHN": "BOY JOHN INS110",
+    "ROSEBLOOM": "ROSEBLOOM INS353",
+    "FAITHLIE": "FAITHLIE FR220",
+    "GUIDING LIGHT": "GUIDING LIGHT H90",
+    "AUDACIOUS": "AUDACIOUS BF83"
+  };
+  function canonVessel(raw) {
+    const r = String(raw || "").replace(/\s+/g, " ").trim().toUpperCase();
+    return VESSEL_CANON[r] || r;
   }
 
   /* ------------------------------------------------------------------ *
@@ -695,7 +716,11 @@
     else if (market.startsWith("P&J Johnstone")) parsed = parsePJJ(allLines, pages);
     else if (market.startsWith("Don Fishing")) parsed = parseDon(allLines);
     else return { market, rows: [], meta: {}, reconcile: buildReconcile(null, []), filename };
-    return { market, rows: parsed.rows, meta: parsed.meta, reconcile: parsed.reconcile, filename };
+    // Seven places set meta.vessel across the parsers and several bypass
+    // detectVessel, so the label is canonicalised HERE — the one point every
+    // parser's result passes through — rather than at each of them.
+    const meta = { ...parsed.meta, vessel: canonVessel(parsed.meta && parsed.meta.vessel) };
+    return { market, rows: parsed.rows, meta, reconcile: parsed.reconcile, filename };
   }
 
   // data: ArrayBuffer | Uint8Array;  pdfjsLib: a pdf.js module (browser or node)
@@ -707,7 +732,7 @@
 
   return {
     VERSION, parsePdf, parseExtracted, extractPages, itemsToLines,
-    detectMarket, detectVessel, canonSpecies, canonBuyer, mapSpeciesCode,
+    detectMarket, detectVessel, canonSpecies, canonBuyer, canonVessel, mapSpeciesCode,
     parseDon, parseHanstholm, parseJSD, parsePJJ, parseShetland, parseLHD, parseAfregning, applyFxRate
   };
 });

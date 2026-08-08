@@ -136,6 +136,17 @@ pick-list. Note `canonBuyer` is **not** applied by the P&J (JSD) or Shetland
 parsers — they use their own `cleanBuyer`/`CANON` — so a variant appearing on
 those notes needs handling separately.
 
+**Vessel labels are canonicalised in `VESSEL_CANON` / `canonVessel()`** (1.3.2).
+Applied in `parseExtracted`, the single point every parser's result passes
+through — **seven** places set `meta.vessel` and several bypass `detectVessel`,
+so patching one would have missed most of them.
+The convention is `NAME REG`. Notes printing only the name are mapped up, so
+`FAITHLIE` → `FAITHLIE FR220` and `AUDACIOUS` → `AUDACIOUS BF83`.
+**Changing this map means backfilling `sales_landings.vessel` in the same
+breath** — otherwise the parser emits the new label while history holds the
+old one, which splits the boat on the next note. That was done for FAITHLIE and
+GUIDING LIGHT in Aug 2026; every vessel label now carries its reg.
+
 Supported sales notes: Peterhead / Don (P&J Johnstone), Hanstholm Afregning
 (DKK → GBP via ECB cross-rate), Hanstholm GBP Invoice, Shetland (LHD + SSA),
 Scrabster.
