@@ -8,6 +8,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
 import { parseVesselCertFile } from '../lib/certs/parseCert'
+import { downscaleImage } from '../lib/downscale'
 
 const BUCKET = 'vessel-certs'
 const safeName = (s) => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
@@ -135,10 +136,13 @@ export default function VesselCerts() {
   // Upload the original FIRST, so a photo is kept even if the reader fails or
   // the skipper walks away — same order as the crew certificate page.
   async function onFile(e) {
-    const file = e.target.files?.[0]
+    const picked = e.target.files?.[0]
     e.target.value = ''
-    if (!file || !appUser?.fleet_id) return
+    if (!picked || !appUser?.fleet_id) return
     setError(''); setReading('uploading')
+    // Shrink first — see the note on the crew certificate page and
+    // src/lib/downscale.js. PDFs pass through untouched.
+    const file = await downscaleImage(picked)
     const path = `${appUser.fleet_id}/${Date.now()}-${safeName(file.name)}`
     const up = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined })
     if (up.error) { setError('Upload failed: ' + up.error.message); setReading(''); return }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
 import { parseCertFile } from '../lib/certs/parseCert'
+import { downscaleImage } from '../lib/downscale'
 
 const BUCKET = 'crew-certs'
 const fmtDate = d => d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—'
@@ -71,10 +72,15 @@ export function CrewCerts({ crew, canEdit }) {
   useEffect(() => { load() }, [crew.id]) // eslint-disable-line
 
   async function onFile(e) {
-    const file = e.target.files?.[0]
+    const picked = e.target.files?.[0]
     e.target.value = ''
-    if (!file) return
+    if (!picked) return
     setError(''); setBusy('reading')
+    // Shrink the photo before it goes anywhere. A phone snap of a certificate
+    // is ~4 MB; 1600px reads just as well at a tenth of that. It is also what
+    // gets sent to the reader, so the parse call is smaller too. PDFs are left
+    // alone. See src/lib/downscale.js.
+    const file = await downscaleImage(picked)
     const path = `${crew.fleet_id}/${crew.id}/${Date.now()}-${safeName(file.name)}`
     // upload original first so it's kept even if parsing fails
     const up = await supabase.storage.from(BUCKET).upload(path, file, { upsert: false, contentType: file.type || undefined })

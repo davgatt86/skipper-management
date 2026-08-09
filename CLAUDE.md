@@ -602,10 +602,26 @@ In the order agreed:
    by mistake), and Certificate of Measurement is filed by Aegir under Safety
    when it is Statutory.
 
-   **`file_path` is null for all of them.** `file_name` records what Aegir
-   holds, but the images are still only in Aegir — storing the original
-   photo/PDF needs a bucket with the same fleet isolation and is still on the
-   list.
+   **Storing the original photo IS built** — on this page and on the crew
+   certificate page, both uploading to a private bucket scoped by
+   `(storage.foldername(name))[1] = current_fleet_id()`. The earlier note that
+   it was "still on the list" was stale. What remains is data entry: 12 of 15
+   vessel certificates and 108 of 112 crew certificates are still only in Aegir.
+
+   **Photos are downscaled before upload** (`src/lib/downscale.js`). A phone
+   snap of a certificate is 3–4 MB at 4032×3024; 1600px on the long edge reads
+   just as well at about a tenth of the size — measured at 3,216 KB → 404 KB,
+   an 87% saving. That matters twice: 127 certificates at 4 MB would be ~450 MB
+   against a 1 GB allowance that also holds the settlement documents, and the
+   upload happens on a boat. PDFs pass through untouched — they are already
+   small, may hold several pages, and re-encoding would lose the text layer.
+   The same shrunk file is sent to the reader, so the parse call is smaller too.
+   Any failure returns the ORIGINAL: a large upload beats a lost certificate.
+
+   **Abandoned uploads leave an orphan.** Both pages upload the file BEFORE the
+   row is saved, deliberately, so a photo survives a failed read — and Cancel
+   cleans up after itself. Closing the page instead does not: one 4.8 MB
+   orphan sits in `crew-certs` from June. Worth a sweep if it ever adds up.
 
    **What it surfaced, which is the argument for the page existing:** five
    certificates are expired and only **one** is the test data recorded below.
