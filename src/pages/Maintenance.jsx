@@ -44,6 +44,7 @@ export default function Maintenance() {
   const [doneDraft, setDoneDraft] = useState({ done_on: today(), running_hours: '', notes: '' })
   const [busy, setBusy] = useState(false)
   const [showSuggest, setShowSuggest] = useState(false)
+  const [formError, setFormError] = useState('')
 
   // Running hours from the latest engine log — the second clock on every task.
   useEffect(() => {
@@ -77,6 +78,16 @@ export default function Maintenance() {
   async function saveTask(e) {
     e.preventDefault()
     if (!draft.name.trim()) return
+    // The table has `check (interval_days > 0)` and the same on hours. Without
+    // this a typed 0 would be QUEUED and then refused for good, turning up as a
+    // stranded failed entry in the sync strip long after he moved on. Say it
+    // here, while he is still looking at the field.
+    const bad = (v) => v !== '' && (!Number.isFinite(Number(v)) || Number(v) <= 0)
+    if (bad(draft.interval_hours) || bad(draft.interval_days)) {
+      setFormError('An interval has to be more than zero. Leave it blank to just track this one without a due date.')
+      return
+    }
+    setFormError('')
     setBusy(true)
     const payload = {
       name: draft.name.trim(),
@@ -186,9 +197,10 @@ export default function Maintenance() {
               <input value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
                      placeholder="Part number, where they're stowed…" />
             </label>
+            {formError && <p className="error" style={{ marginTop: 0 }}>{formError}</p>}
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="submit" disabled={busy || !draft.name.trim()}>{busy ? 'Saving…' : 'Save'}</button>
-              <button type="button" className="secondary" onClick={() => { setAdding(false); setEditing(null) }}>Cancel</button>
+              <button type="button" className="secondary" onClick={() => { setAdding(false); setEditing(null); setFormError('') }}>Cancel</button>
             </div>
           </form>
         </div>
