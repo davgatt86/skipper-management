@@ -21,14 +21,19 @@ const ALLOWED = new Set([
   'http://localhost',        // Android fallback / local dev
   'http://localhost:5173',   // vite dev server
   'http://localhost:4173',   // vite preview
-  // The live site. skippermanagement.co.uk is canonical; the other two are
-  // kept because a redirect does not help a cross-origin request — the browser
+  // The live site. skippermanagement.co.uk is canonical; the rest are kept
+  // because a redirect does not help a cross-origin request — the browser
   // checks the ORIGIN it started from, not where it ended up, so anything a
   // user might have bookmarked has to be listed in its own right.
   'https://skippermanagement.co.uk',
   'https://www.skippermanagement.co.uk',
   'https://skipper-management.com',
   'https://www.skipper-management.com',
+  // "skippermangement" — missing an 'a'. Bought by mistake and kept pointing
+  // at the site so a mistyped or already-bookmarked address still works.
+  // Never use it as a sender or in anything printed.
+  'https://skippermangement.co.uk',
+  'https://www.skippermangement.co.uk',
   'https://skipper-management.netlify.app',
 ])
 
