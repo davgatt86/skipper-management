@@ -679,9 +679,35 @@ Also agreed, not yet scheduled:
   page calls it on every visit.
   First run raised 8, of which two were unknown: **Elizer Tano's ENG 1**
   (due 19-09-2026) and the Portable Fire Extinguisher certificate.
-  **Nothing schedules it yet** — an expiry falling due while nobody opens the
-  app goes unnoticed. A daily cron calling the function is the obvious next
-  step. Engine-parameter and bonus-due alerts can join the same stream.
+  **Scheduling is done — `supabase/alert_cron.sql` is the record of it.**
+  That file supersedes the `cron.schedule` buried in
+  `fuel_suppliers_and_vessel_cert_upload.sql`, which had drifted: the live job
+  had gained `generate_bonus_alerts` and the migration never learned about it.
+
+      compliance-alerts-daily   0 6 * * *     compliance(60) + bonus(30)
+      market-alerts             0 */3 * * *   generate_alerts()
+
+  Market alerts had **never** been scheduled — they fired only when someone
+  opened the page, which is the same hole the compliance cron was built to
+  close. Every three hours, not daily, because a board arriving at midday is
+  worth knowing that afternoon.
+
+  **Why these work from cron when a normal function would not:** all three are
+  SECURITY DEFINER and take `fleet_id` from each source row rather than from
+  `current_fleet_id()`. Cron has no `auth.uid()`, so anything scoped the usual
+  way would quietly do nothing — and "no rows inserted" looks exactly like
+  "nothing was due". Verified across fleets: market alerts span 7.
+
+  **Zero is the right answer for eleven of the twelve fleets.** Only Audacious
+  carries any expiry data at all (18 passports, 86 crew certs, 14 vessel certs,
+  16 contracts with a bonus). Check the source data before treating a quiet
+  fleet as a scoping bug.
+  `cron.job_run_details` is the thing to read — a job that exists but never
+  fires is indistinguishable from nothing being due.
+
+  **Still missing: generating an alert is not telling anyone.** The rows land
+  in `alerts` and sit there until somebody opens the app. Closing that needs
+  email or push and is not built.
 - **Familiarisation** — 42 items in Aegir. The list itself has not been seen
   yet; look at a crewman's page (read-only) before building. Permission given.
 - **Dedicated pair-team fish sales analysis.** Sandy and Gavin tow one net
