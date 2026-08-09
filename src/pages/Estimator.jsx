@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import AppShell from "../AppShell";
 import PageHeader from "../PageHeader";
 import * as XLSX from "xlsx";
+import { fnUrl } from "../lib/apiBase";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "../supabaseClient";
@@ -470,7 +471,7 @@ export default function Estimator(){
       const prompt=which==="pd"
         ?`Peterhead fish market sheet with three price columns LOW, HIGH, AVE (GBP). For EVERY priced row, extract the species, the grade (A1..A5 or U9), and ALL THREE prices. Respond with ONLY a JSON object, no explanation, no markdown. For each grade output the AVE under the grade key, plus two extra keys "<grade> (low)" = LOW and "<grade> (high)" = HIGH. Example {"Cod":{"A1":6.85,"A1 (low)":6.05,"A1 (high)":8.48}}. Skip rows where all three cells are blank. NAMING RULES (use these exact species names): the row "Lythe/Pollack" -> "Lythe"; the row "Megrims" -> "Megrim"; the row "Round Whiting" -> add to "Whiting" as keys "A4r"=AVE, "A4r (low)"=LOW, "A4r (high)"=HIGH; for squid use ONLY the "Squid Trawl" row, name it "Squid" and put its prices under grade "U9" (ignore Fresh/Rockall squid rows). SPECIAL CASE Haddock A4 has three rows Chipper/Metro/Round: also output keys "A4c"=Chipper AVE, "A4m"=Metro HIGH, "A4ma"=Metro AVE, "A4"=Chipper AVE (keep the (low)/(high) keys for A1..A3 etc as normal).`
         :`Hanstholm Danish auction sheet. Extract species + sort number (0,1,2,3,4,5,9) and the Avg. price (the second price on each row; the first is Max). Respond with ONLY a JSON object, no explanation, no markdown. Shape: {"Species":{"1":5.17}}. Sorts are strings. Keep names like "Atlantic Cod","European Hake".`;
-      const resp=await fetch("/.netlify/functions/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({media:b64,mediaType:mt,prompt})});
+      const resp=await fetch(fnUrl("parse"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({media:b64,mediaType:mt,prompt})});
       const data=await resp.json();
       if(!resp.ok){throw new Error((data&&data.error)||`server ${resp.status}`);}
       let t=data.text||"";
@@ -509,7 +510,7 @@ export default function Estimator(){
   async function aiBoatRows({b64,mediaType,text}){
     const prompt=`This is a fishing boat catch tally / landings report. It may be printed OR HANDWRITTEN, and laid out in any style (one boat, several boats side by side, or a simple handwritten column of species with grades and box counts). Extract ONE row per individual size/grade line. For each, give: species (CAPS), the size/grade label exactly as printed, number of boxes, and weight in kg. RULES: Skip species sub-total rows (e.g. "TOTAL", "GH TOTAL", "TOTAL HAD"), the grand total, blank rows, discards/bait/mix rows, and any "haul/discards" section. If the sheet shows several boats with a combined column, use the COMBINED total boxes & kg (not one single boat). If a line has weight but no box count, set boxes to 0. If a line has a box count but NO weight (common on handwritten tallies), set wt to 0 — do NOT invent a weight. Grade labels may be written as a number+name like "4 METRO", "3 CHIPPER", "5 ROBBY", "2 GOOD SEED" — keep the full label as printed. Numbers may use a comma as the decimal separator (e.g. "687,85" means 687.85) and a dot or space as a thousands separator (e.g. "2.534,83" or "2 534,83" means 2534.83) — convert to a plain number. Respond with ONLY a JSON array, no explanation, no markdown: [{"sp":"COD","size":"Sprag","boxes":19,"wt":687.85}].`;
     const body=b64?{media:b64,mediaType,prompt}:{text,prompt};
-    const resp=await fetch("/.netlify/functions/parse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const resp=await fetch(fnUrl("parse"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const data=await resp.json();
     if(!resp.ok){throw new Error((data&&data.error)||`server ${resp.status}`);}
     let t=data.text||"";

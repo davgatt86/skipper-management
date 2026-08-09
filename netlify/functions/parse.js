@@ -1,9 +1,11 @@
+import CorsModule from './cors.cjs'
+const { corsHeaders, preflight } = CorsModule
 // netlify/functions/parse.js
 // Proxies parse requests to the Anthropic API using a server-side key.
 // The browser never sees ANTHROPIC_API_KEY. Set it in Netlify:
 //   Site settings -> Environment variables -> ANTHROPIC_API_KEY
 
-export const handler = async (event) => {
+const handleRequest = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
@@ -67,3 +69,13 @@ export const handler = async (event) => {
     return { statusCode: 502, body: JSON.stringify({ error: String(e.message || e) }) };
   }
 };
+
+// CORS is only needed by the native shell — see netlify/functions/cors.cjs.
+// Wrapping once means every return path carries the headers, including the
+// error returns, which is where a hand-edited version would have missed them.
+export const handler = async (event) => {
+  const pre = preflight(event)
+  if (pre) return pre
+  const res = await handleRequest(event)
+  return { ...res, headers: { ...(res.headers || {}), ...corsHeaders(event) } }
+}

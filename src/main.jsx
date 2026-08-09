@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { Capacitor } from '@capacitor/core'
+import { App as CapApp } from '@capacitor/app'
 import App from './App.jsx'
 
 // Fonts are bundled, not fetched. A boat on patchy signal still gets the
@@ -25,9 +27,23 @@ initTheme()   // set Day/Dark/Auto before first paint (no white flash at night)
 // the page will not load in the first place — see public/sw.js. Registered
 // after load so it never competes with the first paint, and failure is silent:
 // a browser without service workers still gets a working online app.
-if ('serviceWorker' in navigator) {
+//
+// Skipped in the native app: there the whole build is already ON the device, so
+// the worker would be a second cache of files that cannot go missing, sitting
+// between the app and the network for no gain.
+if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
+// Android's hardware back button does nothing by default in a WebView — it
+// closes the app, mid-form, without warning. Make it walk back through the
+// app's own history, and only leave from the top.
+if (Capacitor.isNativePlatform()) {
+  CapApp.addListener('backButton', ({ canGoBack }) => {
+    if (canGoBack) window.history.back()
+    else CapApp.exitApp()
   })
 }
 

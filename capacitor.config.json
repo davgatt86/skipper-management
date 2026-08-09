@@ -1,0 +1,17 @@
+{
+  "appId": "uk.co.skippermanagement.app",
+  "appName": "Skipper",
+  "webDir": "dist",
+  "backgroundColor": "#0A1D26",
+  "android": {
+    "backgroundColor": "#0A1D26"
+  },
+  "ios": {
+    "backgroundColor": "#0A1D26",
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

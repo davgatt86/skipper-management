@@ -17,6 +17,9 @@
 // ============================================================================
 
 import { createClient } from '@supabase/supabase-js'
+import CorsModule from './cors.cjs'
+const { corsHeaders, preflight } = CorsModule
+
 
 const json = (statusCode, obj) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) })
 // 'engineer' is the tightest of these: the logs and nothing else, enforced by
@@ -29,7 +32,7 @@ function makeTempPassword() {
   return `Crew-${a}-${b}`
 }
 
-export const handler = async (event) => {
+const handleRequest = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'POST only' })
 
   const URL = process.env.SUPABASE_URL
@@ -129,4 +132,14 @@ export const handler = async (event) => {
   }
 
   return json(422, { error: 'unknown action' })
+}
+
+// CORS is only needed by the native shell — see netlify/functions/cors.cjs.
+// Wrapping once means every return path carries the headers, including the
+// error returns, which is where a hand-edited version would have missed them.
+export const handler = async (event) => {
+  const pre = preflight(event)
+  if (pre) return pre
+  const res = await handleRequest(event)
+  return { ...res, headers: { ...(res.headers || {}), ...corsHeaders(event) } }
 }

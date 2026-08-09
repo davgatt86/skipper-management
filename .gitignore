@@ -144,3 +144,12 @@ vite.config.ts.timestamp-*
 
 # Local Claude Code settings — machine-specific, not for a public repo
 .claude/settings.local.json
+
+# Capacitor: the native projects ARE committed (they carry permissions, signing
+# and native config), but the web build copied into them is not — it is a
+# duplicate of dist/, which is already ignored, and it changes on every build.
+# Regenerate with `npm run cap:sync`.
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+ios/App/App/public/
+ios/App/App/capacitor.config.json

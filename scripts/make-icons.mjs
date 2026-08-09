@@ -77,9 +77,10 @@ function insideRounded(x, y, size, r) {
   return dx * dx + dy * dy <= r * r
 }
 
-function render(size, { maskable = false } = {}) {
+// Raw RGBA, so the splash can composite the mark over its own ground rather
+// than re-deriving the geometry.
+function renderRaw(size, r) {
   const SS = 4                                   // supersample for clean edges
-  const r = maskable ? 0 : (3 / 32) * size       // maskable icons are full-bleed
   const buf = Buffer.alloc(size * size * 4)
   for (let py = 0; py < size; py++) {
     for (let px = 0; px < size; px++) {
@@ -103,6 +104,37 @@ function render(size, { maskable = false } = {}) {
       buf[i + 3] = Math.round(255 * cov)
     }
   }
+  return buf
+}
+
+function render(size, { maskable = false } = {}) {
+  // Maskable / native icons are full-bleed: the platform applies its own mask,
+  // and a rounded corner baked in here shows as a dark notch inside theirs.
+  const r = maskable ? 0 : (3 / 32) * size
+  return png(size, size, renderRaw(size, r))
+}
+
+/* The splash screen: the mark small and centred on the ink ground, rather than
+ * the icon blown up. Capacitor centre-crops this to every device aspect ratio,
+ * so everything that matters has to sit well inside the middle. */
+function renderSplash(size) {
+  const buf = Buffer.alloc(size * size * 4)
+  const INK = [0x0a, 0x1d, 0x26]                 // --ink, matches the config
+  for (let i = 0; i < size * size; i++) {
+    buf[i * 4] = INK[0]; buf[i * 4 + 1] = INK[1]; buf[i * 4 + 2] = INK[2]; buf[i * 4 + 3] = 255
+  }
+  const markSize = Math.round(size * 0.18)
+  const mark = renderRaw(markSize, (markSize * 3) / 32)
+  const off = Math.round((size - markSize) / 2)
+  for (let y = 0; y < markSize; y++) {
+    for (let x = 0; x < markSize; x++) {
+      const s = (y * markSize + x) * 4
+      const a = mark[s + 3] / 255
+      if (!a) continue
+      const d = ((y + off) * size + (x + off)) * 4
+      for (let c = 0; c < 3; c++) buf[d + c] = Math.round(buf[d + c] * (1 - a) + mark[s + c] * a)
+    }
+  }
   return png(size, size, buf)
 }
 
@@ -115,5 +147,32 @@ const jobs = [
 for (const [name, size, opts] of jobs) {
   const out = render(size, opts)
   writeFileSync(join(OUT, name), out)
-  console.log(`${name.padEnd(24)} ${size}x${size}  ${out.length} bytes`)
+  console.log(`${name.padEnd(28)} ${size}x${size}  ${out.length} bytes`)
+}
+
+// Sources for @capacitor/assets, which fans these out to every density Android
+// and iOS ask for. Full-bleed on purpose: both platforms apply their own mask,
+// and a rounded corner baked in here shows as a dark notch inside theirs.
+const RES = join(dirname(fileURLToPath(import.meta.url)), '..', 'resources')
+mkdirSync(RES, { recursive: true })
+for (const [name, size] of [['icon-only.png', 1024], ['icon-foreground.png', 1024]]) {
+  const out = render(size, { maskable: true })
+  writeFileSync(join(RES, name), out)
+  console.log(`resources/${name.padEnd(17)} ${size}x${size}  ${out.length} bytes`)
+}
+{
+  // A flat background layer for Android's adaptive icon, which moves the
+  // foreground about independently of it.
+  const size = 1024
+  const buf = Buffer.alloc(size * size * 4)
+  for (let i = 0; i < size * size; i++) {
+    buf[i * 4] = HULL[0]; buf[i * 4 + 1] = HULL[1]; buf[i * 4 + 2] = HULL[2]; buf[i * 4 + 3] = 255
+  }
+  writeFileSync(join(RES, 'icon-background.png'), png(size, size, buf))
+  console.log(`resources/icon-background.png  ${size}x${size}`)
+}
+for (const [name, size] of [['splash.png', 2732], ['splash-dark.png', 2732]]) {
+  const out = renderSplash(size)
+  writeFileSync(join(RES, name), out)
+  console.log(`resources/${name.padEnd(17)} ${size}x${size}  ${out.length} bytes`)
 }

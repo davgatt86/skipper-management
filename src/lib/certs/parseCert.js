@@ -40,12 +40,13 @@ const isoOrNull = (v) => {
 }
 
 import { applyCertExpiryRule } from './certRules'
+import { fnUrl } from '../apiBase'
 
 // file -> { cert_type, cert_number, holder_name, issuer, issue_date, expiry_date, expiry_source }
 export async function parseCertFile(file) {
   const media = await fileToB64(file)
   const mediaType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
-  const resp = await fetch('/.netlify/functions/parse', {
+  const resp = await fetch(fnUrl('parse'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ media, mediaType, prompt: PROMPT }),
@@ -95,7 +96,7 @@ Rules:
 export async function parseVesselCertFile(file) {
   const media = await fileToB64(file)
   const mediaType = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'image/jpeg')
-  const resp = await fetch('/.netlify/functions/parse', {
+  const resp = await fetch(fnUrl('parse'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ media, mediaType, prompt: VESSEL_PROMPT }),

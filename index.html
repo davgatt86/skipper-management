@@ -2,7 +2,10 @@
 <html lang="en-GB">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) report real
+         numbers on a notched iPhone. Without it the CSS below is all zeroes and
+         the sidebar tucks under the status bar in the native app. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#1749A8" />
     <meta name="description" content="Sales notes, quota position and crew shares for your vessels — from the wheelhouse or the pier." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

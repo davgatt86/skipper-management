@@ -874,17 +874,69 @@ Icons: `scripts/make-icons.mjs` rasterises the favicon's own geometry to PNG
 with nothing but `zlib`. iOS will not use an SVG for a home-screen icon — with
 no PNG the app icon is a screenshot of the page.
 
-### Still to do for the phone app
+## The native app (Capacitor)
 
-Agreed Aug 2026: **private distribution** (Apple Business Manager custom app or
-TestFlight — not a public listing).
+Added Aug 2026. Capacitor 8 wraps the existing Vite build — the same `dist/`
+the website serves — so no page was rewritten. `android/` and `ios/` are
+committed, because they carry permissions, signing and native config; the web
+build copied into them is gitignored, since it is a duplicate of `dist/`.
 
-- **Capacitor** is the wrapper of choice — it wraps the existing Vite build, so
-  the pages are reused rather than rewritten in React Native.
-- **iOS builds need a Mac with Xcode.** David is on Windows 11, so this needs
-  either a Mac or a cloud build service. Android has no such constraint.
-- The PWA is now installable, so the app can go on a home screen today with no
-  Apple involvement at all.
+    npm run cap:sync       build + copy into both native projects
+    npm run cap:android    build + open Android Studio
+    npm run cap:ios        build + open Xcode  (Mac only)
+
+App id `uk.co.skippermanagement.app`, name **Skipper**.
+
+**iOS generated fine on Windows** — Capacitor 8 uses Swift Package Manager, not
+CocoaPods, so `cap add ios` needs no Mac. **Building and signing still does.**
+Android needs Android Studio (a JDK and the SDK; neither is installed here).
+
+### What had to change for a native shell, and why
+
+- **The five `/.netlify/functions/…` calls were same-origin assumptions.** In
+  the shell the page is served from the device — `capacitor://localhost` on
+  iOS, `https://localhost` on Android — so a relative path resolves to the
+  phone and fails, quietly, in a feature the skipper uses occasionally.
+  `fnUrl()` in `src/lib/apiBase.js` makes them absolute when native. Supabase
+  was never affected: its client is built with an absolute URL.
+- **Those functions then need CORS**, which they had no reason to have while
+  everything was same-origin. `netlify/functions/cors.cjs` is an **allow-list**,
+  not `*` — they run with the service-role key, and there is no reason to let
+  any page on the internet put a request to them. Each handler is wrapped once
+  so every return path carries the headers, including the error returns.
+  `Vary: Origin` matters: without it a CDN can serve one origin's response to
+  another, which looks like CORS failing at random.
+- **The service worker is skipped when native.** The whole build is already on
+  the device, so it would be a second cache of files that cannot go missing.
+- **Android's back button** closed the app mid-form by default. It now walks
+  back through history and only exits from the top.
+- **Safe-area insets** in `body`, plus `viewport-fit=cover` in the meta
+  viewport — without the latter `env(safe-area-inset-*)` reports zero and the
+  sidebar tucks under the notch. Also `overscroll-behavior-y: none`, so a pull
+  down on a log form cannot trigger a reload.
+
+### Icons
+
+`npm run icons` writes both the PWA icons in `public/` and the 1024px sources
+in `resources/`, all from the favicon's own geometry. Then
+`npx @capacitor/assets generate` fans those out to every density.
+
+**That tool is not tidy — check `git status` after running it.** It overwrote
+`public/manifest.webmanifest` with `../icons/*.webp` paths that point above the
+web root and are declared `image/png`, and it deleted `public/favicon.svg`. Both
+were restored by hand. It also leaves a stray `icons/` directory at the repo
+root that nothing serves.
+
+### Still to do
+
+Agreed Aug 2026: **private distribution** — Apple Business Manager custom app
+or TestFlight, not a public listing.
+
+- Neither platform has been **built or run on a device** — no JDK, no Android
+  SDK, no Mac here. Everything above is verified by compile and by inspection
+  of the generated projects, not by a running app.
+- Signing: an Apple Developer account (£79/yr) and an Android keystore.
+- The PWA remains the zero-cost route and is installable today.
 ### Sessions at sea
 
 **An expired access token used to read as a signed-out user.** When the token

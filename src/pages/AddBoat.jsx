@@ -2,6 +2,7 @@ import { useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
+import { fnUrl } from '../lib/apiBase'
 import { useAuth } from '../AuthContext'
 
 const labelStyle = { display: 'block', marginBottom: '1.1rem' }
@@ -38,7 +39,7 @@ export default function AddBoat() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { setBusy(false); return setError('Your session expired — sign in again.') }
-      const res = await fetch('/.netlify/functions/create-fleet', {
+      const res = await fetch(fnUrl('create-fleet'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
