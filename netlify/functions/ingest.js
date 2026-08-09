@@ -299,9 +299,33 @@ export const handler = async (event) => {
           landingId = ins.id
         }
 
+        /* Apply this fleet's buyer merges.
+         *
+         * Buyer names come off the sales note as typed, so one firm turns up
+         * several ways and splits its own record. Merging the history fixes
+         * what is there; without this the NEXT note reintroduces the variant
+         * and the work is undone — which is what the aliases column was added
+         * for and nothing was reading.
+         *
+         * Matched case- and space-insensitively, because that is how the
+         * variants differ ("G & J JACK" vs "G&J Jack Seafoods Ltd"). Applied
+         * per fleet: two boats may know the same firm by different names, and
+         * one fleet's merge is not evidence about another's. */
+        const { data: flags } = await supabase
+          .from('sales_buyer_flags')
+          .select('canonical_name, aliases')
+          .eq('fleet_id', sender.fleet_id)
+          .not('canonical_name', 'is', null)
+        const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        const aliasMap = new Map()
+        for (const f of flags || []) {
+          for (const a of f.aliases || []) aliasMap.set(squash(a), f.canonical_name)
+        }
+        const canonBuyer = (b) => aliasMap.get(squash(b)) || b || ''
+
         const payload = res.rows.map(r => ({
           fleet_id: sender.fleet_id, landing_id: landingId,
-          buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
+          buyer: canonBuyer(r.buyer), species: r.species || '', species_canon: r.species_canon || r.species || '',
           presentation: r.presentation || '', grade: r.grade || '', boxes: r.boxes || 0, box_weight: r.box_weight || 0,
           weight_kg: r.total_weight || 0,
           price_per_kg: dkk ? 0 : (r.price_per_kg || 0), price_per_box: dkk ? 0 : (r.price_per_box || 0),

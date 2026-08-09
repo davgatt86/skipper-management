@@ -191,6 +191,17 @@ export default function Sales() {
     setBusy(true); setUploadLog([]); setError('')
     const log = []
     const byKey = new Map(landings.map(l => [l.dedup_key, l.id]))
+
+    // This fleet's buyer merges, loaded once for the whole upload. Matched
+    // case- and space-insensitively because that is how the variants differ
+    // ("G & J JACK" vs "G&J Jack Seafoods Ltd"). RLS scopes the read to the
+    // fleet, so no filter is needed here.
+    const { data: buyerFlags } = await supabase
+      .from('sales_buyer_flags').select('canonical_name, aliases').not('canonical_name', 'is', null)
+    const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const aliasMap = new Map()
+    for (const bf of buyerFlags || []) for (const a of bf.aliases || []) aliasMap.set(squash(a), bf.canonical_name)
+    const canonBuyer = (b) => aliasMap.get(squash(b)) || b || ''
     for (const f of files) {
       try {
         let res = await parseSalesPdf(f)
@@ -235,8 +246,11 @@ export default function Sales() {
           if (e1) throw e1
           landingId = ins.id; byKey.set(key, landingId)
         }
+        // Same buyer merge as the email ingest — see netlify/functions/ingest.js.
+        // Both paths write sales_rows, so a merge applied on only one of them
+        // gets undone the first time a note is uploaded the other way.
         const payload = res.rows.map(r => ({
-          landing_id: landingId, buyer: r.buyer || '', species: r.species || '', species_canon: r.species_canon || r.species || '',
+          landing_id: landingId, buyer: canonBuyer(r.buyer), species: r.species || '', species_canon: r.species_canon || r.species || '',
           presentation: r.presentation || '', grade: r.grade || '', boxes: r.boxes || 0, box_weight: r.box_weight || 0,
           weight_kg: r.total_weight || 0, price_per_kg: r.price_per_kg || 0, price_per_box: r.price_per_box || 0,
           value: r.total_value || 0, msc: !!r.msc,
