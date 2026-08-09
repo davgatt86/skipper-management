@@ -43,7 +43,10 @@ const CrewCertsRegister = lazy(() => import('./pages/CrewCertsRegister'))
 const Settlements = lazy(() => import('./pages/Settlements'))
 
 function ProtectedRoute({ children }) {
-  const { session, appUser, loading } = useAuth()
+  // `signedIn`, not `session`: an expired token that cannot be refreshed at sea
+  // reports no session, but the man has not signed out and must keep working.
+  // See the note in AuthContext.
+  const { signedIn, appUser, loading } = useAuth()
   const { pathname } = useLocation()
   if (loading) {
     return (
@@ -58,7 +61,7 @@ function ProtectedRoute({ children }) {
       </div>
     )
   }
-  if (!session) {
+  if (!signedIn) {
     return <Navigate to="/login" replace />
   }
 
@@ -98,9 +101,9 @@ function RoleHome() {
 }
 
 function PublicOnly({ children }) {
-  const { session, loading } = useAuth()
+  const { signedIn, loading } = useAuth()
   if (loading) return null
-  if (session) return <Navigate to="/" replace />
+  if (signedIn) return <Navigate to="/" replace />
   return children
 }
 

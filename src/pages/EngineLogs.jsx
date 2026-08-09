@@ -6,7 +6,7 @@ import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
-import { keepsLogs } from '../lib/roles'
+import { keepsLogs, isSkipper } from '../lib/roles'
 import { useOfflineTable } from '../lib/offline/useOfflineTable'
 import { readCache, cacheTable, isOnline } from '../lib/offline/queue'
 import SyncStatus from '../components/SyncStatus'
@@ -128,7 +128,7 @@ export default function EngineLogs() {
   const {
     rows: logs, loading, error, setError, online, pending, failed,
     insert, update, remove: removeRow, sync,
-  } = useOfflineTable('engine_logs', { orderBy: 'log_date', ascending: false })
+  } = useOfflineTable('engine_logs', { orderBy: 'log_date', ascending: false, fleetId: appUser?.fleet_id })
 
   const [draft, setDraft] = useState(null)     // null = form closed
   const [editingId, setEditingId] = useState(null)
@@ -216,7 +216,7 @@ export default function EngineLogs() {
     }
 
     const base = {
-      fleet_id: appUser.fleet_id,
+      fleet_id: appUser?.fleet_id,
       log_date: draft.log_date,
       running_hours: running,
       readings,
@@ -245,21 +245,19 @@ export default function EngineLogs() {
 
   return (
     <AppShell>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <h1 style={{ marginBottom: 0 }}>Engine Log</h1>
-          <p className="muted" style={{ marginTop: '0.2rem', fontSize: '0.85rem' }}>
-            Also: <Link to="/crew-list">Crew List</Link> · <Link to="/crew-certs">Crew Certificates</Link>
-          </p>
-        </div>
-        <Link to="/">← Dashboard</Link>
-      </header>
+      {/* This page still carried a "← Dashboard" link and cross-links to Crew
+          List and Crew Certificates from before the sidebar shell. The sidebar
+          is the way back now, and those two links point an engineer at pages he
+          cannot open. */}
+      <PageHeader title="Engine Log" sub="Readings, running hours and trends" />
 
       <SyncStatus online={online} pending={pending} failed={failed} onChange={sync} />
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
-      {missingVessel && (
+      {/* Only the skipper can set vessel details, and only he can open that
+          page — telling an engineer to go and fix it sends him to a wall. */}
+      {missingVessel && isSkipper(appUser) && (
         <div className="card" style={{ borderColor: 'var(--amber)' }}>
           <p style={{ margin: 0 }}>Set your vessel details so they print on the engine-log PDF. <Link to="/vessel">Open Vessel page →</Link></p>
         </div>

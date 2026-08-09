@@ -65,7 +65,7 @@ export default function FuelLog() {
   const {
     rows, loading, error, setError, online, pending, failed,
     insert, update, remove: removeRow, sync,
-  } = useOfflineTable('vessel_fuel_log', { orderBy: 'entry_date', ascending: false })
+  } = useOfflineTable('vessel_fuel_log', { orderBy: 'entry_date', ascending: false, fleetId: appUser?.fleet_id })
 
   const [settlements, setSettlements] = useState([])
   const [tab, setTab] = useState('fuel')
@@ -181,7 +181,7 @@ export default function FuelLog() {
       updated_at: new Date().toISOString(),
     }
     if (editing) await update(editing, payload)
-    else await insert({ ...payload, fleet_id: appUser?.fleet_id })
+    else await insert(payload)
     setBusy(false)
     setDraft(blank(tab)); setAdding(false); setEditing(null)
   }

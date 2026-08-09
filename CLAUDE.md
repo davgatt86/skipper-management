@@ -885,10 +885,59 @@ TestFlight — not a public listing).
   either a Mac or a cloud build service. Android has no such constraint.
 - The PWA is now installable, so the app can go on a home screen today with no
   Apple involvement at all.
-- **Not yet handled: a session that expires while offline.** `persistSession` is
-  on, so a live session survives, but a token that cannot be refreshed at sea
-  will sign him out and the outbox cannot flush until he signs in again. The
-  entries are safe on the device; he just cannot send them.
+### Sessions at sea
+
+**An expired access token used to read as a signed-out user.** When the token
+expires and the refresh cannot reach the server, auth-js returns
+`session: null` — but it deliberately leaves storage alone, because a dropped
+connection is not a refused token (`isAuthRetryableFetchError` guards the
+`_removeSession` call). Treating that null as signed out sent a man an hour into
+a trip to a login page that needs the network he has not got, with his outbox
+stranded behind it.
+
+`hasStoredSession()` / `sessionHeldInStorage()` in `supabaseClient.js` are the
+test: a refresh token still in storage means signed in but unable to prove it.
+`signOut()` clears it, so a genuine sign-out is not confused with a lost signal.
+`AuthContext` exposes **`signedIn`, and routing must use that, not `session`.**
+`test-session.mjs` covers the decision, corrupt storage included.
+
+**The `app_users` query needs the network too**, so opening the app offline left
+`appUser` null — `keepsLogs(null)` is false, so the engineer could not write the
+very entries the outbox exists to hold, and any row he did make would have had
+no `fleet_id` and been refused by RLS on sync. The record is now cached in
+localStorage. **It is for rendering only** — anyone can edit their own
+localStorage and claim to be a skipper; it changes which menu items they see and
+nothing else, because RLS decides what data exists.
+
+`fleet_id` is stamped by `useOfflineTable.insert()` and its absence is a refusal
+rather than a queued write, so the problem surfaces while the man is still
+looking at the form instead of hours later.
+
+**Boot from cache, never wait on the network.** `getSession()` has to attempt a
+refresh when the token has expired, and auth-js retries with backoff —
+**measured at 20 seconds** against an unreachable server, and the banner
+confirming the state took between 45 and 104 seconds. Blocking first paint on
+that meant 20 seconds of "Loading…" every time. `presumed` covers the gap:
+routing trusts storage immediately, while the "not reaching the office" banner
+waits for a confirmed failure so it never flashes on a normal load.
+**Measured after: 113 ms to a usable app** against the same dead server.
+
+**`navigator.onLine` means "attached to a network", not "the office answers".**
+A boat on wifi with a dead backhaul looks online and answers nothing. Every
+outbox attempt and every table read is bounded at 15 s and a timeout is treated
+as a dropped connection — without that, one hung request would wedge the outbox
+for the whole session, since `flushing` refuses to start a second flush.
+
+Verified against a build pointed at an unreachable Supabase, which fails exactly
+as being at sea does: not bounced to login, sidebar correct, identity from
+cache, log page usable, and the entries still on the device. Rebuild afterwards
+and check the test URL has not leaked into `dist`.
+
+Also fixed on the way past: `EngineLogs.jsx` still carried a `← Dashboard` link
+and cross-links to Crew List and Crew Certificates from before the sidebar
+shell — pages an engineer cannot open. It now uses `PageHeader` like everything
+else, and the "set your vessel details" prompt is skipper-only for the same
+reason.
 
 ## Outstanding work
 

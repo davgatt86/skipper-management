@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
 import { discard, flush, retryFailed, queueItems } from '../lib/offline/queue'
+import { useAuth } from '../AuthContext'
 import { useEffect, useState } from 'react'
 
 /* Says plainly whether what you just typed has reached the office.
@@ -14,6 +15,7 @@ import { useEffect, useState } from 'react'
  * to try again once the cause is fixed, or to throw it away deliberately.
  */
 export default function SyncStatus({ online, pending, failed, onChange }) {
+  const { held } = useAuth()
   const [failedItems, setFailedItems] = useState([])
   const [open, setOpen] = useState(false)
 
@@ -24,7 +26,7 @@ export default function SyncStatus({ online, pending, failed, onChange }) {
     return () => { live = false }
   }, [failed])
 
-  if (online && !pending && !failed) return null
+  if (online && !held && !pending && !failed) return null
 
   const wrap = {
     borderColor: failed ? 'var(--rust)' : 'var(--brass)',
@@ -35,12 +37,16 @@ export default function SyncStatus({ online, pending, failed, onChange }) {
     <div className="card no-print" style={wrap}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
         <strong style={{ fontSize: '0.95rem' }}>
-          {!online ? 'No signal — working offline' : pending ? 'Sending…' : 'Some entries were refused'}
+          {!online ? 'No signal — working offline'
+            : held ? 'Signed in, but not reaching the office'
+            : pending ? 'Sending…'
+            : 'Some entries were refused'}
         </strong>
         <span className="muted" style={{ fontSize: '0.85rem' }}>
           {pending > 0 && `${pending} ${pending === 1 ? 'entry' : 'entries'} saved on this device, not yet sent. `}
           {!online && 'They will go as soon as there is a connection — you can keep working.'}
-          {online && pending > 0 && 'Leave the app open a moment.'}
+          {online && held && 'Your sign-in needs renewing and that needs a connection. Keep logging — nothing is lost, and it will catch up by itself.'}
+          {online && !held && pending > 0 && 'Leave the app open a moment.'}
         </span>
         {online && pending > 0 && (
           <button

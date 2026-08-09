@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../supabaseClient'
 import {
   applyPending, cacheTable, enqueue, flush, isOnline, newId,
-  queueFor, readCache, subscribe, queueCounts,
-} from './queue'
+  queueFor, readCache, subscribe, queueCounts, withTimeout,
+} from './queue.js'
 
 /* One hook for a table that has to work with no signal.
  *
@@ -19,7 +19,7 @@ import {
  * to vanish on save.
  */
 export function useOfflineTable(table, opts = {}) {
-  const { orderBy = null, ascending = false, select = '*' } = opts
+  const { orderBy = null, ascending = false, select = '*', fleetId = null } = opts
 
   const [serverRows, setServerRows] = useState([])
   const [pendingItems, setPendingItems] = useState([])
@@ -42,7 +42,10 @@ export function useOfflineTable(table, opts = {}) {
     if (isOnline()) {
       let q = supabase.from(table).select(select)
       if (orderBy) q = q.order(orderBy, { ascending })
-      const { data, error: e } = await q
+      // Bounded for the same reason the outbox is: "online" can mean attached
+      // to a network that answers nothing, and an unbounded read would leave
+      // the page on "Loading…" indefinitely.
+      const { data, error: e } = await withTimeout(q).catch((err) => ({ data: null, error: err }))
       if (e) {
         // A failed read with a cache behind it is not worth an error banner —
         // the page still has rows. Only shout if there is nothing to show.
@@ -80,13 +83,24 @@ export function useOfflineTable(table, opts = {}) {
 
   const rows = useMemo(() => applyPending(serverRows, pendingItems), [serverRows, pendingItems])
 
+  /* fleet_id is stamped here rather than by each page, and its absence is a
+   * refusal rather than a queued write. Every one of these tables carries a
+   * RESTRICTIVE fleet_isolation policy, so a row without it is certain to be
+   * rejected on sync — and the rejection would arrive hours later, at sea,
+   * about an entry the man has long since moved on from. Better to say no now,
+   * while he is still looking at the form. */
   const insert = useCallback(async (payload) => {
+    const fid = payload.fleet_id || fleetId
+    if (!fid) {
+      setError('Cannot save: this device does not know which boat you are on. Sign in again while you have a signal.')
+      return null
+    }
     const id = newId()
-    await enqueue({ table, op: 'insert', id, payload })
+    await enqueue({ table, op: 'insert', id, payload: { ...payload, fleet_id: fid } })
     await refreshQueue()
     sync()
     return id
-  }, [table, refreshQueue, sync])
+  }, [table, refreshQueue, sync, fleetId])
 
   const update = useCallback(async (id, payload) => {
     await enqueue({ table, op: 'update', id, payload })

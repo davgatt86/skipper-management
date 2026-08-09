@@ -40,7 +40,7 @@ export default function GarbageLog() {
   const {
     rows, loading, error, setError, online, pending, failed,
     insert, update, remove: removeRow, reload, sync,
-  } = useOfflineTable('garbage_log', { orderBy: 'entry_date', ascending: false })
+  } = useOfflineTable('garbage_log', { orderBy: 'entry_date', ascending: false, fleetId: appUser?.fleet_id })
 
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -84,7 +84,7 @@ export default function GarbageLog() {
     // No error to check: the write is durable on this device the moment it is
     // queued, and the outbox reports anything the server later refuses.
     if (editing) await update(editing, payload)
-    else await insert({ ...payload, fleet_id: appUser?.fleet_id })
+    else await insert(payload)
     setBusy(false)
     setDraft(blank()); setAdding(false); setEditing(null)
   }

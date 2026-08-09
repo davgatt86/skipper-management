@@ -120,6 +120,24 @@ export function applyPending(rows, items) {
 /* Replay the outbox. Returns { sent, failed, stopped } — `stopped` means the
  * network went away mid-flush and the rest are still queued, which is a normal
  * outcome at sea and not an error. */
+/* `navigator.onLine` only means "attached to a network", not "the office is
+ * reachable" — a boat on wifi with a dead backhaul, or in cellular signal with
+ * no data, looks online and answers nothing. A request in that state can hang
+ * for minutes, and because `flushing` refuses to start a second flush while one
+ * is running, ONE hung request would wedge the outbox for the rest of the
+ * session. So every attempt is bounded; a timeout is treated exactly like a
+ * dropped connection, which it is. */
+const ATTEMPT_MS = 15000
+export function withTimeout(promise, ms = ATTEMPT_MS) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms)
+    Promise.resolve(promise).then(
+      (v) => { clearTimeout(timer); resolve(v) },
+      (e) => { clearTimeout(timer); reject(e) }
+    )
+  })
+}
+
 let flushing = null
 export function flush(supabase) {
   if (flushing) return flushing            // never two flushes at once (rule 2)
@@ -148,10 +166,11 @@ async function flushOnce(supabase) {
       let error = null
       try {
         const t = supabase.from(item.table)
-        const res =
-          item.op === 'insert' ? await t.insert({ ...item.payload, id: item.id })
-          : item.op === 'update' ? await t.update(item.payload).eq('id', item.id)
-          : await t.delete().eq('id', item.id)
+        const call =
+          item.op === 'insert' ? t.insert({ ...item.payload, id: item.id })
+          : item.op === 'update' ? t.update(item.payload).eq('id', item.id)
+          : t.delete().eq('id', item.id)
+        const res = await withTimeout(call)
         error = res.error
       } catch {
         // Thrown, not answered: the connection dropped. Keep it and stop —
