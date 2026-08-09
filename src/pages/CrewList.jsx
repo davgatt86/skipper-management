@@ -7,6 +7,7 @@ import CrewTabs from '../CrewTabs'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { keepsCrewRecords } from '../lib/roles'
 
 // Section 3 of the crew page: the crew list.
 //
@@ -48,7 +49,7 @@ const REQUIRED = [
 
 export default function CrewList() {
   const { appUser } = useAuth()
-  const canEdit = appUser?.role === 'skipper'
+  const canEdit = keepsCrewRecords(appUser)
 
   const [vessel, setVessel] = useState(null)
   const [crew, setCrew] = useState([])

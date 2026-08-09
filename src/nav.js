@@ -4,16 +4,24 @@
 // exactly the same role gating — the grouping changes how they are found, not
 // who can reach them. Do not add a route here without checking what guards it.
 //
-//   all        — any signed-in user (except an engineer, see below)
+//   all        — any signed-in user (except an officer, see below)
 //   fleetTools — skipper or viewer
-//   engineer   — skipper or engineer: the logs kept by whoever is aboard
+//   officer    — skipper or officer: the logs, maintenance and crew papers
 //   skipper    — skipper only
 //   owner      — fleet owner only
 //
-// An engineer sees ONLY items marked `engineer`, and nothing else — not even
-// the ones marked `all`. That mirrors the allow-list in
-// `supabase/engineer_role.sql`, which is where the boundary actually lives:
+// An officer sees ONLY items marked `officer`, and nothing else — not even the
+// ones marked `all`. That mirrors the allow-list in
+// `supabase/officer_role.sql`, which is where the boundary actually lives:
 // hiding a menu entry hides nothing from anyone holding a session token.
+//
+// `access` may be an ARRAY when an item belongs to two audiences that do not
+// nest — Crew Status is for everybody AND for officers, and neither level
+// contains the other. Written as `['all', 'officer']`.
+
+// Extension included on purpose: node resolves ESM specifiers literally, so
+// './lib/roles' would break `node test-roles.mjs`. Vite is happy either way.
+import { isOfficer } from './lib/roles.js'
 
 export const NAV = [
   {
@@ -54,11 +62,14 @@ export const NAV = [
     // so keep them in step.
     label: 'Crew',
     items: [
-      { to: '/crew', label: 'Crew Status', access: 'all', end: true },
+      // An officer adds a man and files his tickets, so these three are his as
+      // well. Contracted Crew is NOT — that is contracts, bonuses and pay,
+      // which he is denied at the database.
+      { to: '/crew', label: 'Crew Status', access: ['all', 'officer'], end: true },
       { to: '/contracted-crew', label: 'Contracted Crew', access: 'all' },
-      { to: '/crew-list', label: 'Crew List', access: 'skipper' },
+      { to: '/crew-list', label: 'Crew List', access: 'officer' },
       { to: '/rota', label: 'Rota Planner', access: 'fleetTools' },
-      { to: '/crew-certs', label: 'Certificates', access: 'skipper' },
+      { to: '/crew-certs', label: 'Certificates', access: 'officer' },
       { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },
     ],
   },
@@ -80,17 +91,17 @@ export const NAV = [
       // The vessel's own papers. Crew tickets live under Crew — keeping the
       // two apart is the point, since they expire on different clocks and
       // are chased from different places.
-      // The engineer's front page: how long since each book was written in and
-      // what is falling due. First in the group so it is first in his menu.
-      { to: '/engine-room', label: 'Engine Room', access: 'engineer' },
-      { to: '/maintenance', label: 'Maintenance', access: 'engineer' },
+      // The officer's front page: how long since each book was written in and
+      // what is falling due.
+      { to: '/engine-room', label: 'Engine Room', access: 'officer' },
+      { to: '/maintenance', label: 'Maintenance', access: 'officer' },
       // Read-only to an engineer — he needs to see when the liferaft service
       // or the extinguisher certificate runs out; renewing them is not his job.
-      { to: '/vessel-certs', label: 'Vessel Certificates', access: 'engineer' },
+      { to: '/vessel-certs', label: 'Vessel Certificates', access: 'officer' },
       { to: '/stowage', label: 'Stowage Plan', access: 'skipper' },
-      { to: '/engine-logs', label: 'Engine Logs', access: 'engineer' },
-      { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'engineer' },
-      { to: '/garbage-log', label: 'Garbage Record Book', access: 'engineer' },
+      { to: '/engine-logs', label: 'Engine Logs', access: 'officer' },
+      { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'officer' },
+      { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },
     ],
   },
   {
@@ -107,16 +118,21 @@ export const NAV = [
 ]
 
 export function canSee(access, appUser) {
+  const list = Array.isArray(access) ? access : [access]
+  // Deliberately first, and deliberately an allow-list: an officer sees the
+  // pages marked `officer` and nothing else, including nothing marked 'all'.
+  // Adding a nav item therefore hides it from officers by default, which is the
+  // safe direction to fail in.
+  if (isOfficer(appUser)) return list.includes('officer')
+  return list.some((a) => canSeeOne(a, appUser))
+}
+
+function canSeeOne(access, appUser) {
   const role = appUser?.role
-  // Deliberately first, and deliberately an allow-list: an engineer sees the
-  // four log pages and nothing else, including nothing marked 'all'. Adding a
-  // nav item therefore hides it from engineers by default, which is the safe
-  // direction to fail in.
-  if (role === 'engineer') return access === 'engineer'
   switch (access) {
     case 'all': return true
     case 'fleetTools': return ['skipper', 'viewer'].includes(role)
-    case 'engineer': return role === 'skipper'
+    case 'officer': return role === 'skipper'
     case 'skipper': return role === 'skipper'
     case 'owner': return !!appUser?.is_owner
     default: return false

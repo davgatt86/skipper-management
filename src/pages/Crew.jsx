@@ -4,6 +4,7 @@ import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { keepsCrewRecords } from '../lib/roles'
 import { CrewCerts, CertAlerts } from './CrewCerts'
 import { CrewDetails } from './CrewDetails'
 
@@ -55,7 +56,7 @@ export default function Crew() {
   const [openCerts, setOpenCerts] = useState(null)
   const [openDetails, setOpenDetails] = useState(null)
 
-  const canEdit = appUser?.role === 'skipper'
+  const canEdit = keepsCrewRecords(appUser)
 
   async function loadAll() {
     setLoading(true)

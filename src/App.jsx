@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import AppShell from './AppShell'
 import { canSee, accessForPath } from './nav'
-import { isEngineer } from './lib/roles'
+import { isOfficer } from './lib/roles'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
@@ -82,7 +82,7 @@ function ProtectedRoute({ children }) {
   // skipper-only; RoleHome is what enforces that.
   const access = pathname === '/' ? null : accessForPath(pathname)
   const permitted = pathname === '/' ? true
-    : access === null ? !isEngineer(appUser)
+    : access === null ? !isOfficer(appUser)
     : canSee(access, appUser)
   if (appUser && !permitted) {
     return (
@@ -105,7 +105,7 @@ function ProtectedRoute({ children }) {
 // the log he signed in to keep. Also catches "*", which redirects here.
 function RoleHome() {
   const { appUser } = useAuth()
-  if (isEngineer(appUser)) return <Navigate to="/engine-room" replace />
+  if (isOfficer(appUser)) return <Navigate to="/engine-room" replace />
   return <Dashboard />
 }
 

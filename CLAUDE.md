@@ -773,6 +773,79 @@ Both of the corrections that made this work came from David, not from the
 data: the towage line and the 26-05/27-05 pairing. The arithmetic could show
 something was wrong but not what.
 
+## The `officer` role (Aug 2026) — supersedes `engineer`
+
+`supabase/officer_role.sql`. **Re-run that file, not `engineer_role.sql`, after
+adding any table.** Same allow-list machinery, wider list.
+
+An officer is anyone aboard who keeps records — engineer, mate. He gets the
+logs, the maintenance record and **the crew paperwork**: adding a man, filing
+his tickets, producing and saving a crew list. He is denied everything to do
+with money — sales, settlements, quota, contracts, payments, bonuses, and the
+audit log. That is the whole reason the role exists rather than handing out a
+skipper login.
+
+    writes   engine_logs · vessel_fuel_log · garbage_log · fuel_suppliers
+             maintenance_tasks · maintenance_events
+             crew · crew_certificates · crew_lists · crew_list_members
+    reads    vessel_certificates · vessel_details · fleets · settings · app_users
+    storage  crew-certs (read/write) · vessel-certs (read) — everything else shut
+    denied   61 tables
+
+`is_officer()` accepts the legacy `'engineer'` value, so an unmigrated login
+keeps working; the two live logins were migrated. `is_engineer()` is dropped.
+
+**A trap worth remembering.** The deny loop only touches tables OUTSIDE the
+allow-list, so it cannot clear a denial from a table that has just JOINED it.
+`crew_certificates`, `crew_lists` and `crew_list_members` kept their old
+`engineer_no_access` policy and officers would have been shut out of crew certs
+and crew lists with everything else looking right. It was caught only because
+the file drops the old helper **without CASCADE** — Postgres refused and named
+the three offending policies. Keep that DROP plain.
+
+Verified by probe: sales, settlements, quota, payments, contracts and audit_log
+all read **0**; crew 19, crew certs 112, crew lists 1, vessel certs 15 all read;
+add crew, save crew list, add list member and delete crew all **succeed**;
+vessel-certificate update affects **0 rows** and a sales insert is blocked.
+
+`nav.js` gained **array access** (`['all', 'officer']`) because Crew Status
+belongs to two audiences that do not nest. `CrewTabs.jsx` no longer keeps its
+own copy of the sections and the role rules — it derives both from `NAV`, since
+the copy had already drifted.
+
+### Vessel certificate categories
+
+"Safety" was a bundle of seven — liferafts, lifejackets, fire suppression,
+extinguishers, medical stores and a Certificate of Measurement — which is no
+more use than no grouping at all. Split into the categories the trade uses:
+**Statutory · LSA · FFA · Radio · Pollution · Medical · Machinery · Insurance ·
+Equipment · Safety (legacy) · Other**. The 15 Audacious certificates were
+refiled: Statutory 6, LSA 3, FFA 2, Insurance 2, Medical 1, Pollution 1.
+Certificate of Measurement moved to Statutory — Aegir's misfiling, previously
+only noted in `notes`; TBT-Free Antifouling moved to Pollution (AFS Convention).
+
+### The digest email
+
+`netlify/functions/alert-digest.js`, scheduled in `netlify.toml` at 07:00 UTC —
+an hour after the 06:00 generation cron, so it reports that morning's alerts.
+
+**Generating an alert was never the same as telling anyone**, and the rows sat
+in `alerts` until somebody opened the app. This closes that.
+
+- **Expiries only** — passports, crew tickets, vessel certificates, bonuses due.
+  Market price alerts are deliberately excluded: they run every three hours and
+  would turn a useful note into noise, and a digest people stop reading is worse
+  than no digest.
+- **Nothing is sent when there is nothing to say.** A daily "all clear" trains
+  the reader to ignore the sender.
+- Alerts already read or dismissed are skipped, so acting on one stops it.
+- Skippers only. An officer keeps the logs, but chasing a certificate is the
+  skipper's job.
+
+**It will not send until `RESEND_API_KEY` is set in Netlify** — it exits
+cleanly and reports "not set" rather than failing. `DIGEST_FROM` optionally
+overrides the sender, which must be a verified domain on the provider.
+
 ## Roles, and where the boundary actually is
 
 **`nav.js` is presentation. RLS is the boundary.** The Supabase anon key ships

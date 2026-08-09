@@ -7,6 +7,7 @@ import CrewTabs from '../CrewTabs'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { keepsCrewRecords } from '../lib/roles'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
 import { CERT_CATEGORIES, suggestCategory } from './CrewCerts'
 
@@ -126,7 +127,7 @@ function Categoriser({ rows, onDone, setError }) {
 
 export default function CrewCertsRegister() {
   const { appUser } = useAuth()
-  const canEdit = appUser?.role === 'skipper'
+  const canEdit = keepsCrewRecords(appUser)
   const [rows, setRows] = useState([])
   const [crew, setCrew] = useState([])
   const [loading, setLoading] = useState(true)

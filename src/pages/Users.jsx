@@ -8,7 +8,7 @@ import { useAuth } from '../AuthContext'
 const labelStyle = { display: 'block', marginBottom: '1rem' }
 const capStyle = { marginBottom: '0.3rem', fontWeight: 600 }
 const hintStyle = { fontSize: '0.8rem', color: 'var(--grey-400)', marginTop: '0.25rem' }
-const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer', engineer: 'Engineer' }
+const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer', officer: 'Officer', engineer: 'Officer' }
 
 export default function Users() {
   const { appUser } = useAuth()
@@ -153,7 +153,7 @@ export default function Users() {
               <div style={capStyle}>Role</div>
               <select value={role} onChange={e => setRole(e.target.value)}>
                 <option value="crew">Crew (sees own data)</option>
-                <option value="engineer">Engineer (engine, fuel and garbage logs only)</option>
+                <option value="officer">Officer — engineer or mate (logs, maintenance, crew papers. No money.)</option>
                 <option value="office">Office (full except settings/crew)</option>
                 <option value="viewer">Viewer (read-only)</option>
               </select>

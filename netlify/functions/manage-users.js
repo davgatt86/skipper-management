@@ -8,7 +8,7 @@
 // Security: the caller must be signed in AND role='skipper'. Their fleet is
 // read from the DATABASE by their verified user id — never from the request —
 // so a skipper can only ever see and change users inside their own boat. New
-// users are limited to office / crew / viewer / engineer (a skipper can't mint
+// users are limited to office / crew / viewer / officer (a skipper can't mint
 // another skipper or an owner). Deletes are blocked for yourself, the owner, and
 // any skipper, so the boat can't be left without its skipper or its host.
 //
@@ -22,9 +22,11 @@ const { corsHeaders, preflight } = CorsModule
 
 
 const json = (statusCode, obj) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) })
-// 'engineer' is the tightest of these: the logs and nothing else, enforced by
-// RLS in supabase/engineer_role.sql rather than by this list.
-const CREATABLE_ROLES = ['office', 'crew', 'viewer', 'engineer']
+// 'officer' is an engineer or a mate: the logs, the maintenance record and the
+// crew papers, but none of the money. Enforced by RLS in
+// supabase/officer_role.sql rather than by this list. 'engineer' is the old
+// name for the same role — still honoured on existing logins, no longer minted.
+const CREATABLE_ROLES = ['office', 'crew', 'viewer', 'officer']
 
 function makeTempPassword() {
   const a = Math.random().toString(16).slice(2, 6)
@@ -100,10 +102,10 @@ const handleRequest = async (event) => {
       const { error: ae } = await svc.from('app_users').insert({
         id: newUid, email, display_name: displayName, role, fleet_id: fleet, is_owner: false,
         // MUST be null for every role except 'crew'. `check_crew_id_role` on
-        // app_users enforces exactly that, and linking an engineer to his crew
+        // app_users enforces exactly that, and linking an officer to his crew
         // record was tried and rejected. He does not need it: the link only
-        // exists so `crew_read_all` can show a crewman his own row, and an
-        // engineer has no crew page to show it on.
+        // exists so `crew_read_all` can show a crewman his OWN row, and an
+        // officer reads the whole crew list anyway.
         crew_id: role === 'crew' ? crewId : null,
       })
       if (ae) throw new Error(ae.message)

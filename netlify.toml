@@ -7,6 +7,13 @@
   node_bundler = "esbuild"
   external_node_modules = ["pdfjs-dist"]
 
+# The daily digest. 07:00 UTC, an hour after the 06:00 generation cron in
+# supabase/alert_cron.sql, so it reports the alerts raised that same morning
+# rather than yesterday's. Sends nothing when there is nothing outstanding —
+# a daily "all clear" trains the reader to ignore the sender.
+[functions."alert-digest"]
+  schedule = "0 7 * * *"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

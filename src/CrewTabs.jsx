@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import { NAV, canSee } from './nav'
 
 // The five crew sections, shown on every crew page.
 //
@@ -9,31 +10,23 @@ import { useAuth } from './AuthContext'
 // contracted-crew workflow (contract runs → boxes land → month closes →
 // bonus falls due) that used to be five separate tiles.
 //
-// Role gating matches nav.js exactly — the grouping changes how these are
-// found, not who can reach them.
-const SECTIONS = [
-  { to: '/crew', label: 'Crew status', access: 'all', end: true },
-  { to: '/contracted-crew', label: 'Contracted crew', access: 'all' },
-  { to: '/crew-list', label: 'Crew list', access: 'skipper' },
-  { to: '/rota', label: 'Rota planner', access: 'fleetTools' },
-  { to: '/crew-certs', label: 'Certificates', access: 'skipper' },
-  // A sixth, added Aug 2026. The agreed design was five sections;
-  // familiarisation was a separate item on the list and it belongs with the
-  // crew rather than anywhere else.
-  { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },
-]
-
-function allowed(access, appUser) {
-  const role = appUser?.role
-  if (access === 'all') return true
-  if (access === 'fleetTools') return ['skipper', 'viewer'].includes(role)
-  if (access === 'skipper') return role === 'skipper'
-  return false
-}
+// TAKEN FROM nav.js RATHER THAN REPEATED HERE.
+//
+// This used to carry its own copy of the six sections and its own copy of the
+// role rules, with a comment saying the two had to be kept in step. They were
+// not: adding the officer role updated the sidebar and left this strip showing
+// a mate links he cannot open. Deriving it means there is only one list and one
+// rule, so they cannot disagree again.
+const CREW_GROUP = NAV.find((g) => g.label === 'Crew')
+const SECTIONS = (CREW_GROUP ? CREW_GROUP.items : []).map((i) => ({
+  ...i,
+  // The sidebar shouts its labels; a tab strip reads better in sentence case.
+  label: i.label.replace(/\b([A-Z])(\w*)\b/g, (m, a, b, off) => (off === 0 ? m : a.toLowerCase() + b)),
+}))
 
 export default function CrewTabs() {
   const { appUser } = useAuth()
-  const visible = SECTIONS.filter((s) => allowed(s.access, appUser))
+  const visible = SECTIONS.filter((s) => canSee(s.access, appUser))
   if (visible.length < 2) return null
 
   return (

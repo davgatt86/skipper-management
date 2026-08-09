@@ -23,7 +23,32 @@ const safeName = (s) => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80
 
 // Aegir's own three, kept so the two records can be compared, plus a bucket
 // for anything that fits none of them.
-export const VESSEL_CERT_CATEGORIES = ['Statutory', 'Insurance', 'Safety', 'Equipment', 'Other']
+/* The categories a vessel's papers are actually filed under at sea.
+ *
+ * "Safety" was doing far too much: liferafts, lifejackets, fire suppression,
+ * extinguishers, medical stores and a Certificate of Measurement all sat in one
+ * bundle of seven, which is no more use than no grouping at all — a surveyor
+ * asking for the LSA file does not want the medical stores certificate.
+ *
+ * Split along the lines the trade already uses. LSA and FFA are the two that
+ * matter most because they are inspected together and expire on their own
+ * service cycles.
+ *
+ * `Safety` is kept at the end so certificates filed under it before the split
+ * still land somewhere sensible rather than falling into Other. */
+export const VESSEL_CERT_CATEGORIES = [
+  'Statutory',      // registry, tonnage, fishing vessel certificate, ILO 188
+  'LSA',            // life-saving: liferafts, lifejackets, EPIRB, flares
+  'FFA',            // fire-fighting: extinguishers, fixed systems
+  'Radio',          // GMDSS, radio licence
+  'Pollution',      // MARPOL, anti-fouling, oil record
+  'Medical',        // ships medical stores, first aid
+  'Machinery',      // engine, gearbox, shaft, crane and lifting gear
+  'Insurance',
+  'Equipment',
+  'Safety',         // legacy bucket — kept so old filings still show
+  'Other',
+]
 
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
 const blank = () => ({ cert_type: '', category: 'Statutory', cert_number: '', issuer: '', issue_date: '', expiry_date: '', notes: '', file_path: null, file_name: null })
