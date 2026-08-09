@@ -3,6 +3,7 @@ import { NavLink, Link } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import ThemeToggle from './ThemeToggle'
 import { navFor } from './nav'
+import MovedBanner from './components/MovedBanner'
 
 // Sidebar shell: a persistent menu on the left, content on the right.
 // Below 900px the sidebar becomes a drawer so the wheelhouse phone keeps the
@@ -73,7 +74,13 @@ export default function AppShell({ children, badges = {}, maxWidth }) {
         </div>
       </aside>
 
-      <main className="shell-main" style={maxWidth ? { maxWidth } : undefined}>{children}</main>
+      <main className="shell-main" style={maxWidth ? { maxWidth } : undefined}>
+        {/* Renders nothing unless the user is still on the old netlify.app
+            address, so it costs the moved-over majority nothing and cannot
+            become permanent furniture. */}
+        <MovedBanner />
+        {children}
+      </main>
     </div>
   )
 }

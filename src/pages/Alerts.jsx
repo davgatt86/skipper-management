@@ -25,7 +25,16 @@ const COMPLIANCE_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert']
 const isCompliance = (a) => COMPLIANCE_TYPES.includes(a.type)
 const LINK_OF = { crew_passport:'/crew', crew_cert:'/crew-certs', vessel_cert:'/vessel-certs' }
 const DEFAULTS = { daily_jump_pct:15, four_week_pct:25, pd_dk_gap_pct:20, own_spike_pct:20,
-  enable_daily:true, enable_four_week:true, enable_pd_dk:true, enable_own:true }
+  enable_daily:true, enable_four_week:true, enable_pd_dk:true, enable_own:true,
+  // How long a book may go unwritten before it is worth saying so, and how far
+  // ahead an expiry is worth flagging. These must match the defaults in
+  // supabase/activity_alerts.sql and generate_compliance_alerts — the SQL
+  // coalesces to the same numbers, so a fleet that has never opened this panel
+  // behaves identically to one that has and changed nothing.
+  activity_enabled:true,
+  activity_engine_days:2, activity_fuel_days:10,
+  activity_garbage_days:10, activity_crewlist_days:10,
+  expiry_lead_days:60 }
 
 export default function Alerts(){
   const { appUser } = useAuth()
@@ -115,6 +124,25 @@ export default function Alerts(){
           <Row on={cfg.enable_four_week} set={v=>setN('enable_four_week',v)} label="Above 4-week average" suffix="%" val={cfg.four_week_pct} onVal={v=>setN('four_week_pct',v)} hint="price running hot" />
           <Row on={cfg.enable_pd_dk} set={v=>setN('enable_pd_dk',v)} label="Peterhead ↔ Denmark gap" suffix="%" val={cfg.pd_dk_gap_pct} onVal={v=>setN('pd_dk_gap_pct',v)} hint="where-to-land signal" />
           <Row on={cfg.enable_own} set={v=>setN('enable_own',v)} label="Your own sales spike" suffix="%" val={cfg.own_spike_pct} onVal={v=>setN('own_spike_pct',v)} hint="last landing vs your recent average" />
+
+          <h3 style={{ marginBottom:'0.1rem' }}>How long before a log is chased</h3>
+          <p className="muted" style={{ fontSize:'0.82rem', marginTop:0 }}>
+            Checked once a day at 06:00. A book is only ever chased if it has been used at least once —
+            nothing here will nag you about a log you have never started. Untick the first row to switch
+            the lot off.
+          </p>
+          <Row on={cfg.activity_enabled} set={v=>setN('activity_enabled',v)} label="Chase quiet logs" suffix="" val={cfg.activity_engine_days} onVal={v=>setN('activity_engine_days',v)} hint="engine log — days without an entry" />
+          <Row on={cfg.activity_enabled} set={v=>setN('activity_enabled',v)} label="Bunkering" suffix="days" val={cfg.activity_fuel_days} onVal={v=>setN('activity_fuel_days',v)} hint="since the last fuel entry" />
+          <Row on={cfg.activity_enabled} set={v=>setN('activity_enabled',v)} label="Garbage Record Book" suffix="days" val={cfg.activity_garbage_days} onVal={v=>setN('activity_garbage_days',v)} hint="MARPOL Annex V — inspectable" />
+          <Row on={cfg.activity_enabled} set={v=>setN('activity_enabled',v)} label="Crew list" suffix="days" val={cfg.activity_crewlist_days} onVal={v=>setN('activity_crewlist_days',v)} hint="since one was last saved" />
+
+          <h3 style={{ marginBottom:'0.1rem' }}>How far ahead an expiry is flagged</h3>
+          <p className="muted" style={{ fontSize:'0.82rem', marginTop:0 }}>
+            Passports, crew tickets and vessel certificates. Longer gives more warning and a longer list;
+            shorter is quieter but leaves less time to act. Going-home bonuses have their own 30-day lead.
+          </p>
+          <Row on={true} set={()=>{}} label="Warn me before expiry" suffix="days" val={cfg.expiry_lead_days} onVal={v=>setN('expiry_lead_days',v)} hint="60 is the usual" />
+
           <div style={{ marginTop:'0.7rem', display:'flex', gap:'0.6rem', alignItems:'center' }}>
             <button onClick={saveCfg} disabled={saving}>{saving?'Saving…':'Save thresholds'}</button>
             {note && <span className="muted" style={{ fontSize:'0.82rem' }}>{note}</span>}
