@@ -6,6 +6,7 @@ import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { keepsLogs } from '../lib/roles'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
 // ------------------------------------------------------------------
@@ -106,7 +107,7 @@ const blankEntry = () => ({ log_date: today(), readings: {}, notes: '', logged_b
 
 export default function EngineLogs() {
   const { appUser } = useAuth()
-  const canEdit = appUser?.role === 'skipper'
+  const canEdit = keepsLogs(appUser)
 
   const [vessel, setVessel] = useState(null)
   const [view, setView] = useState('entries')            // 'entries' | 'chart'

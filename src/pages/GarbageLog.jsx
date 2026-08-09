@@ -3,6 +3,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { keepsLogs } from '../lib/roles'
 
 // MARPOL Annex V Garbage Record Book.
 //
@@ -30,7 +31,7 @@ const blank = () => ({
 
 export default function GarbageLog() {
   const { appUser } = useAuth()
-  const canEdit = appUser?.role === 'skipper'
+  const canEdit = keepsLogs(appUser)
 
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)

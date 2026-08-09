@@ -3,6 +3,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { keepsLogs } from '../lib/roles'
 
 // Fuel and oil log, plus the fuel loop.
 //
@@ -55,7 +56,7 @@ const normalise = (s) => (s || '').toLowerCase().replace(/[^a-z]/g, '')
 
 export default function FuelLog() {
   const { appUser } = useAuth()
-  const canEdit = appUser?.role === 'skipper'
+  const canEdit = keepsLogs(appUser)
 
   const [rows, setRows] = useState([])
   const [settlements, setSettlements] = useState([])

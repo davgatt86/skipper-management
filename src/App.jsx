@@ -1,6 +1,9 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
+import AppShell from './AppShell'
+import { canSee, accessForPath } from './nav'
+import { isEngineer } from './lib/roles'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
@@ -40,7 +43,8 @@ const CrewCertsRegister = lazy(() => import('./pages/CrewCertsRegister'))
 const Settlements = lazy(() => import('./pages/Settlements'))
 
 function ProtectedRoute({ children }) {
-  const { session, loading } = useAuth()
+  const { session, appUser, loading } = useAuth()
+  const { pathname } = useLocation()
   if (loading) {
     return (
       <div style={{
@@ -57,7 +61,40 @@ function ProtectedRoute({ children }) {
   if (!session) {
     return <Navigate to="/login" replace />
   }
+
+  // Route-level gating, driven off the same table that builds the menu. This is
+  // convenience, not security — RLS in supabase/engineer_role.sql is what
+  // actually stops an engineer reading the sales tables. What this prevents is
+  // a page of empty cards and a stack of console errors when someone follows an
+  // old link or types a URL.
+  //
+  // A route the menu does not list returns null: allowed for everyone except an
+  // engineer, so an unlisted page fails towards the tighter role.
+  const access = accessForPath(pathname)
+  const permitted = access === null ? !isEngineer(appUser) : canSee(access, appUser)
+  if (appUser && !permitted) {
+    return (
+      <AppShell>
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Not available on your login</h2>
+          <p className="muted" style={{ marginBottom: 0 }}>
+            Your account does not have access to this page. If you think it should, ask your skipper.
+          </p>
+        </div>
+      </AppShell>
+    )
+  }
   return children
+}
+
+// The dashboard is built entirely from sales, quota and settlement figures, all
+// of which an engineer is denied at the database. Rendering it for him would
+// give a page of empty cards and a "no data" for every panel, so send him to
+// the log he signed in to keep. Also catches "*", which redirects here.
+function RoleHome() {
+  const { appUser } = useAuth()
+  if (isEngineer(appUser)) return <Navigate to="/engine-logs" replace />
+  return <Dashboard />
 }
 
 function PublicOnly({ children }) {
@@ -78,7 +115,7 @@ export default function App() {
         } />
         <Route path="/" element={
           <ProtectedRoute>
-            <Dashboard />
+            <RoleHome />
           </ProtectedRoute>
         } />
         <Route path="/crew" element={

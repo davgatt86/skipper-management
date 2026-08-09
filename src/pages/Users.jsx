@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext'
 const labelStyle = { display: 'block', marginBottom: '1rem' }
 const capStyle = { marginBottom: '0.3rem', fontWeight: 600 }
 const hintStyle = { fontSize: '0.8rem', color: 'var(--grey-400)', marginTop: '0.25rem' }
-const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer' }
+const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer', engineer: 'Engineer' }
 
 export default function Users() {
   const { appUser } = useAuth()
@@ -77,7 +77,7 @@ export default function Users() {
       const data = await api({
         action: 'create',
         email: email.trim(), displayName: displayName.trim(), role,
-        crewId: role === 'crew' && crewId ? crewId : undefined,
+        crewId: ['crew', 'engineer'].includes(role) && crewId ? crewId : undefined,
         tempPassword: tempPassword.trim() || undefined,
       })
       setResult(data)
@@ -151,11 +151,12 @@ export default function Users() {
               <div style={capStyle}>Role</div>
               <select value={role} onChange={e => setRole(e.target.value)}>
                 <option value="crew">Crew (sees own data)</option>
+                <option value="engineer">Engineer (engine, fuel and garbage logs only)</option>
                 <option value="office">Office (full except settings/crew)</option>
                 <option value="viewer">Viewer (read-only)</option>
               </select>
             </label>
-            {role === 'crew' && crew.length > 0 && (
+            {['crew', 'engineer'].includes(role) && crew.length > 0 && (
               <label style={labelStyle}>
                 <div style={capStyle}>Link to crew record (optional)</div>
                 <select value={crewId} onChange={e => setCrewId(e.target.value)}>

@@ -8,9 +8,9 @@
 // Security: the caller must be signed in AND role='skipper'. Their fleet is
 // read from the DATABASE by their verified user id — never from the request —
 // so a skipper can only ever see and change users inside their own boat. New
-// users are limited to office / crew / viewer (a skipper can't mint another
-// skipper or an owner). Deletes are blocked for yourself, the owner, and any
-// skipper, so the boat can't be left without its skipper or its host.
+// users are limited to office / crew / viewer / engineer (a skipper can't mint
+// another skipper or an owner). Deletes are blocked for yourself, the owner, and
+// any skipper, so the boat can't be left without its skipper or its host.
 //
 // Env (already set): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 // Called same-origin with the signed-in user's access token in Authorization.
@@ -19,7 +19,9 @@
 import { createClient } from '@supabase/supabase-js'
 
 const json = (statusCode, obj) => ({ statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) })
-const CREATABLE_ROLES = ['office', 'crew', 'viewer']
+// 'engineer' is the tightest of these: the logs and nothing else, enforced by
+// RLS in supabase/engineer_role.sql rather than by this list.
+const CREATABLE_ROLES = ['office', 'crew', 'viewer', 'engineer']
 
 function makeTempPassword() {
   const a = Math.random().toString(16).slice(2, 6)
@@ -89,7 +91,10 @@ export const handler = async (event) => {
       newUid = created.user.id
       const { error: ae } = await svc.from('app_users').insert({
         id: newUid, email, display_name: displayName, role, fleet_id: fleet, is_owner: false,
-        crew_id: role === 'crew' ? crewId : null,
+        // An engineer is a crewman too, so let him be linked to his crew record
+        // — that link is what lets crew_read_all show him his OWN row and no
+        // one else's (`id = current_user_crew_id()`).
+        crew_id: ['crew', 'engineer'].includes(role) ? crewId : null,
       })
       if (ae) throw new Error(ae.message)
       return json(200, {
