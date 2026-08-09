@@ -73,12 +73,13 @@ export default function Users() {
     e.preventDefault()
     setError(''); setResult(null)
     if (!email.trim() || !displayName.trim()) return setError('Email and display name are required.')
+    if (role === 'crew' && !crewId) return setError('Pick which crewman this login belongs to. A Crew login has to be tied to a crew record.')
     setBusy(true)
     try {
       const data = await api({
         action: 'create',
         email: email.trim(), displayName: displayName.trim(), role,
-        crewId: ['crew', 'engineer'].includes(role) && crewId ? crewId : undefined,
+        crewId: role === 'crew' && crewId ? crewId : undefined,
         tempPassword: tempPassword.trim() || undefined,
       })
       setResult(data)
@@ -157,14 +158,27 @@ export default function Users() {
                 <option value="viewer">Viewer (read-only)</option>
               </select>
             </label>
-            {['crew', 'engineer'].includes(role) && crew.length > 0 && (
+            {/* NOT optional, whatever the old label said. `check_crew_id_role`
+                on app_users requires a crew_id for role 'crew' and forbids one
+                for every other role, so leaving this blank used to fail with a
+                raw constraint name in front of the skipper. */}
+            {role === 'crew' && (
               <label style={labelStyle}>
-                <div style={capStyle}>Link to crew record (optional)</div>
-                <select value={crewId} onChange={e => setCrewId(e.target.value)}>
-                  <option value="">— not linked —</option>
-                  {crew.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
-                <div style={hintStyle}>Links this login to a crewman so they see their own bonus.</div>
+                <div style={capStyle}>Which crewman is this?</div>
+                {crew.length > 0 ? (
+                  <select value={crewId} onChange={e => setCrewId(e.target.value)}>
+                    <option value="">— choose —</option>
+                    {crew.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                  </select>
+                ) : (
+                  <p className="muted" style={{ margin: 0 }}>
+                    No crew on record yet. Add the man under Crew first, then come back.
+                  </p>
+                )}
+                <div style={hintStyle}>
+                  Required for a Crew login — it is what lets him see his own bonus and nobody else&rsquo;s.
+                  Every other role is a login only and is never linked to a crew record.
+                </div>
               </label>
             )}
             <label style={labelStyle}>

@@ -77,6 +77,11 @@ const handleRequest = async (event) => {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) return json(422, { error: 'a valid email is required' })
     if (!displayName) return json(422, { error: 'display name required' })
     if (!CREATABLE_ROLES.includes(role)) return json(422, { error: `role must be one of: ${CREATABLE_ROLES.join(', ')}` })
+    // `check_crew_id_role` on app_users: a 'crew' login must be tied to a crew
+    // record, and every other role must NOT be. Say so in words here, or the
+    // skipper gets the constraint name thrown at him.
+    if (role === 'crew' && !crewId) return json(422, { error: 'a Crew login must be linked to a crew record — pick the crewman' })
+    if (role !== 'crew' && crewId) return json(422, { error: `a ${role} login is not linked to a crew record` })
 
     const { data: dup } = await svc.from('app_users').select('id').eq('email', email).maybeSingle()
     if (dup) return json(409, { error: `${email} is already a user` })
@@ -94,10 +99,12 @@ const handleRequest = async (event) => {
       newUid = created.user.id
       const { error: ae } = await svc.from('app_users').insert({
         id: newUid, email, display_name: displayName, role, fleet_id: fleet, is_owner: false,
-        // An engineer is a crewman too, so let him be linked to his crew record
-        // — that link is what lets crew_read_all show him his OWN row and no
-        // one else's (`id = current_user_crew_id()`).
-        crew_id: ['crew', 'engineer'].includes(role) ? crewId : null,
+        // MUST be null for every role except 'crew'. `check_crew_id_role` on
+        // app_users enforces exactly that, and linking an engineer to his crew
+        // record was tried and rejected. He does not need it: the link only
+        // exists so `crew_read_all` can show a crewman his own row, and an
+        // engineer has no crew page to show it on.
+        crew_id: role === 'crew' ? crewId : null,
       })
       if (ae) throw new Error(ae.message)
       return json(200, {
