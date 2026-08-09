@@ -44,8 +44,10 @@ import nodemailer from 'nodemailer'
 // Only the expiry stream. Market alerts are deliberately excluded — see above.
 const DIGEST_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert', 'crew_bonus']
 
-const SITE = process.env.SITE_URL || 'https://skipper-management.netlify.app'
-const FROM = process.env.DIGEST_FROM || 'Skipper Management <alerts@skipper-management.app>'
+const SITE = process.env.SITE_URL || 'https://skippermanagement.co.uk'
+// Must be on the domain verified in CloudMailin, or the message is accepted and
+// quietly dropped. Overridable so a second boat's brand does not need a deploy.
+const FROM = process.env.DIGEST_FROM || 'Skipper Management <alerts@skippermanagement.co.uk>'
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.cloudmta.net'
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587)
 

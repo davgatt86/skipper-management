@@ -6,7 +6,7 @@
   "description": "Multi-tenant SaaS for fishing vessel operations — sales notes, quota, crew shares and daily market prices.",
   "author": "David Gatt",
   "license": "UNLICENSED",
-  "homepage": "https://skipper-management.netlify.app",
+  "homepage": "https://skippermanagement.co.uk",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/davgatt86/skipper-management.git"

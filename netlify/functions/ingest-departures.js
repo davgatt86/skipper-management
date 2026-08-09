@@ -14,7 +14,7 @@
 //
 // ── Setup ───────────────────────────────────────────────────────────────────
 //   1. CloudMailin: add an address/route whose target (POST, JSON) is
-//        https://skipper-management.netlify.app/.netlify/functions/ingest-departures?key=<INGEST_SECRET>
+//        https://skippermanagement.co.uk/.netlify/functions/ingest-departures?key=<INGEST_SECRET>
 //   2. MarineTraffic → Notifications: set that CloudMailin address as the
 //      recipient for your port departure alerts.
 //

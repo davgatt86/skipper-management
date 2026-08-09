@@ -15,7 +15,7 @@ import { Capacitor } from '@capacitor/core'
 export const isNative = () => Capacitor.isNativePlatform()
 
 // Where the site is deployed. Overridable at build time for a staging build.
-const SITE = (import.meta.env.VITE_SITE_URL || 'https://skipper-management.netlify.app').replace(/\/$/, '')
+const SITE = (import.meta.env.VITE_SITE_URL || 'https://skippermanagement.co.uk').replace(/\/$/, '')
 
 export const fnUrl = (name) =>
   isNative() ? `${SITE}/.netlify/functions/${name}` : `/.netlify/functions/${name}`
