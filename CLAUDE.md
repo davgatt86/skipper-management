@@ -835,7 +835,61 @@ covers all of this, including the `/vessel` vs `/vessel-certs` prefix trap.
 
 Creating one: Users page → role **Engineer**. `CREATABLE_ROLES` in
 `netlify/functions/manage-users.js` gates it server-side, so the picker alone is
-not enough.
+not enough. **`check_crew_id_role` on `app_users` allows a `crew_id` ONLY for
+role `crew`, and requires one there** — so an engineer must not be linked to a
+crew record, and a Crew login cannot exist without one. Both sides are now
+validated in words before the insert, because the raw constraint name was
+reaching the skipper.
+
+Live engineer logins: **Norman Wood** and **David Henderson**, Audacious.
+
+### The `viewer` role leaked across fleets — fixed Aug 2026
+
+Found by probing the *other* roles the same way, before handing out logins.
+`supabase/viewer_role_fixes.sql`. Nothing was exploited — all users were
+skippers — but "Viewer" is in the Users picker, so it would have opened the
+moment one was created.
+
+The cause is the shape of every `viewer_read` policy:
+
+    using (exists (select 1 from app_users u
+                    where u.id = auth.uid() and u.role = 'viewer'))
+
+That grants the row to any viewer **in any fleet**. On most tables the
+restrictive `fleet_isolation` policy beside it ANDs the boundary back on. On
+two tables there was no such policy:
+
+| | a viewer could see | should be |
+|---|---|---|
+| `audit_log` | **715 rows across 2 fleets** — the whole table | own fleet, and skipper-only |
+| `fleets` | **all 13** | own fleet |
+
+`audit_log` carries old and new values of changed records, so that was other
+tenants' data. Both `viewer_read` policies were dropped — `audit_read` and
+`fleets_member_read` already cover the intended reader — and `audit_log` gained
+the `fleet_isolation` policy it never had.
+
+Third, subtler: **`payments_read` deliberately withholds `one_off` payments
+from the office and from the crewman himself**, and `viewer_read` bypassed that
+carve-out. A viewer read all 194 Audacious payments including the 8 one-off
+bonuses (£4,000); the office correctly saw 186. A discretionary payment to one
+man is the most sensitive line in that table. Replaced with a policy that
+respects the same rule.
+
+Verified after: viewer sees audit_log **0**, fleets **1**, one_off **0**, and
+still sees payments 186 / sales 118 / contracts 19 / crew 19. Skipper unchanged.
+
+**The rule this leaves behind:** the permissive policies in this database do
+not carry a fleet check of their own, so a **new table needs its
+`fleet_isolation` policy before it needs anything else**. Without it, the table
+is open to every tenant from the moment it exists.
+
+**`crew` and `office` were probed too and are sound** — a `crew` login sees
+only its own crew row and nothing else; `office` sees payments minus one-offs,
+contracts and crew, and no sales at all. Note that last one is a *gap* rather
+than a leak: office is described as "full except settings/crew" but
+`sales_landings_skipper` is skipper-only, so an office user cannot see sales.
+Decide what office is actually for before using it.
 
 ## Working offline
 
