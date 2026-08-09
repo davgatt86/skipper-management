@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
+import { requestPersistentStorage } from './lib/offline/db.js'
 import App from './App.jsx'
 
 // Fonts are bundled, not fetched. A boat on patchy signal still gets the
@@ -34,6 +35,9 @@ initTheme()   // set Day/Dark/Auto before first paint (no white flash at night)
 if ('serviceWorker' in navigator && !Capacitor.isNativePlatform()) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {})
+    // Ask for durable storage. A browser will otherwise treat the outbox as
+    // disposable, and it can be holding a legal record for a whole trip.
+    requestPersistentStorage()
   })
 }
 

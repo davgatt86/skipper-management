@@ -874,9 +874,32 @@ Icons: `scripts/make-icons.mjs` rasterises the favicon's own geometry to PNG
 with nothing but `zlib`. iOS will not use an SVG for a home-screen icon — with
 no PNG the app icon is a screenshot of the page.
 
-## The native app (Capacitor)
+## The native app (Capacitor) — BUILT, THEN SHELVED
 
-Added Aug 2026. Capacitor 8 wraps the existing Vite build — the same `dist/`
+**Decision, Aug 2026: the PWA is the route. The native app is on the shelf.**
+Not abandoned — `android/` and `ios/` are committed and working, and
+`npm run cap:sync` picks up wherever it was left. It was shelved because the
+cost is a Mac (~£600, or £30–80/month for a cloud builder) plus £79/year, and
+the PWA covers the need today at nothing.
+
+**All crew are on iPhone/iPad**, so if this is picked up again: Android is not
+needed and Android Studio is not worth installing — testing there proves
+nothing about WKWebView, which is where the bugs would be. The iOS project is
+already universal (`TARGETED_DEVICE_FAMILY = "1,2"`, iOS 15+), so iPhone and
+iPad are one app, one build, one submission.
+
+**The one thing that should bring it back off the shelf** is storage
+durability. A browser treats web storage as disposable and may reclaim it; the
+outbox can be holding a Garbage Record Book entry — a legal record — for a
+whole trip. `requestPersistentStorage()` in `src/lib/offline/db.js` asks for
+the durable kind at boot, and being on the home screen counts in its favour,
+but the browser decides and **it is a request, not a guarantee**. Measured in
+a desktop browser with no engagement history: **denied**. A native app has no
+such question hanging over it.
+
+Everything below still applies whenever it is resumed.
+
+Capacitor 8 wraps the existing Vite build — the same `dist/`
 the website serves — so no page was rewritten. `android/` and `ios/` are
 committed, because they carry permissions, signing and native config; the web
 build copied into them is gitignored, since it is a duplicate of `dist/`.

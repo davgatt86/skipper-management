@@ -62,6 +62,29 @@ function tx(store, mode, fn) {
   )
 }
 
+/* Ask the browser not to throw this data away.
+ *
+ * By default a browser treats web storage as disposable and may clear it to
+ * reclaim space, or after a spell of not being used. That is a reasonable
+ * default for a website and a bad one for this: the outbox can be holding a
+ * Garbage Record Book entry — a legal record — for the length of a trip.
+ *
+ * `persist()` asks for the durable kind. Browsers decide for themselves, and
+ * having the app on the home screen counts in its favour, so this is worth
+ * asking for but not worth relying on. It is why the native app is still the
+ * better home for this eventually.
+ *
+ * Silent either way: there is nothing useful to tell a man on a boat about a
+ * storage quota he cannot change.
+ */
+export async function requestPersistentStorage() {
+  try {
+    if (!navigator.storage || !navigator.storage.persist) return null
+    if (await navigator.storage.persisted()) return true
+    return await navigator.storage.persist()
+  } catch { return null }
+}
+
 export const idbPut = (store, value) => tx(store, 'readwrite', (s) => s.put(value))
 export const idbDelete = (store, key) => tx(store, 'readwrite', (s) => s.delete(key))
 export const idbGet = (store, key) => tx(store, 'readonly', (s) => s.get(key))
