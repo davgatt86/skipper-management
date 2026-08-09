@@ -811,21 +811,84 @@ Creating one: Users page → role **Engineer**. `CREATABLE_ROLES` in
 `netlify/functions/manage-users.js` gates it server-side, so the picker alone is
 not enough.
 
+## Working offline
+
+Built Aug 2026, because an engineer logs in the engine room and that is where
+the signal is worst.
+
+**Two halves, and the second is useless without the first.** `public/sw.js`
+caches the shell so the app OPENS with no signal — capture is pointless if the
+page never loads. `src/lib/offline/` is the outbox that holds what he types.
+
+`sw.js` is hand-rolled rather than `vite-plugin-pwa`: the rule is "anything
+already fetched stays fetched", which needs no knowledge of Vite's hashed
+filenames and so cannot fall out of step with them. Strategies:
+
+    navigations   network first, cached shell as fallback (a deploy is still
+                  picked up on the next load ashore)
+    /assets/*     cache first — content-hashed, so a URL's bytes never change
+    Supabase      NEVER cached. A stale settlement read back as current is
+                  worse than no figure at all.
+
+Reads that must survive offline are cached **deliberately**, in IndexedDB, with
+a timestamp — `cacheTable()` / `readCache()`.
+
+### The outbox
+
+`useOfflineTable(table)` is what the pages use. **Every write goes through the
+outbox even on a good connection** — two code paths would mean the offline one
+is the path that never gets exercised, and it is the one that has to work on a
+bad day. Online, the immediate flush makes it feel direct.
+
+Three rules it must keep:
+
+1. **Inserts carry a client-generated `id`.** Postgres would default one, but
+   then a row created offline has no identity until it syncs and cannot be
+   edited or deleted before then.
+2. **Replay is strictly in order, one at a time.** An update to a row created
+   offline must land after its insert.
+3. **A rejected write must not block the queue forever.** A dropped connection
+   is temporary; a check-constraint violation or an RLS denial never is. They
+   are told apart by whether PostgREST *answered*: an answer with an error code
+   is a decision, a thrown fetch is a lost connection. Refusals are parked as
+   `failed` and shown by name in `SyncStatus.jsx` — never silently dropped,
+   because a Garbage Record Book entry is a legal record.
+
+`applyPending()` lays unsent writes over the server rows, so an entry typed at
+sea stays visible instead of appearing to vanish on save. Rows carry `_pending`
+and the pages label them "not sent".
+
+**Verified in a real browser, not by inspection.** The riskiest assumption was
+that IndexedDB writes the auto-generated `seq` back into the stored object — if
+it did not, `flush()` could never delete what it had sent and the queue would
+never drain. Confirmed, along with insertion ordering, delete-by-generated-key,
+in-place update without duplication, and the cache round-trip. Service worker
+registers and activates, and the shell, JS, CSS, fonts and login hero are all in
+`caches` after one load. `test-offline.mjs` covers `applyPending()`.
+
+`flush()` **never rejects** — it is fired from an `online` event and from every
+save, neither awaited with a catch, so a rejection would surface as an unhandled
+rejection and leave the outbox looking idle.
+
+Icons: `scripts/make-icons.mjs` rasterises the favicon's own geometry to PNG
+with nothing but `zlib`. iOS will not use an SVG for a home-screen icon — with
+no PNG the app icon is a screenshot of the page.
+
 ### Still to do for the phone app
 
 Agreed Aug 2026: **private distribution** (Apple Business Manager custom app or
-TestFlight — not a public listing), and the engineer **records at sea, with no
-signal**.
+TestFlight — not a public listing).
 
-- **Offline capture is the real work**, and it is not started. The four log
-  pages post straight to Supabase today, so they are useless in an engine room
-  with no signal. They need local-first capture with a sync queue.
 - **Capacitor** is the wrapper of choice — it wraps the existing Vite build, so
   the pages are reused rather than rewritten in React Native.
 - **iOS builds need a Mac with Xcode.** David is on Windows 11, so this needs
   either a Mac or a cloud build service. Android has no such constraint.
-- A PWA is the free interim: it is already a Vite SPA, so an installable home
-  screen icon is close at hand and needs no Apple involvement.
+- The PWA is now installable, so the app can go on a home screen today with no
+  Apple involvement at all.
+- **Not yet handled: a session that expires while offline.** `persistSession` is
+  on, so a live session survives, but a token that cannot be refreshed at sea
+  will sign him out and the outbox cannot flush until he signs in again. The
+  entries are safe on the device; he just cannot send them.
 
 ## Outstanding work
 

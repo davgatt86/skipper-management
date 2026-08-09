@@ -4,6 +4,8 @@ import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { keepsLogs } from '../lib/roles'
+import { useOfflineTable } from '../lib/offline/useOfflineTable'
+import SyncStatus from '../components/SyncStatus'
 
 // Fuel and oil log, plus the fuel loop.
 //
@@ -58,10 +60,14 @@ export default function FuelLog() {
   const { appUser } = useAuth()
   const canEdit = keepsLogs(appUser)
 
-  const [rows, setRows] = useState([])
+  // Bunkering gets written down at the pump. Writes go to the outbox and sync
+  // when there is a signal — see src/lib/offline/queue.js.
+  const {
+    rows, loading, error, setError, online, pending, failed,
+    insert, update, remove: removeRow, sync,
+  } = useOfflineTable('vessel_fuel_log', { orderBy: 'entry_date', ascending: false })
+
   const [settlements, setSettlements] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [tab, setTab] = useState('fuel')
   const [draft, setDraft] = useState(blank('fuel'))
   const [adding, setAdding] = useState(false)
@@ -71,20 +77,19 @@ export default function FuelLog() {
   const [addingSupplier, setAddingSupplier] = useState(false)
   const [newSupplier, setNewSupplier] = useState('')
 
-  async function load() {
-    setLoading(true); setError('')
-    const [lRes, sRes, supRes] = await Promise.all([
-      supabase.from('vessel_fuel_log').select('*').order('entry_date', { ascending: false }),
+  // The log itself comes from the offline hook above. These two are extras:
+  // the consumption benchmark and the supplier list. Both are read-only here
+  // and both come back empty for an engineer (su_settlements is denied to him),
+  // which is why nothing on the page depends on them being present.
+  async function loadExtras() {
+    const [sRes, supRes] = await Promise.all([
       supabase.from('su_settlements').select('reference, settling_date, days_at_sea, trips, fuel_used, total_expenses').not('fuel_used', 'is', null).order('settling_date'),
       supabase.from('fuel_suppliers').select('*').order('name'),
     ])
-    if (lRes.error) setError(lRes.error.message)
-    setRows(lRes.data || [])
     setSettlements(sRes.data || [])
     setSuppliers(supRes.data || [])
-    setLoading(false)
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { loadExtras() }, [])
 
   const totals = useMemo(() => {
     const t = {}
@@ -175,12 +180,10 @@ export default function FuelLog() {
       notes: draft.notes.trim() || null,
       updated_at: new Date().toISOString(),
     }
-    const { error } = editing
-      ? await supabase.from('vessel_fuel_log').update(payload).eq('id', editing)
-      : await supabase.from('vessel_fuel_log').insert(payload)
+    if (editing) await update(editing, payload)
+    else await insert({ ...payload, fleet_id: appUser?.fleet_id })
     setBusy(false)
-    if (error) { setError(error.message); return }
-    setDraft(blank(tab)); setAdding(false); setEditing(null); load()
+    setDraft(blank(tab)); setAdding(false); setEditing(null)
   }
 
   function startEdit(r) {
@@ -197,8 +200,7 @@ export default function FuelLog() {
 
   async function remove(r) {
     if (!confirm(`Delete the ${fmtDate(r.entry_date)} entry of ${L(r.litres)}?`)) return
-    const { error } = await supabase.from('vessel_fuel_log').delete().eq('id', r.id)
-    if (error) setError(error.message); else load()
+    await removeRow(r.id)
   }
 
   const isDisposal = tab === 'dirty_oil' || tab === 'waste'
@@ -211,6 +213,8 @@ export default function FuelLog() {
           <button onClick={() => { setDraft(blank(tab)); setEditing(null); setAdding(true) }}>+ Add entry</button>
         )}
       </PageHeader>
+
+      <SyncStatus online={online} pending={pending} failed={failed} onChange={sync} />
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
 

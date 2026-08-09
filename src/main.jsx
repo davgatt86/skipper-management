@@ -21,6 +21,16 @@ import { initTheme } from './ThemeToggle'
 
 initTheme()   // set Day/Dark/Auto before first paint (no white flash at night)
 
+// Cache the shell so the app OPENS with no signal. Offline capture is no use if
+// the page will not load in the first place — see public/sw.js. Registered
+// after load so it never competes with the first paint, and failure is silent:
+// a browser without service workers still gets a working online app.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {})
+  })
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
-import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { keepsLogs } from '../lib/roles'
+import { useOfflineTable } from '../lib/offline/useOfflineTable'
+import SyncStatus from '../components/SyncStatus'
 
 // MARPOL Annex V Garbage Record Book.
 //
@@ -33,22 +34,18 @@ export default function GarbageLog() {
   const { appUser } = useAuth()
   const canEdit = keepsLogs(appUser)
 
-  const [rows, setRows] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  // A Garbage Record Book gets filled in where the rubbish is handled, which is
+  // not where the signal is. Writes go to the outbox and sync when they can —
+  // see src/lib/offline/queue.js.
+  const {
+    rows, loading, error, setError, online, pending, failed,
+    insert, update, remove: removeRow, reload, sync,
+  } = useOfflineTable('garbage_log', { orderBy: 'entry_date', ascending: false })
+
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState(null)
   const [draft, setDraft] = useState(blank())
   const [busy, setBusy] = useState(false)
-
-  async function load() {
-    setLoading(true); setError('')
-    const { data, error } = await supabase.from('garbage_log').select('*').order('entry_date', { ascending: false })
-    if (error) setError(error.message)
-    setRows(data || [])
-    setLoading(false)
-  }
-  useEffect(() => { load() }, [])
 
   const totals = useMemo(() => {
     const t = { entries: rows.length, m3: 0, toShore: 0, toSea: 0 }
@@ -84,12 +81,12 @@ export default function GarbageLog() {
       notes: draft.notes.trim() || null,
       updated_at: new Date().toISOString(),
     }
-    const { error } = editing
-      ? await supabase.from('garbage_log').update(payload).eq('id', editing)
-      : await supabase.from('garbage_log').insert(payload)
+    // No error to check: the write is durable on this device the moment it is
+    // queued, and the outbox reports anything the server later refuses.
+    if (editing) await update(editing, payload)
+    else await insert({ ...payload, fleet_id: appUser?.fleet_id })
     setBusy(false)
-    if (error) { setError(error.message); return }
-    setDraft(blank()); setAdding(false); setEditing(null); load()
+    setDraft(blank()); setAdding(false); setEditing(null)
   }
 
   function startEdit(r) {
@@ -105,8 +102,7 @@ export default function GarbageLog() {
 
   async function remove(r) {
     if (!confirm(`Delete the ${fmtDate(r.entry_date)} entry? A Garbage Record Book is a legal record — only do this if it was entered in error.`)) return
-    const { error } = await supabase.from('garbage_log').delete().eq('id', r.id)
-    if (error) setError(error.message); else load()
+    await removeRow(r.id)
   }
 
   const th = { padding: '0.45rem 0.4rem', textAlign: 'left' }
@@ -116,6 +112,8 @@ export default function GarbageLog() {
       <PageHeader title="Garbage Record Book" sub="MARPOL Annex V">
         {canEdit && !adding && <button onClick={() => { setDraft(blank()); setEditing(null); setAdding(true) }}>+ Add entry</button>}
       </PageHeader>
+
+      <SyncStatus online={online} pending={pending} failed={failed} onChange={sync} />
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
 
@@ -193,7 +191,14 @@ export default function GarbageLog() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    <td style={th}>{fmtDate(r.entry_date)}</td>
+                    <td style={th}>
+                      {fmtDate(r.entry_date)}
+                      {r._pending && (
+                        <span title="Saved on this device, not yet sent" style={{ color: 'var(--brass)', fontSize: '0.72rem', display: 'block' }}>
+                          not sent
+                        </span>
+                      )}
+                    </td>
                     <td style={th}>{r.category}</td>
                     <td style={th}>
                       {r.disposition}

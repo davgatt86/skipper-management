@@ -7,6 +7,9 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { keepsLogs } from '../lib/roles'
+import { useOfflineTable } from '../lib/offline/useOfflineTable'
+import { readCache, cacheTable, isOnline } from '../lib/offline/queue'
+import SyncStatus from '../components/SyncStatus'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
 // ------------------------------------------------------------------
@@ -105,6 +108,10 @@ const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v)
 
 const blankEntry = () => ({ log_date: today(), readings: {}, notes: '', logged_by: '', edit_reason: '' })
 
+// Sent, held on the device, or wrong — three states, three colours.
+const msgTone = (m) =>
+  m.includes('✓') ? 'var(--green)' : m.includes('this device') ? 'var(--brass)' : 'var(--red)'
+
 export default function EngineLogs() {
   const { appUser } = useAuth()
   const canEdit = keepsLogs(appUser)
@@ -116,9 +123,12 @@ export default function EngineLogs() {
   const [series, setSeries] = useState(['Main Engine 1||Turbo IN Temp', 'Main Engine 1||Turbo OUT Temp'])
   const [fromD, setFromD] = useState('')
   const [toD, setToD] = useState('')
-  const [logs, setLogs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  // Engine readings are taken in the engine room, where the signal is worst of
+  // all. Writes go to the outbox — see src/lib/offline/queue.js.
+  const {
+    rows: logs, loading, error, setError, online, pending, failed,
+    insert, update, remove: removeRow, sync,
+  } = useOfflineTable('engine_logs', { orderBy: 'log_date', ascending: false })
 
   const [draft, setDraft] = useState(null)     // null = form closed
   const [editingId, setEditingId] = useState(null)
@@ -127,18 +137,20 @@ export default function EngineLogs() {
   const [outlierWarn, setOutlierWarn] = useState(null)
   const [confirmedOutliers, setConfirmedOutliers] = useState(false)
 
-  async function loadAll() {
-    setLoading(true); setError('')
-    const [v, l] = await Promise.all([
-      supabase.from('vessel_details').select('*').maybeSingle(),
-      supabase.from('engine_logs').select('*').order('log_date', { ascending: false }).order('created_at', { ascending: false }),
-    ])
-    if (v.data) setVessel(v.data)
-    if (l.error) setError(l.error.message)
-    setLogs(l.data || [])
-    setLoading(false)
-  }
-  useEffect(() => { loadAll() }, [])
+  // The logs come from the offline hook above. The vessel particulars are read
+  // separately and cached by hand, because the page prints them on the PDF and
+  // an engineer offline still needs the boat's name on his log.
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const cached = await readCache('vessel_details')
+      if (live && cached.rows.length) setVessel(cached.rows[0])
+      if (!isOnline()) return
+      const { data } = await supabase.from('vessel_details').select('*').maybeSingle()
+      if (live && data) { setVessel(data); cacheTable('vessel_details', [data]) }
+    })()
+    return () => { live = false }
+  }, [])
 
   const setReading = (group, param, val) =>
     setDraft((p) => ({ ...p, readings: { ...p.readings, [group]: { ...(p.readings[group] || {}), [param]: val } } }))
@@ -214,28 +226,19 @@ export default function EngineLogs() {
     }
 
     if (editingId) {
-      const { data, error } = await supabase.from('engine_logs')
-        .update({ ...base, edited_at: new Date().toISOString(), edit_reason: draft.edit_reason?.trim() || null })
-        .eq('id', editingId).select().single()
-      setSaving(false)
-      if (error) { setMsg(`Couldn’t save: ${error.message}`); return }
-      setLogs((p) => p.map((x) => (x.id === editingId ? data : x)))
+      await update(editingId, { ...base, edited_at: new Date().toISOString(), edit_reason: draft.edit_reason?.trim() || null })
     } else {
-      const { data, error } = await supabase.from('engine_logs').insert(base).select().single()
-      setSaving(false)
-      if (error) { setMsg(`Couldn’t save: ${error.message}`); return }
-      setLogs((p) => [data, ...p].sort((a, b) => (b.log_date || '').localeCompare(a.log_date || '')))
+      await insert(base)
     }
+    setSaving(false)
     setDraft(null); setEditingId(null); setOutlierWarn(null); setConfirmedOutliers(false)
-    setMsg('Engine log saved ✓')
-    setTimeout(() => setMsg(''), 2500)
+    setMsg(isOnline() ? 'Engine log saved ✓' : 'Saved on this device — it will send when there is a signal')
+    setTimeout(() => setMsg(''), 3500)
   }
 
   async function del(l) {
     if (!confirm(`Delete the engine log for ${fmt(l.log_date)}? This can’t be undone.`)) return
-    const { error } = await supabase.from('engine_logs').delete().eq('id', l.id)
-    if (error) setError(error.message)
-    else setLogs((p) => p.filter((x) => x.id !== l.id))
+    await removeRow(l.id)
   }
 
   const missingVessel = !vessel || !(vessel.vessel_name || vessel.pln)
@@ -251,6 +254,8 @@ export default function EngineLogs() {
         </div>
         <Link to="/">← Dashboard</Link>
       </header>
+
+      <SyncStatus online={online} pending={pending} failed={failed} onChange={sync} />
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 
@@ -339,11 +344,13 @@ export default function EngineLogs() {
           <div style={{ marginTop: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
             <button onClick={save} disabled={saving}>{saving ? 'Saving…' : (editingId ? 'Save changes' : 'Save engine log')}</button>
             <button className="secondary" onClick={cancel} disabled={saving}>Cancel</button>
-            {msg && <span style={{ color: msg.includes('✓') ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>{msg}</span>}
+            {/* "Saved on this device" is neither a success nor a failure — the
+                entry is safe but not yet away, so it gets its own colour. */}
+            {msg && <span style={{ color: msgTone(msg), fontWeight: 600 }}>{msg}</span>}
           </div>
         </div>
       )}
-      {!draft && msg && <div className="card"><span style={{ color: 'var(--green)', fontWeight: 600 }}>{msg}</span></div>}
+      {!draft && msg && <div className="card"><span style={{ color: msgTone(msg), fontWeight: 600 }}>{msg}</span></div>}
 
       {/* Chart view */}
       {view === 'chart' && !loading && logs.length > 0 && (
