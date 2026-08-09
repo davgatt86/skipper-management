@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
+import { fetchAll } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 // buyerPremiumLeague, not buyerLeague: SalesInsights already has a
 // buyerLeague that ranks buyers on raw £/kg within a species and grade. That
@@ -42,9 +43,12 @@ export default function BuyerLeague() {
     if (!canView) { setLoading(false); return }
     async function load() {
       setLoading(true); setError('')
+      // fetchAll, not a plain select: Supabase returns at most 1,000 rows per
+      // request and does not say so. This page was reading 1,000 of 8,067 and
+      // showing a single buyer as a result — see src/lib/fetchAll.js.
       const [lRes, rRes] = await Promise.all([
-        supabase.from('sales_landings').select('id, landing_date, vessel, market, currency'),
-        supabase.from('sales_rows').select('landing_id, buyer, species, species_canon, grade, sub_grade, weight_kg, value, boxes'),
+        fetchAll('sales_landings', 'id, landing_date, vessel, market, currency'),
+        fetchAll('sales_rows', 'landing_id, buyer, species, species_canon, grade, sub_grade, weight_kg, value, boxes'),
       ])
       if (lRes.error || rRes.error) setError((lRes.error || rRes.error).message)
       setLandings(lRes.data || [])

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
+import { fetchAll } from '../lib/fetchAll'
 import { useAuth } from '../AuthContext'
 import { solveSettlementRuns, matchConfidence } from '../lib/salesAgg'
 
@@ -83,11 +84,19 @@ export default function Reconcile() {
         supabase.from('su_settlements')
           .select('id, reference, settling_date, period, trips, days_at_sea, total_income, weight_landed')
           .not('total_income', 'is', null).order('settling_date'),
-        supabase.from('sales_landings').select('id, landing_date, market, vessel'),
-        supabase.from('sales_rows').select('landing_id, value, weight_kg'),
-        supabase.from('su_settlement_lines').select('settlement_id, section, label, amount').eq('section', 'income'),
+        // fetchAll, not a plain select: Supabase returns at most 1,000 rows per
+        // request and does not say so. This page was reading 1,000 of 8,067,
+        // so every landing's value came out a fraction of its real size and the
+        // solver rejected every arrangement — the page showed nothing at all,
+        // with no error. See src/lib/fetchAll.js.
+        fetchAll('sales_landings', 'id, landing_date, market, vessel'),
+        fetchAll('sales_rows', 'landing_id, value, weight_kg'),
+        fetchAll('su_settlement_lines', 'settlement_id, section, label, amount', (q) => q.eq('section', 'income')),
       ])
-      if (sRes.error || lRes.error || rRes.error) setError((sRes.error || lRes.error || rRes.error).message)
+      // slRes was not checked before, so a failure on the income lines fell
+      // through to the total_income fallback with no sign anything was wrong.
+      const firstErr = sRes.error || lRes.error || rRes.error || slRes.error
+      if (firstErr) setError(firstErr.message)
 
       // Split the income side: fish, and everything that is not fish.
       const inc = {}
