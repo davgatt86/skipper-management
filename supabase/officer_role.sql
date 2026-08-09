@@ -19,6 +19,22 @@
 -- `is_officer()` accepts the legacy 'engineer' value as well as 'officer', so
 -- an unmigrated login keeps working. The two live engineer logins are migrated
 -- at the end of this file.
+--
+-- PERFORMANCE: EVERY CALL IS WRAPPED IN A SCALAR SUBSELECT, AND MUST BE.
+--
+-- `not is_officer()` written bare in a policy is evaluated ONCE PER ROW. On
+-- market_prices — 43,446 rows — that meant 43,446 nested function calls, each
+-- doing a lookup in app_users. A plain count(*) took 4.2 SECONDS. Daily Prices
+-- fires about sixty such reads in parallel, blew the statement timeout, and
+-- reported "the market tables aren't set up yet" — a performance fault wearing
+-- the costume of a missing migration.
+--
+-- `not (select is_officer())` is the same expression, but the planner lifts it
+-- into an InitPlan and runs it once per statement. The same count: 8 ms.
+--
+-- Write every new policy this way. The trap applies equally to
+-- current_fleet_id(), current_user_role() and auth.uid() — and the older
+-- fleet_isolation policies in this database still call them bare.
 
 -- 1. -------------------------------------------------------------------------
 -- alter type ... add value must already have been run in its own transaction:
@@ -67,8 +83,8 @@ begin
     execute format('drop policy if exists officer_no_access on public.%I', t);
     execute format(
       'create policy officer_no_access on public.%I as restrictive for all '
-      'to authenticated using (not public.is_officer()) '
-      'with check (not public.is_officer())', t);
+      'to authenticated using (not (select public.is_officer())) '
+      'with check (not (select public.is_officer()))', t);
   end loop;
 end $$;
 
@@ -116,12 +132,12 @@ begin
     execute format('drop policy if exists officer_read_only_del on public.%I', t);
 
     execute format('create policy officer_read_only_ins on public.%I as restrictive '
-      'for insert to authenticated with check (not public.is_officer())', t);
+      'for insert to authenticated with check (not (select public.is_officer()))', t);
     execute format('create policy officer_read_only_upd on public.%I as restrictive '
-      'for update to authenticated using (not public.is_officer()) '
-      'with check (not public.is_officer())', t);
+      'for update to authenticated using (not (select public.is_officer())) '
+      'with check (not (select public.is_officer()))', t);
     execute format('create policy officer_read_only_del on public.%I as restrictive '
-      'for delete to authenticated using (not public.is_officer())', t);
+      'for delete to authenticated using (not (select public.is_officer()))', t);
   end loop;
 end $$;
 
@@ -143,7 +159,7 @@ begin
     execute format('drop policy if exists officer_works on public.%I', t);
     execute format(
       'create policy officer_works on public.%I for all to authenticated '
-      'using (public.is_officer()) with check (public.is_officer())', t);
+      'using ((select public.is_officer())) with check ((select public.is_officer()))', t);
   end loop;
 end $$;
 
@@ -152,14 +168,14 @@ end $$;
 drop policy if exists engineer_reads_certs on public.vessel_certificates;
 drop policy if exists officer_reads_certs on public.vessel_certificates;
 create policy officer_reads_certs on public.vessel_certificates
-  for select to authenticated using (public.is_officer());
+  for select to authenticated using ((select public.is_officer()));
 
 -- vessel_details is skipper-only for reading and EngineLogs/CrewList both read
 -- it — without this the engine-log page and the crew-list header come up blank.
 drop policy if exists engineer_reads_vessel on public.vessel_details;
 drop policy if exists officer_reads_vessel on public.vessel_details;
 create policy officer_reads_vessel on public.vessel_details
-  for select to authenticated using (public.is_officer());
+  for select to authenticated using ((select public.is_officer()));
 
 
 -- 5. Storage ----------------------------------------------------------------
@@ -174,8 +190,8 @@ drop policy if exists engineer_no_storage on storage.objects;
 drop policy if exists officer_storage_scope on storage.objects;
 create policy officer_storage_scope on storage.objects as restrictive
   for all to authenticated
-  using (not public.is_officer() or bucket_id in ('crew-certs','vessel-certs'))
-  with check (not public.is_officer() or bucket_id = 'crew-certs');
+  using (not (select public.is_officer()) or bucket_id in ('crew-certs','vessel-certs'))
+  with check (not (select public.is_officer()) or bucket_id = 'crew-certs');
 
 -- The existing crew_certs_insert/update/delete policies require a skipper, so
 -- an officer needs his own. Same fleet-folder check as theirs.
@@ -185,7 +201,7 @@ create policy officer_crew_certs_write on storage.objects
   with check (
     bucket_id = 'crew-certs'
     and (storage.foldername(storage.objects.name))[1] = current_fleet_id()::text
-    and public.is_officer()
+    and (select public.is_officer())
   );
 
 drop policy if exists officer_crew_certs_update on storage.objects;
@@ -194,7 +210,7 @@ create policy officer_crew_certs_update on storage.objects
   using (
     bucket_id = 'crew-certs'
     and (storage.foldername(storage.objects.name))[1] = current_fleet_id()::text
-    and public.is_officer()
+    and (select public.is_officer())
   );
 
 drop policy if exists officer_crew_certs_delete on storage.objects;
@@ -203,7 +219,7 @@ create policy officer_crew_certs_delete on storage.objects
   using (
     bucket_id = 'crew-certs'
     and (storage.foldername(storage.objects.name))[1] = current_fleet_id()::text
-    and public.is_officer()
+    and (select public.is_officer())
   );
 
 -- Reading a vessel-cert file: the existing vessel_certs_read is skipper/viewer.
@@ -213,7 +229,7 @@ create policy officer_vessel_certs_read on storage.objects
   using (
     bucket_id = 'vessel-certs'
     and (storage.foldername(storage.objects.name))[1] = current_fleet_id()::text
-    and public.is_officer()
+    and (select public.is_officer())
   );
 
 
