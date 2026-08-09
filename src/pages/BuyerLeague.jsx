@@ -36,7 +36,9 @@ export default function BuyerLeague() {
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [scope, setScope] = useState('uk')       // Danish sales have no buyers
   const [species, setSpecies] = useState('')
-  const [byGrade, setByGrade] = useState(false)
+  // On by default: comparing a buyer who took A1 against one who took G5 on the
+  // same species is a comparison of grades, not of buyers.
+  const [byGrade, setByGrade] = useState(true)
   const [minKg, setMinKg] = useState(1000)
 
   useEffect(() => {

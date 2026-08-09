@@ -285,32 +285,12 @@ export function seasonalityGrid(rows, landingById, metric = 'pkg') {
   return { species, cells, max: r2(max), metric }
 }
 
-/* Buyer league nested species -> grades -> buyers, every level ranked by
- * average £/kg (highest first), NOT alphabetically (Sales Insights upgrade).
- * Returns [{ species, pkg, boxes, value, kg,
- *            grades:[{ grade, pkg, boxes, best, buyers:[…by £/kg] }] }]. */
-export function buyerLeague(rows) {
-  const fin = o => ({ ...o, value: r2(o.value), kg: r2(o.kg), boxes: r2(o.boxes), pkg: o.kg ? r2(o.value / o.kg) : 0 })
-  const sp = {}
-  for (const r of rows) {
-    const s = r.species_canon || r.species || '?'
-    const gl = gradeLabel(r)
-    const b = r.buyer || '?'
-    const o = (sp[s] = sp[s] || { species: s, value: 0, kg: 0, boxes: 0, grades: {} })
-    o.value += Number(r.value || 0); o.kg += Number(r.weight_kg || 0); o.boxes += Number(r.boxes || 0)
-    const g = (o.grades[gl] = o.grades[gl] || { grade: gl, value: 0, kg: 0, boxes: 0, buyers: {} })
-    g.value += Number(r.value || 0); g.kg += Number(r.weight_kg || 0); g.boxes += Number(r.boxes || 0)
-    const bo = (g.buyers[b] = g.buyers[b] || { buyer: b, value: 0, kg: 0, boxes: 0 })
-    bo.value += Number(r.value || 0); bo.kg += Number(r.weight_kg || 0); bo.boxes += Number(r.boxes || 0)
-  }
-  return Object.values(sp).map(o => {
-    const grades = Object.values(o.grades).map(g => {
-      const buyers = Object.values(g.buyers).map(fin).sort((a, b) => b.pkg - a.pkg)
-      return { ...fin(g), buyers, best: buyers[0] }
-    }).sort((a, b) => b.pkg - a.pkg)
-    return { ...fin(o), grades }
-  }).sort((a, b) => b.pkg - a.pkg)
-}
+/* buyerLeague() was removed Aug 2026. It ranked buyers on raw £/kg within a
+ * species and grade, averaged over the whole period — which mostly measures
+ * WHEN a buyer happened to be bidding, because prices move week to week. Two
+ * tables both called "buyer league", ranking differently, is worse than one.
+ * buyerPremiumLeague() below is the day-relative replacement. */
+
 
 /* Grade-level seasonality for ONE species (species × month drill-down).
  * Same shape as seasonalityGrid but keyed by grade label. */
@@ -530,7 +510,14 @@ const isAuctionName = (b) => /auction/i.test(b || '')
 export function buyerPremiumLeague(rows, landingById, opts = {}) {
   const minKg = opts.minKg ?? 1000
   const species = opts.species || null      // null = all species together
-  const byGrade = !!opts.byGrade
+  /* GRADE FOR GRADE BY DEFAULT.
+   *
+   * With this off, the day's market average is taken across every grade of a
+   * species at once — so a buyer who only took the top grade shows a premium
+   * he has not earned, and one who took the cheap end looks mean. That is a
+   * comparison between grades dressed up as a comparison between buyers.
+   * Opt out with `byGrade: false` if you genuinely want the species-level view. */
+  const byGrade = opts.byGrade !== false
 
   const usable = rows.filter((r) => {
     if (!r.buyer || isAuctionName(r.buyer)) return false

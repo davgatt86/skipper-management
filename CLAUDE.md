@@ -1331,11 +1331,23 @@ what. Re-uploading any of those notes will fill it in.
   they bought. Days with only one buyer are dropped — one bid is not a market.
   Auctions are excluded throughout.
 
-  Note there are now **two** functions and they answer different questions.
-  `buyerLeague()` (older, used by `SalesInsights.jsx`) ranks buyers on raw
-  £/kg within a species and grade — "who paid most for this grade".
-  `buyerPremiumLeague()` is the day-relative one behind the new page. Do not
-  merge them.
+  **`buyerLeague()` was removed Aug 2026** along with the Buyer League tab on
+  `SalesInsights.jsx`. It ranked buyers on raw £/kg averaged over the period,
+  which mostly measures *when* a buyer was bidding. Two tables both called
+  "buyer league" that rank differently is worse than one.
+  `buyerPremiumLeague()` is the only one now, and **`byGrade` defaults to
+  true** — with it off the day's average is taken across every grade of a
+  species, so a buyer who took only the top grade shows a premium he has not
+  earned. That is a comparison of grades dressed as a comparison of buyers.
+
+  **The 1,000-row trap.** Supabase caps a REST response at 1,000 rows and does
+  not say so. `BuyerLeague.jsx` and `Reconcile.jsx` both read `sales_rows`
+  with a plain select and silently got 1,000 of 8,067 — the league showed a
+  single buyer, and the reconciliation showed nothing at all, neither with an
+  error. `src/lib/fetchAll.js` is the shared paginated read; Sales,
+  SalesCompare and SalesInsights each already had their own `range()` loop,
+  which is why only the two newest pages were wrong. Use `fetchAll` for
+  anything new that reads a whole table.
 
   **Merged Aug 2026: "J Smith" → "Messrs J Smith Ltd".** The fourth instance
   of the name-variant pattern, and the merge changed the answer materially:

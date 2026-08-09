@@ -3,7 +3,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
-import { bySpecies, gradesFor, buyerLeague, priceTrendSeries, seasonalityGrid, gradeSeasonality } from '../lib/salesAgg'
+import { bySpecies, gradesFor, priceTrendSeries, seasonalityGrid, gradeSeasonality } from '../lib/salesAgg'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
 } from 'recharts'
@@ -30,7 +30,6 @@ export default function SalesInsights() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('trends')
   const [scope, setScope] = useState('all')   // 'all' | a year string
-  const [month, setMonth] = useState('all')   // 'all' | '01'..'12' (Buyer League only)
 
   // load landings once
   useEffect(() => {
@@ -79,12 +78,6 @@ export default function SalesInsights() {
 
   const landingById = useMemo(() => Object.fromEntries(landings.map(l => [l.id, l])), [landings])
 
-  // Month filter narrows the Buyer League only (Trends is a time series, Seasonality pools months).
-  const monthRows = useMemo(
-    () => month === 'all' ? rows : rows.filter(r => (landingById[r.landing_id]?.landing_date || '').slice(5, 7) === month),
-    [rows, month, landingById]
-  )
-
   if (!isSkipper) {
     return (
       <AppShell>
@@ -100,7 +93,7 @@ export default function SalesInsights() {
       <div className="card">
         <h1 style={{ marginBottom: '0.5rem' }}>Sales Insights</h1>
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-          {[['trends', 'Price Trends'], ['buyers', 'Buyer League'], ['season', 'Seasonality']].map(([k, lbl]) => (
+          {[['trends', 'Price Trends'], ['season', 'Seasonality']].map(([k, lbl]) => (
             <button key={k} className={tab === k ? '' : 'secondary'} onClick={() => setTab(k)}>{lbl}</button>
           ))}
         </div>
@@ -108,15 +101,6 @@ export default function SalesInsights() {
           <span className="muted" style={{ fontSize: '0.8rem' }}>Period:</span>
           <button className={scope === 'all' ? '' : 'secondary'} style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => setScope('all')}>All</button>
           {years.map(y => <button key={y} className={scope === y ? '' : 'secondary'} style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => setScope(y)}>{y}</button>)}
-          {tab === 'buyers' && (
-            <label style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }} className="muted">
-              Month:{' '}
-              <select value={month} onChange={e => setMonth(e.target.value)} style={{ padding: '0.2rem 0.4rem', fontSize: '0.82rem' }}>
-                <option value="all">All</option>
-                {MON.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
-              </select>
-            </label>
-          )}
         </div>
       </div>
 
@@ -124,8 +108,7 @@ export default function SalesInsights() {
         : error ? <div className="card"><p className="error">Error: {error}</p></div>
           : rows.length === 0 ? <div className="card"><p className="muted">No sales in this period yet.</p></div>
             : tab === 'trends' ? <Trends rows={rows} landingById={landingById} />
-              : tab === 'buyers' ? <BuyerLeague rows={monthRows} />
-                : <Seasonality rows={rows} landingById={landingById} />}
+              : <Seasonality rows={rows} landingById={landingById} />}
     </AppShell>
   )
 }
@@ -215,62 +198,6 @@ function Seg({ label, value, onChange, options }) {
           <button key={v} className={value === v ? '' : 'secondary'} style={{ padding: '0.2rem 0.6rem', fontSize: '0.82rem' }} onClick={() => onChange(v)}>{l}</button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function BuyerLeague({ rows }) {
-  const league = useMemo(() => buyerLeague(rows), [rows])
-  const [openSp, setOpenSp] = useState('')
-  const [openGr, setOpenGr] = useState('')
-
-  return (
-    <div className="card">
-      <h2 style={{ fontSize: '1.05rem', marginBottom: '0.25rem' }}>Buyer league — by species, then grade</h2>
-      <p className="muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>Ranked by average £/kg, highest first. Tap a species to see its grades; tap a grade for every buyer.</p>
-      <Scroll>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.88rem' }}>
-          <thead><tr><th style={th}>Species / grade</th><th style={th}>Best-paying buyer</th><th style={thR}>£/kg</th><th style={thR}>Boxes</th></tr></thead>
-          <tbody>
-            {league.map(s => {
-              const spOpen = openSp === s.species
-              return (
-                <Fragment key={s.species}>
-                  <tr onClick={() => { setOpenSp(spOpen ? '' : s.species); setOpenGr('') }} style={{ cursor: 'pointer' }}>
-                    <td style={{ ...td, fontWeight: 700 }}>{spOpen ? '▾' : '▸'} {s.species}</td>
-                    <td style={td}></td>
-                    <td style={tdR}><strong>{gbp(s.pkg)}</strong></td>
-                    <td style={tdR}>{num(s.boxes)}</td>
-                  </tr>
-                  {spOpen && s.grades.map(g => {
-                    const gkey = s.species + '||' + g.grade
-                    const grOpen = openGr === gkey
-                    const more = g.buyers.length > 1
-                    return (
-                      <Fragment key={gkey}>
-                        <tr onClick={() => more && setOpenGr(grOpen ? '' : gkey)} style={{ cursor: more ? 'pointer' : 'default', background: 'var(--grey-50)' }}>
-                          <td style={{ ...td, paddingLeft: '1.6rem' }}>{more ? (grOpen ? '▾' : '▸') : '·'} {g.grade}</td>
-                          <td style={td}><strong>{g.best?.buyer || '—'}</strong></td>
-                          <td style={tdR}>{g.best ? gbp(g.best.pkg) : '—'}</td>
-                          <td style={tdR}>{g.best ? num(g.best.boxes) : '—'}</td>
-                        </tr>
-                        {grOpen && g.buyers.slice(1).map(b => (
-                          <tr key={b.buyer}>
-                            <td style={{ ...td, paddingLeft: '2.8rem' }}></td>
-                            <td style={{ ...td, color: 'var(--grey-400)' }}>{b.buyer}</td>
-                            <td style={{ ...tdR, color: 'var(--grey-400)' }}>{gbp(b.pkg)}</td>
-                            <td style={{ ...tdR, color: 'var(--grey-400)' }}>{num(b.boxes)}</td>
-                          </tr>
-                        ))}
-                      </Fragment>
-                    )
-                  })}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
-      </Scroll>
     </div>
   )
 }
