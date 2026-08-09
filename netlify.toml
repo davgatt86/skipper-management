@@ -30,6 +30,12 @@
 # the inbound sales notes to it, and a 301 turns a POST into a GET — the ingest
 # would fail silently, which is the last thing here that should break.
 #
+# CURRENT STATE (Aug 2026): skipper-management.com and skippermangement.co.uk
+# are NOT attached to the site as domain aliases, by choice. Netlify will not
+# serve a hostname it does not know, so these four rules match nothing today and
+# both domains return 404. They are kept because the moment either is added back
+# as an alias, it redirects here instead of becoming a second live origin.
+#
 # These must sit ABOVE the SPA catch-all: Netlify applies redirects in order.
 [[redirects]]
   from = "https://skipper-management.com/*"
