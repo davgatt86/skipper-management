@@ -17,6 +17,46 @@
 [functions."alert-digest"]
   schedule = "0 7 * * *"
 
+# ---------------------------------------------------------------------------
+# One canonical origin.
+#
+# A Netlify domain ALIAS serves the site directly — it does not redirect to the
+# primary. So without these the app is live on three hostnames at once, and
+# browser storage is per-origin: a man who installs the PWA from the .com gets a
+# separate app with its own login, its own cached data and its own offline
+# outbox. Entries queued on one origin are invisible from the other.
+#
+# The netlify.app subdomain is DELIBERATELY NOT redirected. CloudMailin POSTs
+# the inbound sales notes to it, and a 301 turns a POST into a GET — the ingest
+# would fail silently, which is the last thing here that should break.
+#
+# These must sit ABOVE the SPA catch-all: Netlify applies redirects in order.
+[[redirects]]
+  from = "https://skipper-management.com/*"
+  to = "https://skippermanagement.co.uk/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.skipper-management.com/*"
+  to = "https://skippermanagement.co.uk/:splat"
+  status = 301
+  force = true
+
+# The mistyped domain — kept alive so a bookmark or a mis-keyed address still
+# lands, but never the place anyone stays.
+[[redirects]]
+  from = "https://skippermangement.co.uk/*"
+  to = "https://skippermanagement.co.uk/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.skippermangement.co.uk/*"
+  to = "https://skippermanagement.co.uk/:splat"
+  status = 301
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
