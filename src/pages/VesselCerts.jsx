@@ -9,6 +9,7 @@ import { useAuth } from '../AuthContext'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
 import { parseVesselCertFile } from '../lib/certs/parseCert'
 import { downscaleImage } from '../lib/downscale'
+import UnattachedFiles from '../components/UnattachedFiles'
 
 const BUCKET = 'vessel-certs'
 const safeName = (s) => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
@@ -228,6 +229,16 @@ export default function VesselCerts() {
       </PageHeader>
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
+
+      {/* Photos uploaded but never attached to a certificate — see the note in
+          the component. Renders nothing when there are none. */}
+      <UnattachedFiles
+        bucket={BUCKET}
+        fleetId={appUser?.fleet_id}
+        referenced={rows.map((r) => r.file_path).filter(Boolean)}
+        canDelete={canEdit}
+        onChange={load}
+      />
 
       <div className="card">
         <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>

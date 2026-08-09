@@ -10,6 +10,7 @@ import { useAuth } from '../AuthContext'
 import { keepsCrewRecords } from '../lib/roles'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
 import { CERT_CATEGORIES, suggestCategory } from './CrewCerts'
+import UnattachedFiles from '../components/UnattachedFiles'
 
 const BUCKET = 'crew-certs'
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
@@ -245,6 +246,17 @@ export default function CrewCertsRegister() {
           <Stat label="No expiry" value={counts.none} accent="var(--grey-400)" />
         </div>
       </div>
+
+      {/* crew-certs is nested <fleet>/<crew_id>/<file>, so the scan goes one
+          level deeper than the vessel bucket. */}
+      <UnattachedFiles
+        bucket={BUCKET}
+        fleetId={appUser?.fleet_id}
+        referenced={rows.map((r) => r.file_path).filter(Boolean)}
+        nested
+        canDelete={canEdit}
+        onChange={load}
+      />
 
       {uncategorised > 0 && canEdit && (
         <Categoriser rows={enriched} onDone={load} setError={setError} />
