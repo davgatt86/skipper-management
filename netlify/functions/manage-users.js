@@ -120,6 +120,63 @@ const handleRequest = async (event) => {
     }
   }
 
+  // ---------------- UPDATE ----------------
+  // Roles and names were fixed at creation, so the only way to correct one was
+  // to delete the login and make a new one — which is how a relief skipper ends
+  // up filed as 'office' and stays there.
+  if (action === 'update') {
+    const userId = String(body.userId || '')
+    if (!userId) return json(422, { error: 'userId required' })
+
+    const { data: target } = await svc.from('app_users')
+      .select('id, role, is_owner, fleet_id, display_name, crew_id').eq('id', userId).maybeSingle()
+    if (!target) return json(404, { error: 'user not found' })
+    if (target.fleet_id !== fleet) return json(403, { error: 'that user is not in your fleet' })
+
+    const patch = {}
+    if (body.displayName !== undefined) {
+      const dn = String(body.displayName).trim()
+      if (!dn) return json(422, { error: 'display name cannot be blank' })
+      patch.display_name = dn
+    }
+
+    if (body.role !== undefined) {
+      const role = String(body.role).trim()
+      // Only the site owner may make somebody a skipper. An ordinary skipper
+      // minting more skippers is how one compromised login becomes several.
+      const allowed = me.is_owner ? [...CREATABLE_ROLES, 'skipper'] : CREATABLE_ROLES
+      if (!allowed.includes(role)) {
+        return json(422, {
+          error: me.is_owner
+            ? `role must be one of: ${allowed.join(', ')}`
+            : `role must be one of: ${allowed.join(', ')} — only the site owner can make someone a skipper`,
+        })
+      }
+      // Changing your own role is how you lock yourself out of this page.
+      if (userId === me.id) return json(409, { error: "you can't change your own role" })
+      if (target.is_owner) return json(403, { error: "the site owner's role can't be changed here" })
+
+      // check_crew_id_role: 'crew' must carry a crew_id, everything else must not.
+      const crewId = body.crewId ? String(body.crewId) : null
+      if (role === 'crew') {
+        const linkTo = crewId || target.crew_id
+        if (!linkTo) return json(422, { error: 'a Crew login must be linked to a crew record — pick the crewman' })
+        const { data: crewRow } = await svc.from('crew').select('id').eq('id', linkTo).eq('fleet_id', fleet).maybeSingle()
+        if (!crewRow) return json(422, { error: 'that crew record is not in your fleet' })
+        patch.crew_id = linkTo
+      } else {
+        patch.crew_id = null
+      }
+      patch.role = role
+    }
+
+    if (!Object.keys(patch).length) return json(422, { error: 'nothing to change' })
+
+    const { error: ue2 } = await svc.from('app_users').update(patch).eq('id', userId)
+    if (ue2) return json(500, { error: ue2.message })
+    return json(200, { ok: true, updated: userId, patch })
+  }
+
   // ---------------- DELETE ----------------
   if (action === 'delete') {
     const userId = String(body.userId || '')

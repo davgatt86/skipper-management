@@ -41,8 +41,26 @@
 import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 
-// Only the expiry stream. Market alerts are deliberately excluded — see above.
-const DIGEST_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert', 'crew_bonus']
+// Expiries and stopped books. Market alerts are deliberately excluded — see
+// above: they run every three hours and would drown this.
+const DIGEST_TYPES = [
+  // running out
+  'crew_passport', 'crew_cert', 'vessel_cert', 'crew_bonus',
+  // stopped being written in, or falling due
+  'log_engine', 'log_fuel', 'log_garbage', 'log_crewlist', 'maint_due',
+]
+
+/* Who gets it.
+ *
+ * Anyone aboard who keeps the records, plus the office. An expired liferaft
+ * certificate is the skipper's to renew, but the engine log going quiet is the
+ * engineer's to fix — sending only to the skipper would mean he has to relay it
+ * to the man who can actually act.
+ *
+ * 'engineer' is the old name for 'officer' and is still honoured on any
+ * unmigrated login. 'crew' is excluded: a deckhand can do nothing about any of
+ * this and a daily list of other people's overdue paperwork is just noise. */
+const DIGEST_ROLES = ['skipper', 'officer', 'engineer', 'office']
 
 const SITE = process.env.SITE_URL || 'https://skippermanagement.co.uk'
 // Must be on the domain verified in CloudMailin, or the message is accepted and
@@ -169,16 +187,14 @@ export const handler = async () => {
 
   const [{ data: fleets }, { data: users }] = await Promise.all([
     svc.from('fleets').select('id, name'),
-    // Skippers only. An officer keeps the logs but chasing a certificate is the
-    // skipper's job, and a digest to somebody who cannot act on it is noise.
-    svc.from('app_users').select('email, display_name, fleet_id, role').eq('role', 'skipper'),
+    svc.from('app_users').select('email, display_name, fleet_id, role').in('role', DIGEST_ROLES),
   ])
   const fleetName = Object.fromEntries((fleets || []).map((f) => [f.id, f.name]))
 
   const results = []
   for (const [fleetId, list] of byFleet) {
     const to = (users || []).filter((u) => u.fleet_id === fleetId && u.email)
-    if (!to.length) { results.push(`${fleetName[fleetId] || fleetId}: no skipper with an email`); continue }
+    if (!to.length) { results.push(`${fleetName[fleetId] || fleetId}: nobody to send to`); continue }
     const overdue = list.filter((a) => a.severity === 'warn').length
     const subject = overdue
       ? `${fleetName[fleetId] || 'Your boat'} — ${overdue} overdue, ${list.length} in total`

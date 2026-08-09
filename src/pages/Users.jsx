@@ -29,6 +29,12 @@ export default function Users() {
   const [crewId, setCrewId] = useState('')
   const [tempPassword, setTempPassword] = useState('')
 
+  // edit form
+  const [editing, setEditing] = useState(null)     // user id being edited
+  const [editRole, setEditRole] = useState('')
+  const [editName, setEditName] = useState('')
+  const [editCrewId, setEditCrewId] = useState('')
+
   async function api(payload) {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) throw new Error('Your session expired — sign in again.')
@@ -98,6 +104,24 @@ export default function Users() {
   }
 
   const canDelete = (u) => u.id !== meId && !u.is_owner && u.role !== 'skipper'
+  // You cannot change your own role — that is how you lock yourself out of this
+  // page — nor the owner's. Everything else is fair game.
+  const canEdit = (u) => u.id !== meId && !u.is_owner
+
+  async function saveEdit(u) {
+    setError(''); setResult(null); setBusy(true)
+    try {
+      await api({
+        action: 'update', userId: u.id,
+        role: editRole || undefined,
+        displayName: editName.trim() || undefined,
+        crewId: editRole === 'crew' && editCrewId ? editCrewId : undefined,
+      })
+      setEditing(null)
+      await loadUsers()
+    } catch (err) { setError(err.message) }
+    setBusy(false)
+  }
 
   return (
     <AppShell>
@@ -120,9 +144,56 @@ export default function Users() {
                   {u.id === meId && <span className="muted" style={{ fontSize: '0.75rem' }}> · you</span>}
                   <div className="muted" style={{ fontSize: '0.85rem' }}>{u.email} · {ROLE_LABEL[u.role] || u.role}</div>
                 </div>
-                {canDelete(u)
-                  ? <button className="secondary" disabled={busy} onClick={() => removeUser(u)}>Delete</button>
-                  : <span className="muted" style={{ fontSize: '0.75rem' }}>protected</span>}
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  {canEdit(u) && (
+                    <button className="secondary" disabled={busy}
+                            onClick={() => {
+                              setEditing(editing === u.id ? null : u.id)
+                              setEditRole(u.role); setEditName(u.display_name || ''); setEditCrewId(u.crew_id || '')
+                            }}>
+                      {editing === u.id ? 'Close' : 'Edit'}
+                    </button>
+                  )}
+                  {canDelete(u)
+                    ? <button className="secondary" disabled={busy} onClick={() => removeUser(u)}>Delete</button>
+                    : <span className="muted" style={{ fontSize: '0.75rem', alignSelf: 'center' }}>protected</span>}
+                </div>
+
+                {editing === u.id && (
+                  <div style={{ flexBasis: '100%', marginTop: '0.6rem', padding: '0.75rem', background: 'var(--grey-50)', borderRadius: 6 }}>
+                    <label style={labelStyle}>
+                      <div style={capStyle}>Display name</div>
+                      <input type="text" value={editName} onChange={e => setEditName(e.target.value)} />
+                    </label>
+                    <label style={labelStyle}>
+                      <div style={capStyle}>Role</div>
+                      <select value={editRole} onChange={e => setEditRole(e.target.value)}>
+                        <option value="crew">Crew (sees own data)</option>
+                        <option value="officer">Officer — engineer or mate (logs, maintenance, crew papers. No money.)</option>
+                        <option value="office">Office (payments and contracts, no sales)</option>
+                        <option value="viewer">Viewer (read-only)</option>
+                        {/* Only the site owner may hand out a skipper login. An
+                            ordinary skipper minting more skippers is how one
+                            compromised account becomes several. */}
+                        {appUser?.is_owner && <option value="skipper">Skipper — full access</option>}
+                      </select>
+                      {!appUser?.is_owner && (
+                        <div style={hintStyle}>Only the site owner can make someone a skipper.</div>
+                      )}
+                    </label>
+                    {editRole === 'crew' && (
+                      <label style={labelStyle}>
+                        <div style={capStyle}>Which crewman is this?</div>
+                        <select value={editCrewId} onChange={e => setEditCrewId(e.target.value)}>
+                          <option value="">— choose —</option>
+                          {crew.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
+                        </select>
+                        <div style={hintStyle}>Required for a Crew login. Every other role is a login only.</div>
+                      </label>
+                    )}
+                    <button disabled={busy} onClick={() => saveEdit(u)}>{busy ? 'Saving…' : 'Save changes'}</button>
+                  </div>
+                )}
               </li>
             ))}
             {!users.length && <li className="muted">No users yet.</li>}

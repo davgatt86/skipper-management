@@ -685,7 +685,29 @@ Also agreed, not yet scheduled:
   had gained `generate_bonus_alerts` and the migration never learned about it.
 
       compliance-alerts-daily   0 6 * * *     compliance(60) + bonus(30)
+                                              + activity()
       market-alerts             0 */3 * * *   generate_alerts()
+
+  **`generate_activity_alerts()`** (`supabase/activity_alerts.sql`, Aug 2026)
+  catches the other failure — a book that has quietly stopped being written in,
+  which nothing else notices because nothing expires. Engine log after 2 days,
+  bunkering / garbage / crew list after 10, and a maintenance task falling due
+  within 2 days. Thresholds are per fleet in `alert_settings.data`.
+
+  **A fleet is only alerted about a book it has ALREADY used once.** Eleven of
+  the twelve have never made an engine-log or garbage entry, and nagging them
+  daily about a book they never opened is how a reader learns to filter the
+  sender. "You have not started the garbage record book" is a conversation, not
+  a recurring alert — and Audacious has never made one, which is worth knowing.
+
+  **One alert per episode, not one per day.** The dedup key carries the date of
+  the LAST ENTRY, so a stale book raises one alert and stays quiet until someone
+  writes in it and lets it go stale again. The repetition comes from the digest
+  re-listing unread alerts, not from the table filling up.
+
+  Maintenance uses both clocks: days-based alerts 2 days before the due date,
+  hours-based at 95% of the interval — "48 hours before due" is meaningless for
+  an hours interval without knowing the daily burn, and guessing would be worse.
 
   Market alerts had **never** been scheduled — they fired only when someone
   opened the page, which is the same hole the compliance cron was built to
@@ -839,8 +861,10 @@ in `alerts` until somebody opened the app. This closes that.
 - **Nothing is sent when there is nothing to say.** A daily "all clear" trains
   the reader to ignore the sender.
 - Alerts already read or dismissed are skipped, so acting on one stops it.
-- Skippers only. An officer keeps the logs, but chasing a certificate is the
-  skipper's job.
+- **Sent to skipper, officer and office.** An expired liferaft certificate is
+  the skipper's to renew, but the engine log going quiet is the engineer's to
+  fix — skipper-only would mean relaying it to the man who can act. `crew` is
+  excluded: a deckhand can do nothing about any of it.
 
 **Sent via CloudMailin over SMTP** — the same vendor already handling inbound
 sales notes, so there is one account rather than two. `nodemailer`, pooled to
