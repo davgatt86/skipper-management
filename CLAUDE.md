@@ -842,9 +842,31 @@ in `alerts` until somebody opened the app. This closes that.
 - Skippers only. An officer keeps the logs, but chasing a certificate is the
   skipper's job.
 
-**It will not send until `RESEND_API_KEY` is set in Netlify** — it exits
-cleanly and reports "not set" rather than failing. `DIGEST_FROM` optionally
-overrides the sender, which must be a verified domain on the provider.
+**Sent via CloudMailin over SMTP** — the same vendor already handling inbound
+sales notes, so there is one account rather than two. `nodemailer`, pooled to
+one connection for the whole run and closed at the end, or the function holds
+the session open until the runtime kills it.
+
+Port 587 is STARTTLS, not implicit TLS: `secure: false` with `requireTLS: true`
+is the correct pairing, and the second half is what stops the credentials going
+in the clear. nodemailer is in `external_node_modules` because it resolves parts
+of itself with dynamic `require()` — esbuild bundles it without complaint and
+then it fails at run time.
+
+Env, set in Netlify and **never in the repo**:
+
+    CLOUDMAILIN_SMTP_USERNAME
+    CLOUDMAILIN_SMTP_PASSWORD
+    DIGEST_FROM                 must be on a verified domain
+    SMTP_HOST / SMTP_PORT       optional, default smtp.cloudmta.net:587
+
+Missing credentials are reported as "skipped", not an error, so the schedule
+runs harmlessly until they are set.
+
+**A CloudMailin account starts in TEST MODE: it accepts the message and
+delivers nothing.** The function log will still say "sent". Verify a domain
+before believing a green run — and `netlify.app` cannot be verified, so this
+needs a domain David owns.
 
 ## Roles, and where the boundary actually is
 

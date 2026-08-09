@@ -23,18 +23,31 @@
 // SCHEDULE: see netlify.toml. Runs after the 06:00 UTC generation cron so it
 // reports the same morning's alerts rather than yesterday's.
 //
-// ENV: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (already set),
-//      RESEND_API_KEY   — must be added before anything is actually sent
-//      DIGEST_FROM      — optional, defaults below; must be a verified sender
+// SENDING: CloudMailin, over SMTP — the same vendor already handling inbound
+// sales notes, so there is one account to manage rather than two.
+//
+// ENV (set these in Netlify, never in the repo — this file is on GitHub):
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   already set
+//   CLOUDMAILIN_SMTP_USERNAME                 from the CloudMailin dashboard
+//   CLOUDMAILIN_SMTP_PASSWORD                 ditto (the API key)
+//   DIGEST_FROM                               must be on a VERIFIED domain
+//   SMTP_HOST / SMTP_PORT                     optional overrides
+//
+// Until a domain is verified, CloudMailin accepts the message and delivers
+// nothing — that is its test mode, not a failure, and the log below will still
+// read "sent". Verify the domain before believing a green run.
 // ============================================================================
 
 import { createClient } from '@supabase/supabase-js'
+import nodemailer from 'nodemailer'
 
 // Only the expiry stream. Market alerts are deliberately excluded — see above.
 const DIGEST_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert', 'crew_bonus']
 
 const SITE = process.env.SITE_URL || 'https://skipper-management.netlify.app'
 const FROM = process.env.DIGEST_FROM || 'Skipper Management <alerts@skipper-management.app>'
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.cloudmta.net'
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587)
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
 
@@ -77,16 +90,42 @@ function renderEmail(fleetName, alerts) {
 </body></html>`
 }
 
-async function sendEmail(to, subject, html) {
-  const key = process.env.RESEND_API_KEY
-  if (!key) return { skipped: 'RESEND_API_KEY not set' }
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: FROM, to: [to], subject, html }),
+/* One connection for the whole run, not one per skipper.
+ *
+ * Opening an SMTP session costs a TLS handshake and an AUTH round trip, and
+ * there is one message per boat. `pool` keeps a single connection open across
+ * them, which matters because a Netlify function is billed by the second and
+ * dies when it returns. */
+let transport = null
+function getTransport() {
+  if (transport) return transport
+  const user = process.env.CLOUDMAILIN_SMTP_USERNAME
+  const pass = process.env.CLOUDMAILIN_SMTP_PASSWORD
+  if (!user || !pass) return null
+  transport = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    // 587 is STARTTLS, not implicit TLS. `secure: false` here means "start
+    // plain, then upgrade" — `requireTLS` is what makes the upgrade mandatory,
+    // so the credentials are never sent in the clear.
+    secure: false,
+    requireTLS: true,
+    auth: { user, pass },
+    pool: true,
+    maxConnections: 1,
   })
-  if (!res.ok) return { error: `${res.status} ${await res.text()}` }
-  return { ok: true }
+  return transport
+}
+
+async function sendEmail(to, subject, html) {
+  const t = getTransport()
+  if (!t) return { skipped: 'CLOUDMAILIN_SMTP_USERNAME / _PASSWORD not set' }
+  try {
+    await t.sendMail({ from: FROM, to, subject, html })
+    return { ok: true }
+  } catch (e) {
+    return { error: e.message }
+  }
 }
 
 export const handler = async () => {
@@ -137,6 +176,10 @@ export const handler = async () => {
       results.push(`${u.email}: ${r.ok ? 'sent' : r.skipped || r.error}`)
     }
   }
+
+  // Close the pooled connection, or the function holds it open until the
+  // runtime kills it and CloudMailin logs a dropped session every morning.
+  if (transport) { transport.close(); transport = null }
 
   return { statusCode: 200, body: results.join('\n') || 'nothing to send' }
 }

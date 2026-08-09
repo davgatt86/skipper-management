@@ -5,7 +5,10 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["pdfjs-dist"]
+  # nodemailer resolves parts of itself with dynamic require(), which esbuild
+  # cannot follow — it bundles without complaint and then fails at run time.
+  # Marked external so Netlify installs it as a real module instead.
+  external_node_modules = ["pdfjs-dist", "nodemailer"]
 
 # The daily digest. 07:00 UTC, an hour after the 06:00 generation cron in
 # supabase/alert_cron.sql, so it reports the alerts raised that same morning
