@@ -47,7 +47,17 @@ const DIGEST_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert', 'crew_bonus']
 const SITE = process.env.SITE_URL || 'https://skippermanagement.co.uk'
 // Must be on the domain verified in CloudMailin, or the message is accepted and
 // quietly dropped. Overridable so a second boat's brand does not need a deploy.
-const FROM = process.env.DIGEST_FROM || 'Skipper Management <alerts@skippermanagement.co.uk>'
+/* No default sender, deliberately.
+ *
+ * A hardcoded fallback address is a quiet way to send from a domain that is not
+ * verified — the message is accepted and dropped, and the log says "sent". If
+ * DIGEST_FROM is not set, this refuses to send and says so, which is the honest
+ * failure.
+ *
+ * It also stopped the literal appearing in the build output: DIGEST_FROM was
+ * flagged as a secret in Netlify, and secret scanning fails a build that
+ * contains the value. */
+const FROM = process.env.DIGEST_FROM || ''
 const SMTP_HOST = process.env.SMTP_HOST || 'smtp.cloudmta.net'
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587)
 
@@ -122,6 +132,7 @@ function getTransport() {
 async function sendEmail(to, subject, html) {
   const t = getTransport()
   if (!t) return { skipped: 'CLOUDMAILIN_SMTP_USERNAME / _PASSWORD not set' }
+  if (!FROM) return { skipped: 'DIGEST_FROM not set — refusing to guess a sender' }
   try {
     await t.sendMail({ from: FROM, to, subject, html })
     return { ok: true }
