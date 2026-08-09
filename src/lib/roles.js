@@ -17,10 +17,10 @@ export const isEngineer = (u) => u?.role === 'engineer'
 // keeps them too — adding the engineer does not take the job off him.
 export const keepsLogs = (u) => ['skipper', 'engineer'].includes(u?.role)
 
-// Where a user lands when they open the app. An engineer has no dashboard —
-// every figure on it comes from sales and quota, which he cannot read — so
-// send him to the log he came to keep rather than a page of empty cards.
-export const homeFor = (u) => (isEngineer(u) ? '/engine-logs' : '/')
+// Where a user lands when they open the app. The main dashboard is built from
+// sales and quota, which an engineer cannot read, so he gets his own front page
+// — how long since each book was written in, and what is falling due.
+export const homeFor = (u) => (isEngineer(u) ? '/engine-room' : '/')
 
 export const ROLE_LABELS = {
   skipper: 'Skipper — full access',

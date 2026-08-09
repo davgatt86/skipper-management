@@ -10,6 +10,7 @@ import { keepsLogs, isSkipper } from '../lib/roles'
 import { useOfflineTable } from '../lib/offline/useOfflineTable'
 import { readCache, cacheTable, isOnline } from '../lib/offline/queue'
 import SyncStatus from '../components/SyncStatus'
+import { splitCharts } from '../lib/engineCharts'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
 // ------------------------------------------------------------------
@@ -414,6 +415,23 @@ function Stat({ label, value, accent }) {
 }
 
 // ---------------- Chart view ----------------
+//
+// Two things were wrong with this panel and both showed up the moment an
+// engineer opened it on a phone.
+//
+// 1. THE PICKER DID NOT FIT. It was an auto-fit grid of checkboxes, which on a
+//    narrow screen put the box on top of its own label and ran a second column
+//    off the side of the display. Now it is a plain list that becomes one
+//    column when there is not room for two, with the box pinned left and the
+//    label free to wrap.
+//
+// 2. ONE AXIS FOR EVERYTHING. Main Engine 1 carries RPM near 750, exhausts near
+//    400, pressures between 2 and 6 and running hours in the tens of thousands.
+//    On a shared axis the pressures are a flat line on the floor. The old panel
+//    knew this and put a tip underneath telling the reader to avoid it, which
+//    is asking a man to do the software's job. It now splits the selection into
+//    as many charts as it needs — by unit first, then by magnitude within a
+//    unit — see src/lib/engineCharts.js.
 function ChartPanel({ logs, series, setSeries, pickGroup, setPickGroup, chartType, setChartType, fromD, setFromD, toD, setToD }) {
   const asc = [...logs].sort((a, b) => (a.log_date || '').localeCompare(b.log_date || ''))
   const bounds = { min: asc[0]?.log_date || '', max: asc[asc.length - 1]?.log_date || '' }
@@ -429,18 +447,23 @@ function ChartPanel({ logs, series, setSeries, pickGroup, setPickGroup, chartTyp
     }
     return row
   })
-  const toggle = (key) => setSeries((prev) => prev.includes(key) ? prev.filter((k) => k !== key) : (prev.length >= 12 ? prev : [...prev, key]))
-  const groupParams = FLAT_PARAMS.filter((p) => p.group === pickGroup)
-  const Chart = chartType === 'bar' ? BarChart : LineChart
 
+  const groupParams = FLAT_PARAMS.filter((p) => p.group === pickGroup)
+  const toggle = (key) => setSeries((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+  const selectedParams = FLAT_PARAMS.filter((p) => series.includes(p.key))
+  const { charts, empty } = useMemo(() => splitCharts(selectedParams, data), [series.join('|'), data.length, from, to])
+
+  const Chart = chartType === 'bar' ? BarChart : LineChart
   const btn = (active) => ({ padding: '0.35rem 0.7rem', fontSize: '0.8rem', border: 'none', cursor: 'pointer', background: active ? 'var(--navy)' : 'transparent', color: active ? '#fff' : 'var(--navy)' })
   const fieldLabel = { display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.78rem', fontWeight: 600 }
-  const inp = { padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid var(--border)' }
+  const inp = { padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid var(--border)', maxWidth: '100%' }
+
+  const groupSelected = groupParams.filter((p) => series.includes(p.key)).length
 
   return (
     <div className="card">
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '0.8rem' }}>
-        <label style={fieldLabel}>Equipment
+        <label style={{ ...fieldLabel, flex: '1 1 12rem', minWidth: 0 }}>Equipment
           <select value={pickGroup} onChange={(e) => setPickGroup(e.target.value)} style={inp}>
             {ENGINE_TEMPLATE.map((g) => <option key={g.group}>{g.group}</option>)}
           </select>
@@ -451,45 +474,86 @@ function ChartPanel({ logs, series, setSeries, pickGroup, setPickGroup, chartTyp
           <button onClick={() => setChartType('line')} style={btn(chartType === 'line')}>Line</button>
           <button onClick={() => setChartType('bar')} style={btn(chartType === 'bar')}>Bar</button>
         </div>
-        {series.length > 0 && <button className="secondary" onClick={() => setSeries([])} style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}>Clear</button>}
       </div>
 
-      <div style={{ display: 'grid', gap: '0.25rem 0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginBottom: '0.9rem' }}>
+      {/* Plot the lot in one tap — the split below means it is now a sensible
+          thing to do, where before it produced one unreadable chart. */}
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+        <button className="secondary" style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                onClick={() => setSeries((prev) => [...new Set([...prev, ...groupParams.map((p) => p.key)])])}>
+          Plot all of {pickGroup}
+        </button>
+        {groupSelected > 0 && (
+          <button className="secondary" style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                  onClick={() => setSeries((prev) => prev.filter((k) => !groupParams.some((p) => p.key === k)))}>
+            Remove this group
+          </button>
+        )}
+        {series.length > 0 && (
+          <button className="secondary" style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }} onClick={() => setSeries([])}>
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {/* One column when there is not room for two. The checkbox is pinned and
+          the label wraps beside it rather than under it. */}
+      <div style={{
+        display: 'grid', gap: '0.1rem 1rem',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+        marginBottom: '0.9rem',
+      }}>
         {groupParams.map((p) => (
-          <label key={p.key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}>
-            <input type="checkbox" checked={series.includes(p.key)} onChange={() => toggle(p.key)} />
-            {p.label}{p.unit ? <span className="muted"> ({p.unit})</span> : null}
+          <label key={p.key} style={{
+            display: 'flex', alignItems: 'flex-start', gap: '0.5rem',
+            fontSize: '0.85rem', padding: '0.3rem 0', cursor: 'pointer', minWidth: 0,
+          }}>
+            <input type="checkbox" checked={series.includes(p.key)} onChange={() => toggle(p.key)}
+                   style={{ flex: '0 0 auto', marginTop: '0.15rem', width: 18, height: 18 }} />
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              {p.label}{p.unit ? <span className="muted"> ({p.unit})</span> : null}
+            </span>
           </label>
         ))}
       </div>
 
       {series.length === 0 ? (
-        <p className="muted">Tick one or more parameters above to plot them over time.</p>
+        <p className="muted">Pick parameters above, or plot the whole group — anything on a different scale gets its own chart.</p>
       ) : data.length === 0 ? (
         <p className="muted">No entries in the selected date range.</p>
       ) : (
         <>
-          <div style={{ marginBottom: '0.5rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-            {series.map((s, i) => (
-              <span key={s} onClick={() => toggle(s)} title="Click to remove" style={{ cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: '#fff', background: CHART_COLORS[i % CHART_COLORS.length], borderRadius: 999, padding: '0.1rem 0.55rem' }}>{seriesLabel(s)} ✕</span>
-            ))}
-          </div>
-          <ResponsiveContainer width="100%" height={360}>
-            <Chart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Legend />
-              {series.map((s, i) => chartType === 'bar'
-                ? <Bar key={s} dataKey={s} name={seriesLabel(s)} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                : <Line key={s} dataKey={s} name={seriesLabel(s)} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-              )}
-            </Chart>
-          </ResponsiveContainer>
-          <p className="muted" style={{ fontSize: '0.78rem', marginTop: '0.5rem' }}>
-            Tip: plot parameters with a similar scale together (e.g. the eight exhaust temps, or the pressures) — mixing RPM with pressures flattens the smaller values on a shared axis.
-          </p>
+          {empty.length > 0 && (
+            <p className="muted" style={{ fontSize: '0.8rem' }}>
+              No readings recorded for: {empty.map((k) => seriesLabel(k)).join(', ')}.
+            </p>
+          )}
+          {charts.length > 1 && (
+            <p className="muted" style={{ fontSize: '0.8rem', marginTop: 0 }}>
+              Split into {charts.length} charts — these readings are on scales too different to share an axis.
+            </p>
+          )}
+          {charts.map((c) => (
+            <div key={c.id} style={{ marginBottom: '1.4rem' }}>
+              <h3 style={{ fontSize: '0.9rem', margin: '0 0 0.3rem' }}>
+                {c.unit ? c.unit : 'No unit'}
+                <span className="muted" style={{ fontWeight: 400 }}> · {c.keys.length} {c.keys.length === 1 ? 'reading' : 'readings'}</span>
+              </h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <Chart data={data} margin={{ top: 6, right: 12, bottom: 4, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} width={44} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {c.keys.map((s, i) => chartType === 'bar'
+                    ? <Bar key={s} dataKey={s} name={seriesLabel(s)} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    : <Line key={s} dataKey={s} name={seriesLabel(s)} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                  )}
+                </Chart>
+              </ResponsiveContainer>
+            </div>
+          ))}
         </>
       )}
     </div>

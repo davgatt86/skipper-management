@@ -73,8 +73,9 @@ do $$
 declare
   t text;
   allowed text[] := array[
-    -- writes: the logs an engineer actually keeps
+    -- writes: the logs an engineer actually keeps, and his maintenance record
     'engine_logs', 'vessel_fuel_log', 'garbage_log', 'fuel_suppliers',
+    'maintenance_tasks', 'maintenance_events',
     -- reads: the papers he needs, and the rows the app shell needs to boot
     'vessel_certificates', 'vessel_details', 'fleets', 'settings',
     'app_users', 'crew'

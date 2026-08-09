@@ -18,6 +18,8 @@ eq("accessForPath('/engine-logs')", accessForPath('/engine-logs'), 'engineer')
 eq("accessForPath('/fuel-log')", accessForPath('/fuel-log'), 'engineer')
 eq("accessForPath('/garbage-log')", accessForPath('/garbage-log'), 'engineer')
 eq("accessForPath('/vessel-certs')", accessForPath('/vessel-certs'), 'engineer')
+eq("accessForPath('/engine-room')", accessForPath('/engine-room'), 'engineer')
+eq("accessForPath('/maintenance')", accessForPath('/maintenance'), 'engineer')
 eq("accessForPath('/sales')", accessForPath('/sales'), 'fleetTools')
 eq("accessForPath('/quota')", accessForPath('/quota'), 'skipper')
 eq("accessForPath('/settlements')", accessForPath('/settlements'), 'skipper')
@@ -42,7 +44,8 @@ eq("viewer still sees 'all'", canSee('all', view), true)
 
 // --- the engineer's whole menu ---------------------------------------------
 const engNav = navFor(eng).flatMap((g) => g.items.map((i) => i.to)).sort()
-eq('engineer menu', engNav, ['/engine-logs', '/fuel-log', '/garbage-log', '/vessel-certs'])
+eq('engineer menu', engNav,
+  ['/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/maintenance', '/vessel-certs'])
 eq('engineer sees one group', navFor(eng).map((g) => g.label), ['Vessel'])
 
 // the skipper's menu must not have shrunk
@@ -55,7 +58,9 @@ for (const route of ['/', '/sales', '/quota', '/engine-logs', '/fuel-log', '/gar
 eq('keepsLogs(engineer)', keepsLogs(eng), true)
 eq('keepsLogs(skipper)', keepsLogs(skip), true)
 eq('keepsLogs(viewer)', keepsLogs(view), false)
-eq('homeFor(engineer)', homeFor(eng), '/engine-logs')
+// An engineer opens on his own front page, not the engine-log form: the
+// dashboard behind "/" is built from sales and quota, which he cannot read.
+eq('homeFor(engineer)', homeFor(eng), '/engine-room')
 eq('homeFor(skipper)', homeFor(skip), '/')
 eq('isEngineer(null)', isEngineer(null), false)
 eq('keepsLogs(null)', keepsLogs(null), false)

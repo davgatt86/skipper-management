@@ -843,6 +843,63 @@ reaching the skipper.
 
 Live engineer logins: **Norman Wood** and **David Henderson**, Audacious.
 
+### The engineer's own pages (Aug 2026)
+
+Built after watching a real engineer login on a phone. Two things were wrong at
+once: he landed on **"Not available on your login"**, and the chart picker did
+not fit the screen.
+
+**The wall was `ProtectedRoute` guarding `/`.** `accessForPath('/')` is `all`,
+and `canSee('all', engineer)` is deliberately false, so the guard fired before
+`RoleHome` could redirect him. `/` is now never blocked there — it is the front
+door, and `RoleHome` is what routes each role. The dashboard behind it stays
+skipper-only.
+
+- **`/engine-room`** (`EngineerHome.jsx`) is where an engineer now lands. Days
+  since each of the three books was written in, current running hours, what
+  maintenance is falling due, and vessel certificates read-only. Reads through
+  the offline cache like his other pages. `STALE_DAYS` differs per book on
+  purpose — the engine log is a daily habit, the garbage book only gets an
+  entry when something goes ashore, so a fortnight there is normal.
+- **`/maintenance`** (`Maintenance.jsx`, `supabase/maintenance.sql`) is the
+  record: `maintenance_tasks` (what this boat services) and
+  `maintenance_events` (each time one was done). **Editable per fleet and
+  nothing is seeded** — every engine room differs and a fixed list would be
+  wrong on the second boat — but an empty page offers `SUGGESTED_TASKS` so the
+  first run is one tap rather than twenty.
+
+**Two clocks, and either can ring first.** A task carries an hours interval, a
+days interval, both or neither, and the status is the worse of the two — which
+is how a service schedule actually works. Neither means *tracked, not chased*,
+which is the right default for something a man wants to watch without being
+nagged. `src/lib/maintenance.js`, covered by `test-engineer.mjs`.
+
+**A trap that test caught:** `Number(null)` is `0` and `Number.isFinite(0)` is
+true, so an unknown running-hours reading was reporting **"0 hours since"** —
+which an engineer reads as *just done*. Blank must stay blank the whole way
+through.
+
+### Charts: one axis was never going to work
+
+`splitCharts()` in `src/lib/engineCharts.js`. Main Engine 1 carries RPM near
+750, exhausts near 400, pressures between 2 and 6 and running hours in the tens
+of thousands. On a shared axis the pressures are a flat line on the floor —
+worse than no chart, because it looks like information. The old panel knew, and
+put a tip underneath telling the reader to avoid it, which is asking a man to
+do the software's job.
+
+It now splits a selection by **unit first** — bar and °C never share an axis
+whatever the numbers say — then **by magnitude within a unit**, because a 22°C
+intake and a 400°C exhaust are both °C and still cannot share. `SPREAD_LIMIT`
+is 10, set from those two real cases: 18x apart splits, a 90°C jacket against
+the same exhaust is 4.4x and stays. Magnitude is the **median**, so one
+mis-keyed 175 bar cannot drag a series onto its own chart.
+
+Verified in a mobile viewport: plotting all 28 Main Engine parameters gives 5
+charts, 28 checkboxes with **none overlapping its label**, and no horizontal
+overflow at 375px. The picker was an auto-fit grid that put the box on top of
+its own text and ran a second column off the side of the display.
+
 ### The `viewer` role leaked across fleets — fixed Aug 2026
 
 Found by probing the *other* roles the same way, before handing out logins.

@@ -32,6 +32,8 @@ const GarbageLog = lazy(() => import('./pages/GarbageLog'))
 const BuyerLeague = lazy(() => import('./pages/BuyerLeague'))
 const Activity = lazy(() => import('./pages/Activity'))
 const Reconcile = lazy(() => import('./pages/Reconcile'))
+const EngineerHome = lazy(() => import('./pages/EngineerHome'))
+const Maintenance = lazy(() => import('./pages/Maintenance'))
 const CrewList = lazy(() => import('./pages/CrewList'))
 const Forecast = lazy(() => import('./pages/Forecast'))
 const StowagePlan = lazy(() => import('./pages/StowagePlan'))
@@ -73,8 +75,15 @@ function ProtectedRoute({ children }) {
   //
   // A route the menu does not list returns null: allowed for everyone except an
   // engineer, so an unlisted page fails towards the tighter role.
-  const access = accessForPath(pathname)
-  const permitted = access === null ? !isEngineer(appUser) : canSee(access, appUser)
+  // "/" is never blocked here. It is the app's front door, and RoleHome decides
+  // where each role actually lands — an engineer goes to his logs. Guarding it
+  // like any other route meant he opened the app, got "Not available on your
+  // login", and had to find the menu himself. The dashboard behind it is still
+  // skipper-only; RoleHome is what enforces that.
+  const access = pathname === '/' ? null : accessForPath(pathname)
+  const permitted = pathname === '/' ? true
+    : access === null ? !isEngineer(appUser)
+    : canSee(access, appUser)
   if (appUser && !permitted) {
     return (
       <AppShell>
@@ -96,7 +105,7 @@ function ProtectedRoute({ children }) {
 // the log he signed in to keep. Also catches "*", which redirects here.
 function RoleHome() {
   const { appUser } = useAuth()
-  if (isEngineer(appUser)) return <Navigate to="/engine-logs" replace />
+  if (isEngineer(appUser)) return <Navigate to="/engine-room" replace />
   return <Dashboard />
 }
 
@@ -327,6 +336,20 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <Alerts />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/engine-room" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <EngineerHome />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/maintenance" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Maintenance />
             </Suspense>
           </ProtectedRoute>
         } />

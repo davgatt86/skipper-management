@@ -80,6 +80,10 @@ export const NAV = [
       // The vessel's own papers. Crew tickets live under Crew — keeping the
       // two apart is the point, since they expire on different clocks and
       // are chased from different places.
+      // The engineer's front page: how long since each book was written in and
+      // what is falling due. First in the group so it is first in his menu.
+      { to: '/engine-room', label: 'Engine Room', access: 'engineer' },
+      { to: '/maintenance', label: 'Maintenance', access: 'engineer' },
       // Read-only to an engineer — he needs to see when the liferaft service
       // or the extinguisher certificate runs out; renewing them is not his job.
       { to: '/vessel-certs', label: 'Vessel Certificates', access: 'engineer' },
