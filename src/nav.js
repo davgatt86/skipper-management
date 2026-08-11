@@ -47,6 +47,8 @@ export const NAV = [
     items: [
       { to: '/daily-prices', label: 'Daily Prices', access: 'all' },
       { to: '/estimator', label: 'Where to Land', access: 'fleetTools' },
+      // Laying the trip out on the market floor once the destination is settled.
+      { to: '/market-layout', label: 'Market Layout', access: 'fleetTools' },
       { to: '/forecast', label: 'Market Forecast', access: 'skipper' },
     ],
   },
