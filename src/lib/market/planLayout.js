@@ -1,6 +1,6 @@
 import {
   TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, tiersByRuleOfThumb,
-  AUCTIONS, auctionFor, canSplitBands, maxHeight, isPrime,
+  AUCTIONS, auctionFor, canSplitBands, maxHeight, isPrime, valueOf,
 } from './layoutRules.js'
 
 /* Turn a day tally into a market layout.
@@ -14,6 +14,12 @@ import {
  * the other. So the number of tiers is set by whichever row runs out first,
  * and packing the bottom tight while the top sits half empty simply costs
  * tiers. Species are handed to whichever row is furthest from its share.
+ *
+ * THEN THE SPARE SPACE IS SPENT ON THE DEAR FISH. The heights in layoutRules
+ * are a ceiling, not a target: a grade may always be laid lower, and the good
+ * stuff is favoured low so it can be seen and handled. Once the tier count is
+ * settled, whatever footprints are left over inside those tiers are given to
+ * the most valuable grades, one level at a time. See `solveDrops`.
  */
 
 /* Boxes of one grade, in day order, poured into stacks of at most `height`.
@@ -38,42 +44,100 @@ export function buildStacks(dayEntries, height) {
   return stacks
 }
 
-/* → { tiers, ruleOfThumb, totalBoxes, footprints, rows, auctionSpans, warnings } */
-export function planLayout(lines, opts = {}) {
-  const warnings = []
-  const clean = (lines || []).filter((l) => Number(l.boxes) > 0)
-  const totalBoxes = clean.reduce((s, l) => s + Number(l.boxes), 0)
-  if (!totalBoxes) {
-    return { tiers: 0, ruleOfThumb: 0, totalBoxes: 0, footprints: 0,
-             rows: { top: [], bottom: [] }, byTier: [], auctionSpans: [], warnings: ['Nothing on the tally.'] }
-  }
-
-  // 1. One bucket per species+grade, carrying its days.
+/* One bucket per species+grade, carrying its days and its ceiling. */
+function bucketGrades(clean) {
   const grades = new Map()
   for (const l of clean) {
     const key = `${l.species}||${l.grade}`
     if (!grades.has(key)) {
       grades.set(key, {
+        key,
         species: l.species, grade: l.grade,
         auction: auctionFor(l.species),
-        height: opts.heightFor ? opts.heightFor(l.species, l.grade) : maxHeight(l.species, l.grade),
+        max: maxHeight(l.species, l.grade),
         prime: isPrime(l.species, l.grade),
+        value: valueOf(l.species),
         // Position in the tally, which is grading order. Falls back to a big
         // number so a line without it sorts last rather than first.
         seq: Number.isFinite(l.seq) ? l.seq : Number.MAX_SAFE_INTEGER,
+        boxes: 0,
         days: [],
       })
     }
-    if (Number.isFinite(l.seq)) grades.get(key).seq = Math.min(grades.get(key).seq, l.seq)
-    grades.get(key).days.push({ day: Number(l.day), boxes: Number(l.boxes) })
+    const g = grades.get(key)
+    if (Number.isFinite(l.seq)) g.seq = Math.min(g.seq, l.seq)
+    g.boxes += Number(l.boxes)
+    g.days.push({ day: Number(l.day), boxes: Number(l.boxes) })
   }
+  return [...grades.values()]
+}
 
-  // 2. Stacks, then gather them by species so a species stays whole.
+/* Footprints a grade takes at a given height.
+ *
+ * Exact rather than an estimate: buildStacks fills each stack right up before
+ * starting the next, spanning day tags to do it, so a grade of n boxes at
+ * height h always occupies ceil(n / h) footprints. That is what makes the cost
+ * of laying a grade one lower knowable before doing it. */
+const cost = (boxes, height) => Math.ceil(boxes / Math.max(height, 1))
+
+/* Spend leftover footprints on laying the valuable fish lower.
+ *
+ * Heights are a ceiling — "can not go higher, but can go lower" — and high
+ * value species and grades are always favoured low. So once the tier count is
+ * fixed, any footprint left inside those tiers is worth more under a good fish
+ * than left as a gap in the floor.
+ *
+ * Most of the dear stuff already lies flat (cod's big grades, monks, ling, the
+ * flats), so in practice this reaches the next rank down: cod's small grades,
+ * then catfish, saithe, haddock, whiting.
+ *
+ * Round by round, most valuable first, one level at a time — so a strong grade
+ * gets to 1 high before a weaker one gets its first drop, and the drops spread
+ * evenly if the budget will not stretch that far.
+ *
+ * Returns a Map of key → height. Budget is a footprint count; the caller
+ * re-runs the layout and checks the tier count really did hold, because row
+ * assignment can shift when stack counts change. */
+export function solveDrops(gradeList, budget) {
+  const heights = new Map(gradeList.map((g) => [g.key, g.max]))
+  let spare = budget
+  if (spare <= 0) return heights
+
+  // Most valuable species first; inside a species the tally's own order, which
+  // is grading order, so the bigger grade is favoured over the smaller.
+  const candidates = [...gradeList].sort((a, b) => b.value - a.value || a.seq - b.seq)
+
+  let moved = true
+  while (moved && spare > 0) {
+    moved = false
+    for (const g of candidates) {
+      const h = heights.get(g.key)
+      if (h <= 1) continue
+      const extra = cost(g.boxes, h - 1) - cost(g.boxes, h)
+      if (extra > spare) continue           // cannot afford this one; try the next
+      heights.set(g.key, h - 1)
+      spare -= extra
+      moved = true
+      if (spare <= 0) break
+    }
+  }
+  return heights
+}
+
+/* One pass at a fixed set of heights. `heightOf(grade)` returns the height to
+ * lay each bucket at; the two-pass planner below calls this twice. */
+function layoutOnce(clean, totalBoxes, heightOf) {
+  const warnings = []
+  const gradeList = bucketGrades(clean)
+
+  // Stacks, then gather them by species so a species stays whole.
   const speciesList = new Map()
-  for (const g of grades.values()) {
-    const stacks = buildStacks(g.days, g.height).map((s) => ({
+  for (const g of gradeList) {
+    const height = heightOf(g)
+    const stacks = buildStacks(g.days, height).map((s) => ({
       species: g.species, grade: g.grade, auction: g.auction,
-      height: g.height, boxes: s.boxes, parts: s.parts, prime: g.prime, seq: g.seq,
+      height, max: g.max, lowered: height < g.max,
+      boxes: s.boxes, parts: s.parts, prime: g.prime, seq: g.seq,
     }))
     const key = `${g.auction}||${g.species}`
     if (!speciesList.has(key)) speciesList.set(key, { species: g.species, auction: g.auction, stacks: [] })
@@ -95,8 +159,8 @@ export function planLayout(lines, opts = {}) {
 
   const footprints = species.reduce((s, sp) => s + sp.stacks.length, 0)
 
-  // 3. Hand each species to the row that is furthest behind its share. Only
-  //    the flats auction may be broken across the two rows.
+  // Hand each species to the row that is furthest behind its share. Only the
+  // flats auction may be broken across the two rows.
   const rows = { top: [], bottom: [] }
   const pressure = (r) => (r === 'top' ? rows.top.length / TOP_ROW : rows.bottom.length / BOTTOM_ROW)
   for (const sp of species) {
@@ -108,9 +172,8 @@ export function planLayout(lines, opts = {}) {
     }
   }
 
-  // 4. Tiers are set by whichever row runs out first.
+  // Tiers are set by whichever row runs out first.
   const tiers = Math.max(Math.ceil(rows.top.length / TOP_ROW), Math.ceil(rows.bottom.length / BOTTOM_ROW), 1)
-  const ruleOfThumb = tiersByRuleOfThumb(totalBoxes)
 
   const byTier = []
   for (let t = 0; t < tiers; t++) {
@@ -137,9 +200,66 @@ export function planLayout(lines, opts = {}) {
       warnings.push(`${a.label} is split across tiers ${a.from}–${a.to} rather than sitting in one run.`)
     }
   }
-  if (tiers > ruleOfThumb) {
-    warnings.push(`Needs ${tiers} tiers, but the ÷94 rule would have asked for ${ruleOfThumb}. Ask for ${tiers}.`)
+
+  return { tiers, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species, gradeList }
+}
+
+/* → { tiers, ruleOfThumb, totalBoxes, footprints, rows, auctionSpans, warnings } */
+export function planLayout(lines, opts = {}) {
+  const clean = (lines || []).filter((l) => Number(l.boxes) > 0)
+  const totalBoxes = clean.reduce((s, l) => s + Number(l.boxes), 0)
+  if (!totalBoxes) {
+    return { tiers: 0, ruleOfThumb: 0, totalBoxes: 0, footprints: 0, spare: 0, lowered: [],
+             rows: { top: [], bottom: [] }, byTier: [], auctionSpans: [], warnings: ['Nothing on the tally.'] }
   }
 
-  return { tiers, ruleOfThumb, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species }
+  // A caller dictating heights gets exactly those heights and no second-
+  // guessing — that is the point of passing them.
+  const fixed = opts.heightFor && ((g) => opts.heightFor(g.species, g.grade))
+
+  // Pass one: everything at its ceiling. This is what sets the tier count, and
+  // nothing below is allowed to raise it.
+  let plan = layoutOnce(clean, totalBoxes, fixed || ((g) => g.max))
+  let heights = null
+
+  if (!fixed && opts.drop !== false) {
+    const ceiling = plan.tiers
+    // Footprints going spare inside the tiers already being paid for.
+    let budget = ceiling * PER_TIER_FLAT - plan.footprints
+
+    // The budget is a total, but the two rows fill independently, so a drop
+    // that fits on paper can still push one row over. Back off until it holds
+    // rather than trusting the arithmetic.
+    while (budget > 0) {
+      const tryHeights = solveDrops(plan.gradeList, budget)
+      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max)
+      if (candidate.tiers <= ceiling) { plan = candidate; heights = tryHeights; break }
+      budget -= 1
+    }
+  }
+
+  const ruleOfThumb = tiersByRuleOfThumb(totalBoxes)
+  const spare = plan.tiers * PER_TIER_FLAT - plan.footprints
+
+  // What ended up laid lower than its ceiling, for the page to show — this is
+  // a decision the skipper should be able to see and overrule, not a silent one.
+  const lowered = []
+  if (heights) {
+    for (const g of plan.gradeList) {
+      const h = heights.get(g.key)
+      if (h < g.max) lowered.push({ species: g.species, grade: g.grade, boxes: g.boxes, from: g.max, to: h })
+    }
+    lowered.sort((a, b) => valueOf(b.species) - valueOf(a.species) || a.seq - b.seq)
+  }
+
+  const warnings = [...plan.warnings]
+  if (plan.tiers > ruleOfThumb) {
+    warnings.push(`Needs ${plan.tiers} tiers, but the ÷94 rule would have asked for ${ruleOfThumb}. Ask for ${plan.tiers}.`)
+  }
+
+  return {
+    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints, spare, lowered,
+    rows: plan.rows, byTier: plan.byTier, auctionSpans: plan.auctionSpans,
+    warnings, species: plan.species,
+  }
 }

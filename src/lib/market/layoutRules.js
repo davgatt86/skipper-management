@@ -111,3 +111,26 @@ export function isPrime(species, grade) {
   const g = String(grade || '').toUpperCase()
   return maxHeight(species, grade) === 1 || /^(XL|X LRG|LARGE|CHAT|GOOD SEED|PINGER)/.test(g)
 }
+
+/* What each species actually makes, £/kg.
+ *
+ * MEASURED, NOT GUESSED. Taken from Audacious's own sales notes across every
+ * UK landing on record — the figures a made-up "value order" would have got
+ * wrong. Used for one thing only: deciding which fish gets laid lower when
+ * there is spare room on the market.
+ *
+ * Most of the dear fish already lies flat, so in practice this decides between
+ * cod's small grades, catfish, saithe, haddock and whiting.
+ *
+ * Worth refreshing occasionally; the ORDER matters, not the exact figure. */
+export const SPECIES_VALUE = {
+  TURBOT: 15.69, HALIBUT: 12.05, BRILL: 9.42, LEMONS: 6.20,
+  COD: 5.94, 'COD ROE': 5.94, LYTHE: 5.42, HAKE: 5.08, MONKS: 4.95,
+  CAT: 2.76, MEGS: 2.64, SQUID: 2.59, LING: 2.51, PLAICE: 2.45,
+  BLACK: 2.05, HADDOCK: 2.02, 'HADDOCK ROE': 2.02, WHITING: 1.72,
+  SKATE: 1.59, OTHER: 1.24, WITCH: 0.93,
+}
+
+// An unlisted fish sits mid-table rather than first or last — being wrong
+// about where it goes should cost a little, not a lot.
+export const valueOf = (species) => SPECIES_VALUE[String(species || '').toUpperCase().trim()] ?? 2.5

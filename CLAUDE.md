@@ -187,6 +187,69 @@ Rules learned the hard way:
   fiskeauktion.dk export carries per-species kg — the emailed Hanstholm day
   sheet has a day total only, rounded to 100 kg.
 
+## Market layout (Aug 2026)
+
+`MarketLayout.jsx` at `/market-layout`, under Market. Upload the wheelhouse day
+tally and get back how many tiers to ask Peterhead for and what goes where.
+`src/lib/market/` — `parseDayTally.js`, `layoutRules.js`, `planLayout.js`.
+
+A **tier** is two rows back to back with a walkway between: **21 footprints on
+the top row, 26 on the bottom, 47 flat.** Tiers are back to back with a walkway
+every second tier. David's rule of thumb for the phone call is `total ÷ 94`
+rounded up, **plus one more** if the remainder is over .7 or it lands exactly
+whole. Kept in `tiersByRuleOfThumb()` because it is what gets asked for — the
+allocator works out the real figure separately and the page shows both. It is a
+good rule: on Trip 63 it asked 16 against a real 17.
+
+**Four auctions** — 1 Cod · 2 Haddock & whiting · 3 Rough (black, monks, ling,
+lythe, squid, **cat**, other) · 4 Flats. Fish from one auction stays together so
+its buyers walk it in one go. **Only the flats may be split across the two
+rows**; every other species stays in one band.
+
+**Both rows fill in proportion.** A tier hands you 21 and 26 at the same time —
+you cannot take one without the other — so the tier count is set by whichever
+row runs out first, and packing the bottom tight while the top sits half empty
+simply costs tiers. Species go to whichever row is furthest behind its share.
+
+**Day tags run high number to low**, and a stack may span two days rather than
+stand part-full. That is why `buildStacks` fills each stack right up before
+starting the next — which also makes a grade's footprint count exactly
+`ceil(boxes / height)`, the fact the drop solver is built on.
+
+**Grades sort by the tally's own row order (`seq`), never by name.** Sorting
+alphabetically put Sprag above Med and Cod above Large, which is not how anyone
+reads a market. Confirmed by David: *"sheet follows my grades not alphabetical."*
+
+### Heights are a ceiling, and the spare space goes to the dear fish
+
+`maxHeight()` holds the guideline — M Metro and small black 4 high, Metro and
+Sel 3, roes and the flats and the big cod flat, most things 2. Confirmed
+including three edges that were not obvious: **Sprag is 1 high** (it sits inside
+"medium cod to XL"), **BLACK XX Sma is 4** like the rest of the small black, and
+**the roes lie flat**.
+
+But the rule is *"can not go higher, but can go lower"* — high value species and
+grades are always favoured low so they can be seen and handled. So `planLayout`
+runs **twice**: once at ceiling heights, which fixes the tier count, then
+`solveDrops()` spends whatever footprints are left inside those tiers on laying
+the valuable grades lower, most valuable first, one level at a time. **The tier
+count is never allowed to rise** — and because a total budget can still push one
+row over while the other has room, the second pass is verified by re-running the
+layout and backing the budget off until it holds, rather than trusting the
+arithmetic.
+
+**The value order is MEASURED, not guessed** — `SPECIES_VALUE` in
+`layoutRules.js` is £/kg from Audacious's own sales notes. Most of the dear fish
+already lies flat, so in practice it decides between cod's small grades (£5.94),
+catfish (£2.76), saithe (£2.05), haddock (£2.02) and whiting (£1.72). Note
+saithe over haddock is a **3p margin** — if that ever looks wrong on the market
+floor, it is the figures that need refreshing, not the algorithm.
+
+On Trip 63 this took the spare from **41 footprints to 2**, still 17 tiers,
+lowering cod's B Baby and Baby to flat, then catfish, then black Large, Med and
+X Sma. The page names every grade it dropped: this is a decision the skipper
+should see, not one made silently under him.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

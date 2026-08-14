@@ -91,6 +91,7 @@ export default function MarketLayout() {
                    accent={plan.ruleOfThumb === plan.tiers ? undefined : 'var(--brass)'} />
               <Fig label="Boxes" value={plan.totalBoxes.toLocaleString('en-GB')} />
               <Fig label="Footprints" value={`${plan.footprints} of ${plan.tiers * (TOP_ROW + BOTTOM_ROW)}`} />
+              <Fig label="Spare" value={plan.spare} accent={plan.spare > 20 ? 'var(--brass)' : undefined} />
               <Fig label="Days" value={parsed.days.join(', ')} />
             </div>
             <p className="muted" style={{ fontSize: '0.82rem', margin: '0.6rem 0 0' }}>
@@ -109,6 +110,38 @@ export default function MarketLayout() {
               <p style={{ margin: 0, fontSize: '0.9rem' }}>{w}</p>
             </div>
           ))}
+
+          {/* ---- the fish given the spare room ---- */}
+          {plan.lowered.length > 0 && (
+            <div className="card">
+              <h2 style={{ marginTop: 0 }}>Laid lower than the guideline</h2>
+              <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+                Heights are a ceiling, not a target — never higher, always allowed lower. These tiers are
+                being paid for either way, so the room left over goes to the fish that earns most,
+                dearest first. Nothing here has cost an extra tier.
+              </p>
+              <div style={{ display: 'grid', gap: '0.15rem' }}>
+                {plan.lowered.map((l, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline',
+                                        borderTop: i ? '1px solid var(--border)' : 'none', padding: '0.25rem 0' }}>
+                    <span style={{ flex: '1 1 auto' }}>{l.species} <span className="muted">{l.grade}</span></span>
+                    <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem' }}>
+                      {l.boxes} {l.boxes === 1 ? 'box' : 'boxes'}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-mono, monospace)', width: '6rem', textAlign: 'right' }}>
+                      {l.from} <span className="muted">→</span> <strong style={{ color: 'var(--kelp)' }}>{l.to}</strong> high
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {plan.spare > 0 && (
+                <p className="muted" style={{ fontSize: '0.82rem', margin: '0.6rem 0 0' }}>
+                  {plan.spare} {plan.spare === 1 ? 'footprint' : 'footprints'} still spare — not enough to
+                  drop another grade a full level.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* ---- the four auctions ---- */}
           <div className="card">
@@ -163,8 +196,10 @@ export default function MarketLayout() {
                             <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>
                               {s.parts.map((p) => `d${p.day}×${p.boxes}`).join(' + ')}
                             </span>
-                            <span className="muted" style={{ width: '4.5rem', textAlign: 'right' }}>
-                              {s.boxes} {s.boxes === 1 ? 'box' : 'boxes'}{s.height > 1 ? ` (max ${s.height})` : ' flat'}
+                            <span className="muted" style={{ width: '7rem', textAlign: 'right' }}>
+                              {s.boxes} {s.boxes === 1 ? 'box' : 'boxes'}
+                              {s.height > 1 ? ` · ${s.height} high` : ' · flat'}
+                              {s.lowered && <span style={{ color: 'var(--kelp)' }}> ↓{s.max}</span>}
                             </span>
                           </div>
                         ))}

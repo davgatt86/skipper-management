@@ -1,5 +1,5 @@
-import { tiersByRuleOfThumb, maxHeight, auctionFor, TOP_ROW, BOTTOM_ROW } from './src/lib/market/layoutRules.js'
-import { buildStacks, planLayout } from './src/lib/market/planLayout.js'
+import { tiersByRuleOfThumb, maxHeight, auctionFor, valueOf, TOP_ROW, BOTTOM_ROW } from './src/lib/market/layoutRules.js'
+import { buildStacks, planLayout, solveDrops } from './src/lib/market/planLayout.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -90,6 +90,57 @@ eq('the rule of thumb is reported alongside', typeof plan.ruleOfThumb, 'number')
 // An empty tally must not throw.
 const none = planLayout([])
 eq('an empty tally is handled', none.tiers, 0)
+
+/* ---- spare space goes to the dear fish -------------------------------- *
+ * "Can not go higher, but can go lower." Heights are a ceiling, and the
+ * valuable grades are favoured low — so leftover footprints inside the tiers
+ * already being paid for should end up under good fish, not left as gaps.
+ *
+ * The comparison is against the same tally laid at ceiling heights throughout
+ * (`drop: false`), which is what the allocator used to do. */
+const tall = planLayout(lines, { drop: false })
+
+eq('lowering never costs a tier', plan.tiers <= tall.tiers, true)
+eq('lowering uses space rather than leaving it', plan.footprints >= tall.footprints, true)
+eq('and the spare shrinks', plan.spare <= tall.spare, true)
+eq('nothing is laid higher than its ceiling', placed.every((s) => s.height <= s.max), true)
+eq('the boxes are all still there after lowering',
+  placed.reduce((a, s) => a + s.boxes, 0), tall.totalBoxes)
+eq('what was lowered is reported', Array.isArray(plan.lowered), true)
+eq('a lowered grade really is under its ceiling',
+  plan.lowered.every((l) => l.to < l.from && l.to >= 1), true)
+
+// Value order, from Audacious's own sales: cod (£5.94/kg) is dropped before
+// black (£2.05) which is dropped before whiting (£1.72). A grade only gets a
+// second level once the dearer ones have had their first.
+{
+  const room = [
+    { species: 'COD', grade: 'Baby (5a)', day: 1, boxes: 4, seq: 1 },
+    { species: 'BLACK', grade: 'Med (2)', day: 1, boxes: 4, seq: 2 },
+    { species: 'WHITING', grade: 'Med (1b)', day: 1, boxes: 4, seq: 3 },
+  ]
+  const p = planLayout(room)
+  // 12 boxes, all 2 high — 6 footprints in a tier that holds 47. Everything
+  // affordable, so everything goes flat.
+  eq('with room to spare, all three lie flat', p.lowered.length, 3)
+  eq('and the dearest is named first', p.lowered[0].species, 'COD')
+
+  // Now starve it: one spare footprint buys exactly one drop, and the cod
+  // must be the fish that gets it.
+  const heights = solveDrops(
+    room.map((l) => ({ key: l.species, species: l.species, boxes: l.boxes, seq: l.seq, max: 2, value: valueOf(l.species) })),
+    2)
+  eq('a tight budget goes to the cod', heights.get('COD'), 1)
+  eq('and not to the whiting', heights.get('WHITING'), 2)
+}
+
+// A grade at height 1 already cannot be lowered, and must not loop forever.
+{
+  const flatOnly = [{ species: 'MONKS', grade: 'Med', day: 1, boxes: 9, seq: 0 }]
+  const p = planLayout(flatOnly)
+  eq('a flat grade has nothing to lower', p.lowered.length, 0)
+  eq('and still gets its footprints', p.footprints, 9)
+}
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

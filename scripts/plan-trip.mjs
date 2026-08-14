@@ -34,6 +34,14 @@ for (const a of plan.auctionSpans) {
 }
 if (plan.warnings.length) { console.log(''); for (const w of plan.warnings) console.log('  ! ' + w) }
 
+// The spare footprints inside the tiers already being paid for, spent on the
+// dear fish. Heights are a ceiling — lower is always allowed.
+console.log('')
+console.log(`laid lower       ${plan.lowered.length} grade(s), ${plan.spare} footprint(s) still spare`)
+for (const l of plan.lowered) {
+  console.log(`  ${(l.species + ' ' + l.grade).padEnd(26)} ${String(l.boxes).padStart(4)} boxes  ${l.from} high → ${l.to}`)
+}
+
 console.log('')
 console.log('first three tiers:')
 const label = (s) => `${s.species} ${s.grade} d${s.parts.map((p) => p.day).join('/')} x${s.boxes}`
