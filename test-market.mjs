@@ -1,5 +1,10 @@
-import { tiersByRuleOfThumb, maxHeight, auctionFor, valueOf, TOP_ROW, BOTTOM_ROW } from './src/lib/market/layoutRules.js'
+import {
+  tiersByRuleOfThumb, maxHeight, auctionFor, valueOf, gradeBand, TOP_ROW, BOTTOM_ROW,
+} from './src/lib/market/layoutRules.js'
 import { buildStacks, planLayout, solveDrops } from './src/lib/market/planLayout.js'
+import {
+  runsOf, sheetPages, assignColours, gradeName, gradeCode, shortSpecies,
+} from './src/lib/market/sheet.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -140,6 +145,75 @@ eq('a lowered grade really is under its ceiling',
   const p = planLayout(flatOnly)
   eq('a flat grade has nothing to lower', p.lowered.length, 0)
   eq('and still gets its footprints', p.footprints, 9)
+}
+
+/* ---- value is per GRADE, not per species ------------------------------ *
+ * The correction David made on the market floor, and the sales notes agree
+ * with him: big haddock beats every grade of black, and only the M Metro
+ * falls below it. A species average (haddock 2.02, black 2.05) gets this
+ * exactly backwards, which is what shipped first. */
+eq('a code comes off the tally grade', gradeBand('Good Seed (1d)'), 1)
+eq('as does a U9', gradeBand('Large (U9a)'), 'U9')
+eq('and a plain grade has none', gradeBand('Tusk'), null)
+
+eq('big haddock beats the best black',
+  valueOf('HADDOCK', 'XL (1a)') > valueOf('BLACK', 'Med (2)'), true)
+eq('so does the seed haddock',
+  valueOf('HADDOCK', 'Seed (2a)') > valueOf('BLACK', 'Large (1)'), true)
+eq('but M Metro does not',
+  valueOf('HADDOCK', 'M Metro (4)') < valueOf('BLACK', 'Sma (4a)'), true)
+eq('and a grade beats the smaller grade of its own species',
+  valueOf('COD', 'Med (3)') > valueOf('COD', 'Baby (5a)'), true)
+eq('an unpriced fish still gets a figure', typeof valueOf('SQUID', 'Large (1)'), 'number')
+
+/* ---- the chalk sheet --------------------------------------------------- */
+{
+  const st = (species, grade, days, boxes = 1) =>
+    ({ species, grade, auction: 'x', height: 2, max: 2, boxes, parts: days.map((d) => ({ day: d, boxes: 1 })) })
+
+  const runs = runsOf([
+    st('COD', 'Large (1b)', [6]), st('COD', 'Large (1b)', [6]),   // merge
+    st('COD', 'Large (1b)', [5]),                                  // new day
+    st('COD', 'Sprag (2)', [5]),                                   // new grade
+    st('HADDOCK', 'XL (1a)', [5]),                                 // new species
+  ])
+  eq('consecutive stacks of the same fish and tag are one block', runs.length, 4)
+  eq('and the block carries both footprints', runs[0].footprints, 2)
+  eq('a new day starts a block', runs[1].newDay, true)
+  eq('a new grade is marked', runs[2].newGrade, true)
+  eq('a new species is marked', runs[3].newSpecies, true)
+  // A new grade already carries the heavier mark; flagging the day as well
+  // fired on 287 of 297 blocks on a real trip and buried the species rule.
+  eq('a new grade does not also count as a new day', runs[2].newDay, false)
+  eq('every footprint survives the grouping',
+    runs.reduce((s, r) => s + r.footprints, 0), 5)
+
+  // Ten tiers to a page — beyond that the columns are too narrow to write in.
+  const fakePlan = { byTier: Array.from({ length: 23 }, (_, i) => ({ tier: i + 1, top: [], bottom: [] })) }
+  const pages = sheetPages(fakePlan, 10)
+  eq('tiers are cut into pages of ten', pages.map((p) => p.columns.length), [10, 10, 3])
+  eq('and the pages are numbered by tier', [pages[0].from, pages[0].to, pages[2].from], [1, 10, 21])
+
+  // No two TOUCHING blocks of different fish may share a colour. Repeats
+  // elsewhere on the floor are fine and expected — the palette is only six.
+  const real = planLayout(lines)
+  const rp = sheetPages(real, 10)
+  const col = assignColours(rp)
+  let clash = 0
+  for (const p of rp) for (const c of p.columns) for (const row of [c.top, c.bottom]) {
+    for (let i = 1; i < row.length; i++) {
+      const a = row[i - 1], b = row[i]
+      if (a.species === b.species && a.grade === b.grade) continue
+      if (col.styleFor(a.species, a.grade).fill === col.styleFor(b.species, b.grade).fill) clash++
+    }
+  }
+  eq('no two touching blocks of different fish share a colour', clash, 0)
+  eq('and the palette is actually spread, not all one hue',
+    new Set(col.species.map((s) => col.styleFor(s, '').hue)).size >= 4, true)
+
+  eq('a grade name drops its code', gradeName('Good Seed (1d)'), 'Good Seed')
+  eq('and the code is available on its own', gradeCode('Good Seed (1d)'), '1d')
+  eq('a species is shortened to fit a column', shortSpecies('HADDOCK'), 'HAD')
 }
 
 console.log('')

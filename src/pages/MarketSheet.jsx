@@ -1,0 +1,298 @@
+import { useMemo } from 'react'
+import { createPortal } from 'react-dom'
+import { TOP_ROW, BOTTOM_ROW } from '../lib/market/layoutRules'
+import {
+  sheetPages, assignColours, dayInk, shortSpecies, gradeName, gradeCode,
+} from '../lib/market/sheet'
+
+/* The chalk sheet: the layout as something you can print and take to market.
+ *
+ * Everything here is sized in MILLIMETRES rather than pixels, because the only
+ * output that matters is the printed page — what is on screen is a preview of
+ * it, not the other way round. A4 portrait, 6mm margins, ten tiers to a page.
+ *
+ * It renders through a portal onto document.body so that printing can hide the
+ * whole app in one rule instead of chasing the sidebar and every card.
+ */
+
+/* mm per footprint down the column. Set by the page, not by taste: 47
+ * footprints plus the tier head, the walkway, the page head and the legend
+ * have to come in under A4's 285mm of usable height, or the last page spills
+ * onto a second sheet with three columns on it. Measured at 5.6 and it did. */
+const UNIT = 5.2
+const TOP_MM = TOP_ROW * UNIT
+const BOTTOM_MM = BOTTOM_ROW * UNIT
+
+export default function MarketSheet({ plan, meta, onClose }) {
+  if (!plan) return null
+  return createPortal(<SheetBody plan={plan} meta={meta} onClose={onClose} />, document.body)
+}
+
+/* Split out from the portal so it can be rendered on its own — scripts/sheet-
+ * preview.mjs server-renders THIS, which is how the printed page gets checked
+ * against a real tally without going through a login. */
+export function SheetBody({ plan, meta, onClose }) {
+  const pages = useMemo(() => sheetPages(plan, 10), [plan])
+  const colours = useMemo(() => assignColours(pages), [pages])
+  if (!plan || !pages.length) return null
+
+  return (
+    <div className="msheet">
+      <style>{CSS}</style>
+
+      <div className="msheet-bar no-print">
+        <strong>Chalk sheet</strong>
+        <span className="msheet-bar-note">
+          {plan.tiers} tiers over {pages.length} {pages.length === 1 ? 'page' : 'pages'} · A4 portrait
+        </span>
+        <button onClick={() => window.print()}>🖨 Print</button>
+        {onClose && <button className="secondary" onClick={onClose}>Close</button>}
+      </div>
+
+      <div className="msheet-scroll">
+        {pages.map((page, pi) => (
+          <div className="msheet-page" key={pi}>
+            <div className="msheet-head">
+              <div>
+                <strong>{meta?.vessel || 'Market layout'}</strong>
+                <span className="msheet-sub">
+                  {meta?.port || 'Peterhead'} · tiers {page.from}–{page.to} · {plan.totalBoxes} boxes
+                </span>
+              </div>
+              <div className="msheet-sub">page {pi + 1} of {pages.length}</div>
+            </div>
+
+            <div className="msheet-cols">
+              {page.columns.map((col) => (
+                <div className="msheet-col" key={col.tier}>
+                  <div className="msheet-tier">{col.tier}</div>
+                  <Band runs={col.top} slots={TOP_ROW} mm={TOP_MM} colours={colours} label="TOP" />
+                  <div className="msheet-walk"><span>walkway</span></div>
+                  <Band runs={col.bottom} slots={BOTTOM_ROW} mm={BOTTOM_MM} colours={colours} label="BOT" />
+                </div>
+              ))}
+              {/* Keep the last page's columns the same width as a full one, so
+                  a short page prints to the same scale as the rest. */}
+              {Array.from({ length: 10 - page.columns.length }).map((_, i) => (
+                <div className="msheet-col msheet-col-empty" key={`pad${i}`} />
+              ))}
+            </div>
+
+            {/* On every page, not just the last. A man holding page 2 on the
+                market should not have to go back to page 1 to find out what
+                the blue block is. */}
+            <Legend colours={colours} plan={plan} last={pi === pages.length - 1} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* One row of a tier, drawn down the column. The grid is one track per
+ * footprint, so a block's height IS its footprint count and the same
+ * horizontal line means the same depth in every tier across the page. */
+function Band({ runs, slots, mm, colours, label }) {
+  const used = runs.reduce((s, r) => s + r.footprints, 0)
+  return (
+    <div className="msheet-band" style={{ height: `${mm}mm`, gridTemplateRows: `repeat(${slots}, 1fr)` }}>
+      <div className="msheet-band-tag">{label}</div>
+      {runs.map((r, i) => {
+        const st = colours.styleFor(r.species, r.grade)
+        const n = r.footprints
+        // A one-footprint block is 5.6mm tall — one line, and only the three
+        // things you cannot chalk without: what it is, which tag, how many.
+        const tag = (
+          <span className="msheet-day" style={{ background: dayInk(r.days[0]) }}>
+            {r.days.length > 1 ? r.days.join('/') : r.days[0]}
+          </span>
+        )
+        return (
+          <div key={i}
+               className={`msheet-blk${r.newSpecies ? ' is-species' : r.newGrade ? ' is-grade' : ''}${r.newDay ? ' is-day' : ''}`}
+               // Hover on screen, and the handle the layout check uses to tell
+               // two blocks apart — the printed text abbreviates differently
+               // depending on how tall the block is.
+               title={`${r.species} ${r.grade} — day ${r.days.join('/')} — ${r.boxes} boxes, ${r.footprints} footprint${r.footprints === 1 ? '' : 's'}`}
+               data-fish={`${r.species}||${r.grade}`}
+               style={{
+                 gridRow: `span ${n}`, background: st.fill, borderLeftColor: st.edge,
+                 // Same fish, new tag: a hairline in the tag's own colour. It
+                 // happens on two blocks in three, so it has to be quiet.
+                 ...(r.newDay ? { borderTopColor: dayInk(r.days[0]) } : null),
+               }}>
+            {n === 1 ? (
+              <div className="msheet-blk-in is-1">
+                <span className="msheet-sp">{shortSpecies(r.species)}</span>
+                <span className="msheet-gr-1">{gradeCode(r.grade)}</span>
+                {tag}
+                <span className="msheet-n">{r.boxes}</span>
+              </div>
+            ) : (
+              <div className="msheet-blk-in">
+                <span className="msheet-sp">{shortSpecies(r.species)}</span>
+                <span className="msheet-gr">{gradeName(r.grade)}</span>
+                <span className="msheet-meta">
+                  {tag}
+                  <span className="msheet-n">{r.boxes}bx</span>
+                  {n >= 4 && <span className="msheet-h">{r.height > 1 ? `${r.height} hi` : 'flat'}</span>}
+                </span>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {used < slots && (
+        <div className="msheet-blk msheet-spare" style={{ gridRow: `span ${slots - used}` }}>
+          <span>spare {slots - used}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Legend({ colours, plan, last }) {
+  return (
+    <div className="msheet-legend">
+      <div className="msheet-legend-row">
+        {colours.species.map((sp) => {
+          const st = colours.styleFor(sp, '')
+          return (
+            <span className="msheet-key" key={sp}>
+              <i style={{ background: st.fill, borderColor: st.edge }} />
+              {sp}
+            </span>
+          )
+        })}
+      </div>
+      <div className="msheet-legend-note">
+        Heavy rule = new species · medium rule = new grade · coloured rule and tab = new day tag ·
+        the shade alternates with each grade down a species.
+        {last && plan.lowered?.length > 0 && (
+          <> Laid lower than the guideline to use the spare room:{' '}
+            {plan.lowered.map((l) => `${l.species} ${gradeName(l.grade)} (${l.from}→${l.to})`).join(', ')}.</>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const CSS = `
+.msheet {
+  position: fixed; inset: 0; z-index: 9000; background: #fff; color: #111;
+  display: flex; flex-direction: column;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+}
+.msheet-bar {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .6rem 1rem; border-bottom: 1px solid #ccc; background: #f4f5f6; flex: 0 0 auto;
+}
+.msheet-bar-note { color: #666; font-size: .85rem; margin-right: auto; }
+.msheet-scroll { flex: 1 1 auto; overflow: auto; padding: 6mm; background: #e9eaec; }
+
+.msheet-page {
+  width: 198mm; background: #fff; margin: 0 auto 8mm; padding: 0;
+  box-shadow: 0 1px 6px rgba(0,0,0,.2);
+}
+.msheet-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 0 0 1.5mm; border-bottom: .6mm solid #111; margin-bottom: 1.5mm;
+  font-size: 3.4mm;
+}
+.msheet-sub { color: #555; font-size: 2.8mm; margin-left: 2mm; }
+
+.msheet-cols { display: flex; gap: .8mm; align-items: flex-start; }
+.msheet-col { flex: 1 1 0; min-width: 0; }
+.msheet-col-empty { visibility: hidden; }
+.msheet-tier {
+  text-align: center; font-weight: 700; font-size: 4mm; line-height: 6mm;
+  border: .4mm solid #111; border-bottom: none; background: #111; color: #fff;
+  font-family: 'Big Shoulders Display', Impact, sans-serif; letter-spacing: .04em;
+}
+
+.msheet-band {
+  display: grid; border: .4mm solid #111; position: relative; overflow: hidden;
+}
+.msheet-band-tag {
+  position: absolute; top: 0; right: 0; font-size: 1.9mm; letter-spacing: .05em;
+  background: #111; color: #fff; padding: 0 .6mm; z-index: 2; line-height: 2.6mm;
+}
+.msheet-walk {
+  height: 4mm; display: flex; align-items: center; justify-content: center;
+  background: repeating-linear-gradient(90deg, #111 0 1.2mm, transparent 1.2mm 2.4mm);
+}
+.msheet-walk span {
+  font-size: 1.9mm; letter-spacing: .08em; text-transform: uppercase;
+  background: #fff; padding: 0 1mm; color: #444;
+}
+
+.msheet-blk {
+  border-top: .2mm solid rgba(0,0,0,.2);
+  border-left: .9mm solid transparent;
+  overflow: hidden; min-height: 0;
+}
+/* Three boundaries, three weights, in the order they matter.
+   A new species is the heaviest mark on the sheet because getting that wrong
+   sends a buyer to the wrong fish; a new grade is next; a new day tag inside
+   one grade is a hairline in the tag's own colour, because it happens on two
+   blocks in three and anything louder would drown the other two out. */
+.msheet-blk.is-species { border-top: .8mm solid #111; }
+.msheet-blk.is-grade   { border-top: .4mm solid rgba(0,0,0,.7); }
+.msheet-blk.is-day     { border-top-width: .45mm; border-top-style: solid; }
+
+.msheet-blk-in {
+  padding: .5mm .7mm; display: flex; flex-direction: column; gap: .2mm;
+  height: 100%; line-height: 1.05;
+}
+/* One footprint, one line. Everything on a single baseline, nothing wrapping. */
+.msheet-blk-in.is-1 {
+  flex-direction: row; align-items: center; gap: .6mm;
+  padding: 0 .6mm; flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
+}
+.msheet-blk-in.is-1 .msheet-sp { font-size: 2.3mm; }
+.msheet-blk-in.is-1 .msheet-n { margin-left: auto; }
+.msheet-gr-1 { font-size: 1.9mm; color: #333; font-family: 'IBM Plex Mono', monospace; }
+.msheet-sp { font-weight: 800; font-size: 2.6mm; letter-spacing: .02em; }
+.msheet-gr {
+  font-size: 2.2mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.msheet-meta { display: flex; align-items: center; gap: .7mm; margin-top: auto; flex-wrap: nowrap; }
+.msheet-day {
+  color: #fff; font-weight: 700; font-size: 2.1mm; border-radius: .6mm;
+  padding: 0 .8mm; line-height: 3mm;
+}
+.msheet-n { font-family: 'IBM Plex Mono', monospace; font-size: 2.1mm; font-weight: 600; }
+.msheet-h { font-size: 2mm; color: #444; }
+.msheet-code { font-size: 2mm; color: #444; font-family: 'IBM Plex Mono', monospace; }
+
+.msheet-spare {
+  background: repeating-linear-gradient(45deg, #f4f4f4 0 1.5mm, #e8e8e8 1.5mm 3mm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.2mm; color: #777;
+}
+
+.msheet-legend { margin-top: 2mm; border-top: .4mm solid #111; padding-top: 1.5mm; }
+.msheet-legend-row { display: flex; flex-wrap: wrap; gap: .8mm 3mm; }
+.msheet-key { display: inline-flex; align-items: center; gap: 1mm; font-size: 2.6mm; }
+.msheet-key i {
+  width: 4mm; height: 3mm; border: .4mm solid; border-radius: .5mm; display: inline-block;
+}
+.msheet-legend-note { margin-top: 1.2mm; font-size: 2.4mm; color: #444; }
+
+@media print {
+  @page { size: A4 portrait; margin: 6mm; }
+  html, body { background: #fff !important; }
+  body > #root { display: none !important; }
+  .no-print { display: none !important; }
+  .msheet { position: static !important; inset: auto !important; }
+  .msheet-scroll { overflow: visible !important; padding: 0 !important; background: #fff !important; }
+  .msheet-page {
+    width: auto !important; margin: 0 !important; box-shadow: none !important;
+    break-after: page; page-break-after: always;
+  }
+  .msheet-page:last-child { break-after: auto; page-break-after: auto; }
+  /* Chrome and Safari drop background fills when printing unless told not to,
+     which would take every colour off the sheet — the whole point of it. */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+}
+`

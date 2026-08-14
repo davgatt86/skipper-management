@@ -238,17 +238,77 @@ row over while the other has room, the second pass is verified by re-running the
 layout and backing the budget off until it holds, rather than trusting the
 arithmetic.
 
-**The value order is MEASURED, not guessed** — `SPECIES_VALUE` in
-`layoutRules.js` is £/kg from Audacious's own sales notes. Most of the dear fish
-already lies flat, so in practice it decides between cod's small grades (£5.94),
-catfish (£2.76), saithe (£2.05), haddock (£2.02) and whiting (£1.72). Note
-saithe over haddock is a **3p margin** — if that ever looks wrong on the market
-floor, it is the figures that need refreshing, not the algorithm.
+**The value order is MEASURED, not guessed** — from Audacious's own sales
+notes — and it is **PER GRADE, NOT PER SPECIES**. `GRADE_VALUE` in
+`layoutRules.js` is keyed on the tally's own code digit, which is the market's
+size band: `gradeBand('Good Seed (1d)')` is 1, `'Sma (4a)'` is 4.
 
-On Trip 63 this took the spare from **41 footprints to 2**, still 17 tiers,
-lowering cod's B Baby and Baby to flat, then catfish, then black Large, Med and
-X Sma. The page names every grade it dropped: this is a decision the skipper
-should see, not one made silently under him.
+A species average is not merely less precise here, it is **wrong**, because the
+spread inside a species is far wider than the gap between species:
+
+    haddock  1 → £4.91   2 → £4.07   3 → £3.20   4 → £1.65
+    black    1 → £2.27   2 → £2.53   3 → £2.16   4 → £1.79
+
+On the averages (haddock £2.02 vs black £2.05) black beats every haddock there
+is. In fact the big haddock beats every grade of black by a street and only the
+M Metro falls below it. **That was shipped wrong first and David caught it on
+the floor** — "bigger haddock avg higher prices than black" — and the data
+agrees with him.
+
+The A-grades off the sales note are used as the price for each band because
+they are the same ladder measured on the same fish. Note this is **not** the
+same split as the A4 haddock sub-grades in the estimator, where mini, chipper
+and metro all come off one A4 line: the market grades the box, the note grades
+the fish. Only grades that stack matter — anything already flat never competes
+for the spare room — so the flats and the big round fish carry a species figure
+and nothing finer.
+
+On Trip 63 this takes the spare from **41 footprints to 0**, still 17 tiers,
+laying Cod B Baby, **Haddock Seed**, Whiting Med and Black Large flat. Under
+the species averages the same room went to the black. The page names every
+grade it dropped: this is a decision the skipper should see, not one made
+silently under him.
+
+### The chalk sheet — `MarketSheet.jsx`, `src/lib/market/sheet.js`
+
+The screen view is a picture of the market; this is the working document, and
+it goes on the floor in chalk. It prints A4 portrait, **ten tiers to a page**.
+
+- **Tiers are COLUMNS**, read top to bottom, top row at the top of the column
+  and bottom row at the bottom with the walkway between — a plan view of the
+  floor rather than a diagram of it. Tier number in a black tab at the head.
+- **Runs, not boxes.** Consecutive footprints of the same grade off the same
+  day tag are ONE chalked block, written once. 1,424 boxes become 297 blocks.
+- Three boundaries, three weights: heavy black rule = new species, medium =
+  new grade, hairline in the tag's own colour = new day tag **inside** a grade.
+- **Six hues × two shades.** Species carries the hue and keeps it across every
+  tier so the eye can follow it down the market; grades inside it alternate the
+  shade. Repeats elsewhere on the floor are fine — touching is not.
+
+Everything is sized in **millimetres, not pixels**, because the printed page is
+the only output that matters. `UNIT` (mm per footprint) is set by the page, not
+by taste: 47 footprints plus the tier head, walkway, page head and legend must
+come in under A4's 285mm.
+
+**`scripts/sheet-preview.mjs` is how the printed page gets checked.** It
+esbuild-bundles the real component and server-renders it against a real tally,
+so what is inspected is what the app produces rather than a copy that can
+drift. The page itself is behind a login and a file picker.
+
+Four things that verification caught, none of which were visible by reading the
+code:
+
+- **Greedy graph colouring made the sheet one colour.** Taking the lowest free
+  hue is textbook and useless: only a handful of species ever touch, so eleven
+  of sixteen came out the same blue. It now spreads across the palette first
+  and only shifts on a conflict. 6 distinct fills → 12.
+- **Marking every day change fired on 287 of 297 blocks**, burying the species
+  rule under it. A rule that is almost always true carries no information. Day
+  changes are now marked only *within* a grade, and quietly.
+- **Half the blocks are a single footprint** (5.2mm tall) and 29 clipped their
+  text. Those now render on one line — species, code, tag, count.
+- **A4 overflow of 1mm on the last page**, because that page alone carries the
+  "laid lower" sentence. Measured, not eyeballed.
 
 ## Pair teams
 

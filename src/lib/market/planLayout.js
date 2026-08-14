@@ -56,7 +56,7 @@ function bucketGrades(clean) {
         auction: auctionFor(l.species),
         max: maxHeight(l.species, l.grade),
         prime: isPrime(l.species, l.grade),
-        value: valueOf(l.species),
+        value: valueOf(l.species, l.grade),
         // Position in the tally, which is grading order. Falls back to a big
         // number so a line without it sorts last rather than first.
         seq: Number.isFinite(l.seq) ? l.seq : Number.MAX_SAFE_INTEGER,
@@ -247,9 +247,12 @@ export function planLayout(lines, opts = {}) {
   if (heights) {
     for (const g of plan.gradeList) {
       const h = heights.get(g.key)
-      if (h < g.max) lowered.push({ species: g.species, grade: g.grade, boxes: g.boxes, from: g.max, to: h })
+      if (h < g.max) {
+        lowered.push({ species: g.species, grade: g.grade, boxes: g.boxes,
+                       from: g.max, to: h, seq: g.seq, value: g.value })
+      }
     }
-    lowered.sort((a, b) => valueOf(b.species) - valueOf(a.species) || a.seq - b.seq)
+    lowered.sort((a, b) => valueOf(b.species, b.grade) - valueOf(a.species, a.grade) || a.seq - b.seq)
   }
 
   const warnings = [...plan.warnings]

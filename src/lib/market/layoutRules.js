@@ -112,25 +112,66 @@ export function isPrime(species, grade) {
   return maxHeight(species, grade) === 1 || /^(XL|X LRG|LARGE|CHAT|GOOD SEED|PINGER)/.test(g)
 }
 
-/* What each species actually makes, £/kg.
+/* What the fish actually makes, £/kg.
  *
- * MEASURED, NOT GUESSED. Taken from Audacious's own sales notes across every
- * UK landing on record — the figures a made-up "value order" would have got
- * wrong. Used for one thing only: deciding which fish gets laid lower when
+ * MEASURED, NOT GUESSED — Audacious's own sales notes across every UK landing
+ * on record. Used for one thing only: deciding which fish gets laid lower when
  * there is spare room on the market.
  *
- * Most of the dear fish already lies flat, so in practice this decides between
- * cod's small grades, catfish, saithe, haddock and whiting.
+ * PER GRADE, NOT PER SPECIES. A species average gets this badly wrong, because
+ * the spread inside a species is far wider than the gap between species:
  *
- * Worth refreshing occasionally; the ORDER matters, not the exact figure. */
+ *     haddock  1 → £4.91   2 → £4.07   3 → £3.20   4 → £1.65
+ *     black    1 → £2.27   2 → £2.53   3 → £2.16   4 → £1.79
+ *
+ * On the averages (haddock £2.02, black £2.05) black wins everything. In fact
+ * the big haddock beats every grade of black by a street and only the M Metro
+ * falls below it — which is David's correction, and the data agrees with him.
+ *
+ * The KEY IS THE TALLY'S OWN CODE DIGIT — "Good Seed (1d)" is a 1, "Sma (4a)"
+ * is a 4 — which is the market's size band, biggest first. The sales note's
+ * A-grades are used as the price for each band because they are the same
+ * ladder measured on the same fish. Note this is NOT the same split as the
+ * A4 haddock sub-grades in the estimator (mini/chipper/metro all come off one
+ * A4 line on the note); the market grades the box, the note grades the fish.
+ *
+ * Only grades that stack matter here — everything already flat never competes
+ * for the spare room — so the flats and the big round fish carry a species
+ * figure and nothing finer.
+ */
+export const GRADE_VALUE = {
+  COD:     { 1: 6.11, 2: 6.37, 3: 5.77, 4: 4.97, 5: 3.97, U9: 3.88 },
+  HADDOCK: { 1: 4.91, 2: 4.07, 3: 3.20, 4: 1.65, U9: 0.49 },
+  BLACK:   { 1: 2.27, 2: 2.53, 3: 2.16, 4: 1.79, U9: 0.77 },
+  WHITING: { 1: 3.68, 2: 2.21, 3: 1.69, 4: 1.59, U9: 1.59 },
+  CAT:     { U9: 2.76 },
+  OTHER:   { U9: 1.24 },                                  // tusk and the like
+}
+
+// Everything below lies flat already, so these never decide a drop. Kept so a
+// value can always be quoted, and so the print legend can order a page.
 export const SPECIES_VALUE = {
-  TURBOT: 15.69, HALIBUT: 12.05, BRILL: 9.42, LEMONS: 6.20,
-  COD: 5.94, 'COD ROE': 5.94, LYTHE: 5.42, HAKE: 5.08, MONKS: 4.95,
-  CAT: 2.76, MEGS: 2.64, SQUID: 2.59, LING: 2.51, PLAICE: 2.45,
-  BLACK: 2.05, HADDOCK: 2.02, 'HADDOCK ROE': 2.02, WHITING: 1.72,
+  TURBOT: 15.69, HALIBUT: 12.05, BRILL: 9.42, LEMONS: 6.20, COD: 5.94,
+  LYTHE: 5.42, HAKE: 5.08, MONKS: 4.95, CAT: 2.76, MEGS: 2.64, SQUID: 2.59,
+  LING: 2.51, PLAICE: 2.45, BLACK: 2.05, HADDOCK: 2.02, WHITING: 1.72,
   SKATE: 1.59, OTHER: 1.24, WITCH: 0.93,
 }
 
-// An unlisted fish sits mid-table rather than first or last — being wrong
-// about where it goes should cost a little, not a lot.
-export const valueOf = (species) => SPECIES_VALUE[String(species || '').toUpperCase().trim()] ?? 2.5
+/* The size band off the tally's own grade label: "Sel (3)" → 3,
+ * "Large (U9a)" → 'U9', "Cod (1c)" → 1. Null when the label carries no code,
+ * which is when the species figure is used instead. */
+export function gradeBand(grade) {
+  const m = /\(\s*(U9|\d)/i.exec(String(grade || ''))
+  if (!m) return null
+  return /^u9$/i.test(m[1]) ? 'U9' : Number(m[1])
+}
+
+/* £/kg for a species and grade. Falls back species-wide, then to mid-table —
+ * being wrong about an unlisted fish should cost a little, not a lot. */
+export function valueOf(species, grade) {
+  const s = String(species || '').toUpperCase().trim()
+  const band = gradeBand(grade)
+  const ladder = GRADE_VALUE[s]
+  if (ladder && band != null && ladder[band] != null) return ladder[band]
+  return SPECIES_VALUE[s] ?? 2.5
+}

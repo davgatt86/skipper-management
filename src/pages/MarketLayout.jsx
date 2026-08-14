@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext'
 import { parseDayTally } from '../lib/market/parseDayTally'
 import { planLayout } from '../lib/market/planLayout'
 import { TOP_ROW, BOTTOM_ROW, AUCTIONS } from '../lib/market/layoutRules'
+import MarketSheet from './MarketSheet'
 
 /* Laying the trip out on Peterhead market.
  *
@@ -34,6 +35,7 @@ export default function MarketLayout() {
   const [busy, setBusy] = useState(false)
   const [fileName, setFileName] = useState('')
   const [openTier, setOpenTier] = useState(null)
+  const [sheet, setSheet] = useState(false)
   const inputRef = useRef(null)
 
   const plan = useMemo(() => (parsed?.lines ? planLayout(parsed.lines) : null), [parsed])
@@ -59,11 +61,18 @@ export default function MarketLayout() {
   return (
     <AppShell maxWidth={1200}>
       <PageHeader title="Market Layout" sub="Peterhead — tiers, auctions and day tags">
-        <button onClick={() => inputRef.current?.click()} disabled={busy}>
+        {plan && (
+          <button onClick={() => setSheet(true)}>🖨 Chalk sheet</button>
+        )}
+        <button className={plan ? 'secondary' : undefined} onClick={() => inputRef.current?.click()} disabled={busy}>
           {busy ? 'Reading…' : parsed ? 'Load another tally' : '📄 Upload day tally'}
         </button>
         <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} style={{ display: 'none' }} />
       </PageHeader>
+
+      {sheet && plan && (
+        <MarketSheet plan={plan} meta={parsed?.meta} onClose={() => setSheet(false)} />
+      )}
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error" style={{ margin: 0 }}>{error}</p></div>}
 

@@ -156,3 +156,7 @@ ios/App/App/capacitor.config.json
 
 # Rendered by scripts/preview-digest.mjs for eyeballing the digest — not a build artefact.
 digest-preview.html
+
+# Rendered by scripts/sheet-preview.mjs for checking the printed page
+sheet-preview.html
+public/_sheet-preview.html
