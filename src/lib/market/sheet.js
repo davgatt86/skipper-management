@@ -71,17 +71,21 @@ export function sheetPages(plan, perPage = 10) {
   return pages
 }
 
-/* Six hues, two shades each. Light enough to write black on and to photocopy,
- * saturated on the edge so a block's boundary survives a wet market floor.
- * The species carries the hue; grades inside it alternate the shade — so a
- * grade change is visible without needing a seventh colour. */
+/* Six hues, three shades each. Light enough to write black on and to
+ * photocopy, saturated on the edge so a block's boundary survives a wet market
+ * floor. The species carries the hue; grades inside it take different shades.
+ *
+ * THREE shades, not two, because two is not always enough: the shade has to
+ * differ between grades that actually touch, and a species' grades do not lay
+ * out in a simple alternating line. Two shades let HAKE Large sit against HAKE
+ * Med in the same pink. */
 export const PALETTE = [
-  { name: 'blue',   edge: '#1749A8', shades: ['#DCE7F7', '#B4CBEE'] },
-  { name: 'green',  edge: '#26654F', shades: ['#DBEDE3', '#B2D9C6'] },
-  { name: 'amber',  edge: '#A97614', shades: ['#F7EBD2', '#EFD6A2'] },
-  { name: 'rose',   edge: '#C2342A', shades: ['#F7DEDC', '#EFBAB5'] },
-  { name: 'violet', edge: '#5B3E9B', shades: ['#E6DEF2', '#CBB9E4'] },
-  { name: 'teal',   edge: '#1C6B78', shades: ['#D7EDF0', '#A9D8E0'] },
+  { name: 'blue',   edge: '#1749A8', shades: ['#DCE7F7', '#B4CBEE', '#8FB2E4'] },
+  { name: 'green',  edge: '#26654F', shades: ['#DBEDE3', '#B2D9C6', '#8CC5AB'] },
+  { name: 'amber',  edge: '#A97614', shades: ['#F7EBD2', '#EFD6A2', '#E5C275'] },
+  { name: 'rose',   edge: '#C2342A', shades: ['#F7DEDC', '#EFBAB5', '#E59A92'] },
+  { name: 'violet', edge: '#5B3E9B', shades: ['#E6DEF2', '#CBB9E4', '#B197D6'] },
+  { name: 'teal',   edge: '#1C6B78', shades: ['#D7EDF0', '#A9D8E0', '#82C3D0'] },
 ]
 
 /* Day tags get their own strong colours, used ONLY on the day chip. The fill
@@ -100,6 +104,18 @@ export const dayInk = (day) => DAY_INK[(Number(day) - 1 + DAY_INK.length) % DAY_
 export function assignColours(pages) {
   const neighbours = new Map()
   const seen = []
+  // Grade-level adjacency, per species — what the SHADE has to separate.
+  const gradeNb = new Map()
+  const gradesOf = new Map()
+  const noteGrade = (sp, g) => {
+    const k = `${sp}||${g}`
+    if (!gradeNb.has(k)) {
+      gradeNb.set(k, new Set())
+      if (!gradesOf.has(sp)) gradesOf.set(sp, [])
+      gradesOf.get(sp).push(g)
+    }
+    return k
+  }
   const note = (sp) => {
     if (!neighbours.has(sp)) { neighbours.set(sp, new Set()); seen.push(sp) }
   }
@@ -108,10 +124,16 @@ export function assignColours(pages) {
       for (const row of [col.top, col.bottom]) {
         row.forEach((r, i) => {
           note(r.species)
+          const key = noteGrade(r.species, r.grade)
           const prev = row[i - 1]
-          if (prev && prev.species !== r.species) {
+          if (!prev) return
+          if (prev.species !== r.species) {
             neighbours.get(r.species).add(prev.species)
             neighbours.get(prev.species).add(r.species)
+          } else if (prev.grade !== r.grade) {
+            const pk = noteGrade(prev.species, prev.grade)
+            gradeNb.get(key).add(pk)
+            gradeNb.get(pk).add(key)
           }
         })
       }
@@ -131,22 +153,21 @@ export function assignColours(pages) {
     hue.set(sp, pick)
   })
 
-  // Grades within a species alternate the two shades, in the tally's own order,
-  // so the shade means "next grade down" rather than anything arbitrary.
+  /* Shades, the same way: step down the ladder so consecutive grades usually
+   * differ, then shift off anything a grade actually TOUCHES. Alternating on
+   * index alone is not the rule — it only looks like it — and it put HAKE
+   * Large against HAKE Med in the same pink. */
   const gradeShade = new Map()
-  const gradesOf = new Map()
-  for (const page of pages) {
-    for (const col of page.columns) {
-      for (const row of [col.top, col.bottom]) {
-        for (const r of row) {
-          if (!gradesOf.has(r.species)) gradesOf.set(r.species, [])
-          const list = gradesOf.get(r.species)
-          if (!list.includes(r.grade)) list.push(r.grade)
-        }
-      }
-    }
+  const shades = PALETTE[0].shades.length
+  for (const [sp, list] of gradesOf) {
+    list.forEach((g, i) => {
+      const k = `${sp}||${g}`
+      const taken = new Set([...gradeNb.get(k)].map((n) => gradeShade.get(n)).filter((s) => s != null))
+      let pick = i % shades
+      for (let t = 0; t < shades && taken.has(pick); t++) pick = (pick + 1) % shades
+      gradeShade.set(k, pick)
+    })
   }
-  for (const [sp, list] of gradesOf) list.forEach((g, i) => gradeShade.set(`${sp}||${g}`, i % 2))
 
   return {
     hueOf: (sp) => hue.get(sp) ?? 0,

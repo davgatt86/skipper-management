@@ -240,6 +240,40 @@ something a skipper can read. A grade carrying **no** code falls to `*` where
 the old regex matched on the name — no grade on a real tally does, but that is
 the behaviour change to know about.
 
+### FLOORS — the fish can go lower, but the market cannot afford it
+
+"Can not go higher, but can go lower" is true of the fish and false of the
+floor space. **David, Aug 2026: "it keeps dropping chippers flat."** Flattening
+124 boxes of chippers costs **62 footprints** and buys nobody a better look at
+a bulk grade; flattening 8 boxes of baby cod costs 4 and is exactly what the
+spare room is for.
+
+So every grade now has a **floor** as well as a ceiling — `DEFAULT_FLOORS`,
+same species × band shape, **absent means 1** (free to go flat). Only the bulk
+grades are stiffened: haddock bands 2/3/4 and black 3/4.
+
+**A size band is not always fine enough, and that is why per-grade rules
+exist.** `Seed (2a)` and `Chipper (2b)` are BOTH band 2 haddock and both price
+at £4.07 — no band rule can hold one and release the other. `gradeRules`, keyed
+`SPECIES||Grade` on the grade exactly as the tally writes it, beats the grid for
+both `max` and `min`. Empty by default; it is where a skipper's own corrections
+land.
+
+**The rules are changed from the layout page, not the settings page.** Market
+Layout lists what was **laid lower** and what was **held up**, each with one
+button — `Hold at N` / `Let it drop` — writing a per-grade rule. That is where
+you notice a grade went somewhere you did not want it, so it is where the rule
+wants changing; typing `Chipper (2b)` from memory three pages away is how it
+does not get done. The settings page carries the same controls for bulk edits.
+
+`plan.held` reports only where a floor **actually bit** (the grade sits at its
+floor and could otherwise have come down). A rule that quietly refuses is as
+confusing as one that quietly acts.
+
+On Trip 63 the floors change the answer: Seed and Chipper stay at 2, Metro
+comes down 3→2 and Black Sma 4→3, while Cod B Baby, Cod Baby, Whiting Med and
+Black Large still go flat. Still 17 tiers, still 0 spare.
+
 **An unfiled species is laid out anyway, on Rough, and NAMED** in the plan's
 warnings with a link to the rules page. Falling to "whichever clock is last" is
 not a rule; quietly sending a fish to the wrong auction is the failure worth
@@ -318,11 +352,26 @@ it goes on the floor in chalk. It prints A4 portrait, **ten tiers to a page**.
   floor rather than a diagram of it. Tier number in a black tab at the head.
 - **Runs, not boxes.** Consecutive footprints of the same grade off the same
   day tag are ONE chalked block, written once. 1,424 boxes become 297 blocks.
+- **Every block says the same five things in the same order**, whatever its
+  size: species · grade NAME · grade CODE on the top line, day tag · boxes ·
+  height on the bottom. Only the type scale changes — a one-footprint block is
+  5.2mm and gets two tight lines rather than one crowded one. Dropping a field
+  on the small blocks meant the sheet said different things in different
+  places, which is worse than small type.
+  Name **and** code, because neither identifies a grade on its own: `Seed (2a)`
+  and `Chipper (2b)` share a band, and "Large" is four different fish.
+- **Height is a chip, not a footnote** — `FLAT` / `2HI` / `3HI` / `4HI`, right
+  aligned so it sits in the same column down a 47-deep tier. FLAT gets the word
+  and a solid black chip: it is the dear fish and the row you must not stack on.
 - Three boundaries, three weights: heavy black rule = new species, medium =
   new grade, hairline in the tag's own colour = new day tag **inside** a grade.
-- **Six hues × two shades.** Species carries the hue and keeps it across every
-  tier so the eye can follow it down the market; grades inside it alternate the
-  shade. Repeats elsewhere on the floor are fine — touching is not.
+- **Six hues × three shades.** Species carries the hue and keeps it across every
+  tier so the eye can follow it down the market; grades inside it take different
+  shades. Repeats elsewhere on the floor are fine — touching is not.
+  **Three shades, not two**: the shade has to differ between grades that
+  actually touch, which is not the same as alternating by index, and two shades
+  put HAKE Large against HAKE Med in the same pink. Both hue and shade are
+  greedy graph colourings over real adjacency; the test asserts zero clashes.
 
 Everything is sized in **millimetres, not pixels**, because the printed page is
 the only output that matters. `UNIT` (mm per footprint) is set by the page, not

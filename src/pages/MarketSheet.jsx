@@ -114,20 +114,22 @@ function Band({ runs, slots, mm, colours, label }) {
       {runs.map((r, i) => {
         const st = colours.styleFor(r.species, r.grade)
         const n = r.footprints
-        // A one-footprint block is 5.6mm tall — one line, and only the three
-        // things you cannot chalk without: what it is, which tag, how many.
-        const tag = (
-          <span className="msheet-day" style={{ background: dayInk(r.days[0]) }}>
-            {r.days.length > 1 ? r.days.join('/') : r.days[0]}
-          </span>
-        )
+        /* Every block says the same five things in the same order, whatever
+         * its size — what fish, which grade (NAME AND CODE, since the tally
+         * uses both and neither on its own identifies a grade), which day
+         * tag, how many boxes, and how high it is stacked.
+         *
+         * Only the type scale changes with the block. A one-footprint block
+         * is 5.2mm and gets two tight lines rather than one crowded one;
+         * dropping a field instead would mean the sheet says different things
+         * in different places, which is worse than small type. */
+        const code = gradeCode(r.grade)
         return (
           <div key={i}
                className={`msheet-blk${r.newSpecies ? ' is-species' : r.newGrade ? ' is-grade' : ''}${r.newDay ? ' is-day' : ''}`}
                // Hover on screen, and the handle the layout check uses to tell
-               // two blocks apart — the printed text abbreviates differently
-               // depending on how tall the block is.
-               title={`${r.species} ${r.grade} — day ${r.days.join('/')} — ${r.boxes} boxes, ${r.footprints} footprint${r.footprints === 1 ? '' : 's'}`}
+               // two blocks apart.
+               title={`${r.species} ${r.grade} — day ${r.days.join('/')} — ${r.boxes} boxes, ${r.footprints} footprint${r.footprints === 1 ? '' : 's'}, ${r.height > 1 ? `${r.height} high` : 'flat'}`}
                data-fish={`${r.species}||${r.grade}`}
                style={{
                  gridRow: `span ${n}`, background: st.fill, borderLeftColor: st.edge,
@@ -135,24 +137,22 @@ function Band({ runs, slots, mm, colours, label }) {
                  // happens on two blocks in three, so it has to be quiet.
                  ...(r.newDay ? { borderTopColor: dayInk(r.days[0]) } : null),
                }}>
-            {n === 1 ? (
-              <div className="msheet-blk-in is-1">
-                <span className="msheet-sp">{shortSpecies(r.species)}</span>
-                <span className="msheet-gr-1">{gradeCode(r.grade)}</span>
-                {tag}
-                <span className="msheet-n">{r.boxes}</span>
-              </div>
-            ) : (
-              <div className="msheet-blk-in">
+            <div className={`msheet-blk-in${n === 1 ? ' is-1' : n === 2 ? ' is-2' : ''}`}>
+              <span className="msheet-name">
                 <span className="msheet-sp">{shortSpecies(r.species)}</span>
                 <span className="msheet-gr">{gradeName(r.grade)}</span>
-                <span className="msheet-meta">
-                  {tag}
-                  <span className="msheet-n">{r.boxes}bx</span>
-                  {n >= 4 && <span className="msheet-h">{r.height > 1 ? `${r.height} hi` : 'flat'}</span>}
+                {code && <span className="msheet-code">{code}</span>}
+              </span>
+              <span className="msheet-meta">
+                <span className="msheet-day" style={{ background: dayInk(r.days[0]) }}>
+                  {r.days.length > 1 ? r.days.join('/') : r.days[0]}
                 </span>
-              </div>
-            )}
+                <span className="msheet-n">{r.boxes}</span>
+                {/* How high it goes. Flat is the one that matters most on the
+                    floor, so it gets the word and the heaviest chip. */}
+                <span className={`msheet-hi h${r.height}`}>{r.height > 1 ? `${r.height}HI` : 'FLAT'}</span>
+              </span>
+            </div>
           </div>
         )
       })}
@@ -180,11 +180,18 @@ function Legend({ colours, plan, last }) {
         })}
       </div>
       <div className="msheet-legend-note">
-        Heavy rule = new species · medium rule = new grade · coloured rule and tab = new day tag ·
-        the shade alternates with each grade down a species.
+        <span className="msheet-legend-keys">
+          <span><b className="msheet-hi h1">FLAT</b> one box high</span>
+          <span><b className="msheet-hi h2">2HI</b> two</span>
+          <span><b className="msheet-hi h3">3HI</b> three</span>
+          <span><b className="msheet-hi h4">4HI</b> four</span>
+        </span>
+        Each block reads <b>species · grade · code</b> on the top line and <b>day tag · boxes ·
+        height</b> on the bottom. Heavy rule = new species · medium rule = new grade · coloured
+        rule and tab = new day tag · the shade alternates with each grade down a species.
         {last && plan.lowered?.length > 0 && (
           <> Laid lower than the guideline to use the spare room:{' '}
-            {plan.lowered.map((l) => `${l.species} ${gradeName(l.grade)} (${l.from}→${l.to})`).join(', ')}.</>
+            {plan.lowered.map((l) => `${l.species} ${gradeName(l.grade)} ${gradeCode(l.grade) ? `(${gradeCode(l.grade)}) ` : ''}${l.from}→${l.to}`).join(', ')}.</>
         )}
       </div>
     </div>
@@ -264,29 +271,61 @@ const CSS = `
 .msheet-blk.is-day     { border-top-width: .45mm; border-top-style: solid; }
 
 .msheet-blk-in {
-  padding: .5mm .7mm; display: flex; flex-direction: column; gap: .2mm;
-  height: 100%; line-height: 1.05;
+  padding: .5mm .7mm; display: flex; flex-direction: column; gap: .3mm;
+  height: 100%; line-height: 1.05; overflow: hidden;
 }
-/* One footprint, one line. Everything on a single baseline, nothing wrapping. */
-.msheet-blk-in.is-1 {
-  flex-direction: row; align-items: center; gap: .6mm;
-  padding: 0 .6mm; flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
+/* Two tight lines rather than one crowded one, so a single-footprint block
+   still says all five things. Type shrinks; nothing is dropped. */
+.msheet-blk-in.is-1 { padding: .15mm .5mm; gap: 0; justify-content: center; }
+.msheet-blk-in.is-1 .msheet-sp   { font-size: 2mm; }
+.msheet-blk-in.is-1 .msheet-gr   { font-size: 1.85mm; }
+.msheet-blk-in.is-1 .msheet-code,
+.msheet-blk-in.is-1 .msheet-n    { font-size: 1.75mm; }
+.msheet-blk-in.is-1 .msheet-day  { font-size: 1.75mm; line-height: 2.4mm; padding: 0 .5mm; }
+.msheet-blk-in.is-1 .msheet-hi   { font-size: 1.7mm; line-height: 2.4mm; padding: 0 .5mm; }
+.msheet-blk-in.is-2 .msheet-sp   { font-size: 2.3mm; }
+.msheet-blk-in.is-2 .msheet-gr   { font-size: 2mm; }
+
+/* Line 1 — what fish and which grade, name AND code. The tally uses both and
+   neither identifies a grade on its own: Seed (2a) and Chipper (2b) are the
+   same size band, and "Large" is four different fish. */
+.msheet-name {
+  display: flex; align-items: baseline; gap: .6mm;
+  white-space: nowrap; overflow: hidden; min-width: 0;
 }
-.msheet-blk-in.is-1 .msheet-sp { font-size: 2.3mm; }
-.msheet-blk-in.is-1 .msheet-n { margin-left: auto; }
-.msheet-gr-1 { font-size: 1.9mm; color: #333; font-family: 'IBM Plex Mono', monospace; }
-.msheet-sp { font-weight: 800; font-size: 2.6mm; letter-spacing: .02em; }
-.msheet-gr {
-  font-size: 2.2mm; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.msheet-sp { font-weight: 800; font-size: 2.5mm; letter-spacing: .02em; flex: 0 0 auto; }
+.msheet-gr { font-size: 2.1mm; overflow: hidden; text-overflow: ellipsis; }
+.msheet-code {
+  font-size: 1.9mm; color: #333; font-family: 'IBM Plex Mono', monospace;
+  flex: 0 0 auto; margin-left: auto;
 }
-.msheet-meta { display: flex; align-items: center; gap: .7mm; margin-top: auto; flex-wrap: nowrap; }
+
+/* Line 2 — tag, count, height. Always these three, always this order, so the
+   eye finds the same thing in the same place down a 47-deep column. */
+.msheet-meta {
+  display: flex; align-items: center; gap: .7mm; margin-top: auto;
+  flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
+}
 .msheet-day {
-  color: #fff; font-weight: 700; font-size: 2.1mm; border-radius: .6mm;
-  padding: 0 .8mm; line-height: 3mm;
+  color: #fff; font-weight: 700; font-size: 2mm; border-radius: .6mm;
+  padding: 0 .8mm; line-height: 2.9mm; flex: 0 0 auto;
 }
-.msheet-n { font-family: 'IBM Plex Mono', monospace; font-size: 2.1mm; font-weight: 600; }
-.msheet-h { font-size: 2mm; color: #444; }
-.msheet-code { font-size: 2mm; color: #444; font-family: 'IBM Plex Mono', monospace; }
+.msheet-n {
+  font-family: 'IBM Plex Mono', monospace; font-size: 2mm; font-weight: 700;
+  flex: 0 0 auto;
+}
+/* How high it is stacked, which was the thing you could not tell at a glance.
+   FLAT gets the word and the heaviest chip because it is the one that matters:
+   it is the dear fish, and it is the row you must not stack on. */
+.msheet-hi {
+  font-family: 'IBM Plex Mono', monospace; font-size: 1.9mm; font-weight: 700;
+  line-height: 2.9mm; padding: 0 .7mm; border-radius: .6mm; margin-left: auto;
+  flex: 0 0 auto; border: .2mm solid #111;
+}
+.msheet-hi.h1 { background: #111; color: #fff; }          /* flat */
+.msheet-hi.h2 { background: #fff; color: #111; }
+.msheet-hi.h3 { background: #fff; color: #111; border-style: dashed; }
+.msheet-hi.h4 { background: transparent; color: #111; border-style: dotted; }
 
 .msheet-spare {
   background: repeating-linear-gradient(45deg, #f4f4f4 0 1.5mm, #e8e8e8 1.5mm 3mm);
@@ -294,13 +333,16 @@ const CSS = `
   font-size: 2.2mm; color: #777;
 }
 
-.msheet-legend { margin-top: 2mm; border-top: .4mm solid #111; padding-top: 1.5mm; }
-.msheet-legend-row { display: flex; flex-wrap: wrap; gap: .8mm 3mm; }
-.msheet-key { display: inline-flex; align-items: center; gap: 1mm; font-size: 2.6mm; }
+.msheet-legend { margin-top: 1.4mm; border-top: .4mm solid #111; padding-top: 1mm; }
+.msheet-legend-row { display: flex; flex-wrap: wrap; gap: .5mm 2.6mm; }
+.msheet-key { display: inline-flex; align-items: center; gap: 1mm; font-size: 2.4mm; }
 .msheet-key i {
-  width: 4mm; height: 3mm; border: .4mm solid; border-radius: .5mm; display: inline-block;
+  width: 3.6mm; height: 2.6mm; border: .4mm solid; border-radius: .5mm; display: inline-block;
 }
-.msheet-legend-note { margin-top: 1.2mm; font-size: 2.4mm; color: #444; }
+.msheet-legend-note { margin-top: .8mm; font-size: 2.15mm; color: #444; line-height: 1.25; }
+.msheet-legend-keys { display: inline-flex; flex-wrap: wrap; gap: .5mm 2.4mm; margin-right: 2.4mm; }
+.msheet-legend-keys span { display: inline-flex; align-items: center; gap: .8mm; }
+.msheet-legend-keys .msheet-hi { margin-left: 0; font-size: 1.9mm; line-height: 2.7mm; }
 
 @media print {
   @page { size: A4 portrait; margin: 6mm; }

@@ -5,9 +5,9 @@ import PageHeader from '../PageHeader'
 import { useAuth } from '../AuthContext'
 import { parseDayTally } from '../lib/market/parseDayTally'
 import { planLayout } from '../lib/market/planLayout'
-import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT } from '../lib/market/layoutRules'
-import { useMarketRules } from '../lib/market/useMarketRules'
-import { gradeName } from '../lib/market/sheet'
+import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, gradeKey } from '../lib/market/layoutRules'
+import { useMarketRules, saveMarketRules } from '../lib/market/useMarketRules'
+import { gradeName, gradeCode } from '../lib/market/sheet'
 import MarketSheet, { SheetBody } from './MarketSheet'
 
 /* Laying the trip out on Peterhead market.
@@ -31,14 +31,43 @@ import MarketSheet, { SheetBody } from './MarketSheet'
 export default function MarketLayout() {
   const { appUser } = useAuth()
   const canView = ['skipper', 'viewer'].includes(appUser?.role)
-  const { rules, loading: rulesLoading, isCustom } = useMarketRules()
+  const { rules, settings, loading: rulesLoading, isCustom, reload: reloadRules } = useMarketRules()
 
   const [parsed, setParsed] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [fileName, setFileName] = useState('')
   const [sheet, setSheet] = useState(false)
+  const [ruleBusy, setRuleBusy] = useState(false)
+  const [ruleMsg, setRuleMsg] = useState('')
   const inputRef = useRef(null)
+
+  const canEdit = appUser?.role === 'skipper'
+
+  /* Set the floor for ONE exact grade, from the panel that just showed it
+   * going somewhere unwanted.
+   *
+   * Per grade rather than per size band, because a band is not fine enough:
+   * Seed (2a) and Chipper (2b) are both band 2 haddock and both price the
+   * same, so no band rule can hold one and let the other go. */
+  async function setFloor(species, grade, floor) {
+    if (!canEdit) return
+    setRuleBusy(true); setRuleMsg('')
+    const key = gradeKey(species, grade)
+    const next = {
+      ...(settings || {}),
+      gradeRules: { ...(settings?.gradeRules || {}), [key]: { ...(settings?.gradeRules?.[key] || {}), min: floor } },
+    }
+    const { error: err } = await saveMarketRules(appUser.fleet_id, next)
+    setRuleBusy(false)
+    if (err) setRuleMsg('Could not save: ' + err.message)
+    else {
+      setRuleMsg(floor > 1
+        ? `${species} ${grade} will not be laid below ${floor} high.`
+        : `${species} ${grade} may now be laid flat.`)
+      reloadRules()
+    }
+  }
 
   const plan = useMemo(
     () => (parsed?.lines && !rulesLoading ? planLayout(parsed.lines, { rules }) : null),
@@ -150,32 +179,47 @@ export default function MarketLayout() {
             </div>
           </div>
 
-          {/* ---- the fish given the spare room ---- */}
-          {plan.lowered.length > 0 && (
+          {/* ---- what the spare room went to, and what was held back ----
+               Both lists, and both adjustable from here. This is where you
+               notice a grade has been laid somewhere you did not want it, so
+               it is where the rule wants changing — not three pages away with
+               the grade name typed from memory. */}
+          {(plan.lowered.length > 0 || plan.held.length > 0) && (
             <div className="card">
-              <h2 style={{ marginTop: 0 }}>Laid lower than the guideline</h2>
+              <h2 style={{ marginTop: 0 }}>How low each grade went</h2>
               <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
-                Heights are a ceiling, never a target — always allowed lower. These tiers are being paid for
-                either way, so the room left over goes to the fish that earns most, dearest first. Nothing
-                here has cost an extra tier.
+                Heights are a ceiling, never a target. These tiers are paid for either way, so the room left
+                over goes to the fish that earns most, dearest first — but a <strong>floor</strong> stops a
+                bulk grade being laid flat, which swallows the market and buys nobody a better look.
+                {canEdit && ' Change either from here.'}
               </p>
-              <div style={{ display: 'grid', gap: '0.15rem' }}>
-                {plan.lowered.map((l, i) => (
-                  <div key={i} style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline',
-                                        borderTop: i ? '1px solid var(--border)' : 'none', padding: '0.25rem 0' }}>
-                    <span style={{ flex: '1 1 auto' }}>{l.species} <span className="muted">{gradeName(l.grade)}</span></span>
-                    <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem' }}>
-                      £{l.value.toFixed(2)}/kg
-                    </span>
-                    <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem' }}>
-                      {l.boxes} {l.boxes === 1 ? 'box' : 'boxes'}
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono, monospace)', width: '6rem', textAlign: 'right' }}>
-                      {l.from} <span className="muted">→</span> <strong style={{ color: 'var(--kelp)' }}>{l.to}</strong> high
-                    </span>
-                  </div>
-                ))}
-              </div>
+
+              {plan.lowered.length > 0 && (
+                <>
+                  <h3 style={H3}>Laid lower</h3>
+                  {plan.lowered.map((l, i) => (
+                    <GradeRow key={i} first={!i} row={l} at={l.to} canEdit={canEdit} busy={ruleBusy}
+                              action={{ label: `Hold at ${l.from}`, title: `Never lay ${l.species} ${gradeName(l.grade)} below ${l.from} high`,
+                                        onClick: () => setFloor(l.species, l.grade, l.from) }}
+                              note={<>{l.from} <span className="muted">→</span> <strong style={{ color: 'var(--kelp)' }}>{l.to}</strong> high</>} />
+                  ))}
+                </>
+              )}
+
+              {plan.held.length > 0 && (
+                <>
+                  <h3 style={H3}>Held up by the rules</h3>
+                  {plan.held.map((h, i) => (
+                    <GradeRow key={i} first={!i} row={h} at={h.at} canEdit={canEdit} busy={ruleBusy}
+                              action={{ label: h.floor > 1 ? `Let it drop` : null,
+                                        title: `Allow ${h.species} ${gradeName(h.grade)} to be laid flat`,
+                                        onClick: () => setFloor(h.species, h.grade, 1) }}
+                              note={<>at <strong>{h.at}</strong> high · floor {h.floor}</>} />
+                  ))}
+                </>
+              )}
+
+              {ruleMsg && <p style={{ fontSize: '0.82rem', margin: '0.6rem 0 0', color: 'var(--kelp)' }}>{ruleMsg}</p>}
               {plan.spare > 0 && (
                 <p className="muted" style={{ fontSize: '0.82rem', margin: '0.6rem 0 0' }}>
                   {plan.spare} {plan.spare === 1 ? 'footprint' : 'footprints'} still spare — not enough to drop
@@ -193,6 +237,36 @@ export default function MarketLayout() {
     </AppShell>
   )
 }
+
+/* One grade in the drop panel. Same shape whether it was laid lower or held
+ * up, so the two lists read as one decision seen from both sides. */
+function GradeRow({ row, at, note, action, canEdit, busy, first }) {
+  const code = gradeCode(row.grade)
+  return (
+    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', flexWrap: 'wrap',
+                  borderTop: first ? 'none' : '1px solid var(--border)', padding: '0.3rem 0' }}>
+      <span style={{ flex: '1 1 12rem' }}>
+        <strong>{row.species}</strong> {gradeName(row.grade)}
+        {code && <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.8rem' }}> ({code})</span>}
+      </span>
+      <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem', width: '5rem', textAlign: 'right' }}>
+        £{row.value.toFixed(2)}/kg
+      </span>
+      <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem', width: '5rem', textAlign: 'right' }}>
+        {row.boxes} {row.boxes === 1 ? 'box' : 'boxes'}
+      </span>
+      <span style={{ fontFamily: 'var(--font-mono, monospace)', width: '9rem', textAlign: 'right' }}>{note}</span>
+      {canEdit && action?.label && (
+        <button className="secondary" title={action.title} disabled={busy} onClick={action.onClick}
+                style={{ padding: '0.1rem 0.5rem', fontSize: '0.78rem' }}>
+          {action.label}
+        </button>
+      )}
+    </div>
+  )
+}
+
+const H3 = { fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0.9rem 0 0.2rem' }
 
 // The clock strip only — the sheet colours the fish itself, by species.
 const CLOCK_COLOUR = ['var(--hull)', 'var(--kelp)', 'var(--brass)', 'var(--rust)', 'var(--mute)']

@@ -272,6 +272,45 @@ eq('an unpriced fish still gets a figure', typeof valueOf('SQUID', 'Large (1)'),
   eq('flattening a species costs tiers', flat.tiers > planLayout(lines).tiers, true)
 }
 
+/* ---- floors: stiff on some grades, flexible on others ------------------ *
+ * "It keeps dropping chippers flat." Heights are a ceiling and the fish can
+ * always go lower, but the MARKET cannot afford it: flattening 124 boxes of
+ * chippers costs 62 footprints and buys nobody a better look. */
+{
+  const r = resolveRules(null)
+  eq('a bulk haddock grade will not be laid flat', r.minHeight('HADDOCK', 'Chipper (2b)'), 2)
+  eq('nor will its band-mate', r.minHeight('HADDOCK', 'Seed (2a)'), 2)
+  eq('but small dear cod still may', r.minHeight('COD', 'B Baby (4)'), 1)
+  eq('and a flat fish has nothing to hold up', r.minHeight('MONKS', 'Large (1)'), 1)
+  eq('a floor may never sit above the ceiling',
+    resolveRules({ floors: { COD: { 1: 4 } } }).minHeight('COD', 'Large (1b)'), 1)
+
+  // The reason per-grade rules exist at all: Seed (2a) and Chipper (2b) are
+  // the SAME band and the same price, so no band rule can separate them.
+  eq('a band cannot tell Seed from Chipper',
+    gradeBand('Seed (2a)'), gradeBand('Chipper (2b)'))
+  const split = resolveRules({ gradeRules: { 'HADDOCK||Seed (2a)': { min: 1 } } })
+  eq('an exact-grade rule can', [split.minHeight('HADDOCK', 'Seed (2a)'), split.minHeight('HADDOCK', 'Chipper (2b)')], [1, 2])
+  eq('and it overrides the ceiling too',
+    resolveRules({ gradeRules: { 'HADDOCK||Metro (3)': { max: 2 } } }).maxHeight('HADDOCK', 'Metro (3)'), 2)
+  eq('pinning a grade exactly leaves it nothing to give',
+    resolveRules({ gradeRules: { 'COD||B Baby (4)': { min: 2 } } }).canDrop('COD', 'B Baby (4)'), false)
+
+  // End to end on the real trip.
+  const p = planLayout(lines)
+  eq('no grade is ever laid below its floor',
+    [...p.rows.top, ...p.rows.bottom].every((s) => s.height >= resolveRules(null).minHeight(s.species, s.grade)), true)
+
+  const freed = planLayout(lines, { rules: resolveRules({ floors: {} }) })
+  eq('lifting every floor lets more grades drop', freed.lowered.length >= p.lowered.length, true)
+  eq('and holding them all pins everything',
+    planLayout(lines, { rules: resolveRules({ floors: Object.fromEntries(
+      [...new Set(lines.map((l) => l.species))].map((s) => [s, { '*': 9 }])) }) }).lowered.length, 0)
+
+  eq('what a floor held back is reported', Array.isArray(p.held), true)
+  eq('and only where it actually bit', p.held.every((h) => h.at <= h.floor && h.floor > 1), true)
+}
+
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
 process.exit(fail === 0 ? 0 : 1)

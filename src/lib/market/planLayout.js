@@ -52,6 +52,9 @@ function bucketGrades(clean, rules) {
         species: l.species, grade: l.grade,
         auction: rules.clockFor(l.species),
         max: rules.maxHeight(l.species, l.grade),
+        // How low this grade is allowed to go. 1 for most fish; higher for the
+        // bulk grades, where flattening swallows the floor and buys nothing.
+        min: rules.minHeight(l.species, l.grade),
         prime: isPrime(l.species, l.grade),
         value: rules.valueOf(l.species, l.grade),
         // Position in the tally, which is grading order. Falls back to a big
@@ -109,7 +112,10 @@ export function solveDrops(gradeList, budget) {
     moved = false
     for (const g of candidates) {
       const h = heights.get(g.key)
-      if (h <= 1) continue
+      // The floor, not 1. A grade held at its floor is one the skipper has
+      // said must not come down any further — a bulk grade laid flat costs
+      // the whole market and buys nobody a better look at the fish.
+      if (h <= Math.max(1, g.min || 1)) continue
       const extra = cost(g.boxes, h - 1) - cost(g.boxes, h)
       if (extra > spare) continue           // cannot afford this one; try the next
       heights.set(g.key, h - 1)
@@ -210,7 +216,7 @@ export function planLayout(lines, opts = {}) {
   const clean = (lines || []).filter((l) => Number(l.boxes) > 0)
   const totalBoxes = clean.reduce((s, l) => s + Number(l.boxes), 0)
   if (!totalBoxes) {
-    return { tiers: 0, ruleOfThumb: 0, totalBoxes: 0, footprints: 0, spare: 0, lowered: [], unfiled: [],
+    return { tiers: 0, ruleOfThumb: 0, totalBoxes: 0, footprints: 0, spare: 0, lowered: [], held: [], unfiled: [],
              rows: { top: [], bottom: [] }, byTier: [], auctionSpans: [], warnings: ['Nothing on the tally.'] }
   }
 
@@ -256,6 +262,20 @@ export function planLayout(lines, opts = {}) {
     lowered.sort((a, b) => b.value - a.value || a.seq - b.seq)
   }
 
+  // What the floors held up. Shown beside what was dropped, because a rule
+  // that quietly refuses is as confusing as one that quietly acts — and this
+  // is the list to loosen from when a trip has room going spare.
+  const held = plan.gradeList
+    .filter((g) => g.min > 1 && g.max > 1)
+    .map((g) => ({
+      species: g.species, grade: g.grade, boxes: g.boxes, seq: g.seq, value: g.value,
+      max: g.max, floor: g.min, at: heights?.get(g.key) ?? g.max,
+      // Could it have come down further but for the floor?
+      blocked: (heights?.get(g.key) ?? g.max) <= g.min,
+    }))
+    .filter((h) => h.blocked)
+    .sort((a, b) => b.value - a.value || a.seq - b.seq)
+
   // A species nobody has put on a clock still gets laid out, on the last clock
   // and at the fallback height — but it is named, because a fish quietly sent
   // to the wrong auction is worse than one you were told about. The market
@@ -274,7 +294,7 @@ export function planLayout(lines, opts = {}) {
   }
 
   return {
-    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints, spare, lowered, unfiled,
+    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints, spare, lowered, held, unfiled,
     rows: plan.rows, byTier: plan.byTier, auctionSpans: plan.auctionSpans,
     warnings, species: plan.species, clocks: rules.clocks,
   }

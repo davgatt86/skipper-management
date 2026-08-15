@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { useAuth } from '../AuthContext'
 import { useMarketRules, saveMarketRules } from '../lib/market/useMarketRules'
 import {
-  DEFAULT_CLOCKS, DEFAULT_SPECIES_CLOCK, DEFAULT_HEIGHTS,
-  resolveRules, knownSpecies, BANDS, FALLBACK_HEIGHT,
+  DEFAULT_CLOCKS, DEFAULT_SPECIES_CLOCK, DEFAULT_HEIGHTS, DEFAULT_FLOORS, DEFAULT_GRADE_RULES,
+  resolveRules, knownSpecies, BANDS, FALLBACK_HEIGHT, gradeKey,
 } from '../lib/market/layoutRules'
 
 /* Market Rules — the clocks, what goes on each, and how high it may go.
@@ -32,20 +32,29 @@ export default function MarketSettings() {
   const [clocks, setClocks] = useState(DEFAULT_CLOCKS)
   const [speciesClock, setSpeciesClock] = useState({})
   const [heights, setHeights] = useState({})
+  const [floors, setFloors] = useState({})
+  const [gradeRules, setGradeRules] = useState({})
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [newSpecies, setNewSpecies] = useState('')
+  const [newRuleSp, setNewRuleSp] = useState('')
+  const [newRuleGr, setNewRuleGr] = useState('')
 
   useEffect(() => {
     if (loading) return
     setClocks(settings?.clocks?.length ? settings.clocks : DEFAULT_CLOCKS)
     setSpeciesClock({ ...DEFAULT_SPECIES_CLOCK, ...(settings?.speciesClock || {}) })
     setHeights({ ...DEFAULT_HEIGHTS, ...(settings?.heights || {}) })
+    setFloors({ ...DEFAULT_FLOORS, ...(settings?.floors || {}) })
+    setGradeRules({ ...DEFAULT_GRADE_RULES, ...(settings?.gradeRules || {}) })
     setDirty(false)
   }, [loading, settings])
 
-  const rules = useMemo(() => resolveRules({ clocks, speciesClock, heights }), [clocks, speciesClock, heights])
+  const rules = useMemo(
+    () => resolveRules({ clocks, speciesClock, heights, floors, gradeRules }),
+    [clocks, speciesClock, heights, floors, gradeRules],
+  )
   const species = useMemo(() => knownSpecies(rules), [rules])
 
   const touch = (fn) => { fn(); setDirty(true); setMsg('') }
@@ -53,14 +62,31 @@ export default function MarketSettings() {
   function setClock(sp, clockId) {
     touch(() => setSpeciesClock((m) => ({ ...m, [sp]: clockId })))
   }
-  function setHeight(sp, band, value) {
+  const cellSetter = (setter) => (sp, band, value) => {
     const n = value === '' ? null : Math.max(1, Math.min(6, Number(value) || 1))
-    touch(() => setHeights((m) => {
+    touch(() => setter((m) => {
       const row = { ...(m[sp] || {}) }
       if (n == null) delete row[band]
       else row[band] = n
       return { ...m, [sp]: row }
     }))
+  }
+  const setHeight = cellSetter(setHeights)
+  const setFloor = cellSetter(setFloors)
+
+  function setGradeRule(key, field, value) {
+    const n = value === '' ? null : Math.max(1, Math.min(6, Number(value) || 1))
+    touch(() => setGradeRules((m) => {
+      const r = { ...(m[key] || {}) }
+      if (n == null) delete r[field]
+      else r[field] = n
+      return { ...m, [key]: r }
+    }))
+  }
+  function addGradeRule() {
+    const key = gradeKey(newRuleSp, newRuleGr)
+    touch(() => setGradeRules((m) => ({ ...m, [key]: m[key] || {} })))
+    setNewRuleGr('')
   }
   function moveClock(i, dir) {
     const next = [...clocks]
@@ -87,6 +113,8 @@ export default function MarketSettings() {
       clocks,
       speciesClock: onlyChanged(speciesClock, DEFAULT_SPECIES_CLOCK),
       heights: onlyChangedDeep(heights, DEFAULT_HEIGHTS),
+      floors: onlyChangedDeep(floors, DEFAULT_FLOORS),
+      gradeRules,          // entirely the skipper's own; there are no defaults
     }
     const { error } = await saveMarketRules(appUser.fleet_id, doc)
     setSaving(false)
@@ -99,6 +127,8 @@ export default function MarketSettings() {
       setClocks(DEFAULT_CLOCKS)
       setSpeciesClock({ ...DEFAULT_SPECIES_CLOCK })
       setHeights({ ...DEFAULT_HEIGHTS })
+      setFloors({ ...DEFAULT_FLOORS })
+      setGradeRules({ ...DEFAULT_GRADE_RULES })
     })
   }
 
@@ -207,38 +237,63 @@ export default function MarketSettings() {
         )}
       </div>
 
-      {/* ---- 3. heights ---- */}
+      {/* ---- 3. heights and floors ---- */}
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>How high each fish may be stacked</h2>
+        <h2 style={{ marginTop: 0 }}>How high, and how low</h2>
         <p className="muted" style={{ marginTop: 0, fontSize: '0.88rem' }}>
           By <strong>size band</strong> — the number in the grade code on the tally, so <em>Good Seed (1d)</em> is
           band 1 and <em>Sma (4a)</em> is band 4. <strong>Any</strong> is the fallback for a grade with no code.
-          These are a <strong>ceiling</strong>: the layout is always free to lay a fish lower to use up spare
-          room, and never higher. Blank means use <em>Any</em>.
+        </p>
+        <ul className="muted" style={{ marginTop: 0, fontSize: '0.86rem', paddingLeft: '1.1rem' }}>
+          <li><strong>Max</strong> is the ceiling — never stacked higher than this.</li>
+          <li><strong>Low</strong> is the floor — never laid lower than this when spare room is being spent.
+            Blank means <strong>1</strong>, free to go flat. Set it equal to Max to pin a grade exactly.</li>
+        </ul>
+        <p className="muted" style={{ marginTop: 0, fontSize: '0.86rem' }}>
+          The floor is what stops a bulk grade being laid flat. Flattening 124 boxes of chippers costs 62
+          footprints and buys nobody a better look at the fish; flattening 8 boxes of baby cod costs 4 and is
+          exactly what the spare room is for.
         </p>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
             <thead>
               <tr>
-                <th style={{ ...TH, textAlign: 'left' }}>Species</th>
-                {BANDS.map((b) => <th key={b} style={TH}>{b}</th>)}
-                <th style={TH}>Any</th>
-                <th style={{ ...TH, textAlign: 'left' }}>Clock</th>
+                <th style={{ ...TH, textAlign: 'left' }} rowSpan={2}>Species</th>
+                {[...BANDS, 'Any'].map((b) => <th key={b} style={TH} colSpan={2}>{b}</th>)}
+                <th style={{ ...TH, textAlign: 'left' }} rowSpan={2}>Clock</th>
+              </tr>
+              <tr>
+                {[...BANDS, 'Any'].map((b) => (
+                  <Fragment key={b}>
+                    <th style={SUBTH}>max</th><th style={SUBTH}>low</th>
+                  </Fragment>
+                ))}
               </tr>
             </thead>
             <tbody>
               {species.map((sp) => (
                 <tr key={sp}>
                   <td style={{ ...TD, textAlign: 'left', fontWeight: 600 }}>{sp}</td>
-                  {[...BANDS, '*'].map((b) => (
-                    <td key={b} style={TD}>
-                      <input type="number" min="1" max="6" disabled={!canEdit}
-                             value={heights[sp]?.[b] ?? ''}
-                             placeholder={b === '*' ? String(FALLBACK_HEIGHT) : ''}
-                             onChange={(e) => setHeight(sp, b, e.target.value)}
-                             style={{ width: '3rem', textAlign: 'center', padding: '0.1rem' }} />
-                    </td>
-                  ))}
+                  {[...BANDS, '*'].map((b) => {
+                    const max = heights[sp]?.[b] ?? (b === '*' ? FALLBACK_HEIGHT : null)
+                    return (
+                      <Fragment key={b}>
+                        <td style={TD}>
+                          <input type="number" min="1" max="6" disabled={!canEdit}
+                                 value={heights[sp]?.[b] ?? ''}
+                                 placeholder={b === '*' ? String(FALLBACK_HEIGHT) : ''}
+                                 onChange={(e) => setHeight(sp, b, e.target.value)} style={NUM} />
+                        </td>
+                        <td style={{ ...TD, borderRight: '1px solid var(--border)' }}>
+                          {/* Nothing to hold up if it already lies flat. */}
+                          <input type="number" min="1" max="6" disabled={!canEdit || Number(max) === 1}
+                                 value={floors[sp]?.[b] ?? ''} placeholder={Number(max) === 1 ? '–' : '1'}
+                                 onChange={(e) => setFloor(sp, b, e.target.value)}
+                                 style={{ ...NUM, opacity: Number(max) === 1 ? 0.35 : 1 }} />
+                        </td>
+                      </Fragment>
+                    )
+                  })}
                   <td style={{ ...TD, textAlign: 'left' }} className="muted">
                     {rules.clock(speciesClock[sp] || rules.fallbackClock)?.label}
                   </td>
@@ -247,6 +302,58 @@ export default function MarketSettings() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* ---- 4. per-grade exceptions ---- */}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Rules for one exact grade</h2>
+        <p className="muted" style={{ marginTop: 0, fontSize: '0.88rem' }}>
+          A size band is not always fine enough. <em>Seed (2a)</em> and <em>Chipper (2b)</em> are both band 2
+          haddock and both make about the same money, so no band rule can hold one up and let the other
+          drop. A rule here names the grade exactly as the tally writes it and beats the grid above.
+        </p>
+        <p className="muted" style={{ marginTop: 0, fontSize: '0.86rem' }}>
+          The easy way to add one is from <strong>Market Layout</strong> — every grade that was laid lower or
+          held up has a button beside it, so you set the rule while looking at what it did.
+        </p>
+        {Object.keys(gradeRules).length === 0 && (
+          <p className="muted" style={{ fontSize: '0.86rem' }}>No per-grade rules — the grid above decides everything.</p>
+        )}
+        {Object.entries(gradeRules).map(([key, r], i) => {
+          const [sp, gr] = key.split('||')
+          return (
+            <div key={key} style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap',
+                                    borderTop: i ? '1px solid var(--border)' : 'none', padding: '0.35rem 0' }}>
+              <span style={{ flex: '1 1 14rem' }}><strong>{sp}</strong> {gr}</span>
+              <label style={LBL}>max
+                <input type="number" min="1" max="6" disabled={!canEdit} value={r.max ?? ''}
+                       placeholder={String(rules.maxHeight(sp, gr))}
+                       onChange={(e) => setGradeRule(key, 'max', e.target.value)} style={NUM} />
+              </label>
+              <label style={LBL}>low
+                <input type="number" min="1" max="6" disabled={!canEdit} value={r.min ?? ''} placeholder="1"
+                       onChange={(e) => setGradeRule(key, 'min', e.target.value)} style={NUM} />
+              </label>
+              {canEdit && (
+                <button className="secondary" style={BTN}
+                        onClick={() => touch(() => setGradeRules((m) => { const n = { ...m }; delete n[key]; return n }))}>
+                  Remove
+                </button>
+              )}
+            </div>
+          )
+        })}
+        {canEdit && (
+          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <select value={newRuleSp} onChange={(e) => setNewRuleSp(e.target.value)}>
+              <option value="">Species…</option>
+              {species.map((sp) => <option key={sp} value={sp}>{sp}</option>)}
+            </select>
+            <input placeholder="Grade, exactly as the tally writes it — e.g. Chipper (2b)" value={newRuleGr}
+                   onChange={(e) => setNewRuleGr(e.target.value)} style={{ flex: '1 1 auto', maxWidth: 380 }} />
+            <button className="secondary" disabled={!newRuleSp || !newRuleGr.trim()} onClick={addGradeRule}>Add</button>
+          </div>
+        )}
       </div>
     </AppShell>
   )
@@ -268,8 +375,14 @@ function onlyChangedDeep(current, base) {
 }
 
 const BTN = { padding: '0.1rem 0.45rem', fontSize: '0.8rem' }
+const NUM = { width: '2.6rem', textAlign: 'center', padding: '0.1rem' }
+const LBL = { display: 'inline-flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.82rem' }
 const TH = {
   borderBottom: '2px solid var(--border)', padding: '0.3rem 0.4rem',
   textAlign: 'center', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.04em',
+}
+const SUBTH = {
+  borderBottom: '2px solid var(--border)', padding: '0 0.2rem 0.2rem',
+  textAlign: 'center', fontSize: '0.68rem', fontWeight: 400, color: 'var(--mute)',
 }
 const TD = { borderBottom: '1px solid var(--border)', padding: '0.15rem 0.4rem', textAlign: 'center' }

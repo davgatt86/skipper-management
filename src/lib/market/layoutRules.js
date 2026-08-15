@@ -127,6 +127,35 @@ export const DEFAULT_HEIGHTS = {
 // direction to be wrong in — too low costs a tier, too high damages fish.
 export const FALLBACK_HEIGHT = 2
 
+/* HOW LOW A GRADE MAY BE LAID — the floor under the ceiling.
+ *
+ * "Can not go higher, but can go lower" is true of the fish, but it is not
+ * true of the market: laying a big bulk grade flat swallows the floor and
+ * gains nothing, because nobody is peering at a box of chippers.
+ *
+ * Same shape as the heights — species × size band, `*` as the species default
+ * — and ABSENT MEANS 1, free to go flat. Only stiffen what needs stiffening.
+ *
+ * Haddock band 2 is Seed and Chipper: bulk grades where flattening 124 boxes
+ * costs 62 footprints and buys nothing. David, Aug 2026: "it keeps dropping
+ * chippers flat". Band 3 is Metro, same argument one grade down. */
+export const DEFAULT_FLOORS = {
+  HADDOCK: { 2: 2, 3: 2, 4: 3 },
+  BLACK: { 3: 2, 4: 3 },
+}
+
+/* PER-GRADE EXCEPTIONS, and the reason this exists at all: a size band is not
+ * fine enough. Seed (2a) and Chipper (2b) are BOTH band 2 haddock and both
+ * price at £4.07, so no band rule can let one drop and hold the other.
+ *
+ * Keyed `SPECIES||Grade` on the grade exactly as the tally writes it, and it
+ * beats the band grid for both the ceiling and the floor. Empty by default —
+ * this is where a skipper's own corrections land, one tap from the layout
+ * page when he sees a grade dropped that should not have been. */
+export const DEFAULT_GRADE_RULES = {}
+
+export const gradeKey = (species, grade) => `${up(species)}||${String(grade || '').trim()}`
+
 /* What the fish actually makes, £/kg.
  *
  * MEASURED, NOT GUESSED — Audacious's own sales notes across every UK landing
@@ -174,9 +203,19 @@ export const DEFAULT_RULES = {
   clocks: DEFAULT_CLOCKS,
   speciesClock: DEFAULT_SPECIES_CLOCK,
   heights: DEFAULT_HEIGHTS,
+  floors: DEFAULT_FLOORS,
+  gradeRules: DEFAULT_GRADE_RULES,
 }
 
 const up = (s) => String(s || '').toUpperCase().trim()
+
+// A cell of either grid: a whole number of boxes, or nothing.
+function cell(row, band) {
+  if (!row) return null
+  const v = (band != null ? row[band] : undefined) ?? row['*']
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 1 ? Math.round(n) : null
+}
 
 /* Take whatever is stored for a fleet and hand back something the allocator
  * can ask questions of. Anything missing falls back to the defaults above, so
@@ -188,6 +227,8 @@ export function resolveRules(settings) {
     .sort((a, b) => a.n - b.n)
   const speciesClock = { ...DEFAULT_SPECIES_CLOCK, ...(settings?.speciesClock || {}) }
   const heights = { ...DEFAULT_HEIGHTS, ...(settings?.heights || {}) }
+  const floors = { ...DEFAULT_FLOORS, ...(settings?.floors || {}) }
+  const gradeRules = { ...DEFAULT_GRADE_RULES, ...(settings?.gradeRules || {}) }
   // An odd round fish belongs on Rough — that is what the clock is for, and
   // "whichever clock happens to be last" is not a rule. Only if there is no
   // Rough does it fall to the end of the list.
@@ -216,12 +257,38 @@ export function resolveRules(settings) {
       return !!clocks.find((c) => c.id === clockId)?.splitRows
     },
 
+    heightsFloors: floors,
+    gradeRules,
+
+    /* The ceiling — never stacked higher than this.
+     *
+     * An exact-grade rule beats the band grid, because a band is not always
+     * fine enough: Seed (2a) and Chipper (2b) are both band 2 haddock. */
     maxHeight(species, grade) {
-      const row = heights[up(species)]
-      if (!row) return FALLBACK_HEIGHT
-      const band = gradeBand(grade)
-      const h = (band != null ? row[band] : undefined) ?? row['*']
-      return Number.isFinite(Number(h)) && Number(h) >= 1 ? Number(h) : FALLBACK_HEIGHT
+      const own = gradeRules[gradeKey(species, grade)]
+      if (own?.max != null && Number(own.max) >= 1) return Math.round(Number(own.max))
+      return cell(heights[up(species)], gradeBand(grade)) ?? FALLBACK_HEIGHT
+    },
+
+    /* The floor — never laid lower than this when spending spare room.
+     *
+     * Absent means 1: free to go flat, which is right for most fish. It is the
+     * bulk grades that want holding up, because flattening 124 boxes of
+     * chippers costs 62 footprints and gains nobody anything.
+     *
+     * Never allowed above the ceiling — a floor over the roof would leave a
+     * grade with no legal height at all. */
+    minHeight(species, grade) {
+      const max = this.maxHeight(species, grade)
+      const own = gradeRules[gradeKey(species, grade)]
+      const raw = own?.min != null ? Number(own.min) : cell(floors[up(species)], gradeBand(grade))
+      const min = Number.isFinite(raw) && raw >= 1 ? Math.round(raw) : 1
+      return Math.min(min, max)
+    },
+
+    // Whether the layout is allowed to lay this grade any lower at all.
+    canDrop(species, grade) {
+      return this.maxHeight(species, grade) > this.minHeight(species, grade)
     },
 
     /* £/kg for a species and grade. Falls back species-wide, then to mid-table
