@@ -1,5 +1,6 @@
 import {
-  tiersByRuleOfThumb, maxHeight, auctionFor, valueOf, gradeBand, TOP_ROW, BOTTOM_ROW,
+  tiersByRuleOfThumb, maxHeight, auctionFor, valueOf, gradeBand, resolveRules,
+  TOP_ROW, BOTTOM_ROW,
 } from './src/lib/market/layoutRules.js'
 import { buildStacks, planLayout, solveDrops } from './src/lib/market/planLayout.js'
 import {
@@ -214,6 +215,61 @@ eq('an unpriced fish still gets a figure', typeof valueOf('SQUID', 'Large (1)'),
   eq('a grade name drops its code', gradeName('Good Seed (1d)'), 'Good Seed')
   eq('and the code is available on its own', gradeCode('Good Seed (1d)'), '1d')
   eq('a species is shortened to fit a column', shortSpecies('HADDOCK'), 'HAD')
+}
+
+/* ---- the rules are settings, not law --------------------------------- *
+ * The market moves species between clocks. That used to be a code change and
+ * a deploy for something the skipper knows the day it happens. */
+{
+  eq('nothing stored behaves exactly as the defaults',
+    [resolveRules(null).clockFor('COD'), resolveRules(null).maxHeight('HADDOCK', 'M Metro (4)')],
+    [auctionFor('COD'), maxHeight('HADDOCK', 'M Metro (4)')])
+
+  // Changing one thing must not freeze a copy of everything else — a fleet
+  // that moves haddock still gets later corrections to the rest.
+  const moved = resolveRules({ speciesClock: { HADDOCK: 'rough' } })
+  eq('a moved species goes where it is told', moved.clockFor('HADDOCK'), 'rough')
+  eq('and the untouched ones keep the shipped default', moved.clockFor('WHITING'), 'hadwhit')
+  eq('as do the heights', moved.maxHeight('BLACK', 'Sma (4a)'), 4)
+
+  const taller = resolveRules({ heights: { COD: { 1: 2, '*': 3 } } })
+  eq('a changed height is used', taller.maxHeight('COD', 'Large (1b)'), 2)
+  eq('and its species default with it', taller.maxHeight('COD', 'Tusky'), 3)
+  eq('while another species is untouched', taller.maxHeight('HADDOCK', 'Metro (3)'), 3)
+
+  // The clocks themselves are editable, including the order and which one may
+  // be broken across the two rows.
+  const five = resolveRules({
+    clocks: [
+      { id: 'flats', n: 1, label: 'Flats', splitRows: true },
+      { id: 'cod', n: 2, label: 'Cod' },
+      { id: 'hadwhit', n: 3, label: 'Had/Whg' },
+      { id: 'rough', n: 4, label: 'Rough' },
+      { id: 'shell', n: 5, label: 'Shellfish', splitRows: false },
+    ],
+    speciesClock: { SQUID: 'shell' },
+  })
+  eq('clocks run in the order given', five.clocks.map((c) => c.id)[0], 'flats')
+  eq('a new clock can be added', five.clockFor('SQUID'), 'shell')
+  eq('and told whether it may split rows', [five.canSplitRows('flats'), five.canSplitRows('cod')], [true, false])
+
+  // An unfiled fish must still get onto the market, on the catch-all clock,
+  // and must be NAMED — quietly sending it to the wrong auction is the failure.
+  eq('an unfiled fish falls to rough, not to whichever clock is last',
+    resolveRules(null).clockFor('OCTOPUS'), 'rough')
+  const odd = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 4, seq: 0 },
+    { species: 'OCTOPUS', grade: 'Med (2)', day: 1, boxes: 3, seq: 1 },
+  ])
+  eq('and it is named on the plan', odd.unfiled, ['OCTOPUS'])
+  eq('with a warning that says where it went',
+    odd.warnings.some((w) => w.includes('OCTOPUS') && w.includes('Rough')), true)
+  eq('but it is still laid out', odd.rows.top.length + odd.rows.bottom.length > 0, true)
+  eq('a fully filed tally reports nothing unfiled', planLayout(lines).unfiled, [])
+
+  // The whole point: a different rule set gives a different plan.
+  const flat = planLayout(lines, { rules: resolveRules({ heights: { HADDOCK: { '*': 1 } } }) })
+  eq('flattening a species costs tiers', flat.tiers > planLayout(lines).tiers, true)
 }
 
 console.log('')

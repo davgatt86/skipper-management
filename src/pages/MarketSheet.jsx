@@ -28,24 +28,38 @@ export default function MarketSheet({ plan, meta, onClose }) {
   return createPortal(<SheetBody plan={plan} meta={meta} onClose={onClose} />, document.body)
 }
 
-/* Split out from the portal so it can be rendered on its own — scripts/sheet-
- * preview.mjs server-renders THIS, which is how the printed page gets checked
- * against a real tally without going through a login. */
-export function SheetBody({ plan, meta, onClose }) {
+/* Split out from the portal for two reasons: the layout page embeds it, so
+ * what is on screen IS the sheet rather than a second drawing of the same
+ * thing that can drift from it; and scripts/sheet-preview.mjs server-renders
+ * it, which is how the printed page gets checked against a real tally without
+ * going through a login. */
+export function SheetBody({ plan, meta, onClose, embedded, onPrint }) {
   const pages = useMemo(() => sheetPages(plan, 10), [plan])
   const colours = useMemo(() => assignColours(pages), [pages])
   if (!plan || !pages.length) return null
 
   return (
-    <div className="msheet">
-      <style>{CSS}</style>
+    <div className={`msheet${embedded ? ' is-embedded' : ''}`}>
+      {/* dangerouslySetInnerHTML, not children: React escapes text children,
+          so a `>` in a selector renders as `&gt;` and the browser drops the
+          whole rule. It silently took out the one that hides the app when
+          printing, which is not a failure you would notice until a sheet came
+          off the printer with a sidebar down the side of it. */}
+      <style dangerouslySetInnerHTML={{ __html: CSS }} />
 
       <div className="msheet-bar no-print">
         <strong>Chalk sheet</strong>
         <span className="msheet-bar-note">
           {plan.tiers} tiers over {pages.length} {pages.length === 1 ? 'page' : 'pages'} · A4 portrait
         </span>
-        <button onClick={() => window.print()}>🖨 Print</button>
+        {/* Embedded, this opens the full-screen copy and prints from there.
+            It has to: printing hides #root so the page's sidebar and cards do
+            not come out with the sheet, and the embedded sheet is INSIDE
+            #root — printing it in place gives a blank page. Showing the pages
+            full screen before printing is the better order anyway. */}
+        <button onClick={onPrint || (() => window.print())}>
+          {onPrint ? '🖨 Print sheet' : '🖨 Print'}
+        </button>
         {onClose && <button className="secondary" onClick={onClose}>Close</button>}
       </div>
 
@@ -190,6 +204,15 @@ const CSS = `
 .msheet-bar-note { color: #666; font-size: .85rem; margin-right: auto; }
 .msheet-scroll { flex: 1 1 auto; overflow: auto; padding: 6mm; background: #e9eaec; }
 
+/* Embedded on the layout page, the sheet IS the screen view — same component,
+   same geometry, so what is looked at is what gets printed. It sits in the
+   page flow instead of covering it, and the page is allowed to scroll
+   sideways on a phone rather than shrinking the sheet to illegibility. */
+.msheet.is-embedded { position: static; inset: auto; z-index: auto; background: transparent; }
+.msheet.is-embedded .msheet-bar { border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--card, #f4f5f6); }
+.msheet.is-embedded .msheet-scroll { padding: 4mm; border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; max-height: 80vh; }
+.msheet.is-embedded .msheet-page { margin-bottom: 4mm; }
+
 .msheet-page {
   width: 198mm; background: #fff; margin: 0 auto 8mm; padding: 0;
   box-shadow: 0 1px 6px rgba(0,0,0,.2);
@@ -284,6 +307,9 @@ const CSS = `
   html, body { background: #fff !important; }
   body > #root { display: none !important; }
   .no-print { display: none !important; }
+  /* Belt and braces: if an embedded sheet is ever on screen at print time it
+     is inside #root and already hidden, but say so rather than rely on it. */
+  .msheet.is-embedded { display: none !important; }
   .msheet { position: static !important; inset: auto !important; }
   .msheet-scroll { overflow: visible !important; padding: 0 !important; background: #fff !important; }
   .msheet-page {

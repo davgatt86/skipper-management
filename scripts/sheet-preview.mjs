@@ -40,11 +40,17 @@ const { SheetBody } = await import(pathToFileURL(bundle).href)
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { createElement } = await import('react')
 
+// Both shapes: the full-screen one that prints, and the one embedded on the
+// layout page. They are the same component, and the point of checking both is
+// that the page is now the sheet rather than a second drawing of it.
 const html = renderToStaticMarkup(createElement(SheetBody, { plan, meta: parsed.meta }))
+const embedded = process.argv.includes('--embedded')
+  ? renderToStaticMarkup(createElement(SheetBody, { plan, meta: parsed.meta, embedded: true }))
+  : ''
 writeFileSync(out, `<!doctype html><meta charset="utf-8">
 <title>Chalk sheet — ${parsed.meta?.port || 'market'}</title>
 <style>body{margin:0}</style>
-${html}`)
+${embedded ? `<div id="root">${embedded}</div>` : html}`)
 
 console.log(`${out}`)
 console.log(`  tiers        ${plan.tiers}  (${Math.ceil(plan.tiers / 10)} page(s))`)

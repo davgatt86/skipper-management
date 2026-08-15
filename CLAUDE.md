@@ -201,10 +201,49 @@ whole. Kept in `tiersByRuleOfThumb()` because it is what gets asked for — the
 allocator works out the real figure separately and the page shows both. It is a
 good rule: on Trip 63 it asked 16 against a real 17.
 
-**Four auctions** — 1 Cod · 2 Haddock & whiting · 3 Rough (black, monks, ling,
-lythe, squid, **cat**, other) · 4 Flats. Fish from one auction stays together so
-its buyers walk it in one go. **Only the flats may be split across the two
-rows**; every other species stays in one band.
+**Four clocks** — 1 Cod · 2 Haddock & Whiting · 3 Rough · 4 Flats. Fish from one
+clock stays together so its buyers walk it in one go. **Only the flats may be
+split across the two rows**; every other species stays in one band.
+
+The allocation is **Peterhead's own, off the supply catalogue dated 13-08-2026**
+(one report per clock, FAO codes), not an assumption:
+
+    Cod       COD
+    Had/Whg   HAD · WHG
+    Rough     ANF monks · CAT · LIN ling · POK saithe/black · POL lythe
+    Flats     HAL · HKE hake · LEM lemons · LEZ megrim · PLE · TUR · WIT witch
+
+Squid, skate, brill and tusk are absent from that catalogue because they were
+not landed that day, not because they have no clock — they are placed on the
+obvious reading and worth confirming when one is next landed.
+
+### The rules are SETTINGS, not law
+
+`/market-rules` (`MarketSettings.jsx`, `supabase/market_layout_settings.sql`),
+skipper-only to change and readable by the fleet. The market moves species
+between clocks; that used to be a code change and a deploy for something the
+skipper knows the day it happens.
+
+Three things are editable: the clocks (label, order, whether one may split
+rows), which species goes on which, and the height grid.
+
+**The stored document holds only what DIFFERS from the shipped defaults**, and
+`resolveRules()` merges it over them. So a fleet that moves one species still
+picks up later corrections to everything else, instead of freezing a copy of
+today's defaults the first time it saves. A fleet with no row behaves exactly
+as before — verified by test, not assumed.
+
+**Heights are a species × size-band grid**, keyed on the tally's own code digit
+(`Good Seed (1d)` is band 1, `Sma (4a)` is 4), with `*` as the species default.
+That grid reproduces every one of the old name-matching rules exactly and is
+something a skipper can read. A grade carrying **no** code falls to `*` where
+the old regex matched on the name — no grade on a real tally does, but that is
+the behaviour change to know about.
+
+**An unfiled species is laid out anyway, on Rough, and NAMED** in the plan's
+warnings with a link to the rules page. Falling to "whichever clock is last" is
+not a rule; quietly sending a fish to the wrong auction is the failure worth
+guarding against.
 
 **Both rows fill in proportion.** A tier hands you 21 and 26 at the same time —
 you cannot take one without the other — so the tier count is set by whichever
@@ -290,13 +329,30 @@ the only output that matters. `UNIT` (mm per footprint) is set by the page, not
 by taste: 47 footprints plus the tier head, walkway, page head and legend must
 come in under A4's 285mm.
 
+**The screen view IS the sheet.** `MarketLayout.jsx` embeds `SheetBody` rather
+than drawing its own picture — it used to render a horizontal strip per tier,
+which is neither the shape of the floor nor something you can follow a species
+down. One renderer, nothing to drift.
+
+Embedding it created one trap: the print CSS hides `#root` so the sidebar and
+cards do not come out with the sheet, and the embedded sheet is **inside**
+`#root`, so printing in place gives a blank page. The embedded Print button
+opens the full-screen copy and prints from there, which is the better order
+anyway, and `.msheet.is-embedded` is explicitly hidden in print as well.
+
 **`scripts/sheet-preview.mjs` is how the printed page gets checked.** It
 esbuild-bundles the real component and server-renders it against a real tally,
 so what is inspected is what the app produces rather than a copy that can
-drift. The page itself is behind a login and a file picker.
+drift. The page itself is behind a login and a file picker. `--embedded` checks
+the in-app shape the same way.
 
-Four things that verification caught, none of which were visible by reading the
-code:
+**`<style>` must use `dangerouslySetInnerHTML`, not children.** React escapes
+text children, so `body > #root` renders as `body &gt; #root` and the browser
+drops the whole rule — silently taking out the one that hides the app when
+printing. Not a failure anyone would notice until a sheet came off the printer
+with a sidebar down the side of it.
+
+Four more things that verification caught, none visible by reading the code:
 
 - **Greedy graph colouring made the sheet one colour.** Taking the lowest free
   hue is textbook and useless: only a handful of species ever touch, so eleven

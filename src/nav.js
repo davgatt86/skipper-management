@@ -49,6 +49,10 @@ export const NAV = [
       { to: '/estimator', label: 'Where to Land', access: 'fleetTools' },
       // Laying the trip out on the market floor once the destination is settled.
       { to: '/market-layout', label: 'Market Layout', access: 'fleetTools' },
+      // Which clock each fish goes on and how high it stacks. Read by the
+      // layout page, changed only by the skipper — the market moves species
+      // between clocks and that should not need a deploy.
+      { to: '/market-rules', label: 'Market Rules', access: 'fleetTools' },
       { to: '/forecast', label: 'Market Forecast', access: 'skipper' },
     ],
   },

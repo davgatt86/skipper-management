@@ -1,7 +1,4 @@
-import {
-  TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, tiersByRuleOfThumb,
-  AUCTIONS, auctionFor, canSplitBands, maxHeight, isPrime, valueOf,
-} from './layoutRules.js'
+import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, tiersByRuleOfThumb, RULES, isPrime } from './layoutRules.js'
 
 /* Turn a day tally into a market layout.
  *
@@ -45,7 +42,7 @@ export function buildStacks(dayEntries, height) {
 }
 
 /* One bucket per species+grade, carrying its days and its ceiling. */
-function bucketGrades(clean) {
+function bucketGrades(clean, rules) {
   const grades = new Map()
   for (const l of clean) {
     const key = `${l.species}||${l.grade}`
@@ -53,10 +50,10 @@ function bucketGrades(clean) {
       grades.set(key, {
         key,
         species: l.species, grade: l.grade,
-        auction: auctionFor(l.species),
-        max: maxHeight(l.species, l.grade),
+        auction: rules.clockFor(l.species),
+        max: rules.maxHeight(l.species, l.grade),
         prime: isPrime(l.species, l.grade),
-        value: valueOf(l.species, l.grade),
+        value: rules.valueOf(l.species, l.grade),
         // Position in the tally, which is grading order. Falls back to a big
         // number so a line without it sorts last rather than first.
         seq: Number.isFinite(l.seq) ? l.seq : Number.MAX_SAFE_INTEGER,
@@ -126,9 +123,9 @@ export function solveDrops(gradeList, budget) {
 
 /* One pass at a fixed set of heights. `heightOf(grade)` returns the height to
  * lay each bucket at; the two-pass planner below calls this twice. */
-function layoutOnce(clean, totalBoxes, heightOf) {
+function layoutOnce(clean, totalBoxes, heightOf, rules) {
   const warnings = []
-  const gradeList = bucketGrades(clean)
+  const gradeList = bucketGrades(clean, rules)
 
   // Stacks, then gather them by species so a species stays whole.
   const speciesList = new Map()
@@ -144,10 +141,10 @@ function layoutOnce(clean, totalBoxes, heightOf) {
     speciesList.get(key).stacks.push(...stacks)
   }
 
-  // Order: auction 1→4; within an auction the biggest species first, so the
-  // awkward remainders are the small ones; within a species the prime grades
-  // first, which is what puts them low and at the head of the run.
-  const order = new Map(AUCTIONS.map((a, i) => [a.id, i]))
+  // Order: clock 1→n; within a clock the biggest species first, so the awkward
+  // remainders are the small ones; within a species the prime grades first,
+  // which is what puts them low and at the head of the run.
+  const order = new Map(rules.clocks.map((a, i) => [a.id, i]))
   const species = [...speciesList.values()].sort((a, b) =>
     order.get(a.auction) - order.get(b.auction) ||
     b.stacks.length - a.stacks.length ||
@@ -164,7 +161,7 @@ function layoutOnce(clean, totalBoxes, heightOf) {
   const rows = { top: [], bottom: [] }
   const pressure = (r) => (r === 'top' ? rows.top.length / TOP_ROW : rows.bottom.length / BOTTOM_ROW)
   for (const sp of species) {
-    if (canSplitBands(sp.auction)) {
+    if (rules.canSplitRows(sp.auction)) {
       for (const st of sp.stacks) rows[pressure('top') <= pressure('bottom') ? 'top' : 'bottom'].push(st)
     } else {
       const band = pressure('top') <= pressure('bottom') ? 'top' : 'bottom'
@@ -184,8 +181,8 @@ function layoutOnce(clean, totalBoxes, heightOf) {
     })
   }
 
-  // Which tiers each auction lands on — what you actually tell the market.
-  const auctionSpans = AUCTIONS.map((a) => {
+  // Which tiers each clock lands on — what you actually tell the market.
+  const auctionSpans = rules.clocks.map((a) => {
     const hits = []
     byTier.forEach((t, i) => {
       if ([...t.top, ...t.bottom].some((s) => s.auction === a.id)) hits.push(i + 1)
@@ -204,12 +201,16 @@ function layoutOnce(clean, totalBoxes, heightOf) {
   return { tiers, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species, gradeList }
 }
 
-/* → { tiers, ruleOfThumb, totalBoxes, footprints, rows, auctionSpans, warnings } */
+/* → { tiers, ruleOfThumb, totalBoxes, footprints, rows, auctionSpans, warnings }
+ *
+ * `opts.rules` is a resolved rules object (see resolveRules). Omit it and the
+ * built-in defaults are used, which is what the tests and the scripts do. */
 export function planLayout(lines, opts = {}) {
+  const rules = opts.rules || RULES
   const clean = (lines || []).filter((l) => Number(l.boxes) > 0)
   const totalBoxes = clean.reduce((s, l) => s + Number(l.boxes), 0)
   if (!totalBoxes) {
-    return { tiers: 0, ruleOfThumb: 0, totalBoxes: 0, footprints: 0, spare: 0, lowered: [],
+    return { tiers: 0, ruleOfThumb: 0, totalBoxes: 0, footprints: 0, spare: 0, lowered: [], unfiled: [],
              rows: { top: [], bottom: [] }, byTier: [], auctionSpans: [], warnings: ['Nothing on the tally.'] }
   }
 
@@ -219,7 +220,7 @@ export function planLayout(lines, opts = {}) {
 
   // Pass one: everything at its ceiling. This is what sets the tier count, and
   // nothing below is allowed to raise it.
-  let plan = layoutOnce(clean, totalBoxes, fixed || ((g) => g.max))
+  let plan = layoutOnce(clean, totalBoxes, fixed || ((g) => g.max), rules)
   let heights = null
 
   if (!fixed && opts.drop !== false) {
@@ -232,7 +233,7 @@ export function planLayout(lines, opts = {}) {
     // rather than trusting the arithmetic.
     while (budget > 0) {
       const tryHeights = solveDrops(plan.gradeList, budget)
-      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max)
+      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max, rules)
       if (candidate.tiers <= ceiling) { plan = candidate; heights = tryHeights; break }
       budget -= 1
     }
@@ -252,17 +253,29 @@ export function planLayout(lines, opts = {}) {
                        from: g.max, to: h, seq: g.seq, value: g.value })
       }
     }
-    lowered.sort((a, b) => valueOf(b.species, b.grade) - valueOf(a.species, a.grade) || a.seq - b.seq)
+    lowered.sort((a, b) => b.value - a.value || a.seq - b.seq)
   }
+
+  // A species nobody has put on a clock still gets laid out, on the last clock
+  // and at the fallback height — but it is named, because a fish quietly sent
+  // to the wrong auction is worse than one you were told about. The market
+  // does move species between clocks, which is the whole reason the rules are
+  // editable.
+  const unfiled = [...new Set(clean.map((l) => l.species))].filter((s) => !rules.isFiled(s))
 
   const warnings = [...plan.warnings]
   if (plan.tiers > ruleOfThumb) {
     warnings.push(`Needs ${plan.tiers} tiers, but the ÷94 rule would have asked for ${ruleOfThumb}. Ask for ${plan.tiers}.`)
   }
+  if (unfiled.length) {
+    const one = unfiled.length === 1
+    const fb = rules.clock(rules.fallbackClock)
+    warnings.push(`${unfiled.join(', ')} ${one ? 'is' : 'are'} not on a clock, so ${one ? 'it has' : 'they have'} gone on ${fb?.label || 'the last one'}. Set ${one ? 'it' : 'them'} on Market Rules.`)
+  }
 
   return {
-    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints, spare, lowered,
+    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints, spare, lowered, unfiled,
     rows: plan.rows, byTier: plan.byTier, auctionSpans: plan.auctionSpans,
-    warnings, species: plan.species,
+    warnings, species: plan.species, clocks: rules.clocks,
   }
 }
