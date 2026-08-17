@@ -4,6 +4,9 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+// Split out so it can be tested: the classification had a bug that put the
+// logbook alerts into the price stream, where "clear" would have taken them.
+import { isMarket, isCompliance } from '../lib/alertStreams'
 
 // colour-mix keeps these readable in BOTH themes: a tint of the signal colour
 // over the current surface, so nothing glares on a night wheelhouse screen.
@@ -15,17 +18,23 @@ const SEV = {
 const TYPE_LABEL = {
   daily:'Daily jump', fourweek:'4-week', pd_dk:'PD vs DK', own_spike:'Your sales', forecast:'Forecast',
   crew_passport:'Passport', crew_cert:'Crew ticket', vessel_cert:'Vessel cert',
+  crew_bonus:'Bonus due', log_engine:'Engine log', log_fuel:'Bunkering',
+  log_garbage:'Garbage book', log_crewlist:'Crew list', maintenance:'Maintenance',
 }
 
-// Vessel and crew expiries are kept in their own stream. There are thousands
-// of price alerts on this database and a handful of expiries — in one feed a
-// passport expiry is buried by lunchtime. Same table, same page, separate
-// list, and "clear all" on one never touches the other.
-const COMPLIANCE_TYPES = ['crew_passport', 'crew_cert', 'vessel_cert']
-const isCompliance = (a) => COMPLIANCE_TYPES.includes(a.type)
-const LINK_OF = { crew_passport:'/crew', crew_cert:'/crew-certs', vessel_cert:'/vessel-certs' }
+const LINK_OF = {
+  crew_passport:'/crew', crew_cert:'/crew-certs', vessel_cert:'/vessel-certs',
+  crew_bonus:'/contracted-crew', log_engine:'/engine-logs', log_fuel:'/fuel-log',
+  log_garbage:'/garbage-log', log_crewlist:'/crew-list', maintenance:'/maintenance',
+}
 const DEFAULTS = { daily_jump_pct:15, four_week_pct:25, pd_dk_gap_pct:20, own_spike_pct:20,
   enable_daily:true, enable_four_week:true, enable_pd_dk:true, enable_own:true,
+  // How the price stream is kept quiet. Measured Aug 2026: without these it
+  // ran at 28.7 alerts per fleet per day, because one species moving was
+  // announced once per grade AND re-announced every board day for as long as
+  // the condition held (18 days running, on the PD/DK gap). These must match
+  // the coalesce() defaults in generate_alerts.
+  price_cooldown_days:7, price_max_per_run:3, price_expire_days:21,
   // How long a book may go unwritten before it is worth saying so, and how far
   // ahead an expiry is worth flagging. These must match the defaults in
   // supabase/activity_alerts.sql and generate_compliance_alerts — the SQL
@@ -63,7 +72,7 @@ export default function Alerts(){
   }, [isSkipper])
 
   const compliance = useMemo(() => rows.filter(isCompliance), [rows])
-  const market = useMemo(() => rows.filter(r => !isCompliance(r)), [rows])
+  const market = useMemo(() => rows.filter(isMarket), [rows])
   const unread = useMemo(() => rows.filter(r => !r.read_at).length, [rows])
   const complianceUnread = useMemo(() => compliance.filter(r => !r.read_at).length, [compliance])
 
@@ -125,6 +134,16 @@ export default function Alerts(){
           <Row on={cfg.enable_pd_dk} set={v=>setN('enable_pd_dk',v)} label="Peterhead ↔ Denmark gap" suffix="%" val={cfg.pd_dk_gap_pct} onVal={v=>setN('pd_dk_gap_pct',v)} hint="where-to-land signal" />
           <Row on={cfg.enable_own} set={v=>setN('enable_own',v)} label="Your own sales spike" suffix="%" val={cfg.own_spike_pct} onVal={v=>setN('own_spike_pct',v)} hint="last landing vs your recent average" />
 
+          <h3 style={{ marginBottom:'0.1rem' }}>How often price alerts may repeat</h3>
+          <p className="muted" style={{ fontSize:'0.82rem', marginTop:0 }}>
+            A price gap that holds for a fortnight is one piece of news, not fourteen. Without these the
+            board ran at <b>29 alerts a day</b> and the certificates were buried underneath. The cooldown
+            is per species, so a different fish still gets through at once.
+          </p>
+          <Row on={true} set={()=>{}} label="Don’t repeat a species for" suffix="days" val={cfg.price_cooldown_days} onVal={v=>setN('price_cooldown_days',v)} hint="7 is the usual" />
+          <Row on={true} set={()=>{}} label="Most alerts per board" suffix="each" val={cfg.price_max_per_run} onVal={v=>setN('price_max_per_run',v)} hint="biggest movers first" />
+          <Row on={true} set={()=>{}} label="Price alerts drop off after" suffix="days" val={cfg.price_expire_days} onVal={v=>setN('price_expire_days',v)} hint="a five-week-old board move is not news" />
+
           <h3 style={{ marginBottom:'0.1rem' }}>How long before a log is chased</h3>
           <p className="muted" style={{ fontSize:'0.82rem', marginTop:0 }}>
             Checked once a day at 06:00. A book is only ever chased if it has been used at least once —
@@ -161,8 +180,8 @@ export default function Alerts(){
           </h2>
           {compliance.length === 0 ? (
             <div className="card"><p className="muted" style={{ margin:0 }}>
-              Nothing expiring in the next 60 days. Certificates, passports and vessel papers are
-              checked each time this page opens.
+              Nothing expiring in the next {cfg.expiry_lead_days} days, and no logbook overdue.
+              Certificates, passports and vessel papers are checked each time this page opens.
             </p></div>
           ) : compliance.map(a => <AlertCard key={a.id} a={a} onDismiss={dismiss} />)}
 
@@ -175,8 +194,11 @@ export default function Alerts(){
           ) : market.map(a => <AlertCard key={a.id} a={a} onDismiss={dismiss} />)}
 
           <p className="muted" style={{ fontSize:'0.74rem' }}>
-            Price alerts cover your main species only and won&rsquo;t repeat the same one twice in a day.
-            Expiries are raised once per certificate per expiry date, and again if one lapses.
+            Price alerts cover your main species only, are raised once per species rather than once per
+            grade, and stay quiet for {cfg.price_cooldown_days} days afterwards — so a gap that holds for
+            a fortnight is said once. They drop off the page after {cfg.price_expire_days} days.
+            Expiries and logbooks are never cleared with them: they are raised once per certificate per
+            expiry date, and again if one lapses.
           </p>
         </>
       )}
