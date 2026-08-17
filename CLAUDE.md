@@ -986,6 +986,70 @@ Also agreed, not yet scheduled:
 Explicitly NOT wanted: hours of rest, PLB tracking, crew schedule (the rota
 planner covers it), inspection pack, AI audit, and Aegir's own landings page.
 
+## Trip rates — `Trips.jsx`, `src/lib/tripAgg.js`
+
+`/trips`, under Sales. What each trip made **per day at sea**.
+
+**Called rates and NOT profit, deliberately.** There is no cost against a trip
+anywhere in this database: not one entry in `vessel_fuel_log` carries a price
+(the `price_per_litre` and `total_cost` columns exist and are empty), and a
+settlement covers a *run* of trips rather than one. A profit figure here would
+be invented. Gross per day at sea is the honest number and is the one asked
+for. Fuel is shown as **litres**, estimated at 5,846 L/day, and labelled as an
+estimate.
+
+### THE UNIT IS THE TRIP, NOT THE LANDING
+
+This is the whole point of the file. A trip lands more than once — a few boxes
+at Ullapool on the way past, then the trip proper at Peterhead — and **every
+one of those landings carries the whole trip's days at sea**:
+
+    120 landings · 51 within 3 days of the one before
+                 · 37 of those carrying an identical days_at_sea
+    they collapse to 72 real trips, 42 of which landed more than once
+
+So dividing a landing's gross by its own `days_at_sea` counts the same days two
+and three times. Measured on Audacious's real record:
+
+    per LANDING (wrong)   £12,049/day over 767.25 days
+    per TRIP   (right)    £18,976/day over 487.17 days
+
+**280 phantom days, and a 57% understatement.** It also makes a one-box call at
+Ullapool read as a catastrophic £12/day trip when it is half an hour's work
+inside a good one. An earlier draft of this analysis reported the £11,951
+figure as fact; it was wrong for exactly this reason.
+
+**The trip boundary is REAL, not inferred.** `quota_trips` carries `trip_nr`,
+`departure_at` and `arrival_at` straight off the logbook export — 167 trips for
+Audacious with both dates, back to 2022, and **all 120 sales landings attach to
+one**. Worth insisting on: the settlement solver has to infer its boundaries
+because the office does not supply them, and it is the hardest code in the
+repo. Here the answer is already recorded, so inferring would be inventing a
+problem.
+
+A landing matches the trip whose **arrival** is nearest, within one day before
+and three days after — a note is dated when the fish hits the market, never
+before the boat sailed. Nearest arrival wins, so back-to-back trips do not
+steal each other's landings.
+
+**Days come from the logbook; the typed figure is reported, never resolved.**
+13 of the 72 trips differ by more than a day and the page shows both — which
+one is wrong is the skipper's call, not the code's.
+
+**Nothing is ever dropped.** A landing with no logbook trip is listed as
+unattached rather than silently left out of a rate. `scripts/trip-check.mjs`
+asserts the three things that matter on real rows: every landing placed exactly
+once, gross reconciling against the raw rows, and no trip counted twice — a
+trip aggregator that quietly loses a landing produces a plausible wrong number,
+which is the worst kind.
+
+**Pair teams are correct by construction.** Gross and boxes sum across the two
+boats; days are the *trip's* single figure and are never summed, because both
+boats fished the same days.
+
+The headline is total gross over total days, **not a mean of the trip rates** —
+a two-day run must not weigh the same as a nine-day one.
+
 ## Landings vs settlements
 
 `Reconcile.jsx` at `/reconcile`, under Settlement. Compares what the sales

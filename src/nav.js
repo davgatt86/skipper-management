@@ -38,6 +38,9 @@ export const NAV = [
       { to: '/sales', label: 'Fish Sales', access: 'fleetTools' },
       { to: '/sales-insights', label: 'Sales Insights', access: 'skipper' },
       { to: '/buyer-league', label: 'Buyer League', access: 'fleetTools' },
+      // What each TRIP made per day at sea. The unit is the trip, not the
+      // landing — see src/lib/tripAgg.js for why that distinction matters.
+      { to: '/trips', label: 'Trip Rates', access: 'fleetTools' },
       { to: '/sales-compare', label: 'Compare Sales', access: 'skipper' },
       { to: '/price-vs-fleet', label: 'Price vs Fleet', access: 'skipper' },
     ],
