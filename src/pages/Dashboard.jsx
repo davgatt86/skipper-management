@@ -44,7 +44,16 @@ export default function Dashboard() {
     if (!isSkipper) return
     let cancel = false
     ;(async () => {
-      try { await supabase.rpc('generate_alerts') } catch (e) { /* non-fatal */ }
+      // Deliberately NOT calling generate_alerts() here any more.
+      //
+      // It was written when market alerts had no schedule and only fired when
+      // somebody opened a page. They have run on cron every three hours since
+      // Aug 2026, so this was doing the same work again — and it is not cheap:
+      // measured at 573-931 ms mean over 495 calls, 283 seconds of database
+      // time in total, all of it blocking the front page of the app before it
+      // could show a single figure.
+      //
+      // The badge below reads what the cron already raised.
       const { count } = await supabase.from('alerts').select('id', { count: 'exact', head: true }).is('read_at', null).is('dismissed_at', null)
       if (!cancel) setUnread(count || 0)
     })()

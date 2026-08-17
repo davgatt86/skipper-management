@@ -1311,6 +1311,53 @@ than a leak: office is described as "full except settings/crew" but
 `sales_landings_skipper` is skipper-only, so an office user cannot see sales.
 Decide what office is actually for before using it.
 
+### RLS speed: MEASURED, and there is no problem — don't rewrite the policies
+
+Aug 2026. 174 of 314 policies in `public` call `current_fleet_id()` /
+`current_user_fleet_id()` / `current_user_role()` / `auth.uid()` **bare**,
+rather than wrapped in a scalar subselect. That looks like the well-known
+Supabase trap where a per-row call is re-evaluated for every row, and it was
+about to be "fixed" across all 174.
+
+**Benchmarked first, as a real skipper session with RLS applied, and the
+rewrite is unnecessary.** All 56 tables carrying a bare call, scanned in full:
+
+    56 tables swept · ONE over 100ms · two over 50ms · 574ms for all of them
+    market_prices 44,152 rows  6.3ms      sales_rows 8,260 rows  5.0ms
+    Buyer League join 8.5ms                grouped 13.8ms
+
+The reason is simple and checkable: **all six helper functions are `STABLE`**,
+so the planner already hoists them out of the per-row loop. The subselect is
+belt-and-braces, not a fix.
+
+The one outlier — `audit_log` at 102ms — is a **cold first touch**. Warm it is
+12ms across three runs.
+
+So the 4,249ms → 8ms incident that made this look urgent was specific to that
+policy and that plan shape, not a general property of bare calls. Rewriting
+174 security boundaries for no measured gain is risk without benefit. **If it
+is ever revisited, benchmark first** — the sweep above is the query to re-run.
+
+### What was actually slow: the dashboard generated alerts on every load
+
+`pg_stat_statements` named it, and it was nothing to do with policies:
+
+    generate_alerts()   573–931ms mean · 495 calls · 283 SECONDS total
+
+`Dashboard.jsx` called `supabase.rpc('generate_alerts')` and **awaited it**
+before the front page could show a figure. That was written when market alerts
+had no schedule and only fired when somebody opened a page; they have run on
+cron every three hours since Aug 2026, so it was doing the same work twice.
+Removed — the badge reads what the cron already raised.
+
+The rewritten generator is also cheaper at **417ms**, because it inserts far
+fewer rows.
+
+**The lesson is the method, not the number.** The RLS pass was recommended off
+reading policy text and one remembered incident; the dashboard call was found
+by asking the database what was actually slow. Read `pg_stat_statements`
+before optimising anything here.
+
 ## Working offline
 
 Built Aug 2026, because an engineer logs in the engine room and that is where
