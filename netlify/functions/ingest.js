@@ -51,6 +51,8 @@ if (typeof Promise.withResolvers !== 'function') {
 
 import { createClient } from '@supabase/supabase-js'
 import { parseMarketFromDoc } from '../../src/lib/market/parseMarket.js'
+// Shared with the browser upload in Sales.jsx. esbuild bundles it in.
+import { canonBuyerFrom } from '../../src/lib/buyerAliases.js'
 
 // parse-core.cjs is the canonical sales-note parser, vendored here so the
 // function can run it server-side. Imported statically so the Netlify/esbuild
@@ -303,25 +305,24 @@ export const handler = async (event) => {
          *
          * Buyer names come off the sales note as typed, so one firm turns up
          * several ways and splits its own record. Merging the history fixes
-         * what is there; without this the NEXT note reintroduces the variant
-         * and the work is undone — which is what the aliases column was added
-         * for and nothing was reading.
+         * what is there; the aliases are what stop the NEXT note reintroducing
+         * the variant and undoing the work.
          *
-         * Matched case- and space-insensitively, because that is how the
-         * variants differ ("G & J JACK" vs "G&J Jack Seafoods Ltd"). Applied
-         * per fleet: two boats may know the same firm by different names, and
-         * one fleet's merge is not evidence about another's. */
+         * The matching itself is shared with the browser upload path in
+         * Sales.jsx — see src/lib/buyerAliases.js. It was written out twice,
+         * inline and identical, which is the drift this repo keeps being
+         * bitten by.
+         *
+         * The fleet filter is EXPLICIT here and must stay: this function holds
+         * the service-role key, so RLS is not scoping the read the way it does
+         * in the browser. Without it one fleet's merges would be applied to
+         * another's sales note. */
         const { data: flags } = await supabase
           .from('sales_buyer_flags')
           .select('canonical_name, aliases')
           .eq('fleet_id', sender.fleet_id)
           .not('canonical_name', 'is', null)
-        const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-        const aliasMap = new Map()
-        for (const f of flags || []) {
-          for (const a of f.aliases || []) aliasMap.set(squash(a), f.canonical_name)
-        }
-        const canonBuyer = (b) => aliasMap.get(squash(b)) || b || ''
+        const canonBuyer = canonBuyerFrom(flags)
 
         const payload = res.rows.map(r => ({
           fleet_id: sender.fleet_id, landing_id: landingId,

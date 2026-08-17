@@ -1680,9 +1680,25 @@ what. Re-uploading any of those notes will fill it in.
 
   **The merge is recorded, not just applied.** `sales_buyer_flags` gained
   `canonical_name` and `aliases`. The one-off UPDATE fixes history; the alias
-  is what stops the next sales note reintroducing the variant — **but nothing
-  reads it at ingest yet.** Wiring that into the parser is the remaining step,
-  and it needs both copies of `parse-core` changed and the version bumped.
+  is what stops the next sales note reintroducing the variant.
+
+  **Both ingest paths read it** — the CloudMailin webhook and the browser
+  upload. `src/lib/buyerAliases.js` holds the matching and **both import it**;
+  it was written out twice inline, which is the same drift this file warns
+  about everywhere else. esbuild bundles it into the Netlify function, and
+  `test-buyers.mjs` covers it against the four real merges.
+
+  **It is NOT in `parse-core`, deliberately.** The aliases are per fleet and
+  live in the database; parse-core is a pure library that must stay byte-
+  identical across two repos. Applying them in the ingest layer, where the
+  fleet is known, keeps both properties — so this needed no version bump.
+
+  Two things the tests pin down. **A near miss is never guessed at**: "J
+  Smithson" stays "J Smithson", because welding two genuinely different firms
+  together is not recoverable from the note afterwards. And **one fleet's merge
+  never reaches another** — in the webhook that filter is explicit, because it
+  holds the service-role key and RLS is not scoping the read the way it does in
+  the browser.
 
 ## Toolchain
 

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
+// Shared with netlify/functions/ingest.js — the two upload paths must merge
+// buyer names identically, and they were two inline copies of the same code.
+import { canonBuyerFrom } from '../lib/buyerAliases'
 import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2,
   withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
@@ -192,16 +195,12 @@ export default function Sales() {
     const log = []
     const byKey = new Map(landings.map(l => [l.dedup_key, l.id]))
 
-    // This fleet's buyer merges, loaded once for the whole upload. Matched
-    // case- and space-insensitively because that is how the variants differ
-    // ("G & J JACK" vs "G&J Jack Seafoods Ltd"). RLS scopes the read to the
-    // fleet, so no filter is needed here.
+    // This fleet's buyer merges, loaded once for the whole upload. RLS scopes
+    // the read to the fleet, so no filter is needed here. The matching itself
+    // is shared with the CloudMailin webhook — see src/lib/buyerAliases.js.
     const { data: buyerFlags } = await supabase
       .from('sales_buyer_flags').select('canonical_name, aliases').not('canonical_name', 'is', null)
-    const squash = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-    const aliasMap = new Map()
-    for (const bf of buyerFlags || []) for (const a of bf.aliases || []) aliasMap.set(squash(a), bf.canonical_name)
-    const canonBuyer = (b) => aliasMap.get(squash(b)) || b || ''
+    const canonBuyer = canonBuyerFrom(buyerFlags)
     for (const f of files) {
       try {
         let res = await parseSalesPdf(f)
