@@ -1173,6 +1173,19 @@ in `alerts` until somebody opened the app. This closes that.
   the skipper's to renew, but the engine log going quiet is the engineer's to
   fix — skipper-only would mean relaying it to the man who can act. `crew` is
   excluded: a deckhand can do nothing about any of it.
+- **BUT NOT THE SAME EMAIL TO EVERYBODY** (fixed Aug 2026). It rendered one
+  message per fleet and posted it to all of them, so `crew_bonus` alerts —
+  *"Bonus 4500.00, paid so far 2250.00, still to pay 2250.00"* — went to the
+  engineer every morning. An officer is **denied every money table at the
+  database**, and that denial is the entire reason the role exists rather than
+  handing out a skipper login; the digest walked straight around it.
+  **RLS cannot catch this**: the digest runs on the service-role key by
+  necessity, so the filter has to be written down. `TYPES_FOR_ROLE` mirrors
+  `officer_role.sql` — an officer gets the logs, the maintenance and the crew
+  paperwork, and nothing to do with money. The email is now built per
+  recipient, and a reader with nothing to act on is sent nothing at all rather
+  than an empty digest. An unlisted role gets **nothing**, failing the same
+  direction as the nav guards. `test-digest.mjs` covers it.
 
 **Sent via CloudMailin over SMTP** — the same vendor already handling inbound
 sales notes, so there is one account rather than two. `nodemailer`, pooled to

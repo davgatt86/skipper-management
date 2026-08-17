@@ -43,7 +43,7 @@ import nodemailer from 'nodemailer'
 
 // Expiries and stopped books. Market alerts are deliberately excluded — see
 // above: they run every three hours and would drown this.
-const DIGEST_TYPES = [
+export const DIGEST_TYPES = [
   // running out
   'crew_passport', 'crew_cert', 'vessel_cert', 'crew_bonus',
   // stopped being written in, or falling due
@@ -61,6 +61,32 @@ const DIGEST_TYPES = [
  * unmigrated login. 'crew' is excluded: a deckhand can do nothing about any of
  * this and a daily list of other people's overdue paperwork is just noise. */
 const DIGEST_ROLES = ['skipper', 'officer', 'engineer', 'office']
+
+/* WHAT EACH ROLE MAY BE TOLD, which is not the same as who gets an email.
+ *
+ * An officer is denied every money table at the database — contracts,
+ * payments, bonuses — and that denial is the entire reason the role exists
+ * rather than handing out a skipper login. But `crew_bonus` alerts carry the
+ * figures in the body:
+ *
+ *   "Eugene Tano — going-home bonus due now — Contract ends 02-03-2026.
+ *    Bonus 4500.00, paid so far 2250.00, still to pay 2250.00."
+ *
+ * Mailing that to the engineer every morning walks straight around the
+ * boundary. RLS cannot help here: the digest runs on the service-role key by
+ * necessity, so the filter has to be written down, and this is it.
+ *
+ * The lists mirror `supabase/officer_role.sql` — an officer gets the logs, the
+ * maintenance and the crew paperwork, and nothing to do with money.
+ */
+export const MONEY_TYPES = ['crew_bonus']
+export const TYPES_FOR_ROLE = {
+  skipper: DIGEST_TYPES,
+  office: DIGEST_TYPES,                                        // bonuses are their job
+  officer: DIGEST_TYPES.filter((t) => !MONEY_TYPES.includes(t)),
+  engineer: DIGEST_TYPES.filter((t) => !MONEY_TYPES.includes(t)),   // legacy name
+}
+export const typesFor = (role) => TYPES_FOR_ROLE[role] || []
 
 const SITE = process.env.SITE_URL || 'https://skippermanagement.co.uk'
 // Must be on the domain verified in CloudMailin, or the message is accepted and
@@ -195,14 +221,24 @@ export const handler = async () => {
   for (const [fleetId, list] of byFleet) {
     const to = (users || []).filter((u) => u.fleet_id === fleetId && u.email)
     if (!to.length) { results.push(`${fleetName[fleetId] || fleetId}: nobody to send to`); continue }
-    const overdue = list.filter((a) => a.severity === 'warn').length
-    const subject = overdue
-      ? `${fleetName[fleetId] || 'Your boat'} — ${overdue} overdue, ${list.length} in total`
-      : `${fleetName[fleetId] || 'Your boat'} — ${list.length} falling due`
-    const html = renderEmail(fleetName[fleetId] || 'Your boat', list)
+    const boat = fleetName[fleetId] || 'Your boat'
+
+    /* The email is built PER RECIPIENT, not once per fleet, because what an
+     * officer may be told is narrower than what the skipper may. Rendering one
+     * message and posting it to everybody is how the bonus figures reached the
+     * engineer. */
     for (const u of to) {
-      const r = await sendEmail(u.email, subject, html)
-      results.push(`${u.email}: ${r.ok ? 'sent' : r.skipped || r.error}`)
+      const allowed = typesFor(u.role)
+      const mine = list.filter((a) => allowed.includes(a.type))
+      // Nothing this reader can act on: say nothing. A digest that arrives
+      // empty teaches people to stop opening it.
+      if (!mine.length) { results.push(`${u.email}: nothing for a ${u.role}`); continue }
+      const overdue = mine.filter((a) => a.severity === 'warn').length
+      const subject = overdue
+        ? `${boat} — ${overdue} overdue, ${mine.length} in total`
+        : `${boat} — ${mine.length} falling due`
+      const r = await sendEmail(u.email, subject, renderEmail(boat, mine))
+      results.push(`${u.email} (${u.role}): ${r.ok ? `sent ${mine.length}` : r.skipped || r.error}`)
     }
   }
 
