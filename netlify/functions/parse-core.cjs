@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.2";
+  const VERSION = "1.3.3";
   const round2 = n => Math.round(n * 100) / 100;
   const num = s => parseFloat(String(s).replace(/,/g, ""));
 
@@ -209,6 +209,63 @@
     return { frag: txt, msc };
   }
 
+  /* A row whose SPECIES cell wrapped onto the next line.
+   *
+   * The note is a fixed-width print and the species/grade cell is the widest
+   * thing on the row, so a long buyer name plus a long token pushes the tail
+   * of the token onto a second line. THE FIGURES STAY WITH THE FIRST LINE,
+   * which is what makes this so quiet — the row looks complete except that
+   * there is no slash-token to anchor on, so parseDonLine returns null and the
+   * whole row is dropped without a trace:
+   *
+   *     GT Seafoods Saithe 1.00 40 56.40 40 56.40
+   *     Coley/GUT/A+4
+   *
+   * An A+ grade is ONE CHARACTER wider than a plain A grade, which is enough
+   * to trigger the wrap — so in practice this loses A+ rows and nothing else.
+   * Measured on the real Audacious note of 13-08-2026: 13 boxes and £2,241.80
+   * missing, every one an A+ row, on a note that otherwise reconciled to the
+   * penny on 13 of its 15 species.
+   *
+   * The continuation may ALSO carry the tail of the buyer name, because both
+   * cells wrap onto the same line:
+   *
+   *     Topsail Fish Products Pollock 1.00 40 299.20 40 299.20
+   *     Ltd Lyth/GUT/A+2
+   *
+   * so the part before the slash-token is handed back separately and appended
+   * to the BUYER. Leaving it in front of the species would break the
+   * SPECIES_PREFIX match that rebuilds "Pollock Lyth", and the row would come
+   * out as species "Lyth" with the buyer swallowing "Pollock".
+   *
+   * Note buyerFragment() cannot pick these up: it rejects anything containing
+   * a digit, and "Coley/GUT/A+4" has one. That is why the row vanished rather
+   * than corrupting the buyer above it. */
+  const MONEY_TOKEN = /[\d,]+\.\d{2}/;
+  function speciesWrap(line) {
+    if (!line) return null;
+    const txt = line.replace(/MSC-F-\d+/g, "").replace(/\s+/g, " ").trim();
+    // Figures never wrap — they stay on the row itself. A line carrying money
+    // is a real row, not a fragment of one.
+    if (!txt || MONEY_TOKEN.test(txt)) return null;
+    const words = txt.split(" ");
+    let sp = -1;
+    for (let i = 0; i < words.length; i++) { if (SLASH_TOKEN.test(words[i])) { sp = i; break; } }
+    if (sp === -1) return null;
+    return {
+      frag: words.slice(0, sp).join(" "),      // tail of the buyer name, if any
+      tail: words.slice(sp).join(" "),         // tail of the species token
+      msc: /MSC-F-\d+/.test(line),
+    };
+  }
+
+  // Put the wrapped token back on the end of the head, in front of the
+  // figures, so parseDonLine sees the row exactly as it would unwrapped.
+  function joinSpeciesWrap(line, w) {
+    const m = line.match(/^(.*?)(\s+[\d,]+\.\d{2}\s+\d+\s+[\d,]+\.\d{2}\s+[\d,]+\s+[\d,]+\.\d{2})$/);
+    return m ? m[1] + " " + w.tail + m[2] : null;
+  }
+
   function parseDonLine(line) {
     // Defensive: pdf.js sometimes merges a row's MSC code into the start of
     // the NEXT row's line. Strip it and report so the caller can flag the
@@ -255,10 +312,22 @@
     const rows = [];
     let lastRow = null;
     for (let i = 0; i < allLines.length; i++) {
-      const r = parseDonLine(allLines[i]);
+      let r = parseDonLine(allLines[i]);
+      let wrapFrag = "";
+      // The species cell wrapped: rebuild the row from this line and the next,
+      // and consume the continuation so it is not read again below.
+      if (!r) {
+        const w = speciesWrap(allLines[i + 1]);
+        if (w) {
+          const joined = joinSpeciesWrap(allLines[i], w);
+          const r2 = joined && parseDonLine(joined);
+          if (r2) { r = r2; wrapFrag = w.frag; if (w.msc) r.msc = true; i++; }
+        }
+      }
       if (r) {
         if (r._mscLeading && lastRow) lastRow.msc = true;
         delete r._mscLeading;
+        if (wrapFrag) r.buyer = (r.buyer + " " + wrapFrag).replace(/\s+/g, " ").trim();
         rows.push(r); lastRow = r;
         continue;
       }

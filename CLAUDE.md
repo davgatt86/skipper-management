@@ -123,7 +123,49 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 `parse-core.cjs` (this repo, Netlify Functions) and `parse-core.js` (in
 `davgatt86/fish-sales-tracker`) are **identical files**. Any fix must be applied
-to both, and the version bumped. Now **1.3.2**.
+to both, and the version bumped. Now **1.3.3**.
+
+**WHICH COPY RUNS WHERE — this matters when a fix has to reach a note.**
+The CloudMailin webhook uses **this repo's** `parse-core.cjs`. The browser
+upload does **not**: `src/lib/parseCore` loads
+`https://fish-sales.netlify.app/parse-core.js` at runtime, off the other
+repo's deploy. So a fix landed here only takes effect for **emailed** notes
+until fish-sales-tracker is updated and redeployed — and re-uploading by hand
+in the browser will still hit the old parser.
+
+### The wrapped-row bug — 1.3.3, Aug 2026
+
+**A row whose species cell wrapped onto the next line was dropped silently.**
+The note is a fixed-width print and an `A+` grade is **one character wider**
+than a plain `A` grade, which is enough to push the tail of the species token
+onto a second line while the figures stay on the first:
+
+    GT Seafoods Saithe 1.00 40 56.40 40 56.40
+    Coley/GUT/A+4
+
+`parseDonLine` anchors on the slash-token, finds none, and returns null — so
+the whole row disappears. `buyerFragment` cannot pick the continuation up
+either, because it rejects anything containing a digit, which is why the row
+vanished rather than corrupting the buyer above it.
+
+The continuation may carry the tail of a **long buyer name as well**
+(`Ltd Lyth/GUT/A+2`), and that part must be appended to the BUYER — leaving it
+in front of the species breaks the `SPECIES_PREFIX` match that rebuilds
+"Pollock Lyth", and the buyer swallows "Pollock".
+
+Measured on the real Audacious note of 13-08-2026: **13 boxes and £2,241.80**
+missing, every one an A+ row, on a note that reconciled to the penny on 13 of
+its 15 species. After the fix it reconciles exactly — 1,192 boxes, 44,805 kg,
+£136,656.50, `ok: true`, 175 rows → 182.
+
+**The same signature is on three other landings** — a small negative diff on
+boxes, weight and value at once, all Don Fishing: Boy Andrew 11-08 (−92 boxes,
+−£4,088.98), Beryl 11-08 (−1, −£2,343.75), Boy Andrew 17-08 (−2, −£98.80).
+**£8,773 across the four.** Those notes want re-ingesting once both copies of
+the parser carry 1.3.3.
+
+`test-parser.mjs` holds the real pdf.js-extracted lines and covers it,
+including that a following data row is never eaten as a continuation.
 
 **Checked Aug 2026 by diffing the two files: they were genuinely identical, at
 1.2.1.** This document's claim of 1.3.0 was simply wrong — the identical-files
