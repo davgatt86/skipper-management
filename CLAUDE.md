@@ -140,10 +140,35 @@ emailed notes got them. Nobody could see it, because the version that mattered
 was on a server nobody looked at.
 
 That copy is a strict subset of this one; nothing was lost by taking it
-in-house. **Do not reintroduce a second copy.** If `fish-sales.netlify.app` or
-`sales-analyser.netlify.app` are still live they still serve their own
-`parse-core.js`, so don't delete that repo on this app's account — just know
-nothing here depends on it any more.
+in-house. **Do not reintroduce a second copy.**
+
+**Nothing else consumes it either.** `fish-sales-tracker/index.html` carries a
+comment saying the Sales Analyser loads it from
+`https://fish-sales.netlify.app/parse-core.js`; checked against the real
+sales-analyser repo Aug 2026, that is **stale** — it loads four cdnjs scripts
+and never references `ParseCore` at all. So the fish-sales deploy has no
+consumer left.
+
+### The other repos, audited Aug 2026 — no ties either way
+
+`fish-sales-tracker`, `sales-analyser`, `trip-gross-estimator` and
+`square-up-sheet` were all read in full. **None of the four touches Supabase**,
+so there is no shared database, and nothing in this app fetches from any of
+them at runtime.
+
+`src/squareup/` IS a **vendored fork** of `square-up-sheet` — nine files, copied
+once and then developed here. This app is ahead on every one that differs
+(storage 35→89 lines as it moved off localStorage onto Supabase, ui 82→137 and
+constants rewritten onto the design tokens, pdfGenerator, Preview,
+invoiceParser); the rest are byte-identical. `netlify/functions/parse.js` is
+the same story against `trip-gross-estimator`. **Nothing in those repos is
+missing from here** — checked line by line, not assumed. They are ancestors,
+not dependencies.
+
+The su_* tables came from **none of these four**. Most likely
+`square-up-fleet-settlements` (its Netlify publish date matches the last write
+to `su_boats`), which has no repo here — that is the one thing that could still
+be writing to this database.
 
 ### pdf.js is bundled, not fetched
 
