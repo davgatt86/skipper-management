@@ -1805,6 +1805,28 @@ Note P&J's box diff is informational — it prints a *physical* box count that
 never ties to the fractional column, so `reconcilePJJ()` scores on weight and
 value only and sets `basis: 'physical'`.
 
+### The re-upload banner — `ReconcileBanner.jsx`, `supabase/reconcile_ack.sql`
+
+A flagged note can only be fixed by the skipper who has it, so the notice goes
+where he already is: **compact on the Dashboard** (seen at login) and **full on
+Fish Sales** (where the upload button is). An email would only be a message
+asking him to open the app.
+
+**Driven by the data, so it clears itself.** Re-uploading re-parses and replaces
+the rows in place; when the figures agree the row stops being flagged and the
+banner goes. Nothing to remember to take down, and a note that breaks next
+month raises it again with no code change.
+
+**And it can be put to bed.** `reconcile_ack_at` hides a note that genuinely
+cannot be got again — it does NOT clear `reconcile_ok`, which stays as the
+record that the figures are not trustworthy. The ten P&J landings are
+acknowledged in the migration with the reason on the row, because a banner
+nagging a fleet about ten things nobody can act on is the same failure as the
+29-alerts-a-day price stream.
+
+Shows on first run: Beryl 4 · Boy Andrew 3 · Boy John + Rosebloom 2 ·
+Guiding Light 0 (10 acknowledged) · Audacious 0 (fixed).
+
 **16 landings currently carry `reconcile_ok = false`** — the 10 P&J ones above,
 plus 06-16 Rosebloom, 06-16 Boy John, 06-30 / 07-13 / 07-21 Beryl and 08-03
 Boy Andrew. Those six have **no** blank buyers, so they failed for some other

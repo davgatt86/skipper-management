@@ -10,6 +10,7 @@ import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, 
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
 import AppShell from '../AppShell'
+import ReconcileBanner from '../ReconcileBanner'
 import PageHeader from '../PageHeader'
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend
@@ -435,6 +436,10 @@ export default function Sales() {
         <button className="secondary" onClick={() => exportSalesExcel({ scopeLabel, rows, landings: scopeLandings, landingById })} disabled={!rows.length}>Excel</button>
         <button className="secondary" onClick={() => window.print()} disabled={!rows.length}>PDF / Print</button>
       </PageHeader>
+
+      {/* Full version here: the upload button is on this page, and so is the
+          way out for a note that genuinely cannot be got again. */}
+      <ReconcileBanner />
 
       {/* scope selector */}
       <div className="card no-print" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>

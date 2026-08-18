@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
+import ReconcileBanner from '../ReconcileBanner'
 import VesselPlate, { useVessel } from '../VesselPlate'
 import SectionRule from '../SectionRule'
 import { shortMarket } from '../lib/salesAgg'
@@ -147,6 +148,12 @@ export default function Dashboard() {
   return (
     <AppShell badges={{ alerts: unread }}>
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error" style={{ margin: 0 }}>{error}</p></div>}
+
+      {/* Above the plate on purpose: this is the one thing on the front page
+          that needs the skipper to go and DO something, and he is the only
+          person who has the note. Compact here — the dismiss lives on Fish
+          Sales, where he is already looking at the landing. */}
+      <ReconcileBanner compact />
 
       <VesselPlate vessel={vessel} loading={vesselLoading} />
 
