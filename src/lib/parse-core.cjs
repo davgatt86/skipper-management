@@ -39,9 +39,10 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.3";
+  const VERSION = "1.3.4";
   const round2 = n => Math.round(n * 100) / 100;
-  const num = s => parseFloat(String(s).replace(/,/g, ""));
+  // A leading '*' is a flag the office puts on a figure, not part of it.
+  const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
 
   /* ------------------------------------------------------------------ *
    * Text extraction: pdf.js textContent -> merged lines + word coords
@@ -274,7 +275,24 @@
     const lm = body.match(/^((?:MSC-F-\d+\s+)+)(.*)$/);
     if (lm) { mscLeading = true; body = lm[2]; }
 
-    const m = body.match(/^(.*?)\s+([\d,]+\.\d{2})\s+(\d+)\s+([\d,]+\.\d{2})\s+([\d,]+)\s+([\d,]+\.\d{2})$/);
+    /* A STARRED PRICE. The office flags a figure with a leading '*', and on a
+     * fixed-width print the star costs a character — so a price that would
+     * read 2343.75 comes out as "*2343." with the pence pushed off the end:
+     *
+     *   AG D Duff & Partners Halibut/GUT/U9 1.00 188 *2343. 188 2,343.75
+     *
+     * The old pattern wanted [\d,]+\.\d{2} in the cost column, got neither the
+     * digits nor the star, and dropped the whole row. Found by Colin on the
+     * Beryl note of 11-08-2026, where that one halibut row IS the entire
+     * £2,343.75 the landing was short.
+     *
+     * So the cost column now tolerates a star and truncated pence, and the
+     * value column tolerates a star too — the flag can land on either, and it
+     * is a marker rather than part of the number (num() strips it).
+     *
+     * The TRUNCATION still loses real precision, so a starred or short price
+     * is recomputed from the value below rather than trusted. */
+    const m = body.match(/^(.*?)\s+([\d,]+\.\d{2})\s+(\d+)\s+(\*?[\d,]+\.\d{0,2})\s+([\d,]+)\s+(\*?[\d,]+\.\d{2})$/);
     if (!m) return null;
     const [, head, nbox, wt, cost, twt, val] = m;
     if (!SLASH_TOKEN.test(head)) return null;
@@ -299,10 +317,15 @@
     const buyer = words.slice(0, sp).join(" ").trim();
     const parts = words.slice(sp).join(" ").split("/");
     const boxes = num(nbox), twt2 = num(twt), val2 = num(val);
+    // A starred or truncated price has lost its pence on the print, so take it
+    // from the value instead — that column is unstarred and exact. Everything
+    // else keeps the figure the note actually shows.
+    const costShort = /\*/.test(cost) || !/\.\d{2}$/.test(cost);
+    const ppb = costShort && boxes ? round2(val2 / boxes) : num(cost);
     return {
       buyer, species: parts[0] || "", species_canon: canonSpecies(parts[0]),
       presentation: parts[1] || "", grade: parts[2] || "", quality: "",
-      boxes, box_weight: num(wt), price_per_box: num(cost),
+      boxes, box_weight: num(wt), price_per_box: ppb,
       total_weight: twt2, total_value: val2,
       price_per_kg: twt2 ? round2(val2 / twt2) : 0, msc: false, _mscLeading: mscLeading
     };

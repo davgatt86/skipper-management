@@ -121,7 +121,7 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 ## Parsers
 
-**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.3**. The
+**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.4**. The
 CloudMailin webhook imports it and so does the browser upload, so a fix cannot
 reach one path and not the other.
 
@@ -212,6 +212,31 @@ Measured on the real Audacious note of 13-08-2026: **13 boxes and £2,241.80**
 missing, every one an A+ row, on a note that reconciled to the penny on 13 of
 its 15 species. After the fix it reconciles exactly — 1,192 boxes, 44,805 kg,
 £136,656.50, `ok: true`, 175 rows → 182.
+
+### The starred-price bug — 1.3.4, Aug 2026
+
+**A row whose price carried a leading `*` was dropped silently.** The office
+flags a figure with a star, and on a fixed-width print the star costs a
+character — so a price that should read `2343.75` comes out as `*2343.` with
+the pence pushed off the end:
+
+    AG D Duff & Partners Halibut/GUT/U9 1.00 188 *2343. 188 2,343.75
+
+`parseDonLine` wanted `[\d,]+\.\d{2}` in the cost column, got neither the
+digits nor the star, and returned null — losing the whole row.
+
+**Found by Colin on the Beryl note of 11-08-2026**, where that ONE halibut row
+is the entire **£2,343.75** the landing was short. He spotted it on the note;
+no amount of reading the parser would have.
+
+The cost and value columns now both tolerate a star (`num()` strips it — a
+flag is not part of the number) and the cost column tolerates truncated pence.
+**A starred or short price is recomputed from the value**, which is unstarred
+and exact, rather than trusted at face value.
+
+Note this is a *different* bug from the wrapped row below, on a different note.
+Two separate silent-drop faults in the same parser, both worth real money, both
+invisible until someone reconciled a note against its own printed total.
 
 **The same signature is on three other landings** — a small negative diff on
 boxes, weight and value at once, all Don Fishing: Boy Andrew 11-08 (−92 boxes,

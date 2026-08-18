@@ -94,7 +94,45 @@ const notAFragment = PC.parseDon([
 ])
 eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1)
 
-eq('the version was bumped', PC.VERSION, '1.3.3')
+/* ---- A STARRED PRICE (1.3.4) -----------------------------------------
+ *
+ * The office flags a figure with a leading '*'. On a fixed-width print the
+ * star costs a character, so a price that should read 2343.75 comes out as
+ * "*2343." with the pence pushed off the end. The old pattern wanted
+ * [\d,]+\.\d{2} in that column, got neither the digits nor the star, and
+ * dropped the whole row without a trace.
+ *
+ * Found by Colin on the Beryl note of 11-08-2026, where that ONE halibut row
+ * is the entire £2,343.75 the landing was short. Lines below are as they read
+ * on the note. */
+{
+  const starred = PC.parseDon([
+    'AG D Duff & Partners Halibut/GUT/U9 1.00 188 *2343. 188 2,343.75',
+  ]).rows
+  eq('a starred, truncated price no longer drops the row', starred.length, 1)
+  eq('and the value is the one the note printed', starred[0].total_value, 2343.75)
+  eq('the buyer survives it', starred[0].buyer, 'AG D Duff & Partners')
+  eq('and the species', starred[0].species_canon, 'Halibut')
+  // The star ate the pence, so the printed price is short — take it from the
+  // value column, which is unstarred and exact.
+  eq('the lost pence are recovered from the value', starred[0].price_per_box, 2343.75)
+  eq('and £/kg is right', starred[0].price_per_kg, 12.47)
+
+  // A star on the VALUE column instead — the flag can land on either.
+  eq('a starred value is read too',
+    PC.parseDon(['G&J Jack Seafoods Ltd Hake/GUT/U9 1.00 25 65.00 25 *65.00']).rows[0]?.total_value, 65)
+
+  // The ordinary rows either side of it on Colin's screen must be unchanged.
+  const plain = PC.parseDon([
+    'Whitelink Seafoods Black / GL H/GUT/A4 26.00 40 155.00 1040 4,030.00',
+    'G&J Jack Seafoods Ltd Halibut/GUT/U9 4.00 40 475.00 160 1,900.00',
+    'AG D Duff & Partners Halibut/GUT/U9 1.00 29 362.50 29 362.50',
+  ]).rows
+  eq('an unstarred row is untouched', plain.map(r => r.total_value), [4030, 1900, 362.5])
+  eq('and keeps the price the note printed', plain.map(r => r.price_per_box), [155, 475, 362.5])
+}
+
+eq('the version was bumped', PC.VERSION, '1.3.4')
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
