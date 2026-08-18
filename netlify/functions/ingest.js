@@ -54,18 +54,21 @@ import { parseMarketFromDoc } from '../../src/lib/market/parseMarket.js'
 // Shared with the browser upload in Sales.jsx. esbuild bundles it in.
 import { canonBuyerFrom } from '../../src/lib/buyerAliases.js'
 
-// parse-core.cjs is the canonical sales-note parser, vendored here so the
-// function can run it server-side. Imported statically so the Netlify/esbuild
-// bundler inlines it (createRequire(import.meta.url) breaks once bundled to
-// CommonJS — import.meta.url is undefined there). Keep this file identical to
-// the copy hosted at fish-sales.netlify.app/parse-core.js — all parser fixes
-// happen there, then this file is replaced with the same contents.
-import ParseCoreModule from './parse-core.cjs'
+// src/lib/parse-core.cjs is THE sales-note parser — one copy, in this repo,
+// used by this webhook and by the browser upload alike. Imported statically so
+// the Netlify/esbuild bundler inlines it (createRequire(import.meta.url) breaks
+// once bundled to CommonJS — import.meta.url is undefined there).
+//
+// It used to be a second copy of a file hosted in davgatt86/fish-sales-tracker,
+// kept in step by hand. That did not survive contact: this copy reached 1.3.2
+// and that one was still on 1.2.1, so every note uploaded through the browser
+// was parsed WITHOUT the buyer and vessel canonicalisation. Retired Aug 2026.
+import ParseCoreModule from '../../src/lib/parse-core.cjs'
 const ParseCore = ParseCoreModule?.default ?? ParseCoreModule
 
 const ok = (body) => ({ statusCode: 200, body: typeof body === 'string' ? body : JSON.stringify(body) })
 
-// Same dedup scheme the app uses (src/lib/parseCore.js dedupKey).
+// Same dedup scheme the app uses (src/lib/parseCore dedupKey).
 function dedupKey(res) {
   const m = res.meta || {}
   return (res.market || '') + '|' + (m.vessel || '') + '|' + (m.saleNo || m.isoDate || res.filename || '')

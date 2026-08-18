@@ -1,29 +1,38 @@
-// Loads pdf.js (CDN) and the canonical shared parser parse-core.js, which is
-// hosted in the fish-sales-tracker repo and served at fish-sales.netlify.app.
-// ALL sales-note parsing fixes are made in parse-core.js, never here.
+// Sales-note parsing in the browser.
+//
+// ONE PARSER, IN THIS REPO. This file used to pull two scripts off the network
+// at runtime — pdf.js from cdnjs, and parse-core.js from
+// fish-sales.netlify.app, a different repo of David's — and hand them to each
+// other. That arrangement failed in three separate ways:
+//
+//  1. THE COPIES DRIFTED. The rule was "both files identical, fix both, bump
+//     the version". In practice this repo reached 1.3.2 while fish-sales-tracker
+//     was still on 1.2.1, so every note uploaded through the BROWSER was parsed
+//     without the buyer-name and vessel-label canonicalisation that the emailed
+//     notes had been getting for months. Nobody could see it, because the
+//     version that mattered was on a server nobody looked at.
+//  2. IT NEEDED SIGNAL. Two cross-origin scripts, neither cacheable by the
+//     service worker, on an app whose whole offline story is "anything already
+//     fetched stays fetched". Uploading a note at sea was impossible.
+//  3. IT NEEDED SOMEBODY ELSE'S SITE TO BE UP.
+//
+// Now both the parser and pdf.js are bundled. The parser is the SAME FILE the
+// CloudMailin webhook runs (src/lib/parse-core.cjs), so a fix cannot reach one
+// path and not the other.
+//
+// Loaded on demand rather than at boot: pdf.js is large and most sessions never
+// upload a note. Vite code-splits the dynamic imports, and the service worker
+// caches the chunks like any other asset — so the second upload works offline.
 
-const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-const PARSE_CORE_SRC = 'https://fish-sales.netlify.app/parse-core.js'
+import { ensurePdfjs } from './pdfjs.js'
 
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    if (document.querySelector(`script[src="${src}"]`)) return res()
-    const s = document.createElement('script')
-    s.src = src
-    s.onload = res
-    s.onerror = () => rej(new Error('Failed to load ' + src))
-    document.body.appendChild(s)
-  })
-}
+let cached = null
 
 export async function ensureParsing() {
-  if (!window.pdfjsLib) {
-    await loadScript(PDFJS_SRC)
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER
-  }
-  if (!window.ParseCore) await loadScript(PARSE_CORE_SRC)
-  return { pdfjsLib: window.pdfjsLib, ParseCore: window.ParseCore }
+  if (cached) return cached
+  const [pdfjsLib, core] = await Promise.all([ensurePdfjs(), import('./parse-core.cjs')])
+  cached = { pdfjsLib, ParseCore: core.default ?? core }
+  return cached
 }
 
 // Parse one File -> ParseCore result {market, rows, meta, reconcile, filename}
@@ -32,15 +41,23 @@ export async function parseSalesPdf(file) {
   return ParseCore.parsePdf(await file.arrayBuffer(), pdfjsLib, file.name)
 }
 
-// Same dedup key scheme as the Fish Sales Tracker.
+// Same dedup key scheme the ingest webhook uses, so a note that arrives by
+// email and the same note uploaded by hand collapse onto one landing.
 export function dedupKey(res) {
   const m = res.meta || {}
   return (res.market || '') + '|' + (m.vessel || '') + '|' + (m.saleNo || m.isoDate || res.filename || '')
 }
 
 // Convert a DKK-priced result (Hanstholm Afregning) to GBP using the day rate
-// the user enters for that note. ParseCore is already loaded by parseSalesPdf.
-export function applyFxRate(res, rate) {
-  if (!window.ParseCore || !window.ParseCore.applyFxRate) throw new Error('Parser not loaded')
-  return window.ParseCore.applyFxRate(res, rate)
+// the user enters for that note.
+export async function applyFxRate(res, rate) {
+  const { ParseCore } = await ensureParsing()
+  return ParseCore.applyFxRate(res, rate)
+}
+
+// The parser version actually running in this browser. Worth being able to see:
+// the whole reason this file was rewritten is that nobody could tell.
+export async function parserVersion() {
+  const { ParseCore } = await ensureParsing()
+  return ParseCore.VERSION
 }

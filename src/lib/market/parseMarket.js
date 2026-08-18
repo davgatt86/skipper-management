@@ -9,25 +9,10 @@
 import {
   pdSpecies, dkSpecies, dkGrade, parsePdDate, parseDkDate, num,
 } from './marketCanon.js'
+// One pdf.js for the whole app, bundled rather than fetched from a CDN — this
+// parser runs on a boat with a PDF already on the device.
+import { ensurePdfjs } from '../pdfjs.js'
 
-const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    if (document.querySelector(`script[src="${src}"]`)) return res()
-    const s = document.createElement('script')
-    s.src = src; s.onload = res; s.onerror = () => rej(new Error('Failed to load ' + src))
-    document.body.appendChild(s)
-  })
-}
-async function ensurePdfjs() {
-  if (!window.pdfjsLib) {
-    await loadScript(PDFJS_SRC)
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER
-  }
-  return window.pdfjsLib
-}
 
 // pdf -> [{ page, rows:[{ y, items:[{x,str}] }] }]
 async function extractPages(pdf) {

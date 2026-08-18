@@ -1,7 +1,5 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+// Shared with every other PDF parser in the app — see src/lib/pdfjs.js.
+import { ensurePdfjs } from '../lib/pdfjs.js';
 
 const NUM_RE = /^[\d,]+\.\d{2}$/;
 const parseNum = (s) => parseFloat(String(s).replace(/,/g, ''));
@@ -15,6 +13,7 @@ const parseNum = (s) => parseFloat(String(s).replace(/,/g, ''));
  */
 export async function parseBondInvoice(file) {
   const buffer = await file.arrayBuffer();
+  const pdfjsLib = await ensurePdfjs();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
   const allItems = [];

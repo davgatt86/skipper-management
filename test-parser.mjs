@@ -14,7 +14,7 @@
  */
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const PC = require('./netlify/functions/parse-core.cjs')
+const PC = require('./src/lib/parse-core.cjs')
 
 let fail = 0
 const eq = (label, got, want) => {

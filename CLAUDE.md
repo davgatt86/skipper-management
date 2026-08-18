@@ -121,17 +121,47 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 ## Parsers
 
-`parse-core.cjs` (this repo, Netlify Functions) and `parse-core.js` (in
-`davgatt86/fish-sales-tracker`) are **identical files**. Any fix must be applied
-to both, and the version bumped. Now **1.3.3**.
+**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.3**. The
+CloudMailin webhook imports it and so does the browser upload, so a fix cannot
+reach one path and not the other.
 
-**WHICH COPY RUNS WHERE — this matters when a fix has to reach a note.**
-The CloudMailin webhook uses **this repo's** `parse-core.cjs`. The browser
-upload does **not**: `src/lib/parseCore` loads
-`https://fish-sales.netlify.app/parse-core.js` at runtime, off the other
-repo's deploy. So a fix landed here only takes effect for **emailed** notes
-until fish-sales-tracker is updated and redeployed — and re-uploading by hand
-in the browser will still hit the old parser.
+### The two-repo rule is RETIRED (Aug 2026) — and it had already failed
+
+It used to be a second copy of a file in `davgatt86/fish-sales-tracker`, served
+at `fish-sales.netlify.app/parse-core.js` and pulled in **at runtime** by the
+browser. The rule was "identical files, fix both, bump the version", and this
+document claimed both were on 1.3.2, verified line for line.
+
+**They were not.** Checked against the actual repo Aug 2026: it was still on
+**1.2.1**. So for months every note uploaded through the BROWSER was parsed
+without `BUYER_CANON` and without `canonVessel` — the two fixes that exist
+precisely to stop buyers and vessels splitting their own records — while
+emailed notes got them. Nobody could see it, because the version that mattered
+was on a server nobody looked at.
+
+That copy is a strict subset of this one; nothing was lost by taking it
+in-house. **Do not reintroduce a second copy.** If `fish-sales.netlify.app` or
+`sales-analyser.netlify.app` are still live they still serve their own
+`parse-core.js`, so don't delete that repo on this app's account — just know
+nothing here depends on it any more.
+
+### pdf.js is bundled, not fetched
+
+The same change killed the last CDN loads. `src/lib/pdfjs.js` is the single
+loader; `parseCore`, `parseMarket.js`, `mcatchParse.js` and the Square Up
+invoice parser all use it.
+
+Before this the app shipped **two major versions of pdf.js** and picked between
+them by which page you opened: Square Up imported the bundled `pdfjs-dist` v4,
+while the sales-note, daily-price and quota parsers each injected a `<script>`
+for **3.11.174 from cdnjs**. The webhook parses the same notes with v4, so two
+versions of pdf.js were reading one note.
+
+It also meant those uploads **needed signal**. A cross-origin script cannot be
+cached by the service worker, on an app whose whole offline story is "anything
+already fetched stays fetched" — so parsing a PDF already sitting on the device
+failed on the network. Bundled and lazily imported, the chunk is fetched once
+and cached like any other asset.
 
 ### The wrapped-row bug — 1.3.3, Aug 2026
 

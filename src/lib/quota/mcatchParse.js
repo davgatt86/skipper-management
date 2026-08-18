@@ -7,28 +7,9 @@
 // Validated against six real Audacious reports (mcatch-report-api
 // v0.0.226): every detail row begins with a private-use icon glyph,
 // so row regexes are end-anchored only, never start-anchored.
+import { ensurePdfjs } from '../pdfjs.js'
 
-const PDFJS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 
-function loadScript(src) {
-  return new Promise((res, rej) => {
-    if (document.querySelector(`script[src="${src}"]`)) return res()
-    const s = document.createElement('script')
-    s.src = src
-    s.onload = res
-    s.onerror = () => rej(new Error('Failed to load ' + src))
-    document.body.appendChild(s)
-  })
-}
-
-async function ensurePdfjs() {
-  if (!window.pdfjsLib) {
-    await loadScript(PDFJS_SRC)
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER
-  }
-  return window.pdfjsLib
-}
 
 // Rebuild text lines from pdf.js items: group by Y (2-unit tolerance),
 // sort by X, join with spaces.

@@ -212,7 +212,7 @@ export default function Sales() {
           const ans = window.prompt(`${f.name}\nDanish (DKK) note — gross ${Math.round(res.meta.grossDkk || 0).toLocaleString()} DKK.\nEnter the day's exchange rate for this note (DKK per £1), e.g. 8.75:`, '')
           const rate = Number(ans)
           if (!rate || rate <= 0) { log.push(`– ${f.name}: skipped (no DKK rate entered)`); continue }
-          res = applyFxRate(res, rate); fxRate = rate
+          res = await applyFxRate(res, rate); fxRate = rate
         }
         const key = dedupKey(res)
         const rec = res.reconcile || {}
