@@ -1277,7 +1277,14 @@ in `alerts` until somebody opened the app. This closes that.
   database**, and that denial is the entire reason the role exists rather than
   handing out a skipper login; the digest walked straight around it.
   **RLS cannot catch this**: the digest runs on the service-role key by
-  necessity, so the filter has to be written down. `TYPES_FOR_ROLE` mirrors
+  necessity, so BOTH boundaries have to be written down and both live in
+  `planDigest()` — the one pure function that decides an address.
+  **Fleet is the other one.** Every vessel is a separate business; Sandy has no
+  business knowing what Colin's notes are worth, and a mail that named another
+  boat's figures would be a data-protection problem, not just a bug. Covered by
+  test, including that the two compose (an officer of one fleet gets his own
+  fleet's alerts and no money).
+  `TYPES_FOR_ROLE` mirrors
   `officer_role.sql` — an officer gets the logs, the maintenance and the crew
   paperwork, and nothing to do with money. The email is now built per
   recipient, and a reader with nothing to act on is sent nothing at all rather

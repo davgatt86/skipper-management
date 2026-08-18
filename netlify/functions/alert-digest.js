@@ -88,6 +88,40 @@ export const TYPES_FOR_ROLE = {
 }
 export const typesFor = (role) => TYPES_FOR_ROLE[role] || []
 
+/* Who gets which alerts — the whole addressing decision in one pure function,
+ * so both boundaries it has to hold can be tested rather than reasoned about.
+ *
+ *  1. FLEET. Every vessel here is a SEPARATE BUSINESS with its own skipper.
+ *     Beryl is not a second boat in David's fleet, and Sandy has no business
+ *     knowing what Colin's notes are worth. This function is the only place
+ *     that decides an address, and it never crosses a fleet.
+ *  2. ROLE. An officer is denied every money table at the database, so the
+ *     mail he gets must not carry figures he could not query.
+ *
+ * Runs on the service-role key, so RLS is not scoping any of this — the
+ * boundary exists here or nowhere. `test-digest.mjs` asserts both.
+ */
+export function planDigest(byFleet, users, fleetName = {}) {
+  const out = []
+  for (const [fleetId, list] of byFleet) {
+    const boat = fleetName[fleetId] || 'Your boat'
+    // ONE fleet's users, and only this fleet's alerts reach them.
+    const to = (users || []).filter((u) => u.fleet_id === fleetId && u.email)
+    for (const user of to) {
+      const allowed = typesFor(user.role)
+      const mine = list.filter((a) => a.fleet_id === fleetId && allowed.includes(a.type))
+      const overdue = mine.filter((a) => a.severity === 'warn').length
+      out.push({
+        fleetId, boat, user, alerts: mine,
+        subject: overdue
+          ? `${boat} — ${overdue} overdue, ${mine.length} in total`
+          : `${boat} — ${mine.length} falling due`,
+      })
+    }
+  }
+  return out
+}
+
 const SITE = process.env.SITE_URL || 'https://skippermanagement.co.uk'
 // Must be on the domain verified in CloudMailin, or the message is accepted and
 // quietly dropped. Overridable so a second boat's brand does not need a deploy.
@@ -218,29 +252,12 @@ export const handler = async () => {
   const fleetName = Object.fromEntries((fleets || []).map((f) => [f.id, f.name]))
 
   const results = []
-  for (const [fleetId, list] of byFleet) {
-    const to = (users || []).filter((u) => u.fleet_id === fleetId && u.email)
-    if (!to.length) { results.push(`${fleetName[fleetId] || fleetId}: nobody to send to`); continue }
-    const boat = fleetName[fleetId] || 'Your boat'
-
-    /* The email is built PER RECIPIENT, not once per fleet, because what an
-     * officer may be told is narrower than what the skipper may. Rendering one
-     * message and posting it to everybody is how the bonus figures reached the
-     * engineer. */
-    for (const u of to) {
-      const allowed = typesFor(u.role)
-      const mine = list.filter((a) => allowed.includes(a.type))
-      // Nothing this reader can act on: say nothing. A digest that arrives
-      // empty teaches people to stop opening it.
-      if (!mine.length) { results.push(`${u.email}: nothing for a ${u.role}`); continue }
-      const overdue = mine.filter((a) => a.severity === 'warn').length
-      const subject = overdue
-        ? `${boat} — ${overdue} overdue, ${mine.length} in total`
-        : `${boat} — ${mine.length} falling due`
-      const r = await sendEmail(u.email, subject, renderEmail(boat, mine))
-      results.push(`${u.email} (${u.role}): ${r.ok ? `sent ${mine.length}` : r.skipped || r.error}`)
-    }
+  for (const { fleetId, boat, user, alerts: mine, subject } of planDigest(byFleet, users, fleetName)) {
+    if (!mine.length) { results.push(`${user.email}: nothing for a ${user.role}`); continue }
+    const r = await sendEmail(user.email, subject, renderEmail(boat, mine))
+    results.push(`${user.email} (${user.role}): ${r.ok ? `sent ${mine.length}` : r.skipped || r.error}`)
   }
+  if (!results.length) results.push('nobody to send to')
 
   // Close the pooled connection, or the function holds it open until the
   // runtime kills it and CloudMailin logs a dropped session every morning.

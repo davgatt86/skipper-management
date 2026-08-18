@@ -12,7 +12,7 @@
  * that went to the engineer every morning. RLS cannot catch it: the digest runs
  * on the service-role key by necessity, so the filter has to be written down.
  */
-import { DIGEST_TYPES, MONEY_TYPES, TYPES_FOR_ROLE, typesFor } from './netlify/functions/alert-digest.js'
+import { DIGEST_TYPES, MONEY_TYPES, TYPES_FOR_ROLE, typesFor, planDigest } from './netlify/functions/alert-digest.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -73,6 +73,49 @@ eq('and no money in it at all',
   forRole('engineer').some((a) => /\d{3,}\.\d\d/.test(a.title)), false)
 eq('the skipper’s email has all three', forRole('skipper').length, 3)
 eq('a crew login is sent nothing and so gets no email', forRole('crew').length, 0)
+
+/* ---- FLEET ISOLATION -------------------------------------------------- *
+ * Every vessel here is a SEPARATE BUSINESS. Beryl is not a second boat in
+ * David's fleet, and Sandy has no business knowing what Colin's notes are
+ * worth. The digest runs on the service-role key, so RLS is scoping nothing —
+ * this boundary exists in planDigest or nowhere at all. */
+{
+  const A = 'fleet-audacious', B = 'fleet-beryl'
+  const byFleet = new Map([
+    [A, [{ fleet_id: A, type: 'vessel_cert', severity: 'warn', title: 'Audacious liferaft' },
+         { fleet_id: A, type: 'crew_bonus',  severity: 'warn', title: 'Audacious bonus 4500.00' }]],
+    [B, [{ fleet_id: B, type: 'vessel_cert', severity: 'warn', title: 'Beryl liferaft' }]],
+  ])
+  const users = [
+    { email: 'david@audacious', role: 'skipper', fleet_id: A },
+    { email: 'norman@audacious', role: 'officer', fleet_id: A },
+    { email: 'colin@beryl', role: 'skipper', fleet_id: B },
+  ]
+  const plan = planDigest(byFleet, users, { [A]: 'AUDACIOUS BF83', [B]: 'BERYL BF440' })
+  const forEmail = (e) => plan.find((p) => p.user.email === e)
+
+  eq('nobody is addressed outside their own fleet',
+    plan.every((p) => p.user.fleet_id === p.fleetId), true)
+  eq('and no alert crosses a fleet either',
+    plan.every((p) => p.alerts.every((a) => a.fleet_id === p.fleetId)), true)
+  eq('Colin gets Beryl only', forEmail('colin@beryl').alerts.map((a) => a.title), ['Beryl liferaft'])
+  eq('and never sees Audacious',
+    JSON.stringify(forEmail('colin@beryl')).includes('Audacious'), false)
+  eq('David gets Audacious only, both types',
+    forEmail('david@audacious').alerts.length, 2)
+  eq('and never sees Beryl',
+    JSON.stringify(forEmail('david@audacious')).includes('Beryl'), false)
+  eq('the subject line names the right boat',
+    [forEmail('colin@beryl').subject.startsWith('BERYL'), forEmail('david@audacious').subject.startsWith('AUDACIOUS')],
+    [true, true])
+  // The two boundaries compose: Norman is Audacious AND an officer.
+  eq('the officer gets his own fleet and no money',
+    forEmail('norman@audacious').alerts.map((a) => a.type), ['vessel_cert'])
+
+  eq('a fleet with alerts but nobody to send to yields nothing',
+    planDigest(new Map([['fleet-x', [{ fleet_id: 'fleet-x', type: 'vessel_cert' }]]]), users).length, 0)
+  eq('and no users at all is handled', planDigest(byFleet, null).length, 0)
+}
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
