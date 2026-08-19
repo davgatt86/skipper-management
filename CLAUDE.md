@@ -416,10 +416,27 @@ species in one band exists to prevent. **David caught it on the printed sheet:
 "why is the flats doubled".**
 
 The spill is now a single pass after everything is placed: move ONE contiguous
-run off the end of the fuller row, take the FEWEST stacks that drop a tier, and
-if nothing drops a tier move nothing. At most one species is ever split, at one
-clean break. Trip 64 stays at 17 tiers with only hake split 62/9; Trip 63 now
-splits nothing at all, because there the split was earning nothing.
+run off the end of the fuller row, and land it at the START of the SAME tier's
+other row. At most one species is ever split, at one clean break.
+
+**A tier is walked top row then bottom row**, so a fish that spills has to carry
+straight off the end of the one into the beginning of the other. Appending it to
+the end of the receiving row instead put four species between the two halves —
+*"if hake is started at top tier 15, it can only go to bottom tier 15, with no
+breaks of another species between"* (David, Aug 2026):
+
+    tier 17 top     HAKE x21
+    tier 17 bottom  HALIBUT x7 | WITCH x2 | PLAICE x1 | TURBOT x1 | HAKE x9
+
+So the number moved must satisfy TWO things, not one: drop a tier, **and** land
+in the tier the donor row now ends on. The bare minimum often leaves the
+receiving row still short of that tier, which is what broke it. Take the fewest
+that does both; if nothing does, spill nothing and wear the extra tier — a
+sheet that reads right is worth more than a tier of flats.
+
+Trip 64 stays at 17 tiers with hake alone split 62/9, carrying tier 17 top into
+tier 17 bottom. Trip 63 splits nothing at all, because there the split was
+earning nothing.
 
 **Day tags run high number to low**, and a stack may span two days rather than
 stand part-full. That is why `buildStacks` fills each stack right up before

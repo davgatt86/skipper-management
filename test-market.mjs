@@ -123,6 +123,37 @@ const bandsOf = (sp) => new Set([
     return true
   }
   eq('each row keeps a species in one run', [contiguous(plan.rows.top), contiguous(plan.rows.bottom)], [true, true])
+
+  /* And where it DOES split, it carries straight over. A tier is walked top
+   * row then bottom row, so the spill has to leave the end of one and arrive
+   * at the beginning of the other IN THE SAME TIER. Appending it to the end
+   * of the row instead put four species between the two halves of the hake on
+   * Trip 64 — David: "if hake is started at top tier 15, it can only go to
+   * bottom tier 15, with no breaks of another species between." */
+  const carriesOver = (p) => {
+    const rows = {}
+    for (const [r, list] of [['top', p.rows.top], ['bottom', p.rows.bottom]])
+      for (const s of list) (rows[s.species] = rows[s.species] || { top: 0, bottom: 0 })[r]++
+    const sp = Object.entries(rows).find(([, v]) => v.top && v.bottom)?.[0]
+    if (!sp) return 'no split'
+    const lastTop = p.byTier.filter((t) => t.top.some((s) => s.species === sp)).pop()
+    const firstBot = p.byTier.find((t) => t.bottom.some((s) => s.species === sp))
+    if (lastTop.tier !== firstBot.tier) return `split across tiers ${lastTop.tier} and ${firstBot.tier}`
+    if (lastTop.top[lastTop.top.length - 1].species !== sp) return 'does not end the top row'
+    if (firstBot.bottom[0].species !== sp) return 'does not start the bottom row'
+    return 'carries over'
+  }
+
+  const spill = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 20, seq: 0 },
+    { species: 'BLACK', grade: 'Sma (4a)', day: 1, boxes: 100, seq: 1 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 44, seq: 2 },
+  ])
+  eq('a spilling flat carries top to bottom in ONE tier', carriesOver(spill), 'carries over')
+  eq('and it is still only one species', splitCount(spill), 1)
+  eq('with every box still placed',
+    [...spill.rows.top, ...spill.rows.bottom].reduce((a, s) => a + s.boxes, 0), 164)
+  eq('a tally that does not spill says so', carriesOver(roomy), 'no split')
   eq('and no box is lost to the spill',
     [...plan.rows.top, ...plan.rows.bottom].reduce((a, s) => a + s.boxes, 0),
     lines.reduce((a, l) => a + l.boxes, 0))

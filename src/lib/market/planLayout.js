@@ -196,14 +196,54 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
   let movable = 0
   while (movable < rows[from].length
          && rules.canSplitRows(rows[from][rows[from].length - 1 - movable].auction)) movable++
+  /* Pick how many to move.
+   *
+   * It has to do two things at once: drop a tier, and land in the SAME tier
+   * the donor row now ends in — a tier is walked top row then bottom row, so a
+   * fish that spills must carry straight over with nothing between the halves.
+   * Moving the bare minimum can leave the receiving row still short of that
+   * tier, in which case the two halves end up in different tiers, which is
+   * the break David objected to.
+   *
+   * So take the FEWEST that satisfies both. If nothing does, spill nothing
+   * and wear the extra tier — a sheet that reads correctly is worth more than
+   * a tier, and this is the flats, which is a handful of boxes. */
   let take = 0
   for (let mv = 1; mv <= movable; mv++) {
-    const t = from === 'top'
-      ? tiersFor(rows.top.length - mv, rows.bottom.length + mv)
-      : tiersFor(rows.top.length + mv, rows.bottom.length - mv)
-    if (t < start) { take = mv; break }
+    const fromLen = rows[from].length - mv
+    const toLen = rows[to].length + mv
+    const t = from === 'top' ? tiersFor(fromLen, toLen) : tiersFor(toLen, fromLen)
+    if (t >= start) continue
+    // Does the receiving row ALREADY reach the tier the donor now ends on?
+    // Its current length is what decides where the spill can be inserted; if
+    // the row stops short of that tier the two halves land in different tiers
+    // and the carry-over is broken.
+    const destTier = Math.max(1, Math.ceil(fromLen / rowSize(from)))
+    if (rows[to].length >= (destTier - 1) * rowSize(to)) { take = mv; break }
   }
-  if (take) rows[to].push(...rows[from].splice(rows[from].length - take, take))
+  if (take) {
+    const moved = rows[from].splice(rows[from].length - take, take)
+    /* AND IT LANDS AT THE START OF THE SAME TIER'S OTHER ROW.
+     *
+     * A tier is walked top row then bottom row, so a fish that spills has to
+     * carry straight off the end of the one into the beginning of the other
+     * with nothing in between. Appending it to the end of the row instead put
+     * four species between the two halves of the hake on Trip 64:
+     *
+     *   tier 17 top     HAKE x21
+     *   tier 17 bottom  HALIBUT x7 | WITCH x2 | PLAICE x1 | TURBOT x1 | HAKE x9
+     *
+     * David: "if hake is started at top tier 15, it can only go to bottom
+     * tier 15 — continued from top to bottom with no breaks of another
+     * species between."
+     *
+     * The donor row now ends exactly on a tier boundary, so that tier is where
+     * the spill belongs; everything already in its other row shuffles along
+     * behind, which costs those species nothing since they stay in one run. */
+    const destTier = Math.max(1, Math.ceil(rows[from].length / rowSize(from)))
+    const at = Math.min((destTier - 1) * rowSize(to), rows[to].length)
+    rows[to].splice(at, 0, ...moved)
+  }
 
   // Tiers are set by whichever row runs out first.
   const tiers = tiersFor(rows.top.length, rows.bottom.length)
