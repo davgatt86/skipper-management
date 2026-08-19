@@ -83,6 +83,51 @@ const bandsOf = (sp) => new Set([
   ...plan.rows.top.filter((s) => s.species === sp).map(() => 'top'),
   ...plan.rows.bottom.filter((s) => s.species === sp).map(() => 'bottom'),
 ])
+/* ---- the flats spill, they are not halved ------------------------------ *
+ * "The flats MAY be broken across the two rows to use up space the other
+ * three leave behind" — not "cut every flat down the middle". Handing each
+ * STACK to whichever row was behind did the latter: on Trip 64 it split hake
+ * 39/32, megrim 9/10, lemons 6/7 and halibut 4/5, so four species appeared
+ * twice and a buyer after hake had to walk both rows. David caught it on the
+ * printed sheet — "why is the flats doubled". */
+{
+  const rowsOf = (p) => {
+    const m = {}
+    for (const [row, list] of [['top', p.rows.top], ['bottom', p.rows.bottom]])
+      for (const s of list) (m[s.species] = m[s.species] || { top: 0, bottom: 0 })[row] += s.boxes
+    return m
+  }
+  const splitCount = (p) => Object.values(rowsOf(p)).filter((v) => v.top > 0 && v.bottom > 0).length
+
+  eq('at most ONE species is ever split', splitCount(plan) <= 1, true)
+
+  // Nothing splits unless it buys a tier. This tally fits comfortably, so it
+  // should come out with every species whole.
+  const roomy = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 6, seq: 0 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 8, seq: 1 },
+    { species: 'MEGS', grade: 'Large (1)', day: 1, boxes: 6, seq: 2 },
+    { species: 'LEMONS', grade: 'Med (2)', day: 1, boxes: 5, seq: 3 },
+  ])
+  eq('a tally with room to spare splits nothing', splitCount(roomy), 0)
+  eq('and still fits in one tier', roomy.tiers, 1)
+
+  // Where a species IS split, its stacks must be contiguous in each row — one
+  // clean break, not an interleave, or the sheet shows it twice per tier.
+  const contiguous = (list) => {
+    const seen = new Set()
+    let last = null
+    for (const s of list) {
+      if (s.species !== last) { if (seen.has(s.species)) return false; seen.add(s.species); last = s.species }
+    }
+    return true
+  }
+  eq('each row keeps a species in one run', [contiguous(plan.rows.top), contiguous(plan.rows.bottom)], [true, true])
+  eq('and no box is lost to the spill',
+    [...plan.rows.top, ...plan.rows.bottom].reduce((a, s) => a + s.boxes, 0),
+    lines.reduce((a, l) => a + l.boxes, 0))
+}
+
 eq('cod stays in one row', bandsOf('COD').size <= 1, true)
 eq('haddock stays in one row', bandsOf('HADDOCK').size <= 1, true)
 eq('black stays in one row', bandsOf('BLACK').size <= 1, true)

@@ -162,21 +162,51 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
 
   const footprints = species.reduce((s, sp) => s + sp.stacks.length, 0)
 
-  // Hand each species to the row that is furthest behind its share. Only the
-  // flats auction may be broken across the two rows.
+  // Hand each species WHOLE to the row that is furthest behind its share —
+  // every species, flats included. A fish belongs in one place.
   const rows = { top: [], bottom: [] }
   const pressure = (r) => (r === 'top' ? rows.top.length / TOP_ROW : rows.bottom.length / BOTTOM_ROW)
   for (const sp of species) {
-    if (rules.canSplitRows(sp.auction)) {
-      for (const st of sp.stacks) rows[pressure('top') <= pressure('bottom') ? 'top' : 'bottom'].push(st)
-    } else {
-      const band = pressure('top') <= pressure('bottom') ? 'top' : 'bottom'
-      rows[band].push(...sp.stacks)
-    }
+    rows[pressure('top') <= pressure('bottom') ? 'top' : 'bottom'].push(...sp.stacks)
   }
 
+  const rowSize = (r) => (r === 'top' ? TOP_ROW : BOTTOM_ROW)
+  const tiersFor = (t, b) => Math.max(Math.ceil(t / TOP_ROW), Math.ceil(b / BOTTOM_ROW), 1)
+
+  /* ONLY NOW does a splittable clock spill, and only as far as it must.
+   *
+   * The rule is "the flats MAY be broken across the two rows to use up space
+   * the other three leave behind" — not "cut every flat down the middle". The
+   * old code handed each STACK to whichever row was behind, which did exactly
+   * that: on Trip 64 it split hake 39/32, megrim 9/10, lemons 6/7 and halibut
+   * 4/5, so four species appeared twice and a buyer after hake had to walk
+   * both rows. That is precisely what keeping a species in one band is for,
+   * and David spotted it on the printed sheet — "why is the flats doubled".
+   *
+   * So: move ONE contiguous run off the end of the fuller row, take the
+   * FEWEST stacks that drop a tier, and if nothing drops a tier move nothing
+   * at all. At most one species ends up split, at one clean break, and only
+   * when the split is genuinely paying for itself. On Trip 64 that is still
+   * 17 tiers rather than 18; on Trip 63 the split earned nothing and now does
+   * not happen. */
+  const start = tiersFor(rows.top.length, rows.bottom.length)
+  const from = Math.ceil(rows.top.length / TOP_ROW) >= Math.ceil(rows.bottom.length / BOTTOM_ROW) ? 'top' : 'bottom'
+  const to = from === 'top' ? 'bottom' : 'top'
+  // Only the trailing stacks whose clock allows a split may move.
+  let movable = 0
+  while (movable < rows[from].length
+         && rules.canSplitRows(rows[from][rows[from].length - 1 - movable].auction)) movable++
+  let take = 0
+  for (let mv = 1; mv <= movable; mv++) {
+    const t = from === 'top'
+      ? tiersFor(rows.top.length - mv, rows.bottom.length + mv)
+      : tiersFor(rows.top.length + mv, rows.bottom.length - mv)
+    if (t < start) { take = mv; break }
+  }
+  if (take) rows[to].push(...rows[from].splice(rows[from].length - take, take))
+
   // Tiers are set by whichever row runs out first.
-  const tiers = Math.max(Math.ceil(rows.top.length / TOP_ROW), Math.ceil(rows.bottom.length / BOTTOM_ROW), 1)
+  const tiers = tiersFor(rows.top.length, rows.bottom.length)
 
   const byTier = []
   for (let t = 0; t < tiers; t++) {

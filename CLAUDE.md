@@ -406,6 +406,21 @@ you cannot take one without the other — so the tier count is set by whichever
 row runs out first, and packing the bottom tight while the top sits half empty
 simply costs tiers. Species go to whichever row is furthest behind its share.
 
+**Every species goes into a row WHOLE, flats included.** The flats exception is
+"may be broken across the two rows to use up space the other three leave
+behind" — it is not "cut every flat down the middle", which is what handing
+each STACK to whichever row was behind actually did. On Trip 64 that split hake
+39/32, megrim 9/10, lemons 6/7 and halibut 4/5, so four species appeared twice
+and a buyer after hake had to walk both rows — the exact thing keeping a
+species in one band exists to prevent. **David caught it on the printed sheet:
+"why is the flats doubled".**
+
+The spill is now a single pass after everything is placed: move ONE contiguous
+run off the end of the fuller row, take the FEWEST stacks that drop a tier, and
+if nothing drops a tier move nothing. At most one species is ever split, at one
+clean break. Trip 64 stays at 17 tiers with only hake split 62/9; Trip 63 now
+splits nothing at all, because there the split was earning nothing.
+
 **Day tags run high number to low**, and a stack may span two days rather than
 stand part-full. That is why `buildStacks` fills each stack right up before
 starting the next — which also makes a grade's footprint count exactly
