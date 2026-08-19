@@ -1031,6 +1031,50 @@ In the order agreed:
 
 Also agreed, not yet scheduled:
 
+- **GEAR LOG — what was done to the nets, and when** (David, Aug 2026). The
+  third book the boat keeps and the app does not. Trawl gear is maintained
+  continuously and nothing records it, so "when did we last renew the codend"
+  is answered from memory.
+
+  **Two different kinds of entry, and they must not be collapsed into one.**
+  A MEASUREMENT is an inspection that produces a figure — rock hoppers
+  measured, headline measured, legs measured — and its value is the SERIES:
+  the same part measured over a year is how wear is seen coming, which a
+  single latest reading cannot show. A RENEWAL is a replacement with a date
+  and, usually, a cost — codends renewed, parts renewed.
+
+  So the table wants a `kind` (measured / renewed / repaired / inspected), the
+  part, a value + unit where it is a measurement, and free text. Grouped by
+  **gear part**, not by date, or the series is unreadable.
+
+  Parts David named, which is the vocabulary to start from and NOT a closed
+  list — a pair trawl and a single rig differ, and this is the same mistake
+  the market clocks made: **rock hoppers · headline · legs · codend**. Make it
+  editable per fleet like the market rules, rather than shipping a fixed list.
+
+  Note this is per VESSEL and not per fleet — a pair team runs two sets of
+  gear. `vessels` exists (stage 1, Aug 2026) so this is one of the first
+  things that should carry `vessel_id` properly rather than being backfilled
+  later.
+
+- **PARTS INVENTORY, hanging off maintenance** (David, Aug 2026). What parts
+  were used on a job, and what is left aboard.
+
+  **The stock figure should be DERIVED, not typed.** A maintenance event
+  consumes parts; if each event records what it used, "what is left onboard"
+  falls out of (last stock take − everything consumed since) and cannot drift
+  from the job record the way a separately-maintained count would. That is the
+  whole design: one number, two views.
+
+  `maintenance_events` already exists and is where the consumption line
+  belongs. What is missing is a parts list and a stock take.
+
+  Worth knowing before building: this is the first thing in the app where a
+  figure is a **running balance** rather than a snapshot, so a wrong entry
+  propagates forward. It wants the same treatment as the fuel log — show the
+  workings, not just the answer — and an officer must be able to correct one
+  without a skipper login, since he is the man holding the part.
+
 - **Garbage log.** A Garbage Record Book is a MARPOL requirement at Audacious's
   size. Confirm whether one is being kept elsewhere before assuming it is not.
 - ~~**Vessel/crew alerts kept SEPARATE from market alerts.**~~ — **done Aug
