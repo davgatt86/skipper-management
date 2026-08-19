@@ -467,7 +467,17 @@ silently under him.
 ### The chalk sheet — `MarketSheet.jsx`, `src/lib/market/sheet.js`
 
 The screen view is a picture of the market; this is the working document, and
-it goes on the floor in chalk. It prints A4 portrait, **ten tiers to a page**.
+it goes on the floor in chalk. It prints A4 portrait, **five tiers to a page**.
+
+**Five, not ten** (David, Aug 2026: *"easier to read when printed"*). Ten
+fitted, and that was the problem — a 19mm column cannot hold a species, a
+grade, a code, a day tag, a count and a height at a size anyone reads on a wet
+market floor, so half the blocks sat at **1.75mm** type and the one-footprint
+ones needed two stacked lines. Five doubles the column to **38.5mm**, which
+lets the type go up with it: smallest block type **1.75mm → 2.3mm**, largest
+2.6 → 3.2mm, and a one-footprint block now fits all five fields on ONE line.
+The column HEIGHT is unchanged — a tier is still 47 footprints — so this costs
+pages, not legibility. Trip 63 goes 2 pages → 4.
 
 - **Tiers are COLUMNS**, read top to bottom, top row at the top of the column
   and bottom row at the bottom with the walkway between — a plan view of the

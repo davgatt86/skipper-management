@@ -13,7 +13,11 @@
  *    it is what makes a 47-deep column readable.
  *  - Every boundary is marked: a new species, a new grade inside it, a new day
  *    tag. Those are the three things you can get wrong while chalking.
- *  - Ten tiers to a page. Beyond that the columns are too narrow to write in.
+ *  - FIVE tiers to a page. It was ten, which fitted but read badly: a 19mm
+ *    column is not enough to write a species, a grade, a code, a tag, a count
+ *    and a height in at a size anyone can read on a wet market floor. Five
+ *    doubles the column to ~40mm and lets the type go up with it. More pages,
+ *    but the sheet is for reading, not for saving paper.
  */
 
 /* Consecutive stacks of the same grade off the same day tag become one block.
@@ -54,7 +58,7 @@ export function runsOf(stacks) {
 }
 
 /* Tiers cut into pages of ten, each tier a column of two runs lists. */
-export function sheetPages(plan, perPage = 10) {
+export function sheetPages(plan, perPage = 5) {
   const pages = []
   const tiers = plan?.byTier || []
   for (let i = 0; i < tiers.length; i += perPage) {

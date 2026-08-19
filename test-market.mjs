@@ -189,11 +189,18 @@ eq('an unpriced fish still gets a figure', typeof valueOf('SQUID', 'Large (1)'),
   eq('every footprint survives the grouping',
     runs.reduce((s, r) => s + r.footprints, 0), 5)
 
-  // Ten tiers to a page — beyond that the columns are too narrow to write in.
+  /* FIVE tiers to a page by default. It was ten, which fitted and read badly —
+   * a 19mm column forced half the blocks down to 1.75mm type. Five doubles the
+   * column to ~38.5mm and the type goes up with it. */
   const fakePlan = { byTier: Array.from({ length: 23 }, (_, i) => ({ tier: i + 1, top: [], bottom: [] })) }
+  const dflt = sheetPages(fakePlan)
+  eq('five tiers to a page by default', dflt.map((p) => p.columns.length), [5, 5, 5, 5, 3])
+  eq('and the pages are numbered by tier',
+    [dflt[0].from, dflt[0].to, dflt[4].from, dflt[4].to], [1, 5, 21, 23])
+  eq('every tier lands on exactly one page',
+    dflt.reduce((a, p) => a + p.columns.length, 0), 23)
   const pages = sheetPages(fakePlan, 10)
-  eq('tiers are cut into pages of ten', pages.map((p) => p.columns.length), [10, 10, 3])
-  eq('and the pages are numbered by tier', [pages[0].from, pages[0].to, pages[2].from], [1, 10, 21])
+  eq('the page size is still a parameter', pages.map((p) => p.columns.length), [10, 10, 3])
 
   // No two TOUCHING blocks of different fish may share a colour. Repeats
   // elsewhere on the floor are fine and expected — the palette is only six.

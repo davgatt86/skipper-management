@@ -9,7 +9,7 @@ import {
  *
  * Everything here is sized in MILLIMETRES rather than pixels, because the only
  * output that matters is the printed page — what is on screen is a preview of
- * it, not the other way round. A4 portrait, 6mm margins, ten tiers to a page.
+ * it, not the other way round. A4 portrait, 6mm margins, five tiers to a page.
  *
  * It renders through a portal onto document.body so that printing can hide the
  * whole app in one rule instead of chasing the sidebar and every card.
@@ -19,9 +19,22 @@ import {
  * footprints plus the tier head, the walkway, the page head and the legend
  * have to come in under A4's 285mm of usable height, or the last page spills
  * onto a second sheet with three columns on it. Measured at 5.6 and it did. */
-const UNIT = 5.2
+const UNIT = 5.1
 const TOP_MM = TOP_ROW * UNIT
 const BOTTOM_MM = BOTTOM_ROW * UNIT
+
+/* FIVE tiers to a page, not ten.
+ *
+ * Ten fitted, and that was the whole problem with it — a 19mm column is not
+ * enough to write a species, a grade, a code, a day tag, a count and a height
+ * in at a size anyone can read on a wet market floor, so half the blocks ended
+ * up at 1.75mm type. Five doubles the column to about 40mm, which is what lets
+ * the type go up with it.
+ *
+ * The column HEIGHT does not change — a tier is still 47 footprints deep — so
+ * this costs pages, not legibility. Trip 63 goes from 2 pages to 4. The sheet
+ * is for reading on the floor, not for saving paper. */
+const TIERS_PER_PAGE = 5
 
 export default function MarketSheet({ plan, meta, onClose }) {
   if (!plan) return null
@@ -34,7 +47,7 @@ export default function MarketSheet({ plan, meta, onClose }) {
  * it, which is how the printed page gets checked against a real tally without
  * going through a login. */
 export function SheetBody({ plan, meta, onClose, embedded, onPrint }) {
-  const pages = useMemo(() => sheetPages(plan, 10), [plan])
+  const pages = useMemo(() => sheetPages(plan, TIERS_PER_PAGE), [plan])
   const colours = useMemo(() => assignColours(pages), [pages])
   if (!plan || !pages.length) return null
 
@@ -87,7 +100,7 @@ export function SheetBody({ plan, meta, onClose, embedded, onPrint }) {
               ))}
               {/* Keep the last page's columns the same width as a full one, so
                   a short page prints to the same scale as the rest. */}
-              {Array.from({ length: 10 - page.columns.length }).map((_, i) => (
+              {Array.from({ length: TIERS_PER_PAGE - page.columns.length }).map((_, i) => (
                 <div className="msheet-col msheet-col-empty" key={`pad${i}`} />
               ))}
             </div>
@@ -231,11 +244,11 @@ const CSS = `
 }
 .msheet-sub { color: #555; font-size: 2.8mm; margin-left: 2mm; }
 
-.msheet-cols { display: flex; gap: .8mm; align-items: flex-start; }
+.msheet-cols { display: flex; gap: 1.4mm; align-items: flex-start; }
 .msheet-col { flex: 1 1 0; min-width: 0; }
 .msheet-col-empty { visibility: hidden; }
 .msheet-tier {
-  text-align: center; font-weight: 700; font-size: 4mm; line-height: 6mm;
+  text-align: center; font-weight: 700; font-size: 5.5mm; line-height: 8mm;
   border: .4mm solid #111; border-bottom: none; background: #111; color: #fff;
   font-family: 'Big Shoulders Display', Impact, sans-serif; letter-spacing: .04em;
 }
@@ -274,17 +287,21 @@ const CSS = `
   padding: .5mm .7mm; display: flex; flex-direction: column; gap: .3mm;
   height: 100%; line-height: 1.05; overflow: hidden;
 }
-/* Two tight lines rather than one crowded one, so a single-footprint block
-   still says all five things. Type shrinks; nothing is dropped. */
-.msheet-blk-in.is-1 { padding: .15mm .5mm; gap: 0; justify-content: center; }
-.msheet-blk-in.is-1 .msheet-sp   { font-size: 2mm; }
-.msheet-blk-in.is-1 .msheet-gr   { font-size: 1.85mm; }
-.msheet-blk-in.is-1 .msheet-code,
-.msheet-blk-in.is-1 .msheet-n    { font-size: 1.75mm; }
-.msheet-blk-in.is-1 .msheet-day  { font-size: 1.75mm; line-height: 2.4mm; padding: 0 .5mm; }
-.msheet-blk-in.is-1 .msheet-hi   { font-size: 1.7mm; line-height: 2.4mm; padding: 0 .5mm; }
-.msheet-blk-in.is-2 .msheet-sp   { font-size: 2.3mm; }
-.msheet-blk-in.is-2 .msheet-gr   { font-size: 2mm; }
+/* A one-footprint block is 5.2mm tall but now ~40mm wide, so all five things
+   fit on ONE line at a readable size. At ten tiers a page they had to be
+   stacked into two lines of 1.75mm type; that is the trade the wider column
+   buys back. */
+.msheet-blk-in.is-1 {
+  flex-direction: row; align-items: center; gap: .9mm;
+  padding: 0 .8mm; flex-wrap: nowrap; white-space: nowrap;
+}
+.msheet-blk-in.is-1 .msheet-name { flex: 0 1 auto; gap: .8mm; }
+.msheet-blk-in.is-1 .msheet-meta { margin-top: 0; margin-left: auto; }
+.msheet-blk-in.is-1 .msheet-sp   { font-size: 2.6mm; }
+.msheet-blk-in.is-1 .msheet-gr   { font-size: 2.3mm; }
+.msheet-blk-in.is-1 .msheet-code { margin-left: 0; }
+.msheet-blk-in.is-2 .msheet-sp   { font-size: 2.9mm; }
+.msheet-blk-in.is-2 .msheet-gr   { font-size: 2.5mm; }
 
 /* Line 1 — what fish and which grade, name AND code. The tally uses both and
    neither identifies a grade on its own: Seed (2a) and Chipper (2b) are the
@@ -293,10 +310,10 @@ const CSS = `
   display: flex; align-items: baseline; gap: .6mm;
   white-space: nowrap; overflow: hidden; min-width: 0;
 }
-.msheet-sp { font-weight: 800; font-size: 2.5mm; letter-spacing: .02em; flex: 0 0 auto; }
-.msheet-gr { font-size: 2.1mm; overflow: hidden; text-overflow: ellipsis; }
+.msheet-sp { font-weight: 800; font-size: 3.2mm; letter-spacing: .02em; flex: 0 0 auto; }
+.msheet-gr { font-size: 2.8mm; overflow: hidden; text-overflow: ellipsis; }
 .msheet-code {
-  font-size: 1.9mm; color: #333; font-family: 'IBM Plex Mono', monospace;
+  font-size: 2.4mm; color: #333; font-family: 'IBM Plex Mono', monospace;
   flex: 0 0 auto; margin-left: auto;
 }
 
@@ -307,19 +324,19 @@ const CSS = `
   flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
 }
 .msheet-day {
-  color: #fff; font-weight: 700; font-size: 2mm; border-radius: .6mm;
-  padding: 0 .8mm; line-height: 2.9mm; flex: 0 0 auto;
+  color: #fff; font-weight: 700; font-size: 2.6mm; border-radius: .7mm;
+  padding: 0 1mm; line-height: 3.6mm; flex: 0 0 auto;
 }
 .msheet-n {
-  font-family: 'IBM Plex Mono', monospace; font-size: 2mm; font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace; font-size: 2.6mm; font-weight: 700;
   flex: 0 0 auto;
 }
 /* How high it is stacked, which was the thing you could not tell at a glance.
    FLAT gets the word and the heaviest chip because it is the one that matters:
    it is the dear fish, and it is the row you must not stack on. */
 .msheet-hi {
-  font-family: 'IBM Plex Mono', monospace; font-size: 1.9mm; font-weight: 700;
-  line-height: 2.9mm; padding: 0 .7mm; border-radius: .6mm; margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace; font-size: 2.4mm; font-weight: 700;
+  line-height: 3.6mm; padding: 0 1mm; border-radius: .7mm; margin-left: auto;
   flex: 0 0 auto; border: .2mm solid #111;
 }
 .msheet-hi.h1 { background: #111; color: #fff; }          /* flat */

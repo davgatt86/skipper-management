@@ -53,6 +53,6 @@ writeFileSync(out, `<!doctype html><meta charset="utf-8">
 ${embedded ? `<div id="root">${embedded}</div>` : html}`)
 
 console.log(`${out}`)
-console.log(`  tiers        ${plan.tiers}  (${Math.ceil(plan.tiers / 10)} page(s))`)
+console.log(`  tiers        ${plan.tiers}  (${(html.match(/class="msheet-page"/g) || []).length} page(s))`)
 console.log(`  boxes        ${plan.totalBoxes}`)
 console.log(`  footprints   ${plan.footprints} of ${plan.tiers * 47}, ${plan.spare} spare`)
