@@ -163,5 +163,10 @@ create policy cook_no_storage on storage.objects as restrictive for all
 -- is a global lookup of rank codes readable by anyone signed in. Deliberate,
 -- and unchanged.
 --
+-- The gear log (Aug 2026) is denied to the cook automatically: it is not in
+-- his allow-list, so section 2's loop picks all four tables up on the next run.
+-- Nothing here needs editing when a table is added — that is the whole point of
+-- generating the deny-list rather than writing one out.
+--
 -- Verify by PROBE, not by inspection. An UPDATE matching zero rows succeeds
 -- silently, so assert on ROW_COUNT and never on "did it throw".

@@ -117,6 +117,9 @@ export const NAV = [
       { to: '/stores', label: 'Stores', access: ['fleetTools', 'cook'] },
       { to: '/engine-logs', label: 'Engine Logs', access: 'officer' },
       { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'officer' },
+      // The third book the boat keeps: what was done to the nets, and when.
+      // Deck work, so it is the mate's as much as the skipper's.
+      { to: '/gear', label: 'Gear Log', access: 'officer' },
       { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },
     ],
   },

@@ -1073,31 +1073,110 @@ In the order agreed:
 
 Also agreed, not yet scheduled:
 
-- **GEAR LOG — what was done to the nets, and when** (David, Aug 2026). The
-  third book the boat keeps and the app does not. Trawl gear is maintained
-  continuously and nothing records it, so "when did we last renew the codend"
-  is answered from memory.
+- ~~**GEAR LOG — what was done to the nets, and when**~~ — **STAGE 1 BUILT
+  Aug 2026.** `/gear` (`GearLog.jsx`), `src/lib/gear/`,
+  `supabase/gear_log.sql` (applied). The third book the boat keeps.
 
-  **Two different kinds of entry, and they must not be collapsed into one.**
-  A MEASUREMENT is an inspection that produces a figure — rock hoppers
-  measured, headline measured, legs measured — and its value is the SERIES:
-  the same part measured over a year is how wear is seen coming, which a
-  single latest reading cannot show. A RENEWAL is a replacement with a date
-  and, usually, a cost — codends renewed, parts renewed.
+  **THE UNIT IS THE NET, NOT THE BOAT** (David, Aug 2026). Nets are named —
+  Port net, Starboard twin, Pair hopper, Pair discer — and each carries its own
+  ground gear, headline, bridles, legs and codend. **A pair tows one net between
+  two boats, but BOTH boats carry nets**, so a pair team typically has FOUR
+  aboard, two per boat, maintained separately. Nothing is shared: one boat
+  shoots the net and bridles, the other comes alongside and attaches to his
+  partner's net with his own rope. The earlier note that a pair "runs two sets
+  of gear" understated it.
 
-  So the table wants a `kind` (measured / renewed / repaired / inspected), the
-  part, a value + unit where it is a measurement, and free text. Grouped by
-  **gear part**, not by date, or the series is unreadable.
+  So `vessel_id` is **required** here, not nullable-and-backfilled like the
+  eighteen tables that took it in the vessels stage-1 migration.
 
-  Parts David named, which is the vocabulary to start from and NOT a closed
-  list — a pair trawl and a single rig differ, and this is the same mistake
-  the market clocks made: **rock hoppers · headline · legs · codend**. Make it
-  editable per fleet like the market rules, rather than shipping a fixed list.
+  **A COMPONENT IS A THING WITH A LIFE, NOT AN EVENT IN A STREAM.** "Add new
+  ground gear to a net" and "retire a set of ground gear" describe an object
+  being fitted and removed, so a set is a ROW with two dates. Its life is
+  `removed_on - fitted_on`, read straight off, rather than inferred by pairing
+  up a stream of events that may be missing one end. A **renewal** closes one
+  component and opens the next, in one action, so the dates stay flush and a
+  life is never a gap. A **measurement** is an event on the fitted component.
 
-  Note this is per VESSEL and not per fleet — a pair team runs two sets of
-  gear. `vessels` exists (stage 1, Aug 2026) so this is one of the first
-  things that should carry `vessel_id` properly rather than being backfilled
-  later.
+  Four tables: `gear_nets`, `gear_parts` (fleet overrides only — the five
+  shipped names live in `src/lib/gear/parts.js` and `resolveParts()` merges,
+  same as the market rules and the stores catalogue), `gear_components`,
+  `gear_measurements`. A partial unique index stops a net carrying two
+  headlines at once.
+
+  **The page is a MATRIX** — nets down, parts across. Read a row for one net's
+  whole rig, or a column for one part across every net; David asked for both
+  and a matrix is the one shape that is both. Click a net to open it: fit,
+  renew, take off, measure, and the history of every set that has been on it.
+
+  **Every "days since" carries its BASIS, and the page shows it.** *measured* /
+  *fitted* / *since aboard* / nothing known. "69 days since measured" and "69
+  days since she came aboard" are different facts, and a bare number would let
+  a net nobody has ever looked at pass for one checked ten weeks ago. That
+  fallback to the net's own `came_aboard` is David's: *"if it's not been
+  logged, then it would show since net came aboard."*
+
+  **Three units — fathoms, feet & inches, metres** — and every reading is
+  stored TWICE. `value` + `unit` is what was written down, so 5 ft 6 in reads
+  back as 5′ 6″ and not 1.6764 m; `value_mm` is the same length canonically, so
+  a series survives the unit changing partway through it. A wear curve where one
+  reading is in fathoms and the next in metres is worse than no curve.
+
+  **Trips as well as days**, via `gear_trips_between()` — SECURITY DEFINER,
+  and that matters: **`quota_trips` is NOT in the officer allow-list**, so read
+  directly it returns zero rows and "0 trips" looks exactly like "no trips"
+  rather than like a permission wall. The man keeping the gear log would have
+  been the one person unable to see the trip count in it. Same argument as
+  `crew_aboard_count()`: hand out the number, not the table.
+
+  **Skipper and officer write it** — gear is deck work and a mate is an
+  officer. Added to all three allow-lists in `officer_role.sql` **and** the 2b
+  cleanup loop, since the deny loop cannot clear a denial from a table that has
+  just JOINED the list. The cook needed no edit at all: he is denied by not
+  being in his own list, which is the whole point of generating the deny-list.
+
+  **A hole found by probe, not by reading.** `fleet_isolation` checks
+  `fleet_id` and nothing checked that `vessel_id` pointed at a boat in that
+  same fleet — so an officer could create a net in his own fleet hung on
+  **another business's vessel**. Not a read leak, but a foreign key across a
+  tenant boundary. Fixed declaratively with a composite FK
+  (`gear_nets(vessel_id, fleet_id) → vessels(id, fleet_id)`, needing
+  `unique (id, fleet_id)` on `vessels`) rather than a trigger, because a CHECK
+  cannot run a subquery. **The other eighteen tables carrying `vessel_id` have
+  the same hole** — out of scope here, but worth knowing before vessels stage 2.
+
+  Probed: officer writes nets, components and measurements, is refused a second
+  fitted headline and a cross-fleet vessel, reads `quota_trips` as **0** while
+  `gear_trips_between()` returns **24**, and still reads sales **0** and
+  payments **0**. Cook reads gear **0** and updates **0 rows**, while keeping
+  his own stores list.
+
+  **`toMm('')` returned 0, caught by test.** `Number('')` is 0 and
+  `Number.isFinite(0)` is true, so a blank box canonicalised to 0 mm and would
+  have joined the wear series as a genuine reading of nothing — a headline
+  appearing to have vanished. Blank stays blank the whole way through; same trap
+  as the running-hours figure in the maintenance page.
+
+  `test-gear.mjs` — 71 checks.
+
+  **Stages 2 and 3, agreed and not built:**
+  - **Life** — intervals between consecutive renewals, per part per net,
+    averaged, in **days and trips**. `closedLives()` is already there and
+    deliberately excludes the set still fitted: it has not finished, and
+    averaging it in would drag every figure towards however recently the last
+    renewal happened. The page must **report the count of intervals** — with one
+    renewal it is an anecdote, not an average, the same discipline as the pair
+    price-gap baseline.
+  - **Grounds** — `quota_trip_catches` carries `fao_area` and `sr` on
+    **13,079 rows back to Oct 2022**, so which grounds a set was worked over is
+    recorded, not guessed. Audacious alone has **129 statistical rectangles
+    across 8 FAO areas**. That makes "some areas are more abrasive on gear"
+    a measurable claim: attribute each closed life to the rectangles fished
+    inside it.
+
+  **Cost is optional throughout** — David: "a lot of the time this isn't
+  known". Where it is entered it would be the **first real per-vessel cost in
+  this database**, which is the thing `Trips.jsx` does not have and why it
+  reports rates rather than profit.
 
 - **PARTS INVENTORY, hanging off maintenance** (David, Aug 2026). What parts
   were used on a job, and what is left aboard.
@@ -1640,6 +1719,11 @@ something was wrong but not what.
 adding any table** — and `supabase/cook_role.sql` in the same breath, since
 Aug 2026 there are TWO generated allow-lists and a new table is denied to
 neither until both are re-run. Same machinery, different lists.
+
+Note the officer file carries the allow-list THREE times — the deny loop, the
+2b cleanup, and the writes policy — and all three must gain a new table or the
+result is a table he is allowed but cannot write, which looks like nothing at
+all going wrong.
 
 An officer is anyone aboard who keeps records — engineer, mate. He gets the
 logs, the maintenance record and **the crew paperwork**: adding a man, filing

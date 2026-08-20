@@ -18,6 +18,7 @@ const cook = { role: 'cook' }
 // --- accessForPath: longest match wins, unlisted routes return null ---------
 eq("accessForPath('/')", accessForPath('/'), 'all')
 eq("accessForPath('/engine-logs')", accessForPath('/engine-logs'), 'officer')
+eq("accessForPath('/gear')", accessForPath('/gear'), 'officer')
 eq("accessForPath('/engine-room')", accessForPath('/engine-room'), 'officer')
 eq("accessForPath('/maintenance')", accessForPath('/maintenance'), 'officer')
 eq("accessForPath('/crew-certs')", accessForPath('/crew-certs'), 'officer')
@@ -58,7 +59,8 @@ eq("viewer still sees 'all'", canSee('all', view), true)
 const offNav = navFor(officer).flatMap((g) => g.items.map((i) => i.to)).sort()
 eq('officer menu', offNav, [
   '/crew', '/crew-certs', '/crew-list',
-  '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/maintenance', '/vessel-certs',
+  // The gear log is deck work — a mate keeps it as much as the skipper does.
+  '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/gear', '/maintenance', '/vessel-certs',
 ])
 eq('officer sees Crew and Vessel only', navFor(officer).map((g) => g.label), ['Crew', 'Vessel'])
 // The money must not appear anywhere in his menu.
@@ -119,7 +121,7 @@ eq("officer denied ['fleetTools','cook']", canSee(['fleetTools', 'cook'], office
 const cookNav = navFor(cook).flatMap((g) => g.items.map((i) => i.to))
 eq('cook menu is the stores list alone', cookNav, ['/stores'])
 eq('and one group', navFor(cook).map((g) => g.label), ['Vessel'])
-for (const gone of ['/', '/sales', '/quota', '/crew', '/engine-logs', '/users', '/settlements']) {
+for (const gone of ['/', '/sales', '/quota', '/crew', '/engine-logs', '/gear', '/users', '/settlements']) {
   eq(`cook menu excludes ${gone}`, cookNav.includes(gone), false)
 }
 // Stores did not disappear for the people who already had it.
