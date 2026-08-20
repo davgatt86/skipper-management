@@ -21,10 +21,17 @@ export function daysBetween(from, to) {
   return Math.round((b - a) / DAY)
 }
 
-// The set currently on the net — the one nobody has taken off yet.
+/* The set currently on the net — the one nobody has taken off yet.
+ *
+ * The LATEST of them, not the first found. The database allows only one open
+ * set per net and part, but a renewal written at sea is queued and the close
+ * happens server-side, so between writing it and syncing there are briefly two
+ * open rows on the device. Showing the older one would tell the man his
+ * renewal had not taken. */
 export const fittedComponent = (components, netId, partKey) =>
-  (components || []).find(
-    (c) => c.net_id === netId && c.part_key === partKey && !c.removed_on) || null
+  (components || [])
+    .filter((c) => c.net_id === netId && c.part_key === partKey && !c.removed_on)
+    .sort((a, b) => String(b.fitted_on || '').localeCompare(String(a.fitted_on || '')))[0] || null
 
 // Everything ever fitted there, newest first. The history is the point of the
 // log, so retired sets are kept rather than deleted.

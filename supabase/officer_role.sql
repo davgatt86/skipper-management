@@ -66,7 +66,7 @@ declare
   allowed text[] := array[
     -- writes: the logs and the maintenance record
     'engine_logs', 'vessel_fuel_log', 'garbage_log', 'fuel_suppliers',
-    'maintenance_tasks', 'maintenance_events',
+    'maintenance_tasks', 'maintenance_events', 'engine_limits',
     -- The gear log. Deck work: a mate keeps it as much as the skipper does.
     'gear_nets', 'gear_parts', 'gear_components', 'gear_measurements',
     -- writes: crew paperwork. A mate adds a man, files his tickets and makes
@@ -106,7 +106,7 @@ declare
   t text;
   allowed text[] := array[
     'engine_logs','vessel_fuel_log','garbage_log','fuel_suppliers',
-    'maintenance_tasks','maintenance_events',
+    'maintenance_tasks','maintenance_events','engine_limits',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
     'vessel_certificates','vessel_details','fleets','settings','app_users'
@@ -155,7 +155,7 @@ declare
 begin
   foreach t in array array[
     'engine_logs','vessel_fuel_log','garbage_log','fuel_suppliers',
-    'maintenance_tasks','maintenance_events',
+    'maintenance_tasks','maintenance_events','engine_limits',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members'
   ] loop

@@ -5,6 +5,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { checkReadings, counterReversals } from '../lib/engine/limits'
 import { useAuth } from '../AuthContext'
 import { keepsLogs, isSkipper } from '../lib/roles'
 import { useOfflineTable } from '../lib/offline/useOfflineTable'
@@ -69,34 +70,11 @@ export const ENGINE_TEMPLATE = [
 
 const MAIN_HOURS = { group: 'Main Engine 1', param: 'Running Hours' }
 
-// How far off the rolling average a reading has to be before it is queried.
-// 60% is wide enough that normal running never trips it — the real slips in
-// this data were out by a factor of 10 to 100.
-const OUTLIER_PCT = 0.6
-const MIN_HISTORY = 3   // below this there is no meaningful average yet
-
-// Compare each reading against the mean of that parameter's previous values.
-// Returns [{ group, label, value, avg, times }] for anything wildly off.
-export function outliers(readings, priorLogs) {
-  const out = []
-  for (const group of Object.keys(readings || {})) {
-    for (const label of Object.keys(readings[group] || {})) {
-      const v = Number(readings[group][label])
-      if (!Number.isFinite(v)) continue
-      const hist = (priorLogs || [])
-        .map((l) => Number(l.readings?.[group]?.[label]))
-        .filter((n) => Number.isFinite(n))
-      if (hist.length < MIN_HISTORY) continue
-      const avg = hist.reduce((a, b) => a + b, 0) / hist.length
-      if (!avg) continue
-      const drift = Math.abs(v - avg) / Math.abs(avg)
-      if (drift > OUTLIER_PCT) {
-        out.push({ group, label, value: v, avg: Math.round(avg * 100) / 100, times: Math.round((v / avg) * 10) / 10 })
-      }
-    }
-  }
-  return out
-}
+// BOTH CHECKS NOW LIVE IN src/lib/engine/limits.js, so a STATED operating
+// range can outrank the rolling average — see checkReadings(). The drift
+// test used to live here and be the only authority, which is how it came to
+// call the CORRECT gearbox oil pressures outliers. Two copies of a check
+// that must agree is how they stop agreeing.
 
 // Flattened list of every parameter, for the chart picker.
 const FLAT_PARAMS = ENGINE_TEMPLATE.flatMap((g) => g.params.map((p) => ({ group: g.group, label: p.label, unit: p.unit, key: `${g.group}||${p.label}` })))
@@ -136,11 +114,31 @@ export default function EngineLogs() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [outlierWarn, setOutlierWarn] = useState(null)
+  /* THE STATED OPERATING RANGES — the primary test, and the reason the
+   * rolling-average check is no longer the authority. Gearbox 1 Oil Press read
+   * 28, 28, 2.8, 2.8, 38, 25, 38 and the median was 28, so a check derived from
+   * history alone called the CORRECT readings outliers. */
+  const [limits, setLimits] = useState([])
   const [confirmedOutliers, setConfirmedOutliers] = useState(false)
 
   // The logs come from the offline hook above. The vessel particulars are read
   // separately and cached by hand, because the page prints them on the PDF and
   // an engineer offline still needs the boat's name on his log.
+  /* The stated ranges, cached like everything else on this page — the engine
+   * room is where the signal is worst, and a check that only works ashore is a
+   * check that never runs when it matters. */
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const cached = await readCache('engine_limits')
+      if (live && cached.rows.length) setLimits(cached.rows)
+      if (!isOnline()) return
+      const { data } = await supabase.from('engine_limits').select('*')
+      if (live && data) { setLimits(data); cacheTable('engine_limits', data) }
+    })()
+    return () => { live = false }
+  }, [])
+
   useEffect(() => {
     let live = true
     ;(async () => {
@@ -208,7 +206,16 @@ export default function EngineLogs() {
     // It is deliberately a QUESTION, not a rule: the same reading that means
     // a mis-key can mean a genuine engine problem, and the man on the boat is
     // the one who can tell the difference.
-    const odd = outliers(readings, logs)
+    /* Range first, drift second, and a counter that has gone backwards is its
+     * own kind of wrong — no range to argue about and no average to be fooled
+     * by. It caught the 30-07-2026 entry, which is a copy of 09-06's readings
+     * and whose running hours therefore sit 872 below the entry before it. */
+    const priorLogs = logs.filter((l) => l.id !== editingId)
+    const odd = [
+      ...checkReadings(readings, limits, priorLogs),
+      ...counterReversals([...priorLogs, { log_date: draft.log_date, readings }], limits)
+        .filter((r) => r.on === draft.log_date),
+    ]
     if (odd.length && !confirmedOutliers) {
       setOutlierWarn(odd)
       setSaving(false)
@@ -315,14 +322,36 @@ export default function EngineLogs() {
           {outlierWarn && (
             <div className="card" style={{ borderColor: 'var(--brass)', marginTop: '1rem' }}>
               <h3 style={{ marginTop: 0 }}>
-                {outlierWarn.length === 1 ? 'One reading is' : `${outlierWarn.length} readings are`} well off the usual
+                {outlierWarn.length === 1 ? 'One reading wants checking' : `${outlierWarn.length} readings want checking`}
               </h3>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {outlierWarn.map((o, i) => (
                   <li key={i} style={{ padding: '0.35rem 0', borderTop: '1px solid var(--border)', fontSize: '0.88rem' }}>
-                    <strong>{o.group} · {o.label}</strong>{' '}
-                    <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700, color: 'var(--brass)' }}>{o.value}</span>
-                    <span className="muted"> — usually about {o.avg}{o.times ? `, this is ${o.times}×` : ''}</span>
+                    <strong>{o.group} · {o.param || o.label}</strong>{' '}
+                    <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
+                                   color: o.kind === 'drift' ? 'var(--brass)' : 'var(--rust)' }}>{o.value}</span>
+                    {/* THREE DIFFERENT FAULTS, THREE DIFFERENT SENTENCES. A reading
+                        outside what the engine does, a counter gone backwards, and one
+                        that is merely unusual are not the same news — and rendering them
+                        alike is how a warning stops being read. */}
+                    {o.kind === 'range' && (
+                      <span className="muted">
+                        {' '}— outside {o.min ?? '—'} to {o.max ?? '—'}, which is what this engine does
+                        {o.limit?.confirmed ? '' : ' (range suggested from the log, not yet confirmed)'}
+                      </span>
+                    )}
+                    {o.kind === 'reversal' && (
+                      <span className="muted">
+                        {' '}— lower than {o.previous} on {fmtDate(o.previousOn)}. This only ever
+                        climbs, so one of the two is wrong.
+                      </span>
+                    )}
+                    {(o.kind === 'drift' || !o.kind) && (
+                      <span className="muted">
+                        {' '}— usually about {o.avg}{o.times ? `, this is ${o.times}×` : ''}
+                        {o.insideStatedRange ? ', though the stated range allows it' : ''}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

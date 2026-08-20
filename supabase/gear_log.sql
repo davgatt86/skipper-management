@@ -281,3 +281,65 @@ grant execute on function public.gear_ground_days(uuid) to authenticated;
 -- The deny loop in each only touches tables OUTSIDE its own list, so a table
 -- that has just JOINED one keeps its old denial until 2b runs. That is the
 -- order-of-operations that shut officers out of crew certs once already.
+
+-- ------------------------------------------- a renewal is ONE write (Aug 2026)
+-- It was two: the client closed the fitted component, then inserted the new
+-- one. Two independent items in the offline outbox, replayed separately — so
+-- when the close did not land, the insert still ran and hit
+-- `gear_components_one_fitted` with a duplicate-key error that says nothing
+-- about what actually went wrong. Reported by David on Single Net's codend,
+-- which was left with the old set still open.
+--
+-- Fixing it in the client would mean keeping two queue items in step forever.
+-- Fixing it here makes the invariant impossible to break: fitting a set CLOSES
+-- whatever was on, in the same statement and the same transaction. The client
+-- sends one insert, which is one outbox item, which lands whole or not at all.
+create or replace function public.gear_close_previous()
+returns trigger
+language plpgsql
+as $$
+declare
+  prev record;
+begin
+  select * into prev
+    from public.gear_components
+   where net_id = new.net_id
+     and part_key = new.part_key
+     and removed_on is null
+     and id <> new.id
+   limit 1;
+
+  if not found then
+    return new;
+  end if;
+
+  -- Without a date there is nothing to close the old set with, and guessing
+  -- would invent a life. Say so plainly instead of failing on the index.
+  if new.fitted_on is null then
+    raise exception 'Give the date this % was fitted — there is a set on since %, and it has to be closed on the day the new one went on.',
+      replace(new.part_key, '_', ' '), to_char(prev.fitted_on, 'DD-MM-YYYY')
+      using errcode = 'check_violation';
+  end if;
+
+  -- Fitting something dated before the set it replaces is a typo, not history.
+  if prev.fitted_on is not null and new.fitted_on < prev.fitted_on then
+    raise exception 'That % was fitted on %, so a replacement cannot be dated % — check the date.',
+      replace(new.part_key, '_', ' '),
+      to_char(prev.fitted_on, 'DD-MM-YYYY'), to_char(new.fitted_on, 'DD-MM-YYYY')
+      using errcode = 'check_violation';
+  end if;
+
+  update public.gear_components
+     set removed_on = new.fitted_on, updated_at = now()
+   where id = prev.id;
+
+  return new;
+end $$;
+
+comment on function public.gear_close_previous() is
+  'Fitting a set of gear closes whatever was on that net for the same part, in the same transaction. A renewal is one operation, so it is one write — splitting it left the offline outbox able to land the insert without the close.';
+
+drop trigger if exists gear_components_close_previous on public.gear_components;
+create trigger gear_components_close_previous
+  before insert on public.gear_components
+  for each row execute function public.gear_close_previous();

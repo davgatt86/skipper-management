@@ -151,14 +151,17 @@ export default function GearLog() {
   const retireNet = (net, on) => netsT.update(net.id, { retired_on: on || today() })
   const unretireNet = (net) => netsT.update(net.id, { retired_on: null })
 
-  // A renewal is two things at once: the old set comes off and a new one goes
-  // on. Doing it in one action is what keeps the two dates flush, so a life is
-  // never a gap.
+  /* A RENEWAL IS ONE WRITE.
+   *
+   * The database closes whatever was on that net for this part, in the same
+   * transaction — see gear_close_previous() in supabase/gear_log.sql. This used
+   * to be two outbox items, a close and an insert, and when the close did not
+   * land the insert hit `gear_components_one_fitted` with a duplicate-key error
+   * that said nothing about the real problem. One item lands whole or not at
+   * all, which is the only version that survives being written at sea.
+   */
   async function renew(net, partKey, on, cost, notes) {
     if (!canEdit) return
-    const fitted = compsT.rows.find(
-      (c) => c.net_id === net.id && c.part_key === partKey && !c.removed_on)
-    if (fitted) await compsT.update(fitted.id, { removed_on: on, updated_at: new Date().toISOString() })
     await compsT.insert({
       fleet_id: appUser.fleet_id, net_id: net.id, part_key: partKey,
       fitted_on: on, cost: cost === '' || cost == null ? null : Number(cost),

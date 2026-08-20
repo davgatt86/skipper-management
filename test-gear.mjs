@@ -125,6 +125,19 @@ const MEAS = [
 eq('the fitted set is the one not taken off',
   fittedComponent(COMPS, 'n1', 'headline')?.id, 'c2')
 eq('nothing fitted reads as none', fittedComponent(COMPS, 'n2', 'codend'), null)
+/* A renewal written at sea is queued and the CLOSE happens server-side, so
+ * between writing it and syncing there are briefly two open rows on the device.
+ * The latest must win, or the man is told his renewal did not take. */
+eq('the latest open set wins while a renewal is still pending',
+  fittedComponent([
+    { id: 'old', net_id: 'n1', part_key: 'legs', fitted_on: '2025-07-31', removed_on: null },
+    { id: 'new', net_id: 'n1', part_key: 'legs', fitted_on: '2026-08-20', removed_on: null },
+  ], 'n1', 'legs')?.id, 'new')
+eq('and order in the array does not decide it',
+  fittedComponent([
+    { id: 'new', net_id: 'n1', part_key: 'legs', fitted_on: '2026-08-20', removed_on: null },
+    { id: 'old', net_id: 'n1', part_key: 'legs', fitted_on: '2025-07-31', removed_on: null },
+  ], 'n1', 'legs')?.id, 'new')
 eq('history is newest first', historyFor(COMPS, 'n1', 'headline').map((c) => c.id), ['c2', 'c1'])
 eq('and does not stray to another net', historyFor(COMPS, 'n1', 'headline').length, 2)
 eq('measurements are newest first', measurementsFor(MEAS, 'c2').map((m) => m.id), ['m2', 'm1'])
