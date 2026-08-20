@@ -771,14 +771,34 @@ fuel log, the Square Up worksheet (litres taken, where) and the settlement
 average consumption per day at sea per trip.
 
 Engine logs: permission granted (Aug 2026) to correct clear clerical errors in
-the imported data — decimal slips such as Charge Air Pressure 150/175 Bar
-(normally ~2), Lube Oil Pressure 42 Bar (normally 4.6), Gearbox Oil Press 28
-bar (normally 2.8), and a duplicated 25-05-2026 entry.
+the imported data. **All of them are now done** — swept Aug 2026 across all 53
+parameters and **no reading is more than 5× off its own median**:
 
-Going forward, keep a rolling average per parameter and flag an entry outside a
-set percentage as a possible mis-key **or a genuine engine problem**. Aegir has
-"parameter limits" and they do not catch any of the above, so limits must
-actually block or flag on entry rather than decorate the form.
+- Charge Air Pressure — 20 readings, all 1.5–2.6. The 150/175 slips are gone.
+- Lube Oil Pressure — 21 readings, all 4.2–5.0. The 42 is gone.
+- **Gearbox 1 Oil Press — corrected 21-08-2026, and THE OTHER WAY ROUND from
+  what this file used to say.** It read `28, 28, 2.8, 2.8, 38, 25, 38`, and the
+  earlier note here claimed 28 was the slip and 2.8 the normal. **David: it is
+  28.** The gauge runs in the 25–38 range and the two 2.8s were the mis-keys.
+  Both were set to 28, with the reason on the row.
+
+That correction is the whole argument for how the range check must work.
+
+**A LIMIT DERIVED FROM HISTORY ALONE WOULD HAVE FLAGGED THE CORRECT READINGS.**
+The median of that series was 28 while five of the seven entries were on one
+scale and two on another — so a rolling average would have called the *right*
+values outliers, and a keen engineer "fixing" them would have destroyed the
+good data. 38 and 25 are also not decimal slips of 28, which is the tell that
+this was two scales rather than a fat finger.
+
+So the design is: a **stated operating range per parameter**, set once by the
+engineer, as the primary test; the rolling average is a secondary *this is
+drifting* signal and never the authority. Aegir has "parameter limits" and they
+caught none of the above, so limits must block or flag on entry rather than
+decorate the form.
+
+Scale of the job: **53 parameters over 4 groups** — Main Engine 1 (28),
+Gearbox 1 (9), Generator 1 (9), Generator 2 (7).
 
 ### Certificate reader
 Ours already beats Aegir's on one point: a cert is filed against a **type**
@@ -966,19 +986,27 @@ In the order agreed:
    takes its rank options from `crew_ranks`, so a voyage is no longer a list of
    Deckhands.
 
-   **All five sections are built.** What remains against them is the
-   certificate reader (firm it up; store the original photo/PDF as Aegir
-   does), the itemised 42-point familiarisation list, and `place_of_birth`
-   on the generated crew list document.
+   **All five sections are built**, and so is the 42-point familiarisation
+   list — `Familiarisation.jsx` at `/familiarisation`, 42 items in three
+   categories, both signatures recorded, and the record only reads as complete
+   when every item is ticked. 2 crew records started as at Aug 2026.
+
+   What remains against them is the certificate reader (firm it up), and
+   `place_of_birth` on the generated crew list document. Storing the original
+   photo/PDF **is** built on both certificate pages; what is outstanding there
+   is data entry — 6 of 16 vessel certificates and 4 of 111 crew certificates
+   have a file attached, the rest are still only in Aegir.
 4. ~~**Days-at-sea repair**~~ — **done Aug 2026.** The single-landing view now
    carries a days-at-sea input under the KPIs. The handler is called
    `saveDays`, not `updateDaysAtSea`, and it rounds to the nearest quarter day
    exactly as the list views do, so a trip typed in either place lands on the
    same figure. The `£/day at sea` KPI used to read "add days below" in a view
    that has no table below it.
-   **79 of Audacious's 118 landings still have no days at sea** (average on
-   the 39 that do: 4.48 days), so `£/day` is unreliable until those are filled
-   in. They only ever arrived via logbook/quota uploads before this.
+   **14 of Audacious's 121 landings still have no days at sea** — re-counted
+   Aug 2026, and the old note here said *79 of 118*, which was badly stale.
+   `£/day` is broadly sound now. It also matters less than it did: `Trips.jsx`
+   takes days from the LOGBOOK and only reports the typed figure beside it,
+   rather than depending on it.
 5. ~~**Vessel certificates page.**~~ — **done Aug 2026.** `VesselCerts.jsx`
    at `/vessel-certs`, under Vessel in the sidebar (kept apart from crew
    certificates on purpose — they expire on different clocks and are chased
@@ -1065,11 +1093,14 @@ In the order agreed:
    groups and shows these rather than correcting the log silently; a supplier
    lookup is the real fix, same lesson as `crew_ranks`.
 
-   Still to do: the itemised engine-parameter range checks (rolling average
-   per parameter, flag outside a set percentage — Aegir's "parameter limits"
-   do not catch the known decimal slips), and the **garbage log** — Aegir has
-   one in Beta, so the MARPOL Garbage Record Book question is answered: it is
-   being kept there, not on paper only.
+   Still to do: the itemised engine-parameter range checks — see the Logs
+   section above for why a limit derived from history alone would have flagged
+   the CORRECT gearbox readings, and why the range has to be stated rather than
+   learned.
+
+   The **garbage log** is built and in use — 6 entries as at Aug 2026, the most
+   recent the same day — so the MARPOL Garbage Record Book question is settled:
+   it is kept here, not only in Aegir.
 
 Also agreed, not yet scheduled:
 
@@ -1675,8 +1706,12 @@ Also agreed, not yet scheduled:
   **Still missing: generating an alert is not telling anyone.** The rows land
   in `alerts` and sit there until somebody opens the app. Closing that needs
   email or push and is not built.
-- **Familiarisation** — 42 items in Aegir. The list itself has not been seen
-  yet; look at a crewman's page (read-only) before building. Permission given.
+- ~~**Familiarisation** — 42 items in Aegir.~~ — **BUILT Aug 2026.**
+  `Familiarisation.jsx`, `familiarisation_items` (42 rows) +
+  `crew_familiarisation` + `crew_familiarisation_items`. Three categories,
+  everything visible at once because the point of the page is the ticking, and
+  BOTH signatures recorded — a familiarisation nobody signed is not evidence of
+  anything.
 - **Dedicated pair-team fish sales analysis.** Sandy and Gavin tow one net
   between two boats: sum gross and boxes, never sum days at sea (both boats
   fished the same days, so the pair rate is pair gross ÷ the trip's days),
