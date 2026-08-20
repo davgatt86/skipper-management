@@ -29,17 +29,17 @@ export const SHEET_WORDS = {
   en: {
     title: 'STORES ORDER', qty: 'QTY', unit: 'UNIT', item: 'ITEM', note: 'NOTE',
     mealsFor: 'Meals for', page: 'Page', of: 'of', items: 'items',
-    generated: 'generated', continued: 'continued',
+    generated: 'generated', continued: 'continued', forN: 'for',
   },
   no: {
     title: 'PROVIANTBESTILLING', qty: 'ANTALL', unit: 'ENHET', item: 'VARE', note: 'MERKNAD',
     mealsFor: 'Måltider til', page: 'Side', of: 'av', items: 'varer',
-    generated: 'laget', continued: 'fortsatt',
+    generated: 'laget', continued: 'fortsatt', forN: 'til',
   },
   da: {
     title: 'PROVIANTBESTILLING', qty: 'ANTAL', unit: 'ENHED', item: 'VARE', note: 'BEMÆRKNING',
     mealsFor: 'Måltider til', page: 'Side', of: 'af', items: 'varer',
-    generated: 'lavet', continued: 'fortsat',
+    generated: 'lavet', continued: 'fortsat', forN: 'til',
   },
 }
 

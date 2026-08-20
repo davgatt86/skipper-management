@@ -24,6 +24,10 @@ create table if not exists public.stores_items (
   category    text,
   name        text,
   unit        text,
+  -- Stage 4, both remembered against the ITEM so a correction sticks for next
+  -- trip — same shape and same reason as the unit override.
+  pack_size   numeric check (pack_size is null or pack_size > 0),
+  section     text,
   name_no     text,          -- Norwegian, for a foreign landing. Blank = print English.
   name_da     text,          -- Danish, same.
   hidden      boolean not null default false,   -- retire without deleting
@@ -69,6 +73,15 @@ create table if not exists public.stores_list_items (
   category    text,
   qty         numeric not null default 1,
   unit        text not null default 'unit',
+  -- Stage 4. "bacon rashers 30x8" is qty 30, pack_size 8 — 30 packs of 8. The
+  -- same order has been written three ways across three trips, so it is a
+  -- number rather than a notation. Null means the quantity is the whole story.
+  pack_size   numeric check (pack_size is null or pack_size > 0),
+  -- Sub-heading within a category: breakfast | cold | meals. The butchers
+  -- order runs that way because that is how the butcher works through it.
+  -- General rather than butcher-only, so another category can take a shape
+  -- later without a migration.
+  section     text,
   note        text,
   got         boolean not null default false,      -- ticked off when it comes aboard
   -- What makes this a list built up over a trip rather than a snapshot.

@@ -165,10 +165,66 @@ export const categoryLabel = (k) => CATEGORIES.find((c) => c.key === k)?.label |
 export const itemKey = (category, name) =>
   `${category}:${String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
 
+/* THE BUTCHERS ORDER HAS ITS OWN SHAPE, and it is not the shelf order.
+ *
+ * David's three real butcher notes (25-07, 17-08 and one other) all read the
+ * same way: breakfast, then cold meat, then meals for N. That is how the
+ * butcher works through it, so it is how the sheet has to be written — a flat
+ * list of 27 cuts in alphabetical order is a different document to the one he
+ * is used to being handed.
+ *
+ * MEALS FOR N IS THE CREW COUNT, never typed. It went "Meals for 10" to
+ * "Meals for 11" between July and August, which is Gundarovs joining, and
+ * nobody would have remembered to change it. crew_aboard_count() supplies it.
+ */
+export const SECTIONS = [
+  { key: 'breakfast', label: 'Breakfast' },
+  { key: 'cold', label: 'Cold meat' },
+  { key: 'meals', label: 'Meals' },      // printed as "Meals for N"
+]
+export const sectionLabel = (k) => SECTIONS.find((x) => x.key === k)?.label || ''
+export const sectionOrder = (k) => {
+  const i = SECTIONS.findIndex((x) => x.key === k)
+  return i < 0 ? 99 : i
+}
+
+/* Which cut goes under which heading — the shipped guess.
+ *
+ * Unlike a translation, being wrong here costs nothing worth worrying about: a
+ * line under the wrong heading is still a line the butcher reads, and the item
+ * name is unchanged. So this ships filled in rather than blank — an unfiled
+ * butcher order is 27 ungrouped lines, which is worse than a mostly-right
+ * grouping. Every one is correctable per item and the correction sticks, the
+ * same as the units.
+ */
+const BUTCHER_SECTIONS = {
+  breakfast: ['Bacon', 'Lorne Sausage', 'Pork Sausage', 'Beef Sausage',
+              'White Pudding', 'Whole Black Pudding', 'Sliced Haggis'],
+  cold: ['Boiled Ham', 'Chopped Pork', 'Corned Beef', 'Roast Beef', 'Roast Ham',
+         'Sliced Polony', 'Whole Polony'],
+  meals: ['Beef Burgers', 'Brisket', 'Chicken Supremes', 'Gammon Steak', 'Lamb Chops',
+          'Leg Lamb', 'Mince', 'Sirloin Steak', 'Silverside', 'Stewing Steak',
+          'Pork Chops', 'Whole Chicken', 'Sausage Rolls'],
+}
+const SECTION_BY_NAME = new Map(
+  Object.entries(BUTCHER_SECTIONS).flatMap(([sec, names]) => names.map((n) => [n, sec])),
+)
+
 export const DEFAULT_ITEMS = CAT.flatMap(([key, , items]) =>
   items.map((it) => {
     const [name, unit] = Array.isArray(it) ? it : [it, 'unit']
-    return { key: itemKey(key, name), category: key, name, unit, no: '', da: '', custom: false }
+    return {
+      key: itemKey(key, name), category: key, name, unit,
+      // Only the butchers order has sections today. The column is general, so
+      // another category can take one later without a migration.
+      section: key === 'BUTCHERS' ? (SECTION_BY_NAME.get(name) || 'meals') : '',
+      /* Pack size ships BLANK. "bacon rashers 30x8" is 30 packs of 8 — but the
+       * 8 is this boat's arrangement with this butcher, not a property of
+       * bacon, and I have three notes rather than a price list. Guessing it
+       * would put a number on an order that nobody chose. */
+      pack: null,
+      no: '', da: '', custom: false,
+    }
   }),
 )
 
@@ -195,6 +251,10 @@ export function resolveCatalogue(rows) {
        * worth telling apart: the page can then show what has never been
        * confirmed rather than presenting my assumption as fact. */
       unitConfirmed: !!r.unit || !!base.unitConfirmed,
+      section: r.section ?? base.section,
+      // A pack size of 0 is meaningless, so it reads as "not set" rather than
+      // as a number — otherwise a cleared field would print "packs x 0".
+      pack: Number(r.pack_size) > 0 ? Number(r.pack_size) : base.pack,
       no: r.name_no ?? base.no,
       da: r.name_da ?? base.da,
       hidden: !!r.hidden,

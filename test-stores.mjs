@@ -8,9 +8,9 @@
  */
 import {
   CATEGORIES, UNITS, DEFAULT_ITEMS, resolveCatalogue, itemKey, supplierName,
-  categoryLabel, unitShort, unitLong,
+  categoryLabel, unitShort, unitLong, SECTIONS, sectionLabel, sectionOrder,
 } from './src/lib/stores/catalogue.js'
-import { groupForOrder, buildStoresDoc } from './src/lib/stores/exportStores.js'
+import { groupForOrder, buildStoresDoc, sectionsOf, unitCell } from './src/lib/stores/exportStores.js'
 import { SHEET_WORDS, words, bothWords, missingTranslations, UNIT_WORDS } from './src/lib/stores/i18n.js'
 
 let fail = 0
@@ -259,6 +259,102 @@ eq('every shipped item still ships untranslated',
     eq(`the sheet builds in ${l}`, doc.internal.getNumberOfPages(), 1)
   }
 }
+
+
+// ---- the butchers order has its own shape ---------------------------------
+/* David's three real butcher notes all run breakfast → cold meat → meals for N.
+ * That is how the butcher works through the order, so it is how the sheet has
+ * to be written. A flat alphabetical list of 27 cuts is a different document to
+ * the one he is used to being handed. */
+{
+  eq('three runs, in the order they are worked through',
+    SECTIONS.map((x) => x.key), ['breakfast', 'cold', 'meals'])
+  eq('and they sort that way', [2, 0, 1].map((i) => sectionOrder(SECTIONS[i].key)), [2, 0, 1])
+  eq('an unknown section sorts last', sectionOrder('pudding') > 2, true)
+
+  // Every butcher item is filed. An unfiled butcher order is 27 ungrouped
+  // lines, which is worse than a mostly-right grouping — and unlike a
+  // translation, a line under the wrong heading is still a line he reads.
+  const butchers = DEFAULT_ITEMS.filter((i) => i.category === 'BUTCHERS')
+  eq('every cut is filed under a run',
+    butchers.every((i) => SECTIONS.some((x) => x.key === i.section)), true)
+  eq('and all three runs are used',
+    new Set(butchers.map((i) => i.section)).size, 3)
+  eq('bacon is breakfast', butchers.find((i) => i.name === 'Bacon')?.section, 'breakfast')
+  eq('sliced polony is cold meat', butchers.find((i) => i.name === 'Sliced Polony')?.section, 'cold')
+  eq('mince is a meal', butchers.find((i) => i.name === 'Mince')?.section, 'meals')
+
+  // NOTHING ELSE grows a shape it has no use for.
+  eq('no other category is sectioned',
+    DEFAULT_ITEMS.filter((i) => i.category !== 'BUTCHERS').every((i) => !i.section), true)
+}
+
+// ---- the runs come out of the grouper in order ----------------------------
+{
+  const mk = (name, section) => ({ item_key: name, name, category: 'BUTCHERS', qty: 1, unit: 'unit', section })
+  // Deliberately out of order going in.
+  const items = [mk('Mince', 'meals'), mk('Bacon', 'breakfast'), mk('Ham', 'cold'), mk('Lorne', 'breakfast')]
+  const runs = sectionsOf(items)
+  eq('runs come back in working order', runs.map(([k]) => k), ['breakfast', 'cold', 'meals'])
+  eq('and carry their own lines', runs[0][1].map((l) => l.name), ['Bacon', 'Lorne'])
+  eq('nothing is dropped between runs', runs.reduce((a, [, l]) => a + l.length, 0), items.length)
+
+  /* An unfiled line sorts LAST, not first. It is something nobody has filed
+   * yet, and putting it above the headings that were chosen deliberately would
+   * be the wrong way round. */
+  const withGap = sectionsOf([...items, mk('Mystery', null)])
+  eq('an unfiled line goes to the end', withGap[withGap.length - 1][0], null)
+  eq('and is still on the sheet', withGap[withGap.length - 1][1].map((l) => l.name), ['Mystery'])
+
+  // A category with no sections at all is ONE unnamed run, so every other
+  // category prints exactly as it did before.
+  const plain = sectionsOf([{ name: 'Apples', category: 'FRUIT', qty: 1, unit: 'unit' }])
+  eq('an unsectioned category is one run', plain.length, 1)
+  eq('and that run is unnamed', plain[0][0], null)
+}
+
+// ---- a quantity is a number, a unit and a pack size -----------------------
+/* The same order has read "bacon rashers 30x8", "x8 20 Bacon Rashers" and
+ * "pork sausages 16 x 5" across three trips. Sixth instance of the pattern
+ * after crew_ranks, fuel suppliers, vessel labels, buyer names and the units:
+ * anything typed rather than picked will drift. */
+{
+  eq('30 packs of 8 reads as one thing',
+    unitCell({ unit: 'pack', qty: 30, pack_size: 8 }, 'en'), 'packs × 8')
+  // The × needs no translation, which is the reason the pack size rides in
+  // the unit column rather than getting a word of its own.
+  eq('and in the shop’s own language',
+    unitCell({ unit: 'pack', qty: 30, pack_size: 8 }, 'da'), 'pakker × 8')
+  eq('one pack is singular', unitCell({ unit: 'pack', qty: 1, pack_size: 8 }, 'en'), 'pack × 8')
+  // Most lines have no pack size and must be untouched by any of this.
+  eq('no pack size prints the unit alone',
+    unitCell({ unit: 'case', qty: 3, pack_size: null }, 'en'), 'cases')
+  eq('and a plain unit still prints nothing',
+    unitCell({ unit: 'unit', qty: 3, pack_size: null }, 'en'), '')
+  // A pack size on a loose item still has to say something.
+  eq('a pack size with no unit word still shows',
+    unitCell({ unit: 'unit', qty: 12, pack_size: 6 }, 'en'), '× 6')
+  /* 0 is not a pack size. A cleared field must read as "not set", or the sheet
+   * says "packs × 0" and the butcher sends nothing. */
+  eq('zero is not a pack size', unitCell({ unit: 'pack', qty: 3, pack_size: 0 }, 'en'), 'packs')
+  eq('nor is a blank one', unitCell({ unit: 'pack', qty: 3, pack_size: '' }, 'en'), 'packs')
+
+  // The pack size is remembered against the item, like the unit.
+  const k = itemKey('BUTCHERS', 'Bacon')
+  eq('a shipped item has no pack size', resolveCatalogue([]).find((i) => i.key === k)?.pack, null)
+  eq('the boat’s own is taken',
+    resolveCatalogue([{ item_key: k, pack_size: 8 }]).find((i) => i.key === k)?.pack, 8)
+  eq('and a cleared one reads as none',
+    resolveCatalogue([{ item_key: k, pack_size: 0 }]).find((i) => i.key === k)?.pack, null)
+  // A section correction sticks the same way.
+  eq('a section correction sticks',
+    resolveCatalogue([{ item_key: k, section: 'meals' }]).find((i) => i.key === k)?.section, 'meals')
+  eq('and leaves the shipped name alone',
+    resolveCatalogue([{ item_key: k, section: 'meals' }]).find((i) => i.key === k)?.name, 'Bacon')
+}
+
+eq('a section has a readable label', sectionLabel('cold'), 'Cold meat')
+eq('and an unknown one is silent', sectionLabel('nope'), '')
 
 
 console.log('')

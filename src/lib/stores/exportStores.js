@@ -4,7 +4,9 @@ import autoTableMod from 'jspdf-autotable'
 // Same defensive shape as parse-core's import, so this works under both — and
 // so scripts can exercise this file rather than a copy of it.
 const autoTable = autoTableMod?.default ?? autoTableMod
-import { CATEGORIES, categoryLabel, unitLong, supplierName } from './catalogue.js'
+import {
+  CATEGORIES, categoryLabel, unitLong, supplierName, sectionLabel, sectionOrder,
+} from './catalogue.js'
 import { SHEET_WORDS, words, missingTranslations } from './i18n.js'
 
 /* Getting the order off the boat and to the shop.
@@ -41,6 +43,45 @@ export function groupForOrder(lines) {
   return [...m.entries()]
     .sort((a, b) => catOrder(a[0]) - catOrder(b[0]))
     .map(([key, items]) => [key, items.slice().sort((a, b) => a.name.localeCompare(b.name))])
+}
+
+/* A category's lines split into its sub-headings, in the order they are worked
+ * through — NOT alphabetically, and not by how many are in each.
+ *
+ * The butchers order runs breakfast, then cold meat, then meals for N, because
+ * that is how the butcher goes through it. Every other category comes back as a
+ * single unnamed run, so nothing else changes shape.
+ *
+ * A line with no section at all sorts LAST rather than first: it is something
+ * nobody has filed yet, and burying it above the headings that were chosen
+ * deliberately would be the wrong way round. */
+export function sectionsOf(items) {
+  const anySection = items.some((l) => l.section)
+  if (!anySection) return [[null, items]]
+  const m = new Map()
+  for (const l of items) {
+    const k = l.section || null
+    if (!m.has(k)) m.set(k, [])
+    m.get(k).push(l)
+  }
+  return [...m.entries()].sort((a, b) => {
+    if (a[0] === null) return 1
+    if (b[0] === null) return -1
+    return sectionOrder(a[0]) - sectionOrder(b[0])
+  })
+}
+
+/* What the shop reads in the unit column: "packs x 8".
+ *
+ * The pack size rides in the unit rather than getting a column of its own —
+ * "30 packs x 8" is exactly what "bacon rashers 30x8" on the paper note means,
+ * and the multiplication sign needs no translation. A quantity with no pack
+ * size prints the unit alone, as before. */
+export function unitCell(line, lang) {
+  const u = unitLong(line.unit, line.qty, lang)
+  const pack = Number(line.pack_size) > 0 ? Number(line.pack_size) : null
+  if (!pack) return u
+  return u ? `${u} × ${pack}` : `× ${pack}`
 }
 
 /* Build the document. Split from the save so a script can render the REAL
@@ -98,63 +139,91 @@ export function buildStoresDoc(list, lines, byKey = new Map(), lang = 'en') {
     if (y > doc.internal.pageSize.getHeight() - 90) { doc.addPage(); y = 56 }
     heading(label, y)
     y += 8
-    const startedOn = doc.getCurrentPageInfo().pageNumber
 
-    autoTable(doc, {
-      startY: y,
-      /* The English goes on its own head ROW, not inline as "ANTAL / QTY".
-       * Inline wrapped in the two narrow columns and came off the page as
-       * "ENHED /" over "/ QTY", which is worse than either language alone.
-       * Two plain head rows repeat across a page break perfectly well — it is
-       * only a colSpan head that does not. */
-      head: lang === 'en'
-        ? [KEYS.map((k) => SHEET_WORDS.en[k])]
-        : [KEYS.map((k) => words(lang)[k]), KEYS.map((k) => SHEET_WORDS.en[k])],
-      body: items.map((l) => {
-        const item = byKey.get(l.item_key)
-        const name = item ? supplierName(item, lang) : l.name
-        // Print the English beside a translation, never instead of it.
-        const shown = name !== l.name ? `${name}  (${l.name})` : l.name
-        /* The unit gets its OWN column, spelt out. "12 cs" is clear on the boat
-         * and ambiguous across a counter — the person picking this has never
-         * seen the app, and reading it as 12 loose items is a week's food
-         * short. A column also keeps the quantities aligned down the page,
-         * which a shop reads far faster than a ragged "12 cs" / "6 dozen". */
-        return [Number(l.qty), unitLong(l.unit, l.qty, lang), shown, l.note || '']
-      }),
-      theme: 'grid',
-      showHead: 'everyPage',
-      styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 4, lineColor: [220, 226, 230], textColor: ink },
-      headStyles: { fillColor: hull, textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
-      // The English row sits under the supplier's, quieter but plainly there.
-      didParseCell: (d) => {
-        if (d.section === 'head' && d.row.index === 1) {
-          d.cell.styles.fontStyle = 'normal'
-          d.cell.styles.fontSize = 7.5
-          d.cell.styles.textColor = [200, 216, 240]
-          d.cell.styles.cellPadding = { top: 0, bottom: 3, left: 4, right: 4 }
-        }
-        if (d.section === 'head' && d.row.index === 0 && lang !== 'en') {
-          d.cell.styles.cellPadding = { top: 3, bottom: 0, left: 4, right: 4 }
-        }
-      },
-      columnStyles: {
-        // 46, not 38: Norwegian ANTALL wraps to a stray 'L' in a narrower
-        // column, which is the sort of thing only rendering the page shows.
-        0: { cellWidth: 46, halign: 'right', fontStyle: 'bold' },
-        1: { cellWidth: 62 },
-        3: { cellWidth: 128 },
-      },
-      margin: { left: 40, right: 40, top: 56 },
-      // Carried onto a new page: say so, so the picker still knows the shelf.
-      // The footer is NOT drawn here — didDrawPage fires once per TABLE, and
-      // with one table per category that stamped eight copies of it on top of
-      // each other. It is stamped once per page after the loop instead.
-      didDrawPage: () => {
-        if (doc.getCurrentPageInfo().pageNumber !== startedOn) heading(`${label} (${w.continued})`, 44)
-      },
-    })
-    y = doc.lastAutoTable.finalY + 18
+    for (const [sec, secItems] of sectionsOf(items)) {
+      /* "MEALS FOR 11" — the count comes from who is aboard, never typed. It
+       * went 10 to 11 when Gundarovs joined and nobody would have remembered.
+       * The butcher needs it to know how many to portion. */
+      if (sec) {
+        const n = sec === 'meals' && list?.meals_for ? ` ${w.forN} ${list.meals_for}` : ''
+        if (y > doc.internal.pageSize.getHeight() - 90) { doc.addPage(); y = 56 }
+        doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...hull)
+        doc.text((sectionLabel(sec) + n).toUpperCase(), 45, y + 3)
+        y += 12
+      }
+      /* PER SECTION, not per category — and that distinction is the whole bug.
+       *
+       * Captured once per category, every section's table compared itself to
+       * the page the CATEGORY opened on, so "BUTCHERS (continued)" was stamped
+       * three times on top of itself at the head of page 2 while COLD MEAT and
+       * MEALS, which had started on that page perfectly naturally, both claimed
+       * to be carried over. Only a run that genuinely began on an earlier page
+       * is a continuation. */
+      const startedOn = doc.getCurrentPageInfo().pageNumber
+
+      autoTable(doc, {
+        startY: y,
+        /* The English goes on its own head ROW, not inline as "ANTAL / QTY".
+         * Inline wrapped in the two narrow columns and came off the page as
+         * "ENHED /" over "/ QTY", which is worse than either language alone.
+         * Two plain head rows repeat across a page break perfectly well — it is
+         * only a colSpan head that does not. */
+        head: lang === 'en'
+          ? [KEYS.map((k) => SHEET_WORDS.en[k])]
+          : [KEYS.map((k) => words(lang)[k]), KEYS.map((k) => SHEET_WORDS.en[k])],
+        body: secItems.map((l) => {
+          const item = byKey.get(l.item_key)
+          const name = item ? supplierName(item, lang) : l.name
+          // Print the English beside a translation, never instead of it.
+          const shown = name !== l.name ? `${name}  (${l.name})` : l.name
+          /* The unit gets its OWN column, spelt out. "12 cs" is clear on the boat
+           * and ambiguous across a counter — the person picking this has never
+           * seen the app, and reading it as 12 loose items is a week's food
+           * short. A column also keeps the quantities aligned down the page,
+           * which a shop reads far faster than a ragged "12 cs" / "6 dozen". */
+          return [Number(l.qty), unitCell(l, lang), shown, l.note || '']
+        }),
+        theme: 'grid',
+        showHead: 'everyPage',
+        styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 4, lineColor: [220, 226, 230], textColor: ink },
+        headStyles: { fillColor: hull, textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
+        // The English row sits under the supplier's, quieter but plainly there.
+        didParseCell: (d) => {
+          if (d.section === 'head' && d.row.index === 1) {
+            d.cell.styles.fontStyle = 'normal'
+            d.cell.styles.fontSize = 7.5
+            d.cell.styles.textColor = [200, 216, 240]
+            d.cell.styles.cellPadding = { top: 0, bottom: 3, left: 4, right: 4 }
+          }
+          if (d.section === 'head' && d.row.index === 0 && lang !== 'en') {
+            d.cell.styles.cellPadding = { top: 3, bottom: 0, left: 4, right: 4 }
+          }
+        },
+        columnStyles: {
+          // 46, not 38: Norwegian ANTALL wraps to a stray 'L' in a narrower
+          // column, which is the sort of thing only rendering the page shows.
+          0: { cellWidth: 46, halign: 'right', fontStyle: 'bold' },
+          1: { cellWidth: 62 },
+          3: { cellWidth: 128 },
+        },
+        margin: { left: 40, right: 40, top: 56 },
+        // Carried onto a new page: say so, so the picker still knows the shelf.
+        // The footer is NOT drawn here — didDrawPage fires once per TABLE, and
+        // with one table per category that stamped eight copies of it on top of
+        // each other. It is stamped once per page after the loop instead.
+        didDrawPage: () => {
+          if (doc.getCurrentPageInfo().pageNumber === startedOn) return
+          // Name the RUN as well as the shelf. Page 2 opening on a tail of
+          // sausages under a bare "BUTCHERS" leaves the butcher guessing which
+          // part of his order he is looking at — the same orphaned-line problem
+          // the category heading exists to solve, one level down.
+          heading(sec ? `${label} — ${sectionLabel(sec)} (${w.continued})`
+                      : `${label} (${w.continued})`, 44)
+        },
+      })
+      y = doc.lastAutoTable.finalY + (sec ? 8 : 18)
+    }
+    y += sectionsOf(items).length > 1 ? 10 : 0
   }
 
   /* THE KEY, and the admission.
@@ -208,17 +277,22 @@ export function exportStoresCsv(list, lines, byKey = new Map(), lang = 'en') {
   // The supplier's word gets its OWN column rather than replacing the English,
   // so a spreadsheet of this is still readable on the boat. Same rule as the
   // PDF: beside it, never instead of it.
-  const head = ['Category', 'Item', 'Qty', 'Unit', 'Note', 'Aboard', 'Added']
-  if (lang !== 'en') head.splice(2, 0, `Item (${lang})`)
+  // Pack size gets its own column rather than being folded into Qty: a
+  // spreadsheet is somewhere sums get done, and "30 x 8" in a numeric cell is
+  // a string. Section too, so the butchers runs survive the round trip.
+  const head = ['Category', 'Section', 'Item', 'Qty', 'Unit', 'Pack size', 'Total', 'Note', 'Aboard', 'Added']
+  if (lang !== 'en') head.splice(3, 0, `Item (${lang})`)
   const rows = [head]
   for (const [cat, items] of groupForOrder(lines)) {
     for (const l of items) {
-      const r = [categoryLabel(cat), l.name, Number(l.qty), unitLong(l.unit, l.qty) || 'unit',
+      const pack = Number(l.pack_size) > 0 ? Number(l.pack_size) : ''
+      const r = [categoryLabel(cat), sectionLabel(l.section), l.name, Number(l.qty),
+                 unitLong(l.unit, l.qty) || 'unit', pack, pack ? Number(l.qty) * pack : '',
                  l.note || '', l.got ? 'yes' : '', (l.added_at || '').slice(0, 10)]
       if (lang !== 'en') {
         const item = byKey.get(l.item_key)
         const t = item ? supplierName(item, lang) : l.name
-        r.splice(2, 0, t === l.name ? '' : t)
+        r.splice(3, 0, t === l.name ? '' : t)
       }
       rows.push(r)
     }

@@ -8,7 +8,7 @@ import { useOfflineTable } from '../lib/offline/useOfflineTable'
 import SyncStatus from '../components/SyncStatus'
 import {
   CATEGORIES, UNITS, DEFAULT_ITEMS, resolveCatalogue, categoryLabel,
-  unitShort, itemKey, supplierName, LANGS,
+  unitShort, itemKey, supplierName, LANGS, SECTIONS, sectionLabel,
 } from '../lib/stores/catalogue'
 import { exportStoresPdf, exportStoresCsv } from '../lib/stores/exportStores'
 import { missingTranslations } from '../lib/stores/i18n'
@@ -125,6 +125,10 @@ export default function Stores() {
     await linesT.insert({
       fleet_id: appUser.fleet_id, list_id: list.id, item_key: item.key,
       name: item.name, category: item.category, qty: Number(qty) || 1, unit: item.unit,
+      // Both defaulted from the item so the butchers order arranges itself,
+      // and both correctable per line below.
+      section: item.section || null,
+      pack_size: item.pack || null,
       added_at: new Date().toISOString(),
       added_by: (await supabase.auth.getUser()).data?.user?.id ?? null,
     })
@@ -156,12 +160,36 @@ export default function Stores() {
    * the shipped catalogue would never reach the boat — the exact thing keeping
    * the catalogue in code is meant to avoid. resolveCatalogue() falls back to
    * the shipped values for anything the row leaves null. */
+  /* A pack size and a section, both remembered against the ITEM.
+   *
+   * Same shape and the same reason as the unit: fixing one and having it come
+   * back wrong next trip is how a correction stops being made at all. Only the
+   * changed field goes into the override row, so a later correction to the
+   * shipped name or category still reaches the boat. */
+  async function rememberOnItem(line, fields) {
+    const had = overrides.find((r) => r.item_key === line.item_key)
+    if (had) await itemsT.update(had.id, { ...fields, updated_at: new Date().toISOString() })
+    else await itemsT.insert({ fleet_id: appUser.fleet_id, item_key: line.item_key, ...fields })
+  }
+
+  async function setPack(line, pack) {
+    if (!canEdit) return
+    // 0 and blank both mean "no pack size", never "packs of nothing".
+    const n = Number(pack) > 0 ? Number(pack) : null
+    await linesT.update(line.id, { pack_size: n })
+    await rememberOnItem(line, { pack_size: n })
+  }
+
+  async function setSection(line, section) {
+    if (!canEdit) return
+    await linesT.update(line.id, { section: section || null })
+    await rememberOnItem(line, { section: section || null })
+  }
+
   async function setUnit(line, unit) {
     if (!canEdit) return
     await linesT.update(line.id, { unit })
-    const had = overrides.find((r) => r.item_key === line.item_key)
-    if (had) await itemsT.update(had.id, { unit, updated_at: new Date().toISOString() })
-    else await itemsT.insert({ fleet_id: appUser.fleet_id, item_key: line.item_key, unit })
+    await rememberOnItem(line, { unit })
   }
 
   /* A new item the shop carries but the form never listed. It is saved to the
@@ -194,6 +222,25 @@ export default function Stores() {
     return [...m.entries()].sort((a, b) =>
       CATEGORIES.findIndex((c) => c.key === a[0]) - CATEGORIES.findIndex((c) => c.key === b[0]))
   }, [onList])
+
+  /* The screen shows the butchers order in the same runs the sheet prints it —
+   * breakfast, cold meat, meals for N. Seeing it laid out the way the butcher
+   * will read it is the point; a cook checking his order against a shape that
+   * only appears on the PDF is checking the wrong document. */
+  const runsOfCategory = (items) => {
+    if (!items.some((l) => l.section)) return [[null, items]]
+    const m = new Map()
+    for (const l of items) {
+      const k = l.section || null
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push(l)
+    }
+    return [...m.entries()].sort((a, b) => {
+      if (a[0] === null) return 1
+      if (b[0] === null) return -1
+      return SECTIONS.findIndex((x) => x.key === a[0]) - SECTIONS.findIndex((x) => x.key === b[0])
+    })
+  }
 
   // The catalogue, minus what is already on the list — you cannot order a
   // thing twice, and seeing it offered again reads as though it did not take.
@@ -447,7 +494,18 @@ export default function Stores() {
               <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.95rem' }}>
                 {categoryLabel(c)} <span className="muted" style={{ fontWeight: 400 }}>({items.length})</span>
               </h3>
-              {items.map((l, i) => (
+              {runsOfCategory(items).map(([sec, run]) => (
+                <div key={sec || '_'}>
+                  {sec && (
+                    /* "MEALS FOR 11" — the crew count, never typed. It went 10
+                       to 11 when Gundarovs joined and nobody would have
+                       remembered to change it. */
+                    <div style={{ ...CAP, color: 'var(--hull)', fontWeight: 700, marginTop: '0.5rem' }}>
+                      {sectionLabel(sec)}
+                      {sec === 'meals' && list?.meals_for ? ` for ${list.meals_for}` : ''}
+                    </div>
+                  )}
+              {run.map((l, i) => (
                 <div key={l.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap',
                                          borderTop: i ? '1px solid var(--border)' : 'none', padding: '0.35rem 0',
                                          opacity: l.got ? 0.55 : 1 }}>
@@ -462,6 +520,21 @@ export default function Stores() {
                   {canEdit && <button className="secondary" style={SM} onClick={() => bump(l, -1)}>−</button>}
                   <QtyBox line={l} disabled={!canEdit} onSet={(n) => setQty(l, n)} />
                   {canEdit && <button className="secondary" style={SM} onClick={() => bump(l, +1)}>+</button>}
+                  {/* PACK SIZE. "bacon rashers 30x8" is 30 packs of 8, and the
+                      same order has been written three ways across three trips.
+                      A number, not a notation. Blank means the quantity is the
+                      whole story, which is most lines. */}
+                  {canEdit && (
+                    <>
+                      <span className="muted" style={{ fontSize: '0.8rem' }}>×</span>
+                      <PackBox line={l} onSet={(n) => setPack(l, n)} />
+                    </>
+                  )}
+                  {Number(l.pack_size) > 0 && (
+                    <span className="muted" style={{ fontSize: '0.75rem', minWidth: '3rem' }}>
+                      = {Number(l.qty) * Number(l.pack_size)}
+                    </span>
+                  )}
                   {canEdit ? (
                     <select value={l.unit} onChange={(e) => setUnit(l, e.target.value)}
                             title={byKey.get(l.item_key)?.unitConfirmed
@@ -474,10 +547,23 @@ export default function Stores() {
                   ) : (
                     <span className="muted" style={{ fontSize: '0.78rem', minWidth: '2rem' }}>{unitShort(l.unit)}</span>
                   )}
+                  {/* Which run of the butchers order it belongs in. Only shown
+                      where the category actually has runs, so no other category
+                      grows a control it has no use for. */}
+                  {canEdit && l.category === 'BUTCHERS' && (
+                    <select value={l.section || ''} onChange={(e) => setSection(l, e.target.value)}
+                            title="Where it goes on the butcher's order"
+                            style={{ fontSize: '0.78rem', padding: '0.1rem 0.2rem', width: '6.2rem' }}>
+                      <option value="">— unfiled —</option>
+                      {SECTIONS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+                    </select>
+                  )}
                   {canEdit && (
                     <button className="secondary" style={{ ...SM, color: 'var(--rust)' }} title="Take off the list"
                             onClick={() => removeLine(l)}>×</button>
                   )}
+                </div>
+              ))}
                 </div>
               ))}
             </div>
@@ -551,6 +637,31 @@ function TransBox({ value, lang, onSave }) {
       }}
       style={{ flex: '1 1 10rem', maxWidth: 260, fontSize: '0.85rem',
                borderStyle: value ? 'solid' : 'dashed' }}
+    />
+  )
+}
+
+/* How many to a pack. Same commit-on-blur as the quantity, and blank is a
+ * first-class answer — most lines have no pack size and the field must not
+ * push a 1 onto them. */
+function PackBox({ line, onSet }) {
+  const v = Number(line.pack_size) > 0 ? String(Number(line.pack_size)) : ''
+  const [draft, setDraft] = useState(v)
+  useEffect(() => { setDraft(v) }, [v])
+  return (
+    <input
+      type="number" inputMode="numeric" min="0" step="1" placeholder="pack"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft !== v) onSet(draft) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') { setDraft(v); e.currentTarget.blur() }
+      }}
+      onFocus={(e) => e.currentTarget.select()}
+      style={{ width: '3.2rem', textAlign: 'right', padding: '0.1rem 0.3rem',
+               fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem',
+               borderStyle: v ? 'solid' : 'dashed' }}
     />
   )
 }

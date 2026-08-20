@@ -1328,7 +1328,57 @@ Also agreed, not yet scheduled:
      - Norwegian `ANTALL` wrapped to a stray `L` in a 38pt quantity column.
        Widened to 46.
 
-  4. **The butchers shape** — breakfast / cold meat / meals for N.
+  4. ~~**The butchers shape** — breakfast / cold meat / meals for N.~~ —
+     **BUILT Aug 2026.** `SECTIONS` and `BUTCHER_SECTIONS` in
+     `catalogue.js`, `sectionsOf()` / `unitCell()` in `exportStores.js`,
+     `section` and `pack_size` on both `stores_list_items` and
+     `stores_items` (applied).
+
+     **The butchers order is not the shelf order.** David's three real notes
+     (25-07, 17-08 and one other) all run **breakfast → cold meat → meals for
+     N**, because that is how the butcher works through it. A flat alphabetical
+     list of 27 cuts is a different document to the one he is used to being
+     handed. The screen shows the same runs the sheet prints, since a cook
+     checking his order against a shape that only exists on the PDF is checking
+     the wrong document.
+
+     **All 27 cuts ship filed** — 7 breakfast, 7 cold, 13 meals. Unlike a
+     translation, being wrong here costs little: a line under the wrong heading
+     is still a line the butcher reads, and an unfiled order is 27 ungrouped
+     lines, which is worse. Correctable per item, and the correction sticks.
+     Nothing outside BUTCHERS carries a section, asserted by test.
+
+     **An unfiled line sorts LAST, never first.** It is something nobody has
+     filed yet, and burying it above the headings that were chosen deliberately
+     would be the wrong way round.
+
+     **"MEALS FOR 11" is the crew count**, from `crew_aboard_count()`, never
+     typed. It went 10 to 11 between July and August when Gundarovs joined and
+     nobody would have remembered to change it.
+
+     **A quantity is a number, a unit AND a pack size.** The same order has read
+     `bacon rashers 30x8`, `x8 20 Bacon Rashers` and `pork sausages 16 x 5`
+     across three trips — seventh instance of the pattern after `crew_ranks`,
+     fuel suppliers, vessel labels, buyer names, the quantity notation itself
+     and the units: **anything typed rather than picked will drift.**
+     The sheet prints it in the unit column as `30 | packs × 8`, which is
+     exactly what the paper note means and needs no translation — `pakker × 8`
+     in Danish. **Pack size ships BLANK**: the 8 is this boat's arrangement with
+     this butcher, not a property of bacon, and guessing would put a number on
+     an order nobody chose. **0 and blank both read as "not set"**, or the sheet
+     says `packs × 0` and the butcher sends nothing.
+
+     **A bug only rendering caught, and the same class as the stage-1 footer.**
+     `startedOn` was captured once per CATEGORY, so every section's table
+     compared itself to the page the category opened on: page 2 carried
+     **"BUTCHERS (continued)" stamped three times on top of itself**, while COLD
+     MEAT and MEALS — which had started on that page perfectly naturally — both
+     claimed to be carried over. It is now per SECTION, and a carried run names
+     itself (`BUTCHERS — Breakfast (continued)`) rather than leaving the
+     butcher with a tail of sausages under a bare shelf name.
+     `scripts/stores-butchers.mjs` asserts it: at most one continuation
+     heading per page, and it must name the run.
+
 
   ### The export is the feature, not a nicety
 
@@ -1360,10 +1410,14 @@ Also agreed, not yet scheduled:
   `didDrawPage`** — that hook fires once per *table*, and with one table per
   category it printed eight copies of the footer on top of each other.
 
-  `test-stores.mjs` (74 checks) covers the catalogue, the merge, the shelf
-  order, the page break and the translation rules; `scripts/stores-preview.mjs`
-  and `scripts/stores-lang.mjs` are the rendered checks — the second reads the
+  `test-stores.mjs` (105 checks) covers the catalogue, the merge, the shelf
+  order, the page break and the translation rules; `scripts/stores-preview.mjs`,
+  `scripts/stores-lang.mjs` and `scripts/stores-butchers.mjs` are the rendered
+  checks — the second reads the
   PDF back and asserts every translated word has its English beside it.
+
+  **All four stages are built.** What is left against stores is whatever
+  the boat asks for after using it.
 
   **ONE LIST, ONE ORDER** — David's call. Items carry no supplier and the list
   prints whole; splitting the butcher's part off is done by hand as now.
