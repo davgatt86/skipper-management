@@ -1117,6 +1117,59 @@ Also agreed, not yet scheduled:
   workings, not just the answer — and an officer must be able to correct one
   without a skipper login, since he is the man holding the part.
 
+- **STORES / PROVISIONS LIST, per trip** (David, Aug 2026). Built up as the
+  trip goes on rather than written once, so it wants a **cook login** — a new
+  role, and one that gets stores and nothing else. Money and sales are denied
+  the same way they are for an officer; re-run `officer_role.sql`'s allow-list
+  machinery for it rather than inventing a second mechanism.
+
+  Views: the whole list, by category, or searched.
+
+  **The inventory already exists on paper** — `iCloudDrive/Audacious_/Stores
+  List.pdf`, the Whitehills Premier order form. Four scanned pages, **18
+  categories and roughly 350 items**: Bakers · Baking · Chill · Fruit ·
+  Vegetables · Crisps and Snacks · Butchers · Tea and Coffee · Cans Fruit and
+  Puddings · Cereals · Juice Cans · Cans Veg and Meat · Sugar and Jams ·
+  Biscuits · Pasta · Frozen · Household · Miscellaneous. That is the seed;
+  type it in once rather than making the cook build it.
+
+  **Units are per item and are not all "each"**: unit, case, pack, litre,
+  half dozen, dozen (eggs). The form already carries some of it in the item
+  name — "VEG COOK OIL 1LITRE" and "5LITRE" are two lines, "POTATOES 25 KILO"
+  is one — which is the paper way of saying the unit belongs on the item.
+
+  **Every category on the form ends with OTHER and blank lines.** That is the
+  paper version of "the cook adds an item", and the app version is that a
+  cook-added item PERSISTS into the next trip's list. Same requirement, so do
+  not build a free-text box that forgets.
+
+  **Translation is for the supplier, not the cook.** Landing in Hanstholm or
+  Norway means handing the list to a foreign shop, so Norwegian and Danish
+  names must be a STORED per-item field the cook can correct — not machine
+  translation at print time. Half this list is Scottish butcher vocabulary
+  (polony, Lorne, neeps, tattie waffles, softies, butteries) and a machine will
+  not get those right; a wrong word on a provisions order gets the wrong food
+  delivered to a boat that is about to sail. Always print the English beside
+  it.
+
+  **The butchers order is its own recurring shape**, and the three real ones
+  (25-07, 17-08 and one other) show it: *breakfast* · *cold meat* · *meals for
+  N*. Two things worth building in rather than discovering later:
+
+  - **N is the crew count.** It went "Meals for 10" → "Meals for 11" between
+    July and August, which is Gundarovs joining. The app already knows who is
+    aboard from Crew Status, so that figure should be derived, not typed.
+  - **The quantity notation already drifts.** The same order reads
+    `bacon rashers 30x8`, `x8 20 Bacon Rashers` and `pork sausages 16 x 5`
+    across three trips — pack size × number of packs, written three ways. That
+    is the fifth instance of the pattern after `crew_ranks`, fuel suppliers,
+    vessel labels and buyer names: **anything typed rather than picked will
+    drift.** A quantity is a number, a unit and a pack size, chosen from the
+    item.
+
+  Per VESSEL rather than per fleet, like the gear log — a pair team feeds two
+  crews.
+
 - **Garbage log.** A Garbage Record Book is a MARPOL requirement at Audacious's
   size. Confirm whether one is being kept elsewhere before assuming it is not.
 - ~~**Vessel/crew alerts kept SEPARATE from market alerts.**~~ — **done Aug
