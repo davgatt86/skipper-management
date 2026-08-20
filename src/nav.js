@@ -108,6 +108,9 @@ export const NAV = [
       // or the extinguisher certificate runs out; renewing them is not his job.
       { to: '/vessel-certs', label: 'Vessel Certificates', access: 'officer' },
       { to: '/stowage', label: 'Stowage Plan', access: 'skipper' },
+      // Provisions for the trip. The catalogue is the order form the boat
+      // already uses; the page exists to get it to a supplier who has no login.
+      { to: '/stores', label: 'Stores', access: 'fleetTools' },
       { to: '/engine-logs', label: 'Engine Logs', access: 'officer' },
       { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'officer' },
       { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },

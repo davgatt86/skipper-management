@@ -1172,16 +1172,59 @@ Also agreed, not yet scheduled:
 
   **AGREED PLAN (Aug 2026), in build order:**
 
-  1. **Catalogue and list, skipper-only.** The catalogue lives in CODE with
-     per-fleet overrides merged over it, exactly like the market rules — seed
-     350 rows per fleet instead and a translation added next month never
-     reaches anybody. Three tables: `stores_items` (fleet additions and
-     overrides only), `stores_lists` (one per trip), `stores_list_items` (the
-     lines). **`added_at` on the line** is what makes it a list built up over a
-     trip rather than a snapshot.
+  1. ~~**Catalogue and list, skipper-only.**~~ — **BUILT Aug 2026.**
+     `/stores` (`Stores.jsx`), `src/lib/stores/catalogue.js`,
+     `supabase/stores.sql` (applied). The catalogue lives in CODE with
+     per-fleet overrides merged over it by `resolveCatalogue()`, exactly like
+     the market rules — seed 334 rows per fleet instead and a translation added
+     next month never reaches the boats that have already saved.
+     **334 items across 18 categories**, transcribed from the Whitehills
+     Premier order form the boat already uses, so the page is the paper form
+     the cook knows rather than a new vocabulary.
+     Three tables: `stores_items` (fleet additions and overrides only),
+     `stores_lists` (one per trip), `stores_list_items` (the lines).
+     **`added_at` on the line** is what makes it a list built up over a trip
+     rather than a snapshot.
+     `crew_aboard_count()` is SECURITY DEFINER and returns **11** for
+     Audacious, which is what "Meals for 11" on the August butcher note says.
+     Verified by probe: skipper read/write, viewer read-only, officer **0 rows
+     and blocked**, every other fleet **0 rows**.
   2. **Cook role and offline capture.**
   3. **Translation and the supplier print.**
   4. **The butchers shape** — breakfast / cold meat / meals for N.
+
+  ### The export is the feature, not a nicety
+
+  **The supplier has no login**, so a stores list that cannot leave the app is
+  a list nobody can fill. `src/lib/stores/exportStores.js` — PDF to send or
+  print, CSV (with a BOM, so Excel opens it as UTF-8) for anyone who would
+  rather have a spreadsheet. Both group by category in the **paper form's own
+  order**, never alphabetically, so a shop picking from it walks its shelves
+  once.
+
+  **`buildStoresDoc` is split from `exportStoresPdf` on purpose.** `doc.save()`
+  reaches for a browser and does **nothing at all** under node — no error, no
+  file. That had me re-reading a stale PDF off disk across several runs and
+  believing a page-break fix that had never executed once. The build half
+  returns the document, so `scripts/stores-preview.mjs` renders the REAL sheet
+  and reads it back with pdf.js rather than checking a copy that can drift.
+  Same reason `SheetBody` is exported from `MarketSheet.jsx`.
+
+  **One autoTable per category, and the category heading is drawn by hand.**
+  `showHead: 'everyPage'` does not repeat a **colSpan** head row, which was
+  found only by rendering: page 2 opened on a bare `12 | Toilet Rolls` with
+  nothing above it to say what shelf that was. On a sheet whose entire job is
+  being picked from by somebody in a shop, an orphaned line is worth the few
+  lines of code. A carried category now repeats as `BAKING (continued)`,
+  asserted **by position** — the heading's baseline must sit above every other
+  item on the page, not merely be present in the content stream.
+
+  **The footer is stamped once per PAGE after the loop, never in
+  `didDrawPage`** — that hook fires once per *table*, and with one table per
+  category it printed eight copies of the footer on top of each other.
+
+  `test-stores.mjs` (37 checks) covers the catalogue, the merge, the shelf
+  order and the page break; `scripts/stores-preview.mjs` is the rendered check.
 
   **ONE LIST, ONE ORDER** — David's call. Items carry no supplier and the list
   prints whole; splitting the butcher's part off is done by hand as now.

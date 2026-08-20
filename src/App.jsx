@@ -36,6 +36,7 @@ const EngineerHome = lazy(() => import('./pages/EngineerHome'))
 const Maintenance = lazy(() => import('./pages/Maintenance'))
 const MarketLayout = lazy(() => import('./pages/MarketLayout'))
 const MarketSettings = lazy(() => import('./pages/MarketSettings'))
+const Stores = lazy(() => import('./pages/Stores'))
 const Trips = lazy(() => import('./pages/Trips'))
 const CrewList = lazy(() => import('./pages/CrewList'))
 const Forecast = lazy(() => import('./pages/Forecast'))
@@ -248,6 +249,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <Trips />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/stores" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Stores />
             </Suspense>
           </ProtectedRoute>
         } />
