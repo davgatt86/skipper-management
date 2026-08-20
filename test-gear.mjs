@@ -20,6 +20,10 @@ import {
 import {
   tripsBetween, livesOf, summarise, running, partLives, netLives, confidence,
 } from './src/lib/gear/gearStats.js'
+import {
+  iceLabel, groundKey, groundLabel, splitKey, groundMix, mixShares,
+  groundWear, groundConfidence,
+} from './src/lib/gear/grounds.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -377,6 +381,154 @@ eq('one renewal is not an average', confidence(1).level, 'one')
 eq('two is thin', confidence(2).level, 'thin')
 eq('three will do', confidence(3).level, 'ok')
 eq('and it says how many', confidence(5).text, '5 renewals')
+
+
+// ---- STAGE 3: which grounds eat gear ---------------------------------------
+
+/* The logbook writes 27.4.a; the trade — and David — say IVa. */
+eq('a division', iceLabel('27.4.a'), 'IVa')
+eq('another', iceLabel('27.6.a'), 'VIa')
+eq('and another', iceLabel('27.6.b'), 'VIb')
+// A numeric sub-division runs on, as it is written.
+eq('a numbered sub-division', iceLabel('27.6.b.2'), 'VIb2')
+eq('and a two-deep one', iceLabel('27.2.a.2'), 'IIa2')
+// A lettered one takes a dot so it cannot be misread as part of the division.
+eq('a lettered sub-division is set off', iceLabel('27.6.a.s'), 'VIa.s')
+// Anything not a 27.x area passes through rather than being mangled into a
+// wrong-looking Roman numeral.
+eq('a non-27 area is left alone', iceLabel('34.1.1'), '34.1.1')
+eq('a bare code is left alone', iceLabel('IVa'), 'IVa')
+eq('and nothing is nothing', iceLabel(null), '')
+eq('an unknown division number is left alone', iceLabel('27.99.a'), '27.99.a')
+
+/* The EEZ is part of the ground's identity. Audacious fished 27.4.a for 578
+ * days in GBR waters and 337 in NOR, and those are different grounds to the man
+ * towing over them. */
+eq('the EEZ is in the label', groundLabel('27.4.a', 'GBR'), 'IVa (GBR)')
+eq('and the same area in another EEZ is a different ground',
+  groundKey('27.4.a', 'GBR') === groundKey('27.4.a', 'NOR'), false)
+eq('no EEZ, no brackets', groundLabel('27.6.a', null), 'VIa')
+eq('a key round-trips', splitKey(groundKey('27.4.a', 'NOR')).label, 'IVa (NOR)')
+eq('and one with no EEZ', splitKey(groundKey('27.6.a', null)).eez, null)
+
+// ---- the mix ---------------------------------------------------------------
+/* Day-ground PAIRS, not days: a day worked over two grounds counts in both,
+ * which is right for attributing wear and is why the shares still sum to 1. */
+{
+  const rows = [
+    { day: '2026-01-10', fao_area: '27.4.a', eez: 'GBR' },
+    { day: '2026-01-11', fao_area: '27.4.a', eez: 'GBR' },
+    { day: '2026-01-11', fao_area: '27.4.a', eez: 'NOR' },  // same day, two grounds
+    { day: '2026-02-01', fao_area: '27.6.a', eez: 'GBR' },
+    { day: '2026-05-01', fao_area: '27.6.b', eez: 'GBR' },  // outside the window
+  ]
+  const mix = groundMix(rows, '2026-01-01', '2026-03-01')
+  eq('pairs, not days', mix.pairs, 4)
+  eq('a day over two grounds counts in both',
+    mix.byGround[groundKey('27.4.a', 'NOR')], 1)
+  eq('and outside the window is out', mix.byGround[groundKey('27.6.b', 'GBR')], undefined)
+
+  const shares = mixShares(mix)
+  eq('biggest ground first', shares[0].label, 'IVa (GBR)')
+  eq('with its share', Math.round(shares[0].share * 100), 50)
+  // Shares sum to 1 even though pairs exceed days.
+  eq('shares sum to one', Math.round(shares.reduce((a, b) => a + b.share, 0)), 1)
+
+  eq('no window, no mix', groundMix(rows, null, '2026-03-01').pairs, 0)
+  eq('no rows, no mix', groundMix(null, '2026-01-01', '2026-03-01').pairs, 0)
+  eq('an empty mix has no shares', mixShares({ pairs: 0, byGround: {} }).length, 0)
+}
+
+// ---- the wear rate ---------------------------------------------------------
+/* THE METHOD. A finished set is ONE set consumed, split across the grounds it
+ * was worked over in proportion to the days on each. A ground's rate is then
+ * sets-attributed over days-fished.
+ *
+ * Splitting the set is the whole point: count a set's whole life against every
+ * ground it touched and a ground always fished alongside a long-lasting one
+ * inherits its figure. */
+{
+  const netVessel = { n1: 'v1' }
+  // Set A: 10 days, all in IVa. Set B: 10 days, all in VIa. Same life, so the
+  // rates must come out equal — this is the control.
+  const groundDays = {
+    v1: [
+      ...Array.from({ length: 10 }, (_, i) => ({ day: `2026-01-${String(i + 1).padStart(2, '0')}`, fao_area: '27.4.a', eez: 'GBR' })),
+      ...Array.from({ length: 10 }, (_, i) => ({ day: `2026-02-${String(i + 1).padStart(2, '0')}`, fao_area: '27.6.a', eez: 'GBR' })),
+    ],
+  }
+  const lives = [
+    { id: 'a', net_id: 'n1', fitted_on: '2026-01-01', removed_on: '2026-01-31' },
+    { id: 'b', net_id: 'n1', fitted_on: '2026-02-01', removed_on: '2026-02-28' },
+  ]
+  const { rows, unattributed } = groundWear(lives, groundDays, netVessel)
+  eq('a ground per set', rows.length, 2)
+  eq('one whole set attributed to each', rows.map((r) => r.sets), [1, 1])
+  eq('and equal time gives equal rates', rows[0].per100, rows[1].per100)
+  eq('ten days each', rows.map((r) => r.days), [10, 10])
+  eq('nothing went unattributed', unattributed, 0)
+
+  /* A set split across two grounds contributes a FRACTION to each, never a
+   * whole set to both. */
+  const split = groundWear(
+    [{ id: 'c', net_id: 'n1', fitted_on: '2026-01-01', removed_on: '2026-02-28' }],
+    groundDays, netVessel)
+  eq('a split set is halved', split.rows.map((r) => r.sets), [0.5, 0.5])
+  eq('not doubled', split.rows.reduce((a, r) => a + r.sets, 0), 1)
+
+  /* A life with no logbook days inside it is COUNTED, not dropped. Silently
+   * losing it would make the rates look better founded than they are. */
+  const orphan = groundWear(
+    [{ id: 'd', net_id: 'n1', fitted_on: '2030-01-01', removed_on: '2030-02-01' }],
+    groundDays, netVessel)
+  eq('a life with no ground days is reported', orphan.unattributed, 1)
+  eq('and contributes nothing', orphan.rows.length, 0)
+
+  eq('no lives at all', groundWear([], groundDays, netVessel).rows.length, 0)
+  eq('and null', groundWear(null, groundDays, netVessel).rows.length, 0)
+  // A net whose vessel has no logbook rows must not throw.
+  eq('an unknown vessel is handled',
+    groundWear([{ id: 'e', net_id: 'zz', fitted_on: '2026-01-01', removed_on: '2026-02-01' }],
+      groundDays, netVessel).unattributed, 1)
+}
+
+/* A GROUND THAT WORE GEAR FASTER SHOWS A HIGHER RATE. The direction of the
+ * measure, asserted rather than assumed: same days fished, shorter life. */
+{
+  const netVessel = { n1: 'v1' }
+  const days = (m, n, fao) => Array.from({ length: n }, (_, i) =>
+    ({ day: `2026-${m}-${String(i + 1).padStart(2, '0')}`, fao_area: fao, eez: 'GBR' }))
+  const groundDays = {
+    // Rough ground: 20 fished days consumed TWO sets.
+    // Clean ground: 20 fished days consumed ONE.
+    v1: [...days('01', 10, '27.6.b'), ...days('02', 10, '27.6.b'), ...days('03', 20, '27.4.a')],
+  }
+  const lives = [
+    { id: 'r1', net_id: 'n1', fitted_on: '2026-01-01', removed_on: '2026-01-31' },
+    { id: 'r2', net_id: 'n1', fitted_on: '2026-02-01', removed_on: '2026-02-28' },
+    { id: 'c1', net_id: 'n1', fitted_on: '2026-03-01', removed_on: '2026-03-31' },
+  ]
+  const { rows } = groundWear(lives, groundDays, netVessel)
+  eq('the rough ground ranks first', rows[0].label, 'VIb (GBR)')
+  eq('at twice the rate', rows[0].per100 / rows[1].per100, 2)
+  eq('on the same fished days', rows[0].days, rows[1].days)
+}
+
+// ---- saying whether it means anything --------------------------------------
+/* Deliberately strict. Ranking grounds off one or two finished sets would be
+ * inventing a finding, and the top of that table is exactly where a thin figure
+ * misleads most. */
+{
+  const thin = [{ days: 4, lives: 1 }, { days: 3, lives: 1 }]
+  const solid = [{ days: 200, lives: 4 }, { days: 150, lives: 3 }]
+  eq('nothing finished yet', groundConfidence([], 0).level, 'none')
+  eq('one set is not a comparison', groundConfidence(solid, 1).level, 'thin')
+  eq('two is not either', groundConfidence(solid, 2).level, 'thin')
+  eq('three sets on thin grounds is still thin', groundConfidence(thin, 3).level, 'thin')
+  eq('three sets on real ground days will do', groundConfidence(solid, 3).level, 'ok')
+  eq('and it says what it rests on', groundConfidence(solid, 5).text,
+    '5 finished sets across 2 grounds')
+}
 
 
 console.log('')

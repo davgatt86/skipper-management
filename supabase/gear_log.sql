@@ -235,6 +235,44 @@ comment on function public.gear_trip_dates(uuid) is
 
 grant execute on function public.gear_trip_dates(uuid) to authenticated;
 
+-- ------------------------------------------------------ which grounds (stage 3)
+-- "Some areas fished are more abrasive on gear" (David, Aug 2026) — measurable
+-- rather than an impression, because quota_trip_catches has carried fao_area
+-- and eez off the logbook since Oct 2022.
+--
+-- AREA, NOT RECTANGLE. David's call, and the data agrees: 17 area+EEZ
+-- combinations against 129 statistical rectangles. At the number of renewals a
+-- boat actually logs, rectangles divide the evidence into slivers.
+--
+-- The EEZ is part of the ground's identity. Audacious fished 27.4.a for 573
+-- days inside GBR waters and 325 inside NOR, and those are different grounds to
+-- the man towing over them — "iva (GBR), iva (NOR)".
+--
+-- DISTINCT DAY + GROUND and nothing else: no species, no kilos, no rectangle.
+-- A day worked over two grounds appears twice, once for each, which is right
+-- for attributing wear and is why the client counts day-ground PAIRS.
+create or replace function public.gear_ground_days(p_vessel_id uuid)
+returns table (day date, fao_area text, eez text)
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select distinct c.catch_date, c.fao_area, c.eez
+    from public.quota_trip_catches c
+    join public.quota_trips t on t.id = c.trip_id
+   where c.fleet_id = (select public.current_fleet_id())
+     and t.vessel_id = p_vessel_id
+     and c.catch_date is not null
+     and c.fao_area is not null
+   order by 1
+$$;
+
+comment on function public.gear_ground_days(uuid) is
+  'Distinct day + FAO area + EEZ for a vessel''s catches, for attributing gear wear to the grounds it was worked over. No species or weights. SECURITY DEFINER so an officer gets it without being granted quota_trip_catches.';
+
+grant execute on function public.gear_ground_days(uuid) to authenticated;
+
 -- ------------------------------------------------------------------- after
 -- RE-RUN BOTH ALLOW-LIST FILES AFTER THIS:
 --   supabase/officer_role.sql   -- adds these four to his list, and 2b clears

@@ -1203,15 +1203,66 @@ Also agreed, not yet scheduled:
   `quota_trips` as **0**, gets **166 dates** for his own boat and **0** for
   another fleet's.
 
-  `test-gear.mjs` — **126 checks**.
+  **STAGE 3 BUILT Aug 2026** — the **Grounds** tab. `src/lib/gear/grounds.js`,
+  `GearGrounds.jsx`, `gear_ground_days()` (applied).
 
-  **Stage 3, agreed and not built:**
-  - **Grounds** — `quota_trip_catches` carries `fao_area` and `sr` on
-    **13,079 rows back to Oct 2022**, so which grounds a set was worked over is
-    recorded, not guessed. Audacious alone has **129 statistical rectangles
-    across 8 FAO areas**. That makes "some areas are more abrasive on gear"
-    a measurable claim: attribute each closed life to the rectangles fished
-    inside it.
+  **AREA, NOT RECTANGLE** — David's call, and the data agrees with him: **17
+  area+EEZ combinations against 129 statistical rectangles**. At the number of
+  renewals a boat actually logs, rectangles would divide the evidence into
+  slivers and every one would be noise.
+
+  **The EEZ is part of the ground's identity, not decoration.** Audacious fished
+  27.4.a for **573 days inside GBR waters and 325 inside NOR**, and David names
+  them separately — *"iva (GBR), iva (NOR)"* — because to him they are different
+  grounds.
+
+  **The logbook writes `27.4.a`; the trade says `IVa`.** `iceLabel()` converts.
+  A numeric sub-division runs on (`VIb1`, `VIb2`, `IIa2`) because that is how it
+  is written; a lettered one takes a dot (`VIa.s`) so it cannot be misread as
+  part of the division letter. Anything not a 27.x area passes through untouched
+  rather than being mangled into a wrong-looking Roman numeral. **All 17 real
+  grounds were run through it and checked by eye**, not assumed.
+
+  **THE METHOD.** A finished set is ONE set consumed, split across the grounds
+  it was worked over in proportion to the days on each. A ground's rate is then
+  *sets attributed ÷ days fished*, reported as sets per 100 days.
+
+  Splitting the set is the whole point. Counting a set's **whole** life against
+  every ground it touched would let a ground that is always fished alongside a
+  long-lasting one inherit its figure — which is a comparison of company kept,
+  not of ground worked. Asserted by test in both directions: equal time on two
+  grounds gives equal rates, and a ground that consumed two sets in the same
+  fished days as another's one ranks at exactly twice the rate.
+
+  **Day-ground PAIRS, not days.** A day worked over two grounds counts in both,
+  which is right for attributing wear, and is why the shares still sum to 1 while
+  the pair total exceeds the days at sea.
+
+  **The page says what it rests on, first and unmissably.** `groundConfidence()`
+  is deliberately strict: fewer than three finished sets, or fewer than two
+  grounds carrying 20+ days and 2+ sets, and it says so at the top rather than
+  ranking anything. Individual thin rows are dimmed and marked *thin*, and the
+  column order puts **days and sets before the rate** — a ground with four days
+  will show the most extreme figure on the page and mean nothing.
+
+  **A life with no logbook days inside it is COUNTED as unattributed**, never
+  dropped. Losing it silently would make the rates look better founded than they
+  are.
+
+  **Where each set was worked is shown regardless**, per part, with the ground
+  mix as chips. That is useful from the first renewal, long before any rate above
+  it means anything.
+
+  Probed: officer reads `quota_trip_catches` as **0**, gets **1,240 day-ground
+  rows across 17 grounds** for his own boat and **0** for another fleet's.
+
+  `test-gear.mjs` — **171 checks**.
+
+  **One oddity worth asking David about:** the logbook carries `27.6.a.s` for
+  24 days, which is not a standard ICES division. It renders as `VIa.s` rather
+  than being silently folded into `VIa`.
+
+  **All three stages are built.**
 
   **Cost is optional throughout** — David: "a lot of the time this isn't
   known". Where it is entered it would be the **first real per-vessel cost in

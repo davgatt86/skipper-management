@@ -14,6 +14,7 @@ import {
 } from '../lib/gear/gearAgg'
 import { tripsBetween } from '../lib/gear/gearStats'
 import GearStats from './GearStats'
+import GearGrounds from './GearGrounds'
 
 /* THE GEAR LOG — what was done to the nets, and when.
  *
@@ -63,6 +64,7 @@ export default function GearLog() {
   const [msg, setMsg] = useState('')
   const [showRetired, setShowRetired] = useState(false)
   const [tripDates, setTripDates] = useState({})
+  const [groundDays, setGroundDays] = useState({})
   const [tab, setTab] = useState('log')
 
   const parts = useMemo(() => resolveParts(partsT.rows), [partsT.rows])
@@ -102,18 +104,25 @@ export default function GearLog() {
     let cancel = false
     ;(async () => {
       const out = {}
+      const grounds = {}
       for (const vid of vesselIds.split(',')) {
-        const { data, error } = await supabase.rpc('gear_trip_dates', { p_vessel_id: vid })
-        // Offline: leave it unknown rather than filling in a zero.
-        if (error) return
-        out[vid] = (data || []).map((d) => String(d).slice(0, 10))
+        const [dates, gd] = await Promise.all([
+          supabase.rpc('gear_trip_dates', { p_vessel_id: vid }),
+          supabase.rpc('gear_ground_days', { p_vessel_id: vid }),
+        ])
+        // Offline: leave both unknown rather than filling in a zero, which
+        // would read as "no trips" and "never fished there".
+        if (dates.error || gd.error) return
+        out[vid] = (dates.data || []).map((d) => String(d).slice(0, 10))
+        grounds[vid] = gd.data || []
       }
-      if (!cancel) setTripDates(out)
+      if (!cancel) { setTripDates(out); setGroundDays(grounds) }
     })()
     return () => { cancel = true }
   }, [vesselIds])
 
   const tripsKnown = Object.keys(tripDates).length > 0
+  const groundsKnown = Object.keys(groundDays).length > 0
 
   // ---- writes -------------------------------------------------------------
   async function addNet(vesselId, name, cameAboard, fitAll) {
@@ -199,7 +208,7 @@ export default function GearLog() {
       {/* Two views of the same book: what is on the nets now, and how long
           these things last. */}
       <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.8rem' }}>
-        {[['log', 'Log'], ['stats', 'Life']].map(([k, label]) => (
+        {[['log', 'Log'], ['stats', 'Life'], ['grounds', 'Grounds']].map(([k, label]) => (
           <button key={k} className={tab === k ? '' : 'secondary'} onClick={() => setTab(k)}>
             {label}
           </button>
@@ -229,6 +238,11 @@ export default function GearLog() {
       {/* ---- THE MATRIX: nets down, parts across ---------------------------
           Read a row for one net's whole rig, or a column for one part across
           every net. David asked for both and this is the one shape that is. */}
+      {tab === 'grounds' && (
+        <GearGrounds parts={parts} nets={nets} components={compsT.rows}
+                     groundDays={groundDays} groundsKnown={groundsKnown} />
+      )}
+
       {tab === 'stats' && (
         <GearStats parts={parts} nets={nets} components={compsT.rows} vessels={vessels}
                    tripDates={tripDates} today={today()} tripsKnown={tripsKnown} />
