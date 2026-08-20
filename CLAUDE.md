@@ -1170,6 +1170,40 @@ Also agreed, not yet scheduled:
   Per VESSEL rather than per fleet, like the gear log — a pair team feeds two
   crews.
 
+  **AGREED PLAN (Aug 2026), in build order:**
+
+  1. **Catalogue and list, skipper-only.** The catalogue lives in CODE with
+     per-fleet overrides merged over it, exactly like the market rules — seed
+     350 rows per fleet instead and a translation added next month never
+     reaches anybody. Three tables: `stores_items` (fleet additions and
+     overrides only), `stores_lists` (one per trip), `stores_list_items` (the
+     lines). **`added_at` on the line** is what makes it a list built up over a
+     trip rather than a snapshot.
+  2. **Cook role and offline capture.**
+  3. **Translation and the supplier print.**
+  4. **The butchers shape** — breakfast / cold meat / meals for N.
+
+  **ONE LIST, ONE ORDER** — David's call. Items carry no supplier and the list
+  prints whole; splitting the butcher's part off is done by hand as now.
+
+  **THE COOK ROLE IS THE DANGEROUS PART, and it is deliberately not in stage
+  1.** `user_role` has no `cook`, so it is an enum change plus an `is_cook()`
+  twin of `is_officer()` plus `CREATABLE_ROLES` in `manage-users.js`. The trap
+  is the deny loop: every permissive policy in this database is
+  `to authenticated using (true)` with only the restrictive fleet check beside
+  it, so **a brand-new role sees everything in its fleet by default**. The cook
+  must be denied by the same generated allow-list, and that loop only touches
+  tables outside its own list — the exact order-of-operations that shut
+  officers out of crew certs once already. Prove it by probe, not inspection.
+
+  **`meals_for` comes from a SECURITY DEFINER function returning the aboard
+  count**, so the cook gets the number without being handed the crew table.
+
+  **Translations ship BLANK and print English when missing.** Do not machine-
+  translate the catalogue: better an English word the supplier queries than a
+  confident wrong Danish one on an order that has to be right before the boat
+  sails.
+
 - **Garbage log.** A Garbage Record Book is a MARPOL requirement at Audacious's
   size. Confirm whether one is being kept elsewhere before assuming it is not.
 - ~~**Vessel/crew alerts kept SEPARATE from market alerts.**~~ — **done Aug
