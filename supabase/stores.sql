@@ -44,6 +44,11 @@ create table if not exists public.stores_lists (
   -- knows that.
   meals_for   int,
   status      text not null default 'building',    -- building | ordered | received
+  -- Which language the shop reads. On the LIST, not a picker that resets: a
+  -- trip landing in Hanstholm lands there every time the list is opened.
+  -- Added Aug 2026 (stage 3) — see supabase/stores_supplier_lang migration.
+  supplier_lang text not null default 'en'
+    check (supplier_lang in ('en','no','da')),
   notes       text,
   created_by  uuid references auth.users(id),
   created_at  timestamptz not null default now(),

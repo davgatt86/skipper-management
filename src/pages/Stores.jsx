@@ -8,9 +8,10 @@ import { useOfflineTable } from '../lib/offline/useOfflineTable'
 import SyncStatus from '../components/SyncStatus'
 import {
   CATEGORIES, UNITS, DEFAULT_ITEMS, resolveCatalogue, categoryLabel,
-  unitShort, itemKey, supplierName,
+  unitShort, itemKey, supplierName, LANGS,
 } from '../lib/stores/catalogue'
 import { exportStoresPdf, exportStoresCsv } from '../lib/stores/exportStores'
+import { missingTranslations } from '../lib/stores/i18n'
 
 /* Stores and provisions — one list per trip, built up as the trip goes on.
  *
@@ -79,6 +80,7 @@ export default function Stores() {
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('')
   const [showAdd, setShowAdd] = useState(false)
+  const [showTrans, setShowTrans] = useState(false)
   const [newName, setNewName] = useState('')
   const [newCat, setNewCat] = useState('MISC')
   const [newUnit, setNewUnit] = useState('unit')
@@ -205,6 +207,21 @@ export default function Stores() {
       .slice(0, 60)
   }, [catalogue, lines, needle, cat])
 
+  /* THE LANGUAGE IS THE LIST'S, not a picker that resets — a trip landing in
+   * Hanstholm lands there every time that list is opened, and a cook filling in
+   * Danish names should not have to re-choose it each time he comes back. */
+  const lang = list?.supplier_lang || 'en'
+  const untranslated = useMemo(
+    () => missingTranslations(lines, byKey, lang), [lines, byKey, lang])
+
+  async function setTranslation(line, value) {
+    if (!canEdit) return
+    const field = lang === 'no' ? 'name_no' : 'name_da'
+    const had = overrides.find((r) => r.item_key === line.item_key)
+    if (had) await itemsT.update(had.id, { [field]: value, updated_at: new Date().toISOString() })
+    else await itemsT.insert({ fleet_id: appUser.fleet_id, item_key: line.item_key, [field]: value })
+  }
+
   const exactMatch = catalogue.some((i) => i.name.toLowerCase() === needle)
 
   if (!canView) return <AppShell><div className="card"><p className="muted">Not available on your login.</p></div></AppShell>
@@ -215,8 +232,8 @@ export default function Stores() {
       <PageHeader title="Stores" sub={list ? `${list.title || 'Trip'} · ${fmtDate(list.starts_on)}` : 'Provisions and stores'}>
         {list && (
           <>
-            <button className="secondary" onClick={() => exportStoresCsv(list, lines)} disabled={!lines.length}>CSV</button>
-            <button onClick={() => exportStoresPdf(list, lines, byKey)} disabled={!lines.length}>📄 Order sheet</button>
+            <button className="secondary" onClick={() => exportStoresCsv(list, lines, byKey, list.supplier_lang || 'en')} disabled={!lines.length}>CSV</button>
+            <button onClick={() => exportStoresPdf(list, lines, byKey, list.supplier_lang || 'en')} disabled={!lines.length}>📄 Order sheet</button>
           </>
         )}
         {canEdit && <button className="secondary" onClick={newList}>New list</button>}
@@ -291,6 +308,74 @@ export default function Stores() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ---- who the sheet is for, and in what words -------------------
+              TRANSLATION IS FOR THE SUPPLIER, NOT THE COOK. The list stays in
+              English on screen; only the sheet that leaves the boat changes.
+              And the words are the BOAT'S — typed here, stored per item, kept
+              for next trip. Nothing is machine-translated: half this catalogue
+              is Scottish butcher vocabulary and a wrong word gets the wrong
+              food delivered to a boat that is about to sail. */}
+          <div className="card">
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <label style={LBL}>
+                <span className="muted" style={CAP}>Sheet for the shop</span>
+                <select value={lang} disabled={!canEdit}
+                        onChange={(e) => patchList({ supplier_lang: e.target.value })}>
+                  {LANGS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+                </select>
+              </label>
+
+              {lang === 'en' ? (
+                <p className="muted" style={{ margin: 0, fontSize: '0.82rem', flex: '1 1 16rem' }}>
+                  Landing abroad? Pick the language and the order sheet prints the shop&rsquo;s words,
+                  with the English beside every one of them.
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <div className="muted" style={CAP}>Named in {LANGS.find((l) => l.key === lang)?.label}</div>
+                    <div style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '1.3rem', fontWeight: 700 }}>
+                      {lines.length - untranslated.length}
+                      <span className="muted" style={{ fontSize: '0.9rem' }}> / {lines.length}</span>
+                    </div>
+                  </div>
+                  {untranslated.length > 0 && canEdit && (
+                    <button className="secondary" onClick={() => setShowTrans((v) => !v)}>
+                      {showTrans ? 'Done' : 'Name the other ' + untranslated.length}
+                    </button>
+                  )}
+                  <p className="muted" style={{ margin: 0, fontSize: '0.78rem', flex: '1 1 14rem' }}>
+                    {untranslated.length === 0
+                      ? 'Every item on this list has a name the shop will read.'
+                      : 'Anything with no name on file prints in English, and the sheet says which — better a word the shop queries than a silent gap.'}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {showTrans && lang !== 'en' && canEdit && (
+              <div style={{ marginTop: '0.8rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem' }}>
+                {/* Everything on the list, not only the gaps. A wrong word
+                    already saved is the one most worth being able to fix, and
+                    it would be invisible in a list of gaps. */}
+                {lines.map((l) => {
+                  const item = byKey.get(l.item_key)
+                  const val = (lang === 'no' ? item?.no : item?.da) || ''
+                  return (
+                    <div key={l.id} style={{ display: 'flex', gap: '0.6rem', alignItems: 'center',
+                                             padding: '0.2rem 0', flexWrap: 'wrap' }}>
+                      <span style={{ flex: '1 1 10rem', fontSize: '0.88rem' }}>{l.name}</span>
+                      <TransBox value={val} lang={lang} onSave={(v) => setTranslation(l, v)} />
+                    </div>
+                  )
+                })}
+                <p className="muted" style={{ fontSize: '0.75rem', marginBottom: 0 }}>
+                  Saved against the item, so it is there next trip and on every list this boat makes.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ---- search and category, driving both the list and the add ---- */}
@@ -442,6 +527,30 @@ function QtyBox({ line, disabled, onSet }) {
       onFocus={(e) => e.currentTarget.select()}
       style={{ width: '3.6rem', textAlign: 'right', fontWeight: 700, padding: '0.1rem 0.3rem',
                fontFamily: 'var(--font-mono, monospace)' }}
+    />
+  )
+}
+
+/* One item's word in the supplier's language.
+ *
+ * Held locally and committed on blur, like the quantity box — saving per
+ * keystroke would write "Ka", "Kar", "Kart" against Potatoes and leave the last
+ * half-typed one behind if the page were closed mid-word. */
+function TransBox({ value, lang, onSave }) {
+  const [draft, setDraft] = useState(value)
+  useEffect(() => { setDraft(value) }, [value])
+  return (
+    <input
+      value={draft}
+      placeholder={lang === 'no' ? 'norsk navn' : 'dansk navn'}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => { if (draft.trim() !== value.trim()) onSave(draft.trim()) }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') { setDraft(value); e.currentTarget.blur() }
+      }}
+      style={{ flex: '1 1 10rem', maxWidth: 260, fontSize: '0.85rem',
+               borderStyle: value ? 'solid' : 'dashed' }}
     />
   )
 }

@@ -11,6 +11,7 @@ import {
   categoryLabel, unitShort, unitLong,
 } from './src/lib/stores/catalogue.js'
 import { groupForOrder, buildStoresDoc } from './src/lib/stores/exportStores.js'
+import { SHEET_WORDS, words, bothWords, missingTranslations, UNIT_WORDS } from './src/lib/stores/i18n.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -169,6 +170,94 @@ eq('zero reads as a plural', unitLong('case', 0), 'cases')
     picked.find((i) => i.key === k)?.name, 'Brown Softies')
   eq('as does the shipped category',
     picked.find((i) => i.key === k)?.category, 'BAKERS')
+}
+
+
+// ---- the supplier's language ----------------------------------------------
+/* THE RULE THE WHOLE FEATURE RESTS ON: a translated word never appears without
+ * its English. If a word of mine is wrong, the shop still has something it can
+ * read, and being wrong costs nothing. Break that and the feature becomes a
+ * way to order the wrong food confidently. */
+{
+  eq('every language has every sheet word',
+    Object.values(SHEET_WORDS).every((w) =>
+      Object.keys(SHEET_WORDS.en).every((k) => w[k] && w[k].trim())), true)
+  eq('an unknown language falls back to English', words('fr'), SHEET_WORDS.en)
+  eq('and so does no language at all', words(undefined), SHEET_WORDS.en)
+
+  eq('a translated head carries the English', bothWords('da', 'qty'), 'ANTAL / QTY')
+  eq('English alone is not doubled up', bothWords('en', 'qty'), 'QTY')
+  // Where a word happens to be identical, it is not printed twice.
+  eq('an identical word is not repeated', bothWords('no', 'item'),
+    SHEET_WORDS.no.item === 'ITEM' ? 'ITEM' : 'VARE / ITEM')
+
+  // The unit words are the only other thing translated in code, and they are
+  // the same generic order-form vocabulary. Everything else is the boat's.
+  for (const l of ['no', 'da']) {
+    eq(`${l} unit words are all pairs`,
+      Object.values(UNIT_WORDS[l]).every((v) => Array.isArray(v) && v.length === 2 && v[0] && v[1]), true)
+  }
+  eq('a case in Danish', unitLong('case', 12, 'da'), 'kasser')
+  eq('one case in Danish', unitLong('case', 1, 'da'), 'kasse')
+  eq('a pack in Norwegian', unitLong('pack', 3, 'no'), 'pakker')
+  eq('dozen is invariant in Danish too', unitLong('doz', 6, 'da'), 'dusin')
+  // A unit with no foreign word falls back to English rather than to nothing —
+  // an English word the shop queries beats a blank cell.
+  eq('an untranslated unit falls back to English', unitLong('litre', 5, 'fr'), 'litres')
+  eq('a plain unit is still silent in Danish', unitLong('unit', 4, 'da'), '')
+}
+
+// ---- being honest about what did NOT translate ----------------------------
+/* A half-translated order that does not say it is half translated is the
+ * failure worth guarding against: the cook believes the list is ready and the
+ * first anyone knows is a short delivery. */
+{
+  const byKey = new Map([
+    ['a', { key: 'a', name: 'Onions', no: 'Løk', da: 'Løg' }],
+    ['b', { key: 'b', name: 'Butteries', no: '', da: '' }],
+    ['c', { key: 'c', name: 'Polony', no: '   ', da: 'Polony' }],
+  ])
+  const lines = [
+    { item_key: 'a', name: 'Onions' },
+    { item_key: 'b', name: 'Butteries' },
+    { item_key: 'c', name: 'Polony' },
+  ]
+  eq('English asks for no translations at all', missingTranslations(lines, byKey, 'en'), [])
+  eq('Danish names the one gap',
+    missingTranslations(lines, byKey, 'da').map((l) => l.name), ['Butteries'])
+  // Whitespace is not a translation.
+  eq('Norwegian counts blank-but-spaces as missing',
+    missingTranslations(lines, byKey, 'no').map((l) => l.name), ['Butteries', 'Polony'])
+  // An item that is not in the catalogue at all still has to be reported,
+  // not quietly skipped.
+  eq('an unknown item counts as missing',
+    missingTranslations([{ item_key: 'zzz', name: 'Mystery' }], byKey, 'da').map((l) => l.name),
+    ['Mystery'])
+  eq('no lines is handled', missingTranslations(null, byKey, 'da'), [])
+}
+
+// ---- the catalogue is still NOT machine-translated -------------------------
+/* The guard against the one change that would break the whole argument. Half
+ * this list is Scottish butcher and baker vocabulary — polony, Lorne, neeps,
+ * softies, butteries, tattie waffles — and no machine gets those right. If a
+ * future me is ever tempted to seed translations, this fails first. */
+eq('every shipped item still ships untranslated',
+  DEFAULT_ITEMS.every((i) => !i.no && !i.da), true)
+{
+  const it = { name: 'Tattie Waffles', no: '', da: '' }
+  eq('an untranslated item prints English on a Danish sheet', supplierName(it, 'da'), 'Tattie Waffles')
+  eq('and on a Norwegian one', supplierName(it, 'no'), 'Tattie Waffles')
+}
+
+// ---- the sheet renders in all three ---------------------------------------
+{
+  const mk = { item_key: 'k', name: 'Large Eggs', category: 'CHILL', qty: 6, unit: 'doz' }
+  const byKey = new Map([['k', { key: 'k', name: 'Large Eggs', no: 'Store egg', da: 'Store æg' }]])
+  for (const l of ['en', 'no', 'da']) {
+    const doc = buildStoresDoc({ title: 'Trip 65', starts_on: '2026-08-21', meals_for: 11 },
+      [mk], byKey, l)
+    eq(`the sheet builds in ${l}`, doc.internal.getNumberOfPages(), 1)
+  }
 }
 
 

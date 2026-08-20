@@ -18,6 +18,10 @@
  * them in as he learns them.
  */
 
+// The dozen generic order-form words that ARE translated in code. See i18n.js
+// for why they are a different class from the item names above.
+import { UNIT_WORDS } from './i18n.js'
+
 /* How a thing is ordered. The paper form carries some of this in the item
  * name already ("VEG COOK OIL 1LITRE" and "5LITRE" are two separate lines),
  * which is the paper way of saying the unit belongs to the item. */
@@ -37,10 +41,16 @@ export const unitShort = (k) => UNITS.find((u) => u.key === k)?.short ?? ''
  * and means nothing across a counter — the person picking the order has never
  * seen this app, and "12 cs" read as 12 loose items is a week's food short.
  * Short forms stay on screen where space is tight and the crew knows them. */
-export const unitLong = (k, qty = 1) => {
+export const unitLong = (k, qty = 1, lang = 'en') => {
   const u = UNITS.find((x) => x.key === k)
   if (!u || !u.long) return ''
-  return Math.abs(Number(qty) || 0) === 1 ? u.long : u.plural
+  const one = Math.abs(Number(qty) || 0) === 1
+  // A supplier's word where there is one; English otherwise, never a guess.
+  // See i18n.js for why these dozen words are translated in code while the
+  // catalogue itself ships blank.
+  const t = UNIT_WORDS[lang]?.[k]
+  if (t) return one ? t[0] : t[1]
+  return one ? u.long : u.plural
 }
 
 // An item is a plain string, or [name, unit] where the unit is not "unit".

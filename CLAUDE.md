@@ -1272,7 +1272,62 @@ Also agreed, not yet scheduled:
   and leaves **dozen** and **half dozen** invariant, because nobody has ever
   written "6 dozens". A plain unit prints nothing at all: "each" on four rows
   in five is noise on a sheet somebody is picking from.
-  3. **Translation and the supplier print.**
+  3. ~~**Translation and the supplier print.**~~ — **BUILT Aug 2026.**
+     `src/lib/stores/i18n.js`, `stores_lists.supplier_lang` (applied),
+     a language picker and a translation editor on `/stores`.
+
+     **TWO CLASSES OF WORD, and they must not be treated alike.**
+
+     The CATALOGUE ships blank and is translated by the boat. Half of it is
+     Scottish butcher and baker vocabulary — polony, Lorne, neeps, tattie
+     waffles, softies, butteries — and no machine gets those right. A wrong
+     word on a provisions order gets the wrong food delivered to a boat that is
+     about to sail. `test-stores.mjs` asserts every shipped item is still
+     untranslated, so a future me seeding the catalogue fails the suite first.
+
+     The SHEET'S FURNITURE is about a dozen fixed, generic terms — quantity,
+     unit, item, note, page, and the unit words themselves. Those ARE
+     translated in code, once, because a case is a case in any trade.
+
+     **What makes that safe is that the English is printed beside every one of
+     them.** Title, column heads, unit words, item names — all of it. If a word
+     of mine is off, the shop still has something it can read and being wrong
+     costs nothing. Break that rule and the feature becomes a way to order the
+     wrong food confidently.
+
+     **The category headings are deliberately NOT translated.** They are the
+     boat's own shelf names off a Scottish order form and they do not always
+     describe their contents — `Baking` on that form holds BBQ sauce, beetroot
+     and a big bag of rice. A confident foreign word that is wrong about what
+     sits under it is worse than leaving it English, and a shop picks by item
+     name regardless.
+
+     **The language lives on the LIST**, not in a picker that resets — a trip
+     landing in Hanstholm lands there every time it is opened, and a cook
+     filling in Danish names should not re-choose it each visit.
+
+     **The sheet says what did NOT translate**, by name, at the foot:
+     *"Printed in English — no translation on file: Butteries, Softies, …"*.
+     A half-translated order that does not say so is the failure worth guarding
+     against: the cook believes the list is ready and the first anyone knows is
+     a short delivery.
+
+     The unit column prints the supplier's word and the **key at the foot
+     carries the English** — `dusin = dozen · pakker = packs · kasser = cases` —
+     because that column is too narrow to hold both. Same rule, different shape.
+
+     The CSV gains an `Item (da)` column rather than replacing the English one,
+     so a spreadsheet of it is still readable on the boat.
+
+     **Two things only rendering the page could have found**, which is why
+     `scripts/stores-lang.mjs` exists and reads the PDF back:
+     - Inline heads (`ANTAL / QTY`) **wrapped** in the two narrow columns and
+       came off the page as `ENHED /` over `/ QTY` — worse than either language
+       alone. The English is now its own head ROW. Plain head rows repeat across
+       a page break perfectly well; it is only a **colSpan** head that does not.
+     - Norwegian `ANTALL` wrapped to a stray `L` in a 38pt quantity column.
+       Widened to 46.
+
   4. **The butchers shape** — breakfast / cold meat / meals for N.
 
   ### The export is the feature, not a nicety
@@ -1305,8 +1360,10 @@ Also agreed, not yet scheduled:
   `didDrawPage`** — that hook fires once per *table*, and with one table per
   category it printed eight copies of the footer on top of each other.
 
-  `test-stores.mjs` (37 checks) covers the catalogue, the merge, the shelf
-  order and the page break; `scripts/stores-preview.mjs` is the rendered check.
+  `test-stores.mjs` (74 checks) covers the catalogue, the merge, the shelf
+  order, the page break and the translation rules; `scripts/stores-preview.mjs`
+  and `scripts/stores-lang.mjs` are the rendered checks — the second reads the
+  PDF back and asserts every translated word has its English beside it.
 
   **ONE LIST, ONE ORDER** — David's call. Items carry no supplier and the list
   prints whole; splitting the butcher's part off is done by hand as now.
