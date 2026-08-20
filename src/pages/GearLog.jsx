@@ -12,6 +12,8 @@ import {
 import {
   buildMatrix, historyFor, measurementsFor, daysBetween, lifeDays,
 } from '../lib/gear/gearAgg'
+import { tripsBetween } from '../lib/gear/gearStats'
+import GearStats from './GearStats'
 
 /* THE GEAR LOG — what was done to the nets, and when.
  *
@@ -60,7 +62,8 @@ export default function GearLog() {
   const [openNet, setOpenNet] = useState('')
   const [msg, setMsg] = useState('')
   const [showRetired, setShowRetired] = useState(false)
-  const [tripCounts, setTripCounts] = useState({})
+  const [tripDates, setTripDates] = useState({})
+  const [tab, setTab] = useState('log')
 
   const parts = useMemo(() => resolveParts(partsT.rows), [partsT.rows])
   const nets = netsT.rows
@@ -76,32 +79,41 @@ export default function GearLog() {
     vessels, today: today(), includeRetired: showRetired,
   }), [nets, parts, compsT.rows, measT.rows, vessels, showRetired])
 
-  /* Trips, not just days. gear_trips_between is SECURITY DEFINER because
-   * quota_trips is NOT in the officer allow-list — read directly it returns
-   * zero rows, and "0 trips" looks exactly like "no trips" rather than like a
-   * permission wall. The man keeping this log would have been the one person
-   * unable to see the count in it. Needs the network, so with no signal the
-   * days stand alone rather than showing a wrong zero. */
+  /* Trips, not just days — and fetched ONCE PER VESSEL, not once per cell.
+   *
+   * gear_trip_dates is SECURITY DEFINER because quota_trips is NOT in the
+   * officer allow-list: read directly it returns zero rows, and "0 trips" looks
+   * exactly like "no trips" rather than like a permission wall. The man keeping
+   * this log would have been the one person unable to see the count in it. It
+   * returns DATES ONLY — no tonnage, no ports, no captain — so it hands out the
+   * minimum that answers the question.
+   *
+   * Counting is then a pure function, which is what makes the window
+   * arithmetic testable. An earlier draft asked the database once per matrix
+   * cell, which is nets x parts round trips for one screen and would have
+   * multiplied again for the per-renewal counts on the stats tab.
+   */
+  const vesselIds = useMemo(
+    () => [...new Set(nets.map((n) => n.vessel_id).filter(Boolean))].sort().join(','),
+    [nets])
+
   useEffect(() => {
+    if (!vesselIds) return
     let cancel = false
-    const wanted = matrix.flatMap((g) => g.rows.flatMap((r) =>
-      r.cells.filter((c) => c.since).map((c) => ({
-        key: `${r.net.id}|${c.partKey}`, vessel: r.net.vessel_id, from: c.since,
-      }))))
-    if (!wanted.length) return
     ;(async () => {
       const out = {}
-      for (const w of wanted) {
-        const { data, error } = await supabase.rpc('gear_trips_between', {
-          p_vessel_id: w.vessel, p_from: w.from, p_to: today(),
-        })
-        if (error) return          // offline or denied: show days alone
-        out[w.key] = data
+      for (const vid of vesselIds.split(',')) {
+        const { data, error } = await supabase.rpc('gear_trip_dates', { p_vessel_id: vid })
+        // Offline: leave it unknown rather than filling in a zero.
+        if (error) return
+        out[vid] = (data || []).map((d) => String(d).slice(0, 10))
       }
-      if (!cancel) setTripCounts(out)
+      if (!cancel) setTripDates(out)
     })()
     return () => { cancel = true }
-  }, [matrix])
+  }, [vesselIds])
+
+  const tripsKnown = Object.keys(tripDates).length > 0
 
   // ---- writes -------------------------------------------------------------
   async function addNet(vesselId, name, cameAboard, fitAll) {
@@ -184,6 +196,16 @@ export default function GearLog() {
         )}
       </PageHeader>
 
+      {/* Two views of the same book: what is on the nets now, and how long
+          these things last. */}
+      <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.8rem' }}>
+        {[['log', 'Log'], ['stats', 'Life']].map(([k, label]) => (
+          <button key={k} className={tab === k ? '' : 'secondary'} onClick={() => setTab(k)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       <SyncStatus online={netsT.online} pending={netsT.pending} failed={netsT.failed}
                   onChange={() => { netsT.sync(); compsT.sync(); measT.sync(); partsT.sync() }} />
 
@@ -202,12 +224,17 @@ export default function GearLog() {
         </div>
       )}
 
-      {canEdit && <AddNet vessels={vessels} parts={parts} onAdd={addNet} />}
+      {tab === 'log' && canEdit && <AddNet vessels={vessels} parts={parts} onAdd={addNet} />}
 
       {/* ---- THE MATRIX: nets down, parts across ---------------------------
           Read a row for one net's whole rig, or a column for one part across
           every net. David asked for both and this is the one shape that is. */}
-      {matrix.map((g) => (
+      {tab === 'stats' && (
+        <GearStats parts={parts} nets={nets} components={compsT.rows} vessels={vessels}
+                   tripDates={tripDates} today={today()} tripsKnown={tripsKnown} />
+      )}
+
+      {tab === 'log' && matrix.map((g) => (
         <div className="card" key={g.vessel.id}>
           <h3 style={{ margin: '0 0 0.6rem', fontSize: '0.95rem' }}>
             {g.vessel.label || g.vessel.name}
@@ -236,7 +263,8 @@ export default function GearLog() {
                     </td>
                     {cells.map((c) => (
                       <td key={c.partKey} style={TD}>
-                        <Cell cell={c} trips={tripCounts[`${net.id}|${c.partKey}`]} />
+                        <Cell cell={c} known={tripsKnown}
+                              trips={c.since ? tripsBetween(tripDates[net.vessel_id] || [], c.since, today()) : null} />
                       </td>
                     ))}
                   </tr>
@@ -247,7 +275,7 @@ export default function GearLog() {
         </div>
       ))}
 
-      {open && (
+      {tab === 'log' && open && (
         <NetDetail
           net={open} parts={parts} canEdit={canEdit}
           components={compsT.rows} measurements={measT.rows}
@@ -263,7 +291,8 @@ export default function GearLog() {
 
 /* One cell. The BASIS is shown, always — a bare number would let a net nobody
  * has ever looked at pass for one checked ten weeks ago. */
-function Cell({ cell, trips }) {
+function Cell({ cell, trips: rawTrips, known }) {
+  const trips = known === false ? null : rawTrips
   if (cell.basis === 'none') return <span className="muted" style={{ fontSize: '0.78rem' }}>—</span>
   const stale = cell.basis !== 'measured'
   return (

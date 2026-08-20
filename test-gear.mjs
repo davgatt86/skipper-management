@@ -17,6 +17,9 @@ import {
   daysBetween, fittedComponent, historyFor, measurementsFor, lifeDays,
   cellFor, buildMatrix, closedLives,
 } from './src/lib/gear/gearAgg.js'
+import {
+  tripsBetween, livesOf, summarise, running, partLives, netLives, confidence,
+} from './src/lib/gear/gearStats.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -201,6 +204,180 @@ eq('and of one still on', lifeDays({ fitted_on: '2026-01-01', removed_on: null }
     closedLives([{ id: 'x', part_key: 'headline', fitted_on: null, removed_on: '2026-01-01' }]).length, 0)
   eq('nothing at all is handled', closedLives(null).length, 0)
 }
+
+// ---- STAGE 2: how long the gear lasts -------------------------------------
+
+/* Trips in a window, both ends INCLUSIVE. A set fitted the day the boat landed
+ * was fitted after that trip; a set taken off the day she landed came off after
+ * that one too. The gear did the trip either way, and getting this wrong is an
+ * off-by-one no amount of looking at the page would reveal. */
+{
+  const dates = ['2026-01-05', '2026-01-19', '2026-02-02', '2026-02-16', '2026-03-02']
+  eq('trips inside a window', tripsBetween(dates, '2026-01-10', '2026-02-20'), 3)
+  eq('the start date counts', tripsBetween(dates, '2026-01-05', '2026-01-06'), 1)
+  eq('and so does the end date', tripsBetween(dates, '2026-01-04', '2026-01-05'), 1)
+  eq('a window with nothing in it', tripsBetween(dates, '2026-01-06', '2026-01-18'), 0)
+  eq('the whole run', tripsBetween(dates, '2026-01-01', '2026-12-31'), 5)
+  eq('no start is unknown, not zero', tripsBetween(dates, null, '2026-12-31'), null)
+  // A backwards window is nought, never a negative or a crash.
+  eq('a backwards window', tripsBetween(dates, '2026-06-01', '2026-01-01'), 0)
+  eq('no dates at all', tripsBetween([], '2026-01-01', '2026-12-31'), 0)
+  eq('and no list at all', tripsBetween(null, '2026-01-01', '2026-12-31'), 0)
+  // Timestamps get trimmed to their day rather than compared as strings.
+  eq('a timestamp still counts',
+    tripsBetween(['2026-01-05T18:30:00Z'], '2026-01-05', '2026-01-05'), 1)
+}
+
+// ---- lives -----------------------------------------------------------------
+const TRIPS = {
+  v1: ['2026-01-15', '2026-02-01', '2026-02-20', '2026-03-10', '2026-03-28',
+       '2026-04-15', '2026-05-02', '2026-05-20', '2026-06-08', '2026-06-25',
+       '2026-07-12', '2026-08-01'],
+  v2: ['2026-02-10', '2026-03-15', '2026-04-20'],
+}
+const NETVESSEL = { n1: 'v1', n2: 'v1', n3: 'v2' }
+const LIFE_COMPS = [
+  // Two finished bridle lives on n1, and one still running.
+  { id: 'b1', net_id: 'n1', part_key: 'bridles', fitted_on: '2026-01-01', removed_on: '2026-03-02', cost: 900 },
+  { id: 'b2', net_id: 'n1', part_key: 'bridles', fitted_on: '2026-03-02', removed_on: '2026-05-01', cost: null },
+  { id: 'b3', net_id: 'n1', part_key: 'bridles', fitted_on: '2026-05-01', removed_on: null },
+  // One finished on another net.
+  { id: 'b4', net_id: 'n3', part_key: 'bridles', fitted_on: '2026-02-01', removed_on: '2026-04-02', cost: 1100 },
+  // A codend nobody has renewed yet — still on, so NOT a life.
+  { id: 'k1', net_id: 'n1', part_key: 'codend', fitted_on: '2026-02-01', removed_on: null },
+  // A set with no fitted date has no measurable life.
+  { id: 'x1', net_id: 'n1', part_key: 'legs', fitted_on: null, removed_on: '2026-04-01' },
+]
+
+{
+  const lives = livesOf(LIFE_COMPS, { partKey: 'bridles', tripDates: TRIPS, netVessel: NETVESSEL })
+  eq('only finished lives count', lives.map((l) => l.id), ['b2', 'b4', 'b1'])
+  // Newest by when it CAME OFF: b2 on 05-01 beats b4 on 04-02.
+eq('newest off first', lives[0].id, 'b2')
+  eq('a life is its two dates', lives.find((l) => l.id === 'b1').days, 60)
+  // n1 is on v1, so its trips come from v1's list — not the other boat's.
+  eq('trips come from the net’s own boat',
+    lives.find((l) => l.id === 'b1').trips, tripsBetween(TRIPS.v1, '2026-01-01', '2026-03-02'))
+  eq('and a net on the other boat uses the other list',
+    lives.find((l) => l.id === 'b4').trips, tripsBetween(TRIPS.v2, '2026-02-01', '2026-04-02'))
+  eq('scoped to one net', livesOf(LIFE_COMPS, { netId: 'n1', partKey: 'bridles' }).length, 2)
+  eq('a set with no fitted date is not a life',
+    livesOf(LIFE_COMPS, { partKey: 'legs' }).length, 0)
+  eq('nothing at all is handled', livesOf(null, {}).length, 0)
+}
+
+// ---- the summary -----------------------------------------------------------
+{
+  const lives = livesOf(LIFE_COMPS, { partKey: 'bridles', tripDates: TRIPS, netVessel: NETVESSEL })
+  const st = summarise(lives)
+  eq('three finished lives', st.n, 3)
+  eq('averaged in days', st.avgDays, Math.round((60 + 60 + 60) / 3))
+  eq('with the range', [st.minDays, st.maxDays], [60, 60])
+  /* COST IS AVERAGED OVER THE ONES THAT HAVE IT, and the count is reported.
+   * A mean over "the ones we know" presented as a mean over all of them is a
+   * quiet lie, and David said the cost often is not known. */
+  eq('cost averaged over what is known', st.avgCost, 1000)
+  eq('and says how many that was', st.costKnown, 2)
+
+  /* NOTHING TO AVERAGE IS NULL, NEVER ZERO. A zero average reads as "they last
+   * no time at all", which is the opposite of "nobody has renewed one yet". */
+  const none = summarise([])
+  eq('no lives, no average', none.avgDays, null)
+  eq('no trips average either', none.avgTrips, null)
+  eq('no cost average', none.avgCost, null)
+  eq('and the count is nought', none.n, 0)
+}
+
+// ---- what is running now ---------------------------------------------------
+/* A set still on the net is reported separately and compared against the
+ * average, never folded into it — averaging it in would drag every figure down
+ * towards however recently the last renewal happened, so the better the log is
+ * kept the worse the answer would get. */
+{
+  const r = running(LIFE_COMPS.find((c) => c.id === 'b3'),
+    { avgDays: 60, tripDates: TRIPS.v1, today: '2026-08-20' })
+  eq('the running set has an age', r.days, daysBetween('2026-05-01', '2026-08-20'))
+  eq('and its trips', r.trips, tripsBetween(TRIPS.v1, '2026-05-01', '2026-08-20'))
+  // 111 days against an average of 60 is 85% over.
+  eq('and how far past the average it is', r.over, Math.round(((111 - 60) / 60) * 100) / 100)
+
+  // With no average there is nothing to be past, and the page must not imply
+  // there is.
+  eq('no average, no comparison',
+    running(LIFE_COMPS.find((c) => c.id === 'k1'), { avgDays: null, today: '2026-08-20' }).over, null)
+  eq('an average of zero is not a divisor',
+    running(LIFE_COMPS.find((c) => c.id === 'k1'), { avgDays: 0, today: '2026-08-20' }).over, null)
+  eq('nothing fitted is null', running(null, {}), null)
+  eq('and a set with no fitted date is too',
+    running({ id: 'z', fitted_on: null }, { today: '2026-08-20' }), null)
+}
+
+// ---- the per-part table ----------------------------------------------------
+{
+  const parts = resolveParts([])
+  const nets = [
+    { id: 'n1', vessel_id: 'v1', name: 'Port net', came_aboard: '2026-01-01' },
+    { id: 'n3', vessel_id: 'v2', name: 'Port net', came_aboard: '2026-02-01' },
+  ]
+  const rows = partLives({ parts, nets, components: LIFE_COMPS, tripDates: TRIPS, today: '2026-08-20' })
+  eq('a row per part', rows.length, parts.length)
+  const bridles = rows.find((r) => r.part.key === 'bridles')
+  eq('bridles have three finished lives', bridles.n, 3)
+  eq('and one still running', bridles.running.length, 1)
+  eq('which knows its net', bridles.running[0].net.name, 'Port net')
+
+  const codend = rows.find((r) => r.part.key === 'codend')
+  eq('a part never renewed has no average', codend.avgDays, null)
+  eq('but is still shown as running', codend.running.length, 1)
+  eq('with no comparison to make', codend.running[0].over, null)
+
+  const legs = rows.find((r) => r.part.key === 'legs')
+  eq('a part with nothing fitted has nothing running', legs.running.length, 0)
+
+  /* A component on a net that is not in scope must not appear. Otherwise a
+   * retired net's rig quietly joins the live figures. */
+  const scoped = partLives({
+    parts, nets: [nets[0]], components: LIFE_COMPS, tripDates: TRIPS, today: '2026-08-20',
+  })
+  eq('a component off an out-of-scope net is not running',
+    scoped.find((r) => r.part.key === 'bridles').running.length, 1)
+}
+
+// ---- the per-net table -----------------------------------------------------
+{
+  const nets = [
+    { id: 'n1', vessel_id: 'v1', name: 'Port net', came_aboard: '2026-01-01' },
+    { id: 'n3', vessel_id: 'v2', name: 'Starboard twin', came_aboard: '2026-02-01', retired_on: '2026-06-01' },
+  ]
+  const vessels = [{ id: 'v1', label: 'AUDACIOUS BF83' }, { id: 'v2', label: 'BERYL BF440' }]
+  const rows = netLives({ nets, components: LIFE_COMPS, tripDates: TRIPS, today: '2026-08-20', vessels })
+  const n1 = rows.find((r) => r.net.id === 'n1')
+  eq('a net in use is aged to today', n1.ageDays, daysBetween('2026-01-01', '2026-08-20'))
+  eq('and carries its boat', n1.vessel.label, 'AUDACIOUS BF83')
+  eq('with its renewals counted', n1.renewals, 2)
+
+  /* A RETIRED NET IS AGED TO ITS RETIREMENT, not to today. Otherwise every net
+   * ever taken off keeps getting older, and the oldest net on the books is
+   * always the one longest gone. */
+  const n3 = rows.find((r) => r.net.id === 'n3')
+  eq('a retired net stops ageing', n3.ageDays, daysBetween('2026-02-01', '2026-06-01'))
+  eq('and is marked as retired', n3.retired, true)
+  eq('its trips stop too', n3.ageTrips, tripsBetween(TRIPS.v2, '2026-02-01', '2026-06-01'))
+
+  eq('a net with no date aboard has no age',
+    netLives({ nets: [{ id: 'z', vessel_id: 'v1', name: 'X' }], components: [], today: '2026-08-20' })[0].ageDays,
+    null)
+}
+
+// ---- saying how sure we are ------------------------------------------------
+/* One renewal is an anecdote, not an average. Kept in one place so every panel
+ * hedges the same way rather than each inventing its own. */
+eq('nothing logged', confidence(0).level, 'none')
+eq('one renewal is not an average', confidence(1).level, 'one')
+eq('two is thin', confidence(2).level, 'thin')
+eq('three will do', confidence(3).level, 'ok')
+eq('and it says how many', confidence(5).text, '5 renewals')
+
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

@@ -203,6 +203,38 @@ comment on function public.gear_trips_between(uuid, date, date) is
 
 grant execute on function public.gear_trips_between(uuid, date, date) to authenticated;
 
+-- And the whole list of dates, for counting many windows at once.
+--
+-- STAGE 2 (Aug 2026). The matrix asked the database once per CELL, which is
+-- nets x parts round trips for one screen; the life figures need a count per
+-- renewal interval as well, so that approach multiplies again for no reason.
+-- Fetch the dates once and count client-side instead, which also makes the
+-- window arithmetic a pure function — testable without a database, and "trips
+-- between two dates" is exactly the off-by-one a unit test catches and an
+-- integration test hides.
+--
+-- DATES ONLY: no tonnage, no ports, no captain, no trip numbers. The minimum
+-- that answers the question.
+create or replace function public.gear_trip_dates(p_vessel_id uuid)
+returns setof date
+language sql
+stable
+security definer
+set search_path to 'public'
+as $$
+  select t.arrival_at::date
+    from public.quota_trips t
+   where t.fleet_id = (select public.current_fleet_id())
+     and t.vessel_id = p_vessel_id
+     and t.arrival_at is not null
+   order by 1
+$$;
+
+comment on function public.gear_trip_dates(uuid) is
+  'Arrival dates of a vessel''s trips, for counting trips between gear renewals. Dates only, scoped to the caller''s fleet. SECURITY DEFINER so an officer gets them without being granted quota_trips.';
+
+grant execute on function public.gear_trip_dates(uuid) to authenticated;
+
 -- ------------------------------------------------------------------- after
 -- RE-RUN BOTH ALLOW-LIST FILES AFTER THIS:
 --   supabase/officer_role.sql   -- adds these four to his list, and 2b clears

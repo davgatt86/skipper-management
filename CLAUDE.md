@@ -1156,16 +1156,56 @@ Also agreed, not yet scheduled:
   appearing to have vanished. Blank stays blank the whole way through; same trap
   as the running-hours figure in the maintenance page.
 
-  `test-gear.mjs` — 71 checks.
+  **STAGE 2 BUILT Aug 2026** — the **Life** tab. `src/lib/gear/gearStats.js`,
+  `GearStats.jsx`, `gear_trip_dates()` (applied).
 
-  **Stages 2 and 3, agreed and not built:**
-  - **Life** — intervals between consecutive renewals, per part per net,
-    averaged, in **days and trips**. `closedLives()` is already there and
-    deliberately excludes the set still fitted: it has not finished, and
-    averaging it in would drag every figure towards however recently the last
-    renewal happened. The page must **report the count of intervals** — with one
-    renewal it is an anecdote, not an average, the same discipline as the pair
-    price-gap baseline.
+  Three panels: **how long a part lasts** (average, shortest, longest, cost,
+  in days AND trips), **what is on now** compared against that average, and
+  **the nets themselves**.
+
+  Two disciplines the file exists to enforce, both of which would quietly
+  corrupt the answer otherwise:
+
+  - **A set still on the net is NOT a life.** It has not finished. Averaging it
+    in would drag every figure down towards however recently the last renewal
+    happened — so *the better the log is kept, the worse the answer would get*.
+    It sits in its own panel, compared against the average rather than folded
+    into it, because "running at 111 days against a usual 60" is the thing you
+    act on.
+  - **The count is part of the answer.** `confidence(n)` is in one place so
+    every panel hedges identically: *no renewals logged yet* · *one renewal —
+    not an average yet* · *two renewals — thin* · *5 renewals*. One interval is
+    an anecdote, and a figure that reads like a fact on the strength of it is
+    the failure worth guarding against.
+
+  **Nothing to average is null, never 0.** A zero average reads as "they last
+  no time at all", which is the opposite of "nobody has renewed one yet".
+  **Cost is averaged only over the ones that have it, and the panel says how
+  many that was** — David: "a lot of the time this isn't known", and a mean
+  over the known ones presented as a mean over all of them is a quiet lie.
+
+  **A retired net is aged to its retirement, not to today**, or every net ever
+  taken off keeps getting older and the oldest on the books is always the one
+  longest gone.
+
+  **`gear_trip_dates()` replaced the per-cell RPC.** Stage 1 asked the database
+  once per matrix CELL — nets × parts round trips for one screen — and the life
+  figures need a count per renewal interval as well, which would have multiplied
+  it again. The dates are fetched once per vessel and counted client-side, which
+  also makes `tripsBetween()` a pure function. **Both ends of the window are
+  inclusive**: a set fitted the day the boat landed was fitted after that trip,
+  and one taken off the day she landed came off after that one too — the gear
+  did the trip either way. That is an off-by-one no amount of looking at the
+  page would reveal, and it is covered by test.
+
+  Same SECURITY DEFINER argument as before, and it returns **dates only** — no
+  tonnage, ports, captain or trip numbers. Probed: officer reads
+  `quota_trips` as **0**, gets **166 dates** for his own boat and **0** for
+  another fleet's.
+
+  `test-gear.mjs` — **126 checks**.
+
+  **Stage 3, agreed and not built:**
   - **Grounds** — `quota_trip_catches` carries `fao_area` and `sr` on
     **13,079 rows back to Oct 2022**, so which grounds a set was worked over is
     recorded, not guessed. Audacious alone has **129 statistical rectangles
