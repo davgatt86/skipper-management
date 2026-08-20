@@ -797,6 +797,32 @@ drifting* signal and never the authority. Aegir has "parameter limits" and they
 caught none of the above, so limits must block or flag on entry rather than
 decorate the form.
 
+**The 30-07-2026 entry was deleted (David, 21-08-2026).** It was corrupt three
+ways over and there was nothing in it worth keeping:
+
+- the **Main Engine block was an exact copy of 09-06's**, down to all eight
+  exhaust temperatures, so its running hours read 65,924 between 66,796 on
+  17-07 and 67,105 on 31-07;
+- the **Generator 2 block was a copy of 01-07's** — but with 8,594 hours where
+  01-07 reads 8,707, so even the copy disagreed with its source;
+- `running_hours` on the row read **66,383**, matching neither its own readings
+  nor anything else.
+
+Found by the counter check, which is the point: **every individual figure in it
+was perfectly ordinary.** A range test would never have looked twice. It is only
+wrong in relation to the entry before it.
+
+After the delete: 20 logs, and **no counter goes backwards anywhere**.
+
+**engine_logs has NO AUDIT TRIGGER, so that deletion left no trace.** Nor do
+`garbage_log`, `vessel_fuel_log`, `maintenance_events`, `gear_nets` or
+`gear_measurements`. The rota tables got audit triggers in Aug 2026 precisely
+because 60 crew assignments vanished with nothing to show what happened, and
+`audit_trigger()` is sitting there already — but the three books that are
+closest to being legal records are the ones without it. The Garbage Record Book
+is a MARPOL requirement. Worth closing before somebody deletes something that
+mattered.
+
 Scale of the job: **53 parameters over 4 groups** — Main Engine 1 (28),
 Gearbox 1 (9), Generator 1 (9), Generator 2 (7).
 
