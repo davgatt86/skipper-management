@@ -22,15 +22,26 @@
  * name already ("VEG COOK OIL 1LITRE" and "5LITRE" are two separate lines),
  * which is the paper way of saying the unit belongs to the item. */
 export const UNITS = [
-  { key: 'unit', label: 'Unit', short: '' },
-  { key: 'pack', label: 'Pack', short: 'pk' },
-  { key: 'case', label: 'Case', short: 'cs' },
-  { key: 'litre', label: 'Litre', short: 'L' },
-  { key: 'half_doz', label: 'Half dozen', short: '½dz' },
-  { key: 'doz', label: 'Dozen', short: 'dz' },
+  { key: 'unit', label: 'Unit', short: '', long: '', plural: '' },
+  { key: 'pack', label: 'Pack', short: 'pk', long: 'pack', plural: 'packs' },
+  { key: 'case', label: 'Case', short: 'cs', long: 'case', plural: 'cases' },
+  { key: 'litre', label: 'Litre', short: 'L', long: 'litre', plural: 'litres' },
+  // Both invariant: "6 dozen", "2 half dozen". Nobody writes "6 dozens".
+  { key: 'half_doz', label: 'Half dozen', short: '½dz', long: 'half dozen', plural: 'half dozen' },
+  { key: 'doz', label: 'Dozen', short: 'dz', long: 'dozen', plural: 'dozen' },
 ]
 export const unitLabel = (k) => UNITS.find((u) => u.key === k)?.label || 'Unit'
 export const unitShort = (k) => UNITS.find((u) => u.key === k)?.short ?? ''
+
+/* SPELT OUT, for the sheet that goes to the shop. `cs` is obvious on the boat
+ * and means nothing across a counter — the person picking the order has never
+ * seen this app, and "12 cs" read as 12 loose items is a week's food short.
+ * Short forms stay on screen where space is tight and the crew knows them. */
+export const unitLong = (k, qty = 1) => {
+  const u = UNITS.find((x) => x.key === k)
+  if (!u || !u.long) return ''
+  return Math.abs(Number(qty) || 0) === 1 ? u.long : u.plural
+}
 
 // An item is a plain string, or [name, unit] where the unit is not "unit".
 const CAT = [
@@ -168,6 +179,12 @@ export function resolveCatalogue(rows) {
       category: r.category || base.category,
       name: r.name || base.name,
       unit: r.unit || base.unit,
+      /* The shipped unit is a GUESS — I read it off the paper form and the form
+       * only carries it sometimes ("VEG COOK OIL 1LITRE" says litre, "Softies"
+       * says nothing). A stored unit is the boat's own answer, so the two are
+       * worth telling apart: the page can then show what has never been
+       * confirmed rather than presenting my assumption as fact. */
+      unitConfirmed: !!r.unit || !!base.unitConfirmed,
       no: r.name_no ?? base.no,
       da: r.name_da ?? base.da,
       hidden: !!r.hidden,

@@ -1,5 +1,5 @@
 import { canSee, accessForPath, navFor } from './src/nav.js'
-import { keepsLogs, keepsCrewRecords, homeFor, isOfficer, isSkipper } from './src/lib/roles.js'
+import { keepsLogs, keepsCrewRecords, keepsStores, homeFor, isOfficer, isCook, isSkipper } from './src/lib/roles.js'
 
 let fail = 0
 const eq = (label, got, want) => {
@@ -13,6 +13,7 @@ const legacy = { role: 'engineer' }   // the old name for the same role
 const skip = { role: 'skipper' }
 const view = { role: 'viewer' }
 const crew = { role: 'crew' }
+const cook = { role: 'cook' }
 
 // --- accessForPath: longest match wins, unlisted routes return null ---------
 eq("accessForPath('/')", accessForPath('/'), 'all')
@@ -90,6 +91,61 @@ eq('homeFor(skipper)', homeFor(skip), '/')
 eq('isOfficer(null)', isOfficer(null), false)
 eq('isSkipper(officer)', isSkipper(officer), false)
 eq('keepsLogs(null)', keepsLogs(null), false)
+
+// --- the COOK ---------------------------------------------------------------
+/* The narrowest role in the app: the stores list and nothing else. Written as
+ * an allow-list for the same reason as the officer — adding a nav item hides
+ * it from him by default, which is the safe direction to fail in.
+ *
+ * This is presentation. supabase/cook_role.sql is the boundary, and it was
+ * verified by probe: reads stores 5 lines / sales 0 / crew 0 / payments 0 /
+ * audit 0 / storage 0, writes his own fleet's list, blocked from another
+ * fleet's, and crew_aboard_count() still returns 11 while crew itself reads 0.
+ */
+for (const a of ['all', 'fleetTools', 'skipper', 'owner', 'officer']) {
+  eq(`cook denied '${a}'`, canSee(a, cook), false)
+}
+eq("cook allowed 'cook'", canSee('cook', cook), true)
+eq("cook allowed ['fleetTools','cook']", canSee(['fleetTools', 'cook'], cook), true)
+eq("skipper allowed 'cook'", canSee('cook', skip), true)
+eq("viewer denied 'cook'", canSee('cook', view), false)
+eq("officer denied 'cook'", canSee('cook', officer), false)
+// The two allow-lists must not leak into each other: a cook is not a junior
+// officer, and an officer has no business in the groceries.
+eq("cook denied ['all','officer']", canSee(['all', 'officer'], cook), false)
+eq("officer denied ['fleetTools','cook']", canSee(['fleetTools', 'cook'], officer), false)
+
+// His whole menu is ONE page. If this ever grows, it was not on purpose.
+const cookNav = navFor(cook).flatMap((g) => g.items.map((i) => i.to))
+eq('cook menu is the stores list alone', cookNav, ['/stores'])
+eq('and one group', navFor(cook).map((g) => g.label), ['Vessel'])
+for (const gone of ['/', '/sales', '/quota', '/crew', '/engine-logs', '/users', '/settlements']) {
+  eq(`cook menu excludes ${gone}`, cookNav.includes(gone), false)
+}
+// Stores did not disappear for the people who already had it.
+for (const u of [skip, view]) {
+  eq(`${u.role} still sees /stores`,
+    navFor(u).flatMap((g) => g.items.map((i) => i.to)).includes('/stores'), true)
+}
+eq('officer still cannot see /stores',
+  navFor(officer).flatMap((g) => g.items.map((i) => i.to)).includes('/stores'), false)
+
+eq("accessForPath('/stores')", accessForPath('/stores'), ['fleetTools', 'cook'])
+eq('isCook(cook)', isCook(cook), true)
+eq('isCook(officer)', isCook(officer), false)
+eq('isCook(null)', isCook(null), false)
+eq('keepsStores(cook)', keepsStores(cook), true)
+eq('keepsStores(skipper)', keepsStores(skip), true)
+eq('keepsStores(viewer)', keepsStores(view), false)
+eq('keepsStores(officer)', keepsStores(officer), false)
+eq('keepsStores(null)', keepsStores(null), false)
+// He keeps the groceries, not the books.
+eq('keepsLogs(cook)', keepsLogs(cook), false)
+eq('keepsCrewRecords(cook)', keepsCrewRecords(cook), false)
+eq('homeFor(cook)', homeFor(cook), '/stores')
+eq('isSkipper(cook)', isSkipper(cook), false)
+eq('isOfficer(cook)', isOfficer(cook), false)
+
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

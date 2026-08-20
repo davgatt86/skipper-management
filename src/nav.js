@@ -7,13 +7,15 @@
 //   all        — any signed-in user (except an officer, see below)
 //   fleetTools — skipper or viewer
 //   officer    — skipper or officer: the logs, maintenance and crew papers
+//   cook       — skipper or cook: the stores list
 //   skipper    — skipper only
 //   owner      — fleet owner only
 //
-// An officer sees ONLY items marked `officer`, and nothing else — not even the
-// ones marked `all`. That mirrors the allow-list in
-// `supabase/officer_role.sql`, which is where the boundary actually lives:
-// hiding a menu entry hides nothing from anyone holding a session token.
+// An officer sees ONLY items marked `officer`, and a cook ONLY items marked
+// `cook` — neither sees the ones marked `all`. That mirrors the allow-lists in
+// `supabase/officer_role.sql` and `supabase/cook_role.sql`, which is where the
+// boundary actually lives: hiding a menu entry hides nothing from anyone
+// holding a session token.
 //
 // `access` may be an ARRAY when an item belongs to two audiences that do not
 // nest — Crew Status is for everybody AND for officers, and neither level
@@ -21,7 +23,7 @@
 
 // Extension included on purpose: node resolves ESM specifiers literally, so
 // './lib/roles' would break `node test-roles.mjs`. Vite is happy either way.
-import { isOfficer } from './lib/roles.js'
+import { isOfficer, isCook } from './lib/roles.js'
 
 export const NAV = [
   {
@@ -110,7 +112,9 @@ export const NAV = [
       { to: '/stowage', label: 'Stowage Plan', access: 'skipper' },
       // Provisions for the trip. The catalogue is the order form the boat
       // already uses; the page exists to get it to a supplier who has no login.
-      { to: '/stores', label: 'Stores', access: 'fleetTools' },
+      // 'cook' as well as fleetTools: this is the cook's ONLY page, and the
+      // two audiences do not nest — a viewer is not a cook and vice versa.
+      { to: '/stores', label: 'Stores', access: ['fleetTools', 'cook'] },
       { to: '/engine-logs', label: 'Engine Logs', access: 'officer' },
       { to: '/fuel-log', label: 'Fuel & Oil Log', access: 'officer' },
       { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },
@@ -131,11 +135,12 @@ export const NAV = [
 
 export function canSee(access, appUser) {
   const list = Array.isArray(access) ? access : [access]
-  // Deliberately first, and deliberately an allow-list: an officer sees the
-  // pages marked `officer` and nothing else, including nothing marked 'all'.
-  // Adding a nav item therefore hides it from officers by default, which is the
-  // safe direction to fail in.
+  // Deliberately first, and deliberately allow-lists: an officer sees the pages
+  // marked `officer` and nothing else, including nothing marked 'all'; a cook
+  // sees only `cook`. Adding a nav item therefore hides it from both by
+  // default, which is the safe direction to fail in.
   if (isOfficer(appUser)) return list.includes('officer')
+  if (isCook(appUser)) return list.includes('cook')
   return list.some((a) => canSeeOne(a, appUser))
 }
 
@@ -145,6 +150,7 @@ function canSeeOne(access, appUser) {
     case 'all': return true
     case 'fleetTools': return ['skipper', 'viewer'].includes(role)
     case 'officer': return role === 'skipper'
+    case 'cook': return role === 'skipper'
     case 'skipper': return role === 'skipper'
     case 'owner': return !!appUser?.is_owner
     default: return false

@@ -8,7 +8,7 @@
  */
 import {
   CATEGORIES, UNITS, DEFAULT_ITEMS, resolveCatalogue, itemKey, supplierName,
-  categoryLabel, unitShort,
+  categoryLabel, unitShort, unitLong,
 } from './src/lib/stores/catalogue.js'
 import { groupForOrder, buildStoresDoc } from './src/lib/stores/exportStores.js'
 
@@ -130,6 +130,47 @@ eq('a category has a readable label', categoryLabel('TEACOFFEE'), 'Tea and Coffe
   eq('a long order runs onto more pages', big.internal.getNumberOfPages() > 1, true)
   eq('and nothing is lost on the way', groupForOrder(mk(60))[0][1].length, 60)
 }
+
+// ---- what the SHOP reads --------------------------------------------------
+/* "CS" is obvious on the boat and means nothing across a counter. The person
+ * picking this order has never seen the app, and reading "12 cs" as 12 loose
+ * items is a week's food short — so the sheet spells the unit out and gives it
+ * its own column. Short forms stay on screen, where space is tight and the
+ * crew knows them. */
+eq('a case is spelt out for the shop', unitLong('case', 1), 'case')
+eq('and pluralised when there is more than one', unitLong('case', 12), 'cases')
+eq('packs likewise', unitLong('pack', 4), 'packs')
+eq('litres likewise', unitLong('litre', 5), 'litres')
+// Both invariant. Nobody has ever written "6 dozens of eggs".
+eq('dozen does not pluralise', unitLong('doz', 6), 'dozen')
+eq('nor does half dozen', unitLong('half_doz', 3), 'half dozen')
+// A loose item needs no word at all — printing "each" on four rows in five is
+// noise on a sheet somebody is picking from.
+eq('a plain unit prints nothing', unitLong('unit', 9), '')
+eq('an unknown unit prints nothing rather than guessing', unitLong('barrel', 2), '')
+eq('zero reads as a plural', unitLong('case', 0), 'cases')
+
+// ---- a unit the boat has CHOSEN, versus one I guessed ---------------------
+/* The shipped units are my reading of the paper form, which only carries the
+ * unit sometimes — "VEG COOK OIL 1LITRE" says it, "Softies" does not. So the
+ * page has to be able to show what has never been confirmed rather than
+ * presenting a guess as fact. */
+{
+  const k = itemKey('BAKERS', 'Brown Softies')
+  eq('a shipped unit is not confirmed',
+    resolveCatalogue([]).find((i) => i.key === k)?.unitConfirmed, undefined)
+  const picked = resolveCatalogue([{ item_key: k, unit: 'pack' }])
+  eq('the boat’s own choice is taken', picked.find((i) => i.key === k)?.unit, 'pack')
+  eq('and marked as confirmed', picked.find((i) => i.key === k)?.unitConfirmed, true)
+  /* Only the unit is stored, so a later correction to the shipped NAME still
+   * reaches a boat that has fixed the unit — the whole reason the catalogue
+   * lives in code with overrides merged over it. */
+  eq('and the shipped name still comes through',
+    picked.find((i) => i.key === k)?.name, 'Brown Softies')
+  eq('as does the shipped category',
+    picked.find((i) => i.key === k)?.category, 'BAKERS')
+}
+
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

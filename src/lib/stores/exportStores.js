@@ -4,7 +4,7 @@ import autoTableMod from 'jspdf-autotable'
 // Same defensive shape as parse-core's import, so this works under both — and
 // so scripts can exercise this file rather than a copy of it.
 const autoTable = autoTableMod?.default ?? autoTableMod
-import { CATEGORIES, categoryLabel, unitShort, supplierName } from './catalogue.js'
+import { CATEGORIES, categoryLabel, unitLong, supplierName } from './catalogue.js'
 
 /* Getting the order off the boat and to the shop.
  *
@@ -86,19 +86,28 @@ export function buildStoresDoc(list, lines, byKey = new Map(), lang = 'en') {
 
     autoTable(doc, {
       startY: y,
-      head: [['QTY', 'ITEM', 'NOTE']],
+      head: [['QTY', 'UNIT', 'ITEM', 'NOTE']],
       body: items.map((l) => {
         const item = byKey.get(l.item_key)
         const name = item ? supplierName(item, lang) : l.name
         // Print the English beside a translation, never instead of it.
         const shown = name !== l.name ? `${name}  (${l.name})` : l.name
-        return [`${Number(l.qty)}${unitShort(l.unit) ? ' ' + unitShort(l.unit) : ''}`, shown, l.note || '']
+        /* The unit gets its OWN column, spelt out. "12 cs" is clear on the boat
+         * and ambiguous across a counter — the person picking this has never
+         * seen the app, and reading it as 12 loose items is a week's food
+         * short. A column also keeps the quantities aligned down the page,
+         * which a shop reads far faster than a ragged "12 cs" / "6 dozen". */
+        return [Number(l.qty), unitLong(l.unit, l.qty), shown, l.note || '']
       }),
       theme: 'grid',
       showHead: 'everyPage',
       styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 4, lineColor: [220, 226, 230], textColor: ink },
       headStyles: { fillColor: hull, textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
-      columnStyles: { 0: { cellWidth: 52, halign: 'right', fontStyle: 'bold' }, 2: { cellWidth: 150 } },
+      columnStyles: {
+        0: { cellWidth: 38, halign: 'right', fontStyle: 'bold' },
+        1: { cellWidth: 58 },
+        3: { cellWidth: 140 },
+      },
       margin: { left: 40, right: 40, top: 56 },
       // Carried onto a new page: say so, so the picker still knows the shelf.
       // The footer is NOT drawn here — didDrawPage fires once per TABLE, and
@@ -133,7 +142,7 @@ export function exportStoresCsv(list, lines) {
   const rows = [['Category', 'Item', 'Qty', 'Unit', 'Note', 'Aboard', 'Added']]
   for (const [cat, items] of groupForOrder(lines)) {
     for (const l of items) {
-      rows.push([categoryLabel(cat), l.name, Number(l.qty), unitShort(l.unit) || 'unit',
+      rows.push([categoryLabel(cat), l.name, Number(l.qty), unitLong(l.unit, l.qty) || 'unit',
                  l.note || '', l.got ? 'yes' : '', (l.added_at || '').slice(0, 10)])
     }
   }

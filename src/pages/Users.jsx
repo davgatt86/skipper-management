@@ -8,7 +8,7 @@ import { useAuth } from '../AuthContext'
 const labelStyle = { display: 'block', marginBottom: '1rem' }
 const capStyle = { marginBottom: '0.3rem', fontWeight: 600 }
 const hintStyle = { fontSize: '0.8rem', color: 'var(--grey-400)', marginTop: '0.25rem' }
-const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer', officer: 'Officer', engineer: 'Officer' }
+const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer', officer: 'Officer', engineer: 'Officer', cook: 'Cook' }
 
 export default function Users() {
   const { appUser } = useAuth()
@@ -170,6 +170,7 @@ export default function Users() {
                       <select value={editRole} onChange={e => setEditRole(e.target.value)}>
                         <option value="crew">Crew (sees own data)</option>
                         <option value="officer">Officer — engineer or mate (logs, maintenance, crew papers. No money.)</option>
+                        <option value="cook">Cook — the stores list only (no money, no crew, no logs)</option>
                         <option value="office">Office (payments and contracts, no sales)</option>
                         <option value="viewer">Viewer (read-only)</option>
                         {/* Only the site owner may hand out a skipper login. An
@@ -225,6 +226,7 @@ export default function Users() {
               <select value={role} onChange={e => setRole(e.target.value)}>
                 <option value="crew">Crew (sees own data)</option>
                 <option value="officer">Officer — engineer or mate (logs, maintenance, crew papers. No money.)</option>
+                <option value="cook">Cook — the stores list only (no money, no crew, no logs)</option>
                 <option value="office">Office (full except settings/crew)</option>
                 <option value="viewer">Viewer (read-only)</option>
               </select>

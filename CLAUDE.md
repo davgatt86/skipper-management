@@ -1189,7 +1189,89 @@ Also agreed, not yet scheduled:
      Audacious, which is what "Meals for 11" on the August butcher note says.
      Verified by probe: skipper read/write, viewer read-only, officer **0 rows
      and blocked**, every other fleet **0 rows**.
-  2. **Cook role and offline capture.**
+  2. ~~**Cook role and offline capture.**~~ — **BUILT Aug 2026.**
+     `supabase/cook_role.sql` (applied), `is_cook()`, `isCook`/`keepsStores`
+     in `roles.js`, `cook` in `CREATABLE_ROLES` and both Users pickers.
+
+     **The cook's whole menu is ONE page.** `canSee()` treats him as an
+     allow-list exactly like the officer, so adding a nav item hides it from
+     him by default — the safe direction to fail in. `RoleHome` sends him to
+     `/stores`, and `/` is never blocked by `ProtectedRoute` (that was the wall
+     an engineer hit before).
+
+     **74 tables denied, 6 allowed** — `stores_items`, `stores_lists`,
+     `stores_list_items` to write; `fleets`, `settings`, `app_users` to read.
+     74 + 6 = 80, which is every RLS table in `public`. Storage is shut whole.
+
+     **Verified by probe, not inspection** — a throwaway cook login created
+     inside a transaction that was then aborted:
+
+         stores_lists 1 · stores_list_items 5 · his own app_users row · fleet 1
+         sales 0 · sales_rows 0 · settlements 0 · quota 0 · payments 0
+         contracts 0 · crew 0 · crew_certs 0 · engine_logs 0 · fuel_log 0
+         vessel_certs 0 · audit_log 0 · alerts 0 · market_prices 0 · storage 0
+
+         stores_list_items UPDATE  5 rows      engine_logs UPDATE   0 rows
+         stores_lists INSERT own fleet  allowed
+         stores_lists INSERT other fleet  blocked
+         settings / fleets / app_users UPDATE  0 rows each
+         app_users INSERT  blocked   (so he cannot mint himself a skipper)
+
+     **`crew = 0` while `crew_aboard_count() = 11`.** That pair is the whole
+     design: he gets "meals for 11" for the butcher's order without being
+     handed the crew table. SECURITY DEFINER is what makes it work, and it is
+     the reason that function exists.
+
+     A skipper re-probed afterwards is unchanged — 121 landings, 20 crew, 194
+     payments, 20 engine logs, 11 storage objects — because `not is_cook()`
+     returns TRUE for every other role rather than null.
+
+     **Offline capture**: `Stores.jsx` now reads and writes through
+     `useOfflineTable` on all three tables, like the logs. All three are read
+     WHOLE and filtered in the page rather than queried by `list_id`, so
+     switching between trips works with no signal. `added_at` is stamped
+     client-side, because a list built up over a trip should carry the time the
+     cook wrote the line, not the time it reached the server.
+     `crew_aboard_count` needs the network, so a list started at sea leaves
+     `meals_for` blank and says so rather than guessing.
+     The `(list_id, item_key)` unique index means the same item added twice —
+     once offline, once ashore — is refused on sync and parked as `failed` with
+     its name shown, which is right: a refusal is a decision, not a lost
+     connection.
+
+  ### Quantities are typed, and units are picked
+
+  **"30x packs of softies is a lot of clicking"** (David, Aug 2026). The
+  steppers stay, because one or two more is genuinely faster than selecting a
+  field, but the number itself is an input. The draft is held locally and
+  commits on blur or Enter — committing per keystroke would save `3` on the way
+  to `30`, and since **0 removes the line**, typing a quantity backwards over a
+  1 would delete the row out from under the cook. Focus selects all, so 30 over
+  a 4 is 30 and not 304.
+
+  **The shipped units were MY GUESS and are now the boat's to set.** The paper
+  form only carries the unit sometimes — "VEG COOK OIL 1LITRE" says it,
+  "Softies" does not — so every line has a unit dropdown, and picking one
+  writes a `stores_items` override that holds for next trip. Sixth instance of
+  the same pattern after `crew_ranks`, fuel suppliers, vessel labels, buyer
+  names and the quantity notation: **anything typed rather than picked will
+  drift** — and anything guessed rather than asked will stay wrong.
+
+  **Only `unit` goes into the override row.** Writing the name and category
+  as well would freeze this fleet's copy of both, so a later correction to the
+  shipped catalogue would never reach the boat — the exact thing keeping the
+  catalogue in code exists to avoid. `resolveCatalogue()` falls back to the
+  shipped values for anything the row leaves null, and marks
+  `unitConfirmed` so the page can show what is still a guess (dashed border)
+  against what the boat has actually answered.
+
+  **The order sheet spells the unit out, in its own column.** `CS` is obvious
+  on the boat and means nothing across a counter; the person picking the order
+  has never seen this app, and reading "12 cs" as 12 loose items is a week's
+  food short. `unitLong()` pluralises — case/cases, pack/packs, litre/litres —
+  and leaves **dozen** and **half dozen** invariant, because nobody has ever
+  written "6 dozens". A plain unit prints nothing at all: "each" on four rows
+  in five is noise on a sheet somebody is picking from.
   3. **Translation and the supplier print.**
   4. **The butchers shape** — breakfast / cold meat / meals for N.
 
@@ -1444,7 +1526,9 @@ something was wrong but not what.
 ## The `officer` role (Aug 2026) — supersedes `engineer`
 
 `supabase/officer_role.sql`. **Re-run that file, not `engineer_role.sql`, after
-adding any table.** Same allow-list machinery, wider list.
+adding any table** — and `supabase/cook_role.sql` in the same breath, since
+Aug 2026 there are TWO generated allow-lists and a new table is denied to
+neither until both are re-run. Same machinery, different lists.
 
 An officer is anyone aboard who keeps records — engineer, mate. He gets the
 logs, the maintenance record and **the crew paperwork**: adding a man, filing

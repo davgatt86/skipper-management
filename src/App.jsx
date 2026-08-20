@@ -3,7 +3,7 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
 import AppShell from './AppShell'
 import { canSee, accessForPath } from './nav'
-import { isOfficer } from './lib/roles'
+import { isOfficer, isCook } from './lib/roles'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
@@ -86,7 +86,9 @@ function ProtectedRoute({ children }) {
   // skipper-only; RoleHome is what enforces that.
   const access = pathname === '/' ? null : accessForPath(pathname)
   const permitted = pathname === '/' ? true
-    : access === null ? !isOfficer(appUser)
+    // An unlisted route fails towards the TIGHTER role: denied to both the
+    // officer and the cook, allowed to everyone else.
+    : access === null ? !isOfficer(appUser) && !isCook(appUser)
     : canSee(access, appUser)
   if (appUser && !permitted) {
     return (
@@ -110,6 +112,9 @@ function ProtectedRoute({ children }) {
 function RoleHome() {
   const { appUser } = useAuth()
   if (isOfficer(appUser)) return <Navigate to="/engine-room" replace />
+  // Same reasoning for the cook: the dashboard is sales, quota and settlement,
+  // every one of which he is denied at the database. Send him to his list.
+  if (isCook(appUser)) return <Navigate to="/stores" replace />
   return <Dashboard />
 }
 

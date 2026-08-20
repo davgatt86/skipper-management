@@ -26,7 +26,8 @@ const json = (statusCode, obj) => ({ statusCode, headers: { 'Content-Type': 'app
 // crew papers, but none of the money. Enforced by RLS in
 // supabase/officer_role.sql rather than by this list. 'engineer' is the old
 // name for the same role — still honoured on existing logins, no longer minted.
-const CREATABLE_ROLES = ['office', 'crew', 'viewer', 'officer']
+// 'cook' gets the stores list and nothing else — see supabase/cook_role.sql.
+const CREATABLE_ROLES = ['office', 'crew', 'viewer', 'officer', 'cook']
 
 function makeTempPassword() {
   const a = Math.random().toString(16).slice(2, 6)
