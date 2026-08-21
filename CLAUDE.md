@@ -1405,9 +1405,34 @@ Also agreed, not yet scheduled:
 
   `test-parts.mjs` — 55 checks.
 
-  Still open: the maintenance event form does not yet record what a job used in
-  the same action — today it is entered against the part. That is the last mile
-  of "one number, two views".
+  **The last mile is closed (Aug 2026).** Marking a maintenance job done now
+  records what it used **in the same action**, on `Maintenance.jsx`. A second
+  trip to a second page is how a ledger goes stale, and a stale ledger is worse
+  than none because the balance still looks like an answer.
+
+  **The picker shows what is aboard beside each part**, because the man filling
+  it in is deciding whether he has enough, and telling him afterwards is too
+  late. Drawing more than the books show is called out — *"more than the books
+  show"* — but **never blocked**: recording what actually happened matters more
+  than keeping the balance tidy, and if it goes negative the count was wrong,
+  which is worth knowing rather than hiding.
+
+  Parts for the job's own **component sort first**: an impeller change wants the
+  impellers, not an alphabetical list of everything the boat carries.
+
+  **This works at sea, and the reason is worth knowing.** `useOfflineTable`
+  generates the row id CLIENT-SIDE and `flush()` sends it as
+  `t.insert({ ...payload, id: item.id })` — so the movements can name an event
+  that does not exist on the server yet, and replay being strictly in order
+  means the event always lands before the lines referencing it. Verified rather
+  than assumed: probed with an event carrying a client-made id followed by a
+  movement naming it, and the foreign key resolved.
+
+  **`event_id` is ON DELETE SET NULL**, so deleting a job leaves the used line
+  in place and unattributed. The part is gone whether or not the job record
+  survives, and losing the movement would silently put the balance back up.
+  Probed: counted 6, used 2 on the job, balance 4; job deleted, the line
+  survives and the balance stays 4.
 - **STORES / PROVISIONS LIST, per trip** (David, Aug 2026). Built up as the
   trip goes on rather than written once, so it wants a **cook login** — a new
   role, and one that gets stores and nothing else. Money and sales are denied
