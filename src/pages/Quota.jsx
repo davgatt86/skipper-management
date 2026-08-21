@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import { useCurrentVessel } from '../VesselContext'
+import { scopeRows } from '../lib/vessels'
+import PickABoat from '../components/PickABoat'
 import { useAuth } from '../AuthContext'
 import { parseAfpoXlsx } from '../lib/quota/afpoParse'
 import { parseTripPdf } from '../lib/quota/mcatchParse'
@@ -200,6 +203,19 @@ export default function Quota() {
   const [view, setView] = useState('position')
   const [showTrips, setShowTrips] = useState(false)
 
+  /* QUOTA IS THE ONE THING THAT MUST NEVER BE COMBINED.
+   *
+   * Sales may be: a pair tows one net and the combined gross is the figure that
+   * matters. Quota may NOT. Every vessel is a separate business with its own
+   * allocation, and summing two boats hides one running short behind one that
+   * is not — which is the exact failure this page exists to catch.
+   *
+   * So a pair fleet showing ALL is asked to pick a boat rather than shown a
+   * total. That asymmetry with Fish Sales is deliberate and is a domain rule,
+   * not a limitation. */
+  const boat = useCurrentVessel()
+  const mustPickBoat = boat.multi && !boat.current
+
   const pushLog = m => setLog(l => [...l, m])
 
   async function loadAll() {
@@ -212,6 +228,10 @@ export default function Quota() {
       selectAll('quota_manual_stocks', { col: 'created_at', asc: true }),
       selectAll('quota_manual_entries', { col: 'entry_date', asc: true }),
     ])
+    /* quota_lines has no vessel of its own — it hangs off a snapshot, and the
+     * SNAPSHOT carries the boat. So the boat is applied there and the lines
+     * follow their parent, rather than being filtered on a column they do not
+     * have. */
     const err = snapRes.error || lineRes.error || tripRes.error || catchRes.error || adjRes.error
     if (err) { setError(err.message); return }
     // manual tables are a later migration — degrade gracefully until it's run
@@ -228,7 +248,7 @@ export default function Quota() {
     for (const l of lineRes.data || []) (linesBySnap[l.snapshot_id] = linesBySnap[l.snapshot_id] || []).push(l)
     const catchesByTrip = {}
     for (const c of catchRes.data || []) (catchesByTrip[c.trip_id] = catchesByTrip[c.trip_id] || []).push(c)
-    setSnapshots((snapRes.data || []).map(s => ({ ...s, lines: linesBySnap[s.id] || [] })))
+    setSnapshots(scopeRows(snapRes.data || [], boat.current).map(s => ({ ...s, lines: linesBySnap[s.id] || [] })))
     setTrips((tripRes.data || []).map(t => ({ ...t, catches: catchesByTrip[t.id] || [] })))
   }
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
@@ -447,6 +467,13 @@ export default function Quota() {
   return (
     <AppShell>
       <PageHeader title="Quota" sub="PO figures vs logbook catch" />
+
+      {mustPickBoat && (
+        <PickABoat
+          vessels={boat.vessels}
+          reason={`Every boat is a separate business with her own allocation, so these figures are never added together — a total would hide one boat running short behind one that is not.`}
+        />
+      )}
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
       {!manualReady && (

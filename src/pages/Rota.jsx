@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { useCurrentVessel } from '../VesselContext'
+import { scopeRows } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
@@ -49,6 +51,8 @@ export default function Rota() {
   const isSkipper = appUser?.role === 'skipper'
   const canView = isSkipper || appUser?.role === 'viewer'
 
+  // A pair team keeps two rotas: two boats, two crews, different men aboard.
+  const boat = useCurrentVessel()
   const [trips, setTrips] = useState([])
   const [holidays, setHolidays] = useState([])
   const [crew, setCrew] = useState([])
@@ -89,7 +93,8 @@ export default function Rota() {
     if (err) { setError(err.message); return }
     const crewByTrip = {}
     for (const r of tc.data || []) (crewByTrip[r.trip_id] = crewByTrip[r.trip_id] || []).push(r.crew_id)
-    setTrips((t.data || []).map((x) => ({ ...x, crew_ids: crewByTrip[x.id] || [] })))
+    // A pair team's two boats keep separate rotas: different men aboard each.
+    setTrips(scopeRows((t.data || []).map((x) => ({ ...x, crew_ids: crewByTrip[x.id] || [] })), boat.current))
     setHolidays(h.data || [])
     setCrew((c.data || []).filter((x) => !x.archived_at))
     setTeams(tm.data || [])
@@ -129,7 +134,10 @@ export default function Rota() {
     if (clash) { setError(`Overlaps the ${fmtDate(clash.start_date)}–${fmtDate(clash.end_date)} trip — delete or adjust that one first.`); return }
     setBusy(true)
     const colour = trips.length % PALETTE.length
-    const { error: err } = await supabase.from('rota_trips').insert({ start_date: s, end_date: e, colour })
+    // Stamped with the boat being shown: a pair team's two boats keep
+    // separate rotas, since they carry different men.
+    const { error: err } = await supabase.from('rota_trips')
+      .insert({ start_date: s, end_date: e, colour, vessel_id: boat.current?.id ?? null })
     if (err) setError(err.message)
     else await loadAll()
     setBusy(false)

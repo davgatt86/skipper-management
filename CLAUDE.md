@@ -2638,8 +2638,41 @@ reason.
 
   `test-vessels.mjs` — 51 checks.
 
-  **What is left of stage 2:** the pickers on crew, quota and rota — the three
-  tables that still have no vessel column of their own to filter on.
+  ### Crew, quota and rota — BUILT Aug 2026. STAGE 2 IS COMPLETE.
+
+  The old note that these three "have no vessel column of any kind" is **stale**:
+  stage 1 gave `crew` and `rota_trips` a `vessel_id`, and `quota_lines`
+  hangs off `quota_snapshots`, which has one. So the boat is applied on the
+  SNAPSHOT and the lines follow their parent, rather than being filtered on a
+  column they do not have.
+
+  **QUOTA IS THE ONE THING THAT MUST NEVER BE COMBINED**, and that asymmetry is
+  the point of this piece. Sales may be: a pair tows one net and the combined
+  gross is the figure that matters. Quota may not — every vessel is a separate
+  business with its own allocation, and **summing two boats hides one running
+  short behind one that is not**, which is the exact failure the page exists to
+  catch. So a pair fleet showing ALL is asked to pick a boat rather than shown a
+  total. Deliberate, and a domain rule rather than a limitation.
+
+  **The stamp matters more than the filter.** No pair fleet has a single crew
+  record today — all 29 crew belong to Audacious, Beryl and Boy Andrew, which
+  are single-vessel — so the crew filter has nothing to do yet. What earns its
+  keep is `vessel_id` being set when a man is added or a rota trip created:
+  without it a pair team's records would all land unassigned and the picker
+  would never have anything to filter. Null on "all" is honest — a man added
+  while looking at the whole fleet has not been put on a boat.
+
+  **A crewman quietly missing off a list is the failure guarded against.**
+  Filtering to one boat hides anyone not yet assigned, so the page counts them
+  and says where they went rather than letting the total silently drop. A crew
+  list is a border document.
+
+  `PickABoat.jsx` carries the wording, because three pages now ask and **the
+  REASON differs every time and the reason is the message** — a crew list needs
+  one boat because it is an official document, quota because combining hides a
+  shortfall. "Pick a boat" alone would lose that. It also says WHERE to answer,
+  since the control is in the sidebar and a man reading the middle of the screen
+  has no reason to look there.
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:

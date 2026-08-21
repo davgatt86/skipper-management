@@ -3,6 +3,8 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
 import { supabase } from '../supabaseClient'
+import { useCurrentVessel } from '../VesselContext'
+import { scopeRows } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import { keepsCrewRecords } from '../lib/roles'
 import { CrewCerts, CertAlerts } from './CrewCerts'
@@ -57,6 +59,14 @@ export default function Crew() {
   const [openDetails, setOpenDetails] = useState(null)
 
   const canEdit = keepsCrewRecords(appUser)
+  /* WHICH BOAT a man is on. A pair team runs two crews — different men,
+   * different numbers aboard — and until now the crew list was the fleet's.
+   * No pair fleet has any crew records yet, so this filters nothing today; what
+   * makes it worth having is the STAMP on adding a man, without which their
+   * crew would all land unassigned and the picker would never have anything to
+   * do. */
+  const boat = useCurrentVessel()
+  const [unassigned, setUnassigned] = useState(0)
 
   async function loadAll() {
     setLoading(true)
@@ -74,7 +84,12 @@ export default function Crew() {
       supabase.from('payments').select('contract_id, payment_type, amount').in('payment_type', ['ghb_first_half', 'ghb_second_half']),
     ])
     if (cRes.error || pRes.error) setError((cRes.error || pRes.error).message)
-    setCrew(cRes.data || [])
+    /* Filter to the boat being shown — but a man with NO boat would then
+     * vanish, and a crewman quietly missing off a list is exactly the failure
+     * worth guarding against. They are kept aside and counted, not dropped. */
+    const allCrew = cRes.data || []
+    setCrew(scopeRows(allCrew, boat.current))
+    setUnassigned(boat.current ? allCrew.filter((c) => !c.vessel_id).length : 0)
     setRanks(rRes.data || [])
     setContracts(ctRes.data || [])
     setMonthLandings(lRes.data || [])
@@ -97,6 +112,9 @@ export default function Crew() {
     setBusy(true); setError('')
     const { error } = await supabase.from('crew').insert({
       fleet_id: appUser.fleet_id, full_name: newName.trim(), status: newStatus, crew_type: newType,
+      // Stamped from the boat being shown. Null on "all", which is honest —
+      // a man added while looking at the whole fleet has not been put on a boat.
+      vessel_id: boat.current?.id ?? null,
     })
     setBusy(false)
     if (error) setError(error.message)
@@ -163,6 +181,20 @@ export default function Crew() {
       </PageHeader>
 
       <CrewTabs />
+
+      {/* A CREWMAN QUIETLY MISSING OFF A LIST is the failure worth guarding
+          against here — that is a border document. Filtering to one boat hides
+          anyone not yet put on a boat, so say how many and where they went,
+          rather than letting the count silently drop. */}
+      {unassigned > 0 && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
+          <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
+            {unassigned} {unassigned === 1 ? 'crewman is' : 'crew are'} not on either boat yet,
+            so {unassigned === 1 ? 'he is' : 'they are'} hidden while one is selected.
+            Switch <strong>Showing</strong> to all boats to see {unassigned === 1 ? 'him' : 'them'}.
+          </p>
+        </div>
+      )}
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
 
