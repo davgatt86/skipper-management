@@ -2519,10 +2519,46 @@ reason.
   Fleet-level tables deliberately have no `vessel_id` — settings, alerts,
   `sales_buyer_flags`, `fuel_suppliers`, `app_users`, `ingest_senders`.
 
-  **Stage 2, not done:** pages reading `vessel_id` rather than matching on the
-  vessel text; `vessel_details` moving off `fleet_id` as its primary key (the
-  disruptive one — do it alone); a vessel picker on crew, quota and rota; and
-  the pair fleets assigning their NULL rows.
+  **Stage 2 part one DONE Aug 2026** (`supabase/vessels_stage2.sql`).
+
+  **457 rows backfilled** — every fleet with exactly one boat, where the answer
+  is not a guess but the only possible answer. **Five rows deliberately left
+  null**: 4 `rota_trips` because HANSTHOLM has no `vessels` row at all (no
+  sales, no quota trips, no vessel_details — there is no name to give a boat,
+  and inventing one is worse than an honest null), and 1
+  `quota_manual_stocks` because TEST FLEET is a pair and which boat it belongs
+  to is not knowable from the row.
+
+  **THE CROSS-TENANT HOLE IS CLOSED ON ALL 20 TABLES.** `fleet_isolation`
+  checks `fleet_id` and nothing checked that `vessel_id` pointed at a boat in
+  that same fleet — so a row could carry a foreign key across a tenant boundary.
+  Found by probe while building the gear log; the other eighteen all had it.
+  No row anywhere violated it, so this was pure hardening. Composite FK
+  (`(vessel_id, fleet_id) → vessels(id, fleet_id)`) rather than a trigger,
+  because a CHECK cannot run a subquery.
+
+  Probed as an officer: an engine log or fuel log on another fleet's boat is
+  refused, an **UPDATE** moving a row across is refused too, his own boat is
+  allowed, and a NULL vessel is still allowed — which HANSTHOLM needs.
+
+  **PART TWO IS NOT A SCHEMA JOB**, and that is the thing to understand before
+  starting it.
+
+  `vessel_details` still has `fleet_id` as its primary key, so a pair team can
+  describe only ONE of its two boats. Moving it looks like a migration — but
+  every one of the six readers does
+  `.from('vessel_details')…maybeSingle()`, which **throws** when a second row
+  appears, and `VesselPlate.jsx` is one of them and sits on every page.
+
+  So the schema change on its own does not give a pair fleet two boats. It gives
+  it six broken pages. What has to come first is a **CURRENT VESSEL** — a choice
+  that persists, which those pages ask for the answer to. Then
+  `vessel_details` can carry a row per boat and each page knows which one it is
+  showing.
+
+  Order: **current-vessel selection → `vessel_details` off `fleet_id` → the
+  pickers on crew, quota and rota.** Pages reading `vessel_id` rather than
+  matching on the vessel text falls out of the first of those.
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:
