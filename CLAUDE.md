@@ -814,14 +814,36 @@ wrong in relation to the entry before it.
 
 After the delete: 20 logs, and **no counter goes backwards anywhere**.
 
-**engine_logs has NO AUDIT TRIGGER, so that deletion left no trace.** Nor do
-`garbage_log`, `vessel_fuel_log`, `maintenance_events`, `gear_nets` or
-`gear_measurements`. The rota tables got audit triggers in Aug 2026 precisely
-because 60 crew assignments vanished with nothing to show what happened, and
-`audit_trigger()` is sitting there already — but the three books that are
-closest to being legal records are the ones without it. The Garbage Record Book
-is a MARPOL requirement. Worth closing before somebody deletes something that
-mattered.
+**That deletion left no trace, because engine_logs had no audit trigger** —
+and neither did the garbage record book, the fuel log, the maintenance record or
+any of the gear log. **Closed 21-08-2026, `supabase/audit_the_books.sql`**:
+thirteen more tables now audited, 34 in all.
+
+The three books closest to being legal records were the ones without it, while
+twenty-one others had had triggers since Aug 2026 — added to the rota tables
+precisely because 60 crew assignments vanished with nothing to show what
+happened.
+
+**It is a CHOSEN list, not every table**, and the exclusions are the useful part:
+- `sales_landings` / `sales_rows` — re-uploading one note deletes its rows and
+  re-inserts them thousands at a time, so auditing it buries everything a person
+  did by hand under machine noise. `reconcile_diff` is the record that matters
+  there.
+- `su_*` — settlements arrive from an edge function on the service-role key,
+  where `auth.uid()` is null. The trail would record that nobody did it, which
+  is worse than no trail.
+- `stores_*` — a grocery list.
+
+The rule: books and settings written **by hand**, a few entries at a time, where
+a silent change would matter. Apply that test before adding a table, or the log
+fills with machine writes and stops being read.
+
+Probed as an officer: insert, update and delete on `engine_logs` all captured,
+every row naming the man who did it, and **the CASCADE delete of a gear
+component caught when its net went** — which is the exact case that lost the 60
+rota rows. `audit_log` stays skipper-only to read; the trigger is SECURITY
+DEFINER, so an officer's writes are recorded even though he cannot read the
+record.
 
 Scale of the job: **53 parameters over 4 groups** — Main Engine 1 (28),
 Gearbox 1 (9), Generator 1 (9), Generator 2 (7).
