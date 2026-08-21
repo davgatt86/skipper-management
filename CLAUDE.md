@@ -1348,24 +1348,66 @@ Also agreed, not yet scheduled:
   this database**, which is the thing `Trips.jsx` does not have and why it
   reports rates rather than profit.
 
-- **PARTS INVENTORY, hanging off maintenance** (David, Aug 2026). What parts
-  were used on a job, and what is left aboard.
+- ~~**PARTS INVENTORY, hanging off maintenance**~~ — **BUILT Aug 2026.**
+  `/parts` (`Parts.jsx`), `src/lib/maintenance/parts.js`,
+  `supabase/parts_inventory.sql` (applied).
 
-  **The stock figure should be DERIVED, not typed.** A maintenance event
-  consumes parts; if each event records what it used, "what is left onboard"
-  falls out of (last stock take − everything consumed since) and cannot drift
-  from the job record the way a separately-maintained count would. That is the
-  whole design: one number, two views.
+  **THE STOCK FIGURE IS DERIVED, NEVER STORED.** There is no `on_hand` column
+  anywhere and no field on the page to edit one — the probe asserts as much. A
+  maintenance event consumes parts; what is left falls out of
+  *(last count + received − used since)*, so it cannot drift from the job record
+  the way a separately kept tally would. One number, two views.
 
-  `maintenance_events` already exists and is where the consumption line
-  belongs. What is missing is a parts list and a stock take.
+  **THE FIRST RUNNING BALANCE IN THE DATABASE**, and that changes what the page
+  owes the reader. Every other figure here is a snapshot — a landing, a reading,
+  a settlement — and a wrong one is wrong on its own. A wrong movement moves
+  every later balance too. So `balanceOf()` returns the workings rather than a
+  number, and every ledger row shows the balance it left behind.
 
-  Worth knowing before building: this is the first thing in the app where a
-  figure is a **running balance** rather than a snapshot, so a wrong entry
-  propagates forward. It wants the same treatment as the fuel log — show the
-  workings, not just the answer — and an officer must be able to correct one
-  without a skipper login, since he is the man holding the part.
+  **THREE STATES THAT MUST NEVER RENDER ALIKE**, which is most of what the tests
+  are about:
+  - **counted** — the figure rests on a real stock take, and the row says when;
+  - **never counted** — net movements from an assumed nought, very likely wrong,
+    and shown in brass with the words *never counted*;
+  - **nothing recorded at all** — an em dash, not a zero.
 
+  A part is called **low only when it is both below its minimum AND counted**.
+  Calling a part short on a balance nobody has verified is how a reorder list
+  stops being believed.
+
+  **A count is absolute; everything else is relative.** A stock take resets the
+  balance on its date and makes everything before it irrelevant — which is how a
+  running balance gets put right without editing history. Same-day order is
+  `moved_on` then `created_at`, so a count entered after a use that day
+  supersedes it, rather than leaving it to chance.
+
+  **Only `adjusted` may be negative**, because it is the only kind where the
+  direction is not already in the word. Enforced by CHECK and asserted by probe.
+
+  **A use need not name a job.** A part used off the books is still a part gone,
+  and refusing the entry would leave the balance wrong — worse than an
+  unattributed line.
+
+  **No shipped catalogue**, unlike the stores list and the gear parts. Those
+  ship defaults because there was a real source to transcribe; a boat's spares
+  are impellers and injectors for HER engine in HER part numbers, and a guessed
+  list would look like a starting point and be wrong.
+
+  **The officer writes it without a skipper login** — he is the man holding the
+  part, and if correcting a miscount needs somebody else to sign in, the
+  miscount stays. Audited from day one, because a silent edit here moves every
+  later figure.
+
+  Probed: officer creates a part and its movements, gets **14** from
+  *counted 12, +6, −4*, is refused a negative "used" and a cross-fleet vessel,
+  and still reads payments **0** and sales **0**. Cook reads **0** and **0**.
+  `parts` carries **no stored stock column**.
+
+  `test-parts.mjs` — 55 checks.
+
+  Still open: the maintenance event form does not yet record what a job used in
+  the same action — today it is entered against the part. That is the last mile
+  of "one number, two views".
 - **STORES / PROVISIONS LIST, per trip** (David, Aug 2026). Built up as the
   trip goes on rather than written once, so it wants a **cook login** — a new
   role, and one that gets stores and nothing else. Money and sales are denied

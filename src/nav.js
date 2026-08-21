@@ -106,6 +106,9 @@ export const NAV = [
       // what is falling due.
       { to: '/engine-room', label: 'Engine Room', access: 'officer' },
       { to: '/maintenance', label: 'Maintenance', access: 'officer' },
+      // What a job used and what is left aboard. The stock figure is derived
+      // from the maintenance record, never typed — see src/lib/maintenance/parts.js.
+      { to: '/parts', label: 'Parts', access: 'officer' },
       // Read-only to an engineer — he needs to see when the liferaft service
       // or the extinguisher certificate runs out; renewing them is not his job.
       { to: '/vessel-certs', label: 'Vessel Certificates', access: 'officer' },
