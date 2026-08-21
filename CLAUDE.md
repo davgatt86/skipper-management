@@ -1768,8 +1768,9 @@ Also agreed, not yet scheduled:
   confident wrong Danish one on an order that has to be right before the boat
   sails.
 
-- **Garbage log.** A Garbage Record Book is a MARPOL requirement at Audacious's
-  size. Confirm whether one is being kept elsewhere before assuming it is not.
+- ~~**Garbage log.**~~ — **answered and in use.** `garbage_log` has 6 entries,
+  the most recent the same day it was checked (Aug 2026), so the MARPOL Garbage
+  Record Book question is settled: it is kept here.
 - ~~**Vessel/crew alerts kept SEPARATE from market alerts.**~~ — **done Aug
   2026.** `supabase/compliance_alerts.sql` adds
   `generate_compliance_alerts(lead_days default 60)`, raising `crew_passport`,
@@ -1839,12 +1840,16 @@ Also agreed, not yet scheduled:
   everything visible at once because the point of the page is the ticking, and
   BOTH signatures recorded — a familiarisation nobody signed is not evidence of
   anything.
-- **Dedicated pair-team fish sales analysis.** Sandy and Gavin tow one net
-  between two boats: sum gross and boxes, never sum days at sea (both boats
-  fished the same days, so the pair rate is pair gross ÷ the trip's days),
-  never combine crew shares or quota. Blocked on the vessels schema.
-- **Certificate reader** — firm it up; store the original photo/PDF against
-  each certificate as Aegir does.
+- ~~**Dedicated pair-team fish sales analysis.**~~ — **BUILT Aug 2026**, and it
+  needed no vessels schema after all: a pair is ONE fleet whose boats are told
+  apart by `sales_landings.vessel`. See the four panels under Pair teams —
+  `byVessel()`, `samedayPriceGap()`, `speciesMixDivergence()`,
+  `vesselMarketSplit()`. The note that it was "blocked on the vessels schema"
+  was stale from before that was worked out.
+- **Certificate reader** — firm it up. **Storing the original photo/PDF is
+  already built** on both certificate pages, with downscaling; what is
+  outstanding there is data ENTRY, not code — 6 of 16 vessel certificates and 4
+  of 111 crew certificates have a file, the rest are still only in Aegir.
 
 Explicitly NOT wanted: hours of rest, PLB tracking, crew schedule (the rota
 planner covers it), inspection pack, AI audit, and Aegir's own landings page.
