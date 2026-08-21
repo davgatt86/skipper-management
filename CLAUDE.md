@@ -1846,10 +1846,46 @@ Also agreed, not yet scheduled:
   `byVessel()`, `samedayPriceGap()`, `speciesMixDivergence()`,
   `vesselMarketSplit()`. The note that it was "blocked on the vessels schema"
   was stale from before that was worked out.
-- **Certificate reader** — firm it up. **Storing the original photo/PDF is
-  already built** on both certificate pages, with downscaling; what is
-  outstanding there is data ENTRY, not code — 6 of 16 vessel certificates and 4
-  of 111 crew certificates have a file, the rest are still only in Aegir.
+- **Certificate reader** — partly firmed up Aug 2026, and what remains needs
+  REAL FAILING EXAMPLES rather than more code.
+
+  **Fixed: the reader could not suggest six of the eleven categories.** The
+  vessel prompt offered *Statutory, Insurance, Safety, Equipment, Other* and the
+  clamp allowed exactly those five — so **LSA, FFA, Radio, Pollution, Medical
+  and Machinery were unreachable**, which are the six the vessel-certificate
+  work created precisely because "Safety" was a useless bundle of seven. Every
+  liferaft, extinguisher and radio certificate read from a photo landed in
+  Safety or Other and had to be refiled by hand. The prompt now names all ten
+  live buckets with a line each, and says to prefer the specific over the
+  general — a liferaft service is LSA, never Equipment.
+
+  `Safety` is deliberately still NOT offered: kept on the page so old filings
+  show, but nothing new should go there.
+
+  **The two lists must stay in step** — `CATS` in `parseCert.js` and
+  `VESSEL_CERT_CATEGORIES` in `VesselCerts.jsx`. They had drifted, and the
+  symptom was invisible: a wrongly-filed certificate looks like a skipper's
+  choice, not a parser that had no other option.
+
+  **What firming up the rest needs, and it is not more prompt-writing:**
+  - **Certificates it got WRONG**, with what it produced beside what is right.
+    The two P&J buyer fixes in this repo failed because they were written blind;
+    the same applies here.
+  - **`expiry_date` and `cert_type` matter more than the rest** — the first
+    drives the alerts and the second drives the matrix grouping. Issuer being
+    slightly off costs nothing.
+  - **Nothing is measured.** There is no record of what the reader produced
+    against what was actually saved, so the error rate is unknown and any change
+    is unfalsifiable. Logging the parse beside the saved row is the single most
+    useful next change, and it needs no new examples to build.
+  - **The bundles are a DESIGN question, not a parsing one.**
+    `L.S.A Certs.pdf` (98 pages) and `UKFVC.pdf` (66) each hold many
+    certificates in one file, which the one-file-one-certificate model does not
+    fit at all.
+
+  Storing the original photo/PDF is already built on both pages with
+  downscaling; what is outstanding THERE is data entry — 6 of 16 vessel
+  certificates and 4 of 111 crew certificates have a file.
 
 Explicitly NOT wanted: hours of rest, PLB tracking, crew schedule (the rota
 planner covers it), inspection pack, AI audit, and Aegir's own landings page.
