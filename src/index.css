@@ -713,3 +713,17 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
   #sales-report table { font-size: 0.8rem; }
   #sales-report .recharts-responsive-container { break-inside: avoid; }
 }
+
+/* The vessel picker in the sidebar. Only rendered when a fleet has more than
+   one boat — four of the twelve are pair teams — so most tenants never see it
+   and the sidebar is unchanged for them. */
+.shell-boat {
+  padding: 0.5rem 0.9rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.4rem;
+}
+.shell-boat select {
+  width: 100%;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.35rem;
+}

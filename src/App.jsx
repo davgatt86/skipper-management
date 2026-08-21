@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './AuthContext'
+import { VesselProvider } from './VesselContext'
 import AppShell from './AppShell'
 import { canSee, accessForPath } from './nav'
 import { isOfficer, isCook } from './lib/roles'

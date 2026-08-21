@@ -74,7 +74,7 @@ declare
     -- the crew list — none of which touches what anyone is paid.
     'crew', 'crew_certificates', 'crew_lists', 'crew_list_members',
     -- reads: the papers he needs, and the rows the app shell needs to boot
-    'vessel_certificates', 'vessel_details', 'fleets', 'settings', 'app_users'
+    'vessel_certificates', 'vessel_details', 'vessels', 'fleets', 'settings', 'app_users'
   ];
 begin
   for t in
@@ -110,7 +110,7 @@ declare
     'maintenance_tasks','maintenance_events','engine_limits','parts','parts_movements',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
-    'vessel_certificates','vessel_details','fleets','settings','app_users'
+    'vessel_certificates','vessel_details','vessels','fleets','settings','app_users'
   ];
 begin
   foreach t in array allowed loop
@@ -127,7 +127,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['vessel_certificates','vessel_details','fleets','settings','app_users'] loop
+  foreach t in array array['vessel_certificates','vessel_details','vessels','fleets','settings','app_users'] loop
     execute format('drop policy if exists engineer_read_only_ins on public.%I', t);
     execute format('drop policy if exists engineer_read_only_upd on public.%I', t);
     execute format('drop policy if exists engineer_read_only_del on public.%I', t);

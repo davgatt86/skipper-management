@@ -2559,6 +2559,50 @@ reason.
   Order: **current-vessel selection → `vessel_details` off `fleet_id` → the
   pickers on crew, quota and rota.** Pages reading `vessel_id` rather than
   matching on the vessel text falls out of the first of those.
+
+  ### The current vessel — BUILT Aug 2026
+
+  `src/lib/vessels.js`, `VesselContext.jsx`, a picker in `AppShell`.
+
+  **NULL MEANS ALL, NOT NONE.** A pair team's combined view is a real view — one
+  net between two boats, and the combined gross is the figure that matters — so
+  "no boat chosen" is the default and a deliberate state, not a prompt. A
+  single-vessel fleet never sees a picker and `current` is simply that boat, so
+  a page can filter unconditionally.
+
+  **THE STORED CHOICE IS VALIDATED AGAINST THIS FLEET'S BOATS, EVERY TIME.** A
+  stale id — from another account, or a boat since retired — would filter every
+  query to a vessel that is not there; RLS returns nothing for it, so the page
+  comes up **empty rather than wrong**, which looks like a boat with no data
+  instead of a bad setting. An unrecognised id falls back to all. The storage key
+  carries the fleet id for the same reason.
+
+  **"All" applies no filter at all**, rather than `is null or eq` — 5 rows have
+  no `vessel_id` and never will (HANSTHOLM's rota trips), and a page showing all
+  must not lose them.
+
+  Cached like the vessel particulars on the engine log, because a picker that
+  disappears at sea is worse than none. The choice lives in localStorage, not the
+  database: it is a view setting, and two people on the same fleet may reasonably
+  be looking at different halves of a pair.
+
+  **Four fleets see it**: Boy John + Rosebloom, Guiding Light + Faithlie,
+  Our Lass + Victory Rose, Test Fleet. Audacious and the other seven are
+  unchanged.
+
+  **A LIVE BUG CAME OUT OF THIS.** `vessels` was NOT in the officer allow-list,
+  so an officer read **0 boats** — which means the gear log's "add a net" boat
+  dropdown was already empty for the very man meant to keep it, and the new
+  picker would never have appeared. The earlier gear probe missed it because it
+  tested the WRITE with a vessel_id supplied from SQL, never the read the page
+  actually makes. `vessels` is now in his list, **read only** — naming or
+  retiring a boat stays the skipper's. Probed: reads 2 on a pair fleet, UPDATE
+  affects 0 rows, cannot create one, still reads payments 0 and sales 0.
+
+  The cook is deliberately still denied `vessels`: his stores list is not
+  per-vessel yet, and a table joins an allow-list when there is a need.
+
+  `test-vessels.mjs` — 38 checks.
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:

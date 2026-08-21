@@ -4,6 +4,8 @@ import { useAuth } from './AuthContext'
 import ThemeToggle from './ThemeToggle'
 import { navFor } from './nav'
 import MovedBanner from './components/MovedBanner'
+import { useCurrentVessel } from './VesselContext'
+import { vesselName } from './lib/vessels'
 
 // Sidebar shell: a persistent menu on the left, content on the right.
 // Below 900px the sidebar becomes a drawer so the wheelhouse phone keeps the
@@ -16,6 +18,7 @@ export default function AppShell({ children, badges = {}, maxWidth }) {
   const { appUser, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const groups = navFor(appUser)
+  const boat = useCurrentVessel()
 
   return (
     <div className="shell">
@@ -37,6 +40,30 @@ export default function AppShell({ children, badges = {}, maxWidth }) {
           <span className="shell-mark" aria-hidden="true" />
           <span className="shell-brandtxt">Skipper Management</span>
         </Link>
+
+        {/* WHICH BOAT. Shown ONLY where there is a choice to make — four of the
+            twelve fleets are pairs, and a single-vessel tenant never sees a
+            picker. That rule comes from the pair-teams work and it is the whole
+            reason `multi` exists rather than just counting the list here.
+
+            "All boats" is a real view, not an empty one: a pair tows one net
+            and their combined gross is the figure that matters, so it is the
+            default rather than a prompt to choose. */}
+        {boat.multi && (
+          <div className="shell-boat no-print">
+            <label className="nav-label" htmlFor="shell-vessel">Showing</label>
+            <select
+              id="shell-vessel"
+              value={boat.current?.id || ''}
+              onChange={(e) => boat.setCurrent(e.target.value || null)}
+            >
+              <option value="">All {boat.vessels.length} boats</option>
+              {boat.vessels.map((v) => (
+                <option key={v.id} value={v.id}>{vesselName(v)}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <nav className="shell-nav">
           {groups.map(g => (
