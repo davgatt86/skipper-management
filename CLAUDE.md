@@ -1297,10 +1297,26 @@ Also agreed, not yet scheduled:
 
   **The logbook writes `27.4.a`; the trade says `IVa`.** `iceLabel()` converts.
   A numeric sub-division runs on (`VIb1`, `VIb2`, `IIa2`) because that is how it
-  is written; a lettered one takes a dot (`VIa.s`) so it cannot be misread as
-  part of the division letter. Anything not a 27.x area passes through untouched
-  rather than being mangled into a wrong-looking Roman numeral. **All 17 real
-  grounds were run through it and checked by eye**, not assumed.
+  is written and because those are real subdivisions that must stay apart.
+  Anything not a 27.x area passes through untouched rather than being mangled
+  into a wrong-looking Roman numeral. **All 17 real grounds were run through it
+  and checked by eye**, not assumed.
+
+  **A LOCAL SUB-AREA TAG IS FOLDED BACK INTO ITS DIVISION** (`normaliseArea()`,
+  Aug 2026). The logbook carried `27.6.a.s` for 24 days; David: it is **VIa** —
+  the `.s` is the local south tag on the West of Scotland ground, not a division
+  of its own.
+
+  The rule follows the ICES hierarchy rather than special-casing that one code:
+  *area . division . subdivision*, where a real subdivision is **numeric**. So
+  anything alphabetic at that depth is a local tag and belongs with its
+  division.
+
+  **Folded in the KEY, not just the label.** Relabelling alone would have left
+  `27.6.a` and `27.6.a.s` as two separate grounds both reading "VIa (GBR)" —
+  two identical rows in the wear table, which is worse than the odd label was.
+  Audacious now reads **16 grounds instead of 17**, with VIa (GBR) at **173 days
+  rather than 149**.
 
   **THE METHOD.** A finished set is ONE set consumed, split across the grounds
   it was worked over in proportion to the days on each. A ground's rate is then
@@ -1335,11 +1351,7 @@ Also agreed, not yet scheduled:
   Probed: officer reads `quota_trip_catches` as **0**, gets **1,240 day-ground
   rows across 17 grounds** for his own boat and **0** for another fleet's.
 
-  `test-gear.mjs` — **171 checks**.
-
-  **One oddity worth asking David about:** the logbook carries `27.6.a.s` for
-  24 days, which is not a standard ICES division. It renders as `VIa.s` rather
-  than being silently folded into `VIa`.
+  `test-gear.mjs` — **185 checks**.
 
   **All three stages are built.**
 

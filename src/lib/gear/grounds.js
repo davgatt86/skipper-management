@@ -24,8 +24,38 @@ const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
  * of the division letter. Anything that is not a 27.x area is passed through
  * untouched rather than mangled into a wrong-looking Roman numeral.
  */
-export function iceLabel(fao) {
+/* FOLD A LOCAL SUB-AREA TAG BACK INTO ITS DIVISION.
+ *
+ * The logbook carried `27.6.a.s` for 24 days, which is not an ICES division.
+ * David, Aug 2026: it is VIa — the `.s` is the local south tag on the West of
+ * Scotland ground, not a division of its own.
+ *
+ * The rule follows the ICES hierarchy rather than special-casing that one code:
+ * area . division . subdivision, where a real subdivision is NUMERIC — VIb1,
+ * VIb2, IIa2 all exist and must be kept apart. Anything alphabetic at that
+ * depth is a local tag and belongs with its division.
+ *
+ * IT IS FOLDED IN THE KEY, NOT JUST THE LABEL. Relabelling alone would leave
+ * `27.6.a` and `27.6.a.s` as two separate grounds both reading "VIa (GBR)" —
+ * two identical rows in the wear table, which is worse than the odd label was.
+ * Audacious's VIa (GBR) goes from 149 days to 173.
+ */
+export function normaliseArea(fao) {
   const s = String(fao || '').trim()
+  if (!s) return ''
+  const parts = s.split('.')
+  if (parts[0] !== '27' || parts.length < 4) return s
+  // Keep everything up to the division, then only numeric subdivisions.
+  const kept = [parts[0], parts[1], parts[2]]
+  for (const p of parts.slice(3)) {
+    if (!/^\d+$/.test(p)) break
+    kept.push(p)
+  }
+  return kept.join('.')
+}
+
+export function iceLabel(fao) {
+  const s = normaliseArea(fao)
   if (!s) return ''
   const parts = s.split('.')
   if (parts[0] !== '27' || parts.length < 2) return s
@@ -42,7 +72,9 @@ export function iceLabel(fao) {
 /* The EEZ is part of the ground's identity, not decoration. Audacious fished
  * 27.4.a for 578 days inside GBR waters and 337 inside NOR, and those are
  * different grounds to the man towing over them. */
-export const groundKey = (fao, eez) => `${fao || '?'}|${eez || ''}`
+// Normalised, so a local sub-area tag lands on its division rather than
+// becoming a ground of its own with the same name.
+export const groundKey = (fao, eez) => `${normaliseArea(fao) || '?'}|${eez || ''}`
 export const groundLabel = (fao, eez) =>
   eez ? `${iceLabel(fao)} (${eez})` : iceLabel(fao)
 export const splitKey = (key) => {

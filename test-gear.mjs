@@ -22,7 +22,7 @@ import {
 } from './src/lib/gear/gearStats.js'
 import {
   iceLabel, groundKey, groundLabel, splitKey, groundMix, mixShares,
-  groundWear, groundConfidence,
+  groundWear, groundConfidence, normaliseArea,
 } from './src/lib/gear/grounds.js'
 
 let fail = 0
@@ -405,8 +405,13 @@ eq('and another', iceLabel('27.6.b'), 'VIb')
 // A numeric sub-division runs on, as it is written.
 eq('a numbered sub-division', iceLabel('27.6.b.2'), 'VIb2')
 eq('and a two-deep one', iceLabel('27.2.a.2'), 'IIa2')
-// A lettered one takes a dot so it cannot be misread as part of the division.
-eq('a lettered sub-division is set off', iceLabel('27.6.a.s'), 'VIa.s')
+/* A LOCAL SUB-AREA TAG FOLDS BACK INTO ITS DIVISION. The logbook carried
+ * 27.6.a.s for 24 days; David, Aug 2026: it is VIa, the .s being a local
+ * south tag on the West of Scotland ground rather than a division of its own.
+ * The rule follows the ICES hierarchy rather than special-casing that code:
+ * a real subdivision is NUMERIC (VIb1, VIb2, IIa2 stay apart), so anything
+ * alphabetic at that depth is a local tag. */
+eq('a local sub-area tag folds into its division', iceLabel('27.6.a.s'), 'VIa')
 // Anything not a 27.x area passes through rather than being mangled into a
 // wrong-looking Roman numeral.
 eq('a non-27 area is left alone', iceLabel('34.1.1'), '34.1.1')
@@ -541,6 +546,38 @@ eq('and one with no EEZ', splitKey(groundKey('27.6.a', null)).eez, null)
   eq('three sets on real ground days will do', groundConfidence(solid, 3).level, 'ok')
   eq('and it says what it rests on', groundConfidence(solid, 5).text,
     '5 finished sets across 2 grounds')
+}
+
+
+// ---- folding a local tag ----------------------------------------------------
+eq('the tag is dropped from the area itself', normaliseArea('27.6.a.s'), '27.6.a')
+eq('a numeric subdivision is kept', normaliseArea('27.6.b.2'), '27.6.b.2')
+eq('and a two-deep numeric one', normaliseArea('27.2.a.2'), '27.2.a.2')
+eq('a plain division is untouched', normaliseArea('27.4.a'), '27.4.a')
+eq('a non-27 area is untouched', normaliseArea('34.1.1'), '34.1.1')
+eq('and nothing is nothing', normaliseArea(null), '')
+
+/* FOLDED IN THE KEY, NOT JUST THE LABEL. Relabelling alone would leave
+ * 27.6.a and 27.6.a.s as two separate grounds both reading "VIa (GBR)" — two
+ * identical rows in the wear table, which is worse than the odd label was. */
+eq('the tag keys to the same ground as its division',
+  groundKey('27.6.a.s', 'GBR'), groundKey('27.6.a', 'GBR'))
+eq('but a numeric subdivision still keys apart',
+  groundKey('27.6.b.2', 'GBR') === groundKey('27.6.b', 'GBR'), false)
+// The EEZ still separates them: IVa (GBR) and IVa (NOR) are different grounds.
+eq('and the EEZ still separates',
+  groundKey('27.6.a.s', 'GBR') === groundKey('27.6.a', 'NOR'), false)
+
+{
+  // The real case: 24 days of 27.6.a.s joining 149 of 27.6.a.
+  const rows = [
+    ...Array.from({ length: 3 }, (_, i) => ({ day: `2026-01-0${i + 1}`, fao_area: '27.6.a', eez: 'GBR' })),
+    ...Array.from({ length: 2 }, (_, i) => ({ day: `2026-01-1${i + 1}`, fao_area: '27.6.a.s', eez: 'GBR' })),
+  ]
+  const shares = mixShares(groundMix(rows, '2026-01-01', '2026-02-01'))
+  eq('they come back as ONE ground', shares.length, 1)
+  eq('named for the division', shares[0].label, 'VIa (GBR)')
+  eq('carrying both lots of days', shares[0].days, 5)
 }
 
 
