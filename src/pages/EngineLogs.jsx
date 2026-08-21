@@ -6,6 +6,8 @@ import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { checkReadings, counterReversals } from '../lib/engine/limits'
+import { useCurrentVessel } from '../VesselContext'
+import { pickDetails } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import { keepsLogs, isSkipper } from '../lib/roles'
 import { useOfflineTable } from '../lib/offline/useOfflineTable'
@@ -119,6 +121,8 @@ export default function EngineLogs() {
    * 28, 28, 2.8, 2.8, 38, 25, 38 and the median was 28, so a check derived from
    * history alone called the CORRECT readings outliers. */
   const [limits, setLimits] = useState([])
+  // Which boat these particulars describe — one row per boat since Aug 2026.
+  const boat = useCurrentVessel()
   const [confirmedOutliers, setConfirmedOutliers] = useState(false)
 
   // The logs come from the offline hook above. The vessel particulars are read
@@ -142,11 +146,15 @@ export default function EngineLogs() {
   useEffect(() => {
     let live = true
     ;(async () => {
+      /* vessel_details is ONE ROW PER BOAT since Aug 2026. .maybeSingle() would
+   throw the moment a pair fleet has two, so the rows are read whole and
+   pickDetails() chooses — which returns null when a pair is showing ALL,
+   because there is no such thing as a pair's particulars. */
       const cached = await readCache('vessel_details')
-      if (live && cached.rows.length) setVessel(cached.rows[0])
+      if (live && cached.rows.length) setVessel(pickDetails(cached.rows, boat.current))
       if (!isOnline()) return
-      const { data } = await supabase.from('vessel_details').select('*').maybeSingle()
-      if (live && data) { setVessel(data); cacheTable('vessel_details', [data]) }
+      const { data } = await supabase.from('vessel_details').select('*')
+      if (live && data) { setVessel(pickDetails(data, boat.current)); cacheTable('vessel_details', data) }
     })()
     return () => { live = false }
   }, [])

@@ -84,3 +84,29 @@ export const showingLabel = (state) => {
   if (state.showing === 'all') return `All ${state.vessels.length} boats`
   return vesselName(state.current)
 }
+
+/* THE PARTICULARS FOR THE BOAT BEING LOOKED AT.
+ *
+ * `vessel_details` is one row per boat since Aug 2026, so every reader has to
+ * choose. The three answers are different and callers must be able to tell
+ * them apart:
+ *
+ *   a row      — the current boat's particulars, or the only row there is
+ *   null + ask — a pair showing ALL. There is no such thing as a pair's
+ *                particulars: two boats have two registrations and two
+ *                tonnages, and picking one to stand for both would put the
+ *                wrong PLN on a crew list.
+ *   null       — nothing filled in yet, which is a form to complete, not a
+ *                choice to make. Different words, so a different flag.
+ */
+export function pickDetails(rows, current) {
+  const all = rows || []
+  if (current) return all.find((r) => r.vessel_id === current.id) || null
+  // One row and nothing to choose between is unambiguous whatever the picker says.
+  return all.length === 1 ? all[0] : null
+}
+
+// True only where a real choice is outstanding — never where the form is
+// simply empty.
+export const needsVesselChoice = (rows, state) =>
+  !!state?.multi && !state?.current && (rows || []).length > 1

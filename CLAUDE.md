@@ -2602,7 +2602,44 @@ reason.
   The cook is deliberately still denied `vessels`: his stores list is not
   per-vessel yet, and a table joins an allow-list when there is a need.
 
-  `test-vessels.mjs` — 38 checks.
+  ### `vessel_details` off `fleet_id` — BUILT Aug 2026
+
+  `supabase/vessel_details_per_vessel.sql`. The key is now
+  **(fleet_id, vessel_id)** and `vessel_id` is required. A pair team can
+  finally describe both boats; before this the second one's registration,
+  tonnage and dimensions had nowhere to live.
+
+  **Done SECOND on purpose.** All six readers called `.maybeSingle()`, which
+  throws the moment a fleet has two rows — this migration on its own would have
+  given a pair fleet six broken pages rather than two boats.
+
+  A composite natural key rather than a surrogate id: nothing references this
+  table, and a uuid nobody uses is another column to keep in step. It doubles as
+  the uniqueness the upsert needs — the page writes
+  `onConflict: 'fleet_id,vessel_id'`, and **without that a pair team's second
+  save would overwrite the first boat.**
+
+  **`pickDetails()` returns NULL when a pair is showing ALL, deliberately.**
+  There is no such thing as a pair's particulars: two boats have two
+  registrations and two tonnages, and picking one to stand for both would put
+  the wrong PLN on a **FAL 5 crew list** — a wrong official document, not a
+  cosmetic slip. `VesselDetails.jsx` asks which boat instead of showing a
+  blank form, and reloads when the choice changes so the second boat never
+  inherits the first's figures.
+
+  All seven call sites changed: `VesselPlate` (`useVesselDetails`),
+  `Dashboard`, `CrewList`, `VesselCerts`, `EngineerHome`, `EngineLogs`,
+  `VesselDetails`.
+
+  Probed as a skipper of a pair fleet: **two sets of particulars held**, a
+  second row for the same boat refused, the upsert updating in place without
+  duplicating, particulars for another fleet's boat refused by the composite FK,
+  and a row naming no boat refused.
+
+  `test-vessels.mjs` — 51 checks.
+
+  **What is left of stage 2:** the pickers on crew, quota and rota — the three
+  tables that still have no vessel column of their own to filter on.
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:

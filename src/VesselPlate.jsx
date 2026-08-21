@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
+import { useCurrentVessel } from './VesselContext'
 
 // The registration number is the identity, so the plate leads with the PLN
 // and the vessel name sits underneath it.
@@ -27,25 +28,62 @@ export function vesselLabel(v) {
   return [name, pln].filter(Boolean).join(' ')
 }
 
-export function useVessel() {
-  const [vessel, setVessel] = useState(null)
+/* THE PARTICULARS OF THE BOAT BEING LOOKED AT.
+ *
+ * Three states, and they are not the same thing — every caller has to be able
+ * to tell them apart, which is why this returns a shape rather than a row:
+ *
+ *   a boat is current      → its particulars. The only case for a
+ *                            single-vessel fleet, which is eight of the twelve.
+ *   showing ALL of a pair  → `needsChoice`. THERE IS NO SUCH THING AS A PAIR'S
+ *                            PARTICULARS: two boats have two registrations and
+ *                            two tonnages, and picking one to stand for both
+ *                            would put the wrong PLN on a crew list.
+ *   no boats at all        → `hasVessels` false. HANSTHOLM.
+ *
+ * `all` carries every row for the fleet, so a page that CAN show both — the
+ * dashboard plate — needs no second query.
+ */
+export function useVesselDetails() {
+  const boat = useCurrentVessel()
+  const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let cancel = false
     ;(async () => {
-      const { data, error } = await supabase
-        .from('vessel_details')
-        .select('vessel_name, pln, home_port, length_m, call_sign')
-        .maybeSingle()
+      const { data, error } = await supabase.from('vessel_details').select('*')
       if (cancel) return
       if (error) console.error('Error loading vessel_details:', error)
-      setVessel(data || null)
+      setRows(data || [])
       setLoading(false)
     })()
     return () => { cancel = true }
   }, [])
 
+  const vessel = boat.current
+    ? rows.find((r) => r.vessel_id === boat.current.id) || null
+    // One row and no choice to make is unambiguous, whatever the picker says.
+    : (rows.length === 1 ? rows[0] : null)
+
+  return {
+    vessel,
+    all: rows,
+    loading: loading || boat.loading,
+    /* A REAL choice, never a missing one. A fleet with one boat and no
+     * particulars row yet is not being asked to choose — it is being asked to
+     * fill the form in, and those want different words. */
+    needsChoice: boat.multi && !boat.current && rows.length > 1,
+    hasVessels: boat.hasVessels,
+    current: boat.current,
+    vessels: boat.vessels,
+  }
+}
+
+/* The narrower shape, for pages that only ever want one boat's row and already
+ * handle a null. Same data. */
+export function useVessel() {
+  const { vessel, loading } = useVesselDetails()
   return { vessel, loading }
 }
 

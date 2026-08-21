@@ -9,6 +9,7 @@
  */
 import {
   resolveCurrent, scopeRows, scopeQuery, storageKey, vesselName, showingLabel,
+  pickDetails, needsVesselChoice,
 } from './src/lib/vessels.js'
 
 let fail = 0
@@ -119,6 +120,46 @@ eq('showing one boat', showingLabel(resolveCurrent([A, B], 'v1')), 'BOY JOHN INS
 eq('showing all of them', showingLabel(resolveCurrent([A, B], null)), 'All 2 boats')
 eq('showing the only one', showingLabel(resolveCurrent([SOLO], null)), 'AUDACIOUS BF83')
 eq('showing none', showingLabel(resolveCurrent([], null)), 'No vessel on record')
+
+// ---- whose particulars ------------------------------------------------------
+/* vessel_details is one row per boat since Aug 2026, so every reader has to
+ * choose. THERE IS NO SUCH THING AS A PAIR'S PARTICULARS: two boats have two
+ * registrations and two tonnages, and picking one to stand for both would put
+ * the wrong PLN on a crew list. */
+{
+  const rows = [
+    { vessel_id: 'v1', vessel_name: 'BOY JOHN', pln: 'INS110' },
+    { vessel_id: 'v2', vessel_name: 'ROSEBLOOM', pln: 'INS353' },
+  ]
+  eq('the current boat’s row', pickDetails(rows, A).vessel_name, 'BOY JOHN')
+  eq('and the other one', pickDetails(rows, B).vessel_name, 'ROSEBLOOM')
+  eq('showing all gives none, not the first', pickDetails(rows, null), null)
+
+  // One row and nothing to choose between is unambiguous whatever the picker
+  // happens to say.
+  const one = [{ vessel_id: 'v9', vessel_name: 'AUDACIOUS' }]
+  eq('a single row is taken', pickDetails(one, null).vessel_name, 'AUDACIOUS')
+  eq('and matched when a boat is current', pickDetails(one, SOLO).vessel_name, 'AUDACIOUS')
+  // A boat with no particulars row yet is a form to fill in, not a wrong answer.
+  eq('a boat with no row yet', pickDetails(rows, SOLO), null)
+  eq('no rows at all', pickDetails([], A), null)
+  eq('and null', pickDetails(null, A), null)
+
+  /* A REAL choice, never a missing one. A fleet with one boat and no
+   * particulars is being asked to fill the form in, not to choose — and those
+   * want different words on the page. */
+  eq('a pair showing all must choose',
+    needsVesselChoice(rows, resolveCurrent([A, B], null)), true)
+  eq('a pair with a boat chosen need not',
+    needsVesselChoice(rows, resolveCurrent([A, B], 'v1')), false)
+  eq('a single-vessel fleet is never asked',
+    needsVesselChoice(one, resolveCurrent([SOLO], null)), false)
+  eq('nor is a pair whose particulars are not filled in yet',
+    needsVesselChoice([], resolveCurrent([A, B], null)), false)
+  eq('nor one with only a single row so far',
+    needsVesselChoice([rows[0]], resolveCurrent([A, B], null)), false)
+}
+
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

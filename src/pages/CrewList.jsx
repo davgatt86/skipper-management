@@ -6,6 +6,8 @@ import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useCurrentVessel } from '../VesselContext'
+import { pickDetails } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import { keepsCrewRecords } from '../lib/roles'
 
@@ -52,6 +54,11 @@ export default function CrewList() {
   const canEdit = keepsCrewRecords(appUser)
 
   const [vessel, setVessel] = useState(null)
+  /* A crew list is a border document for ONE boat: it prints a name, a
+   * registration and a flag. vessel_details is one row per boat since Aug 2026,
+   * so the right one has to be chosen — putting a pair partner's PLN on a FAL 5
+   * would be a wrong official document, not a cosmetic slip. */
+  const boat = useCurrentVessel()
   const [crew, setCrew] = useState([])
   const [ranks, setRanks] = useState(FALLBACK_RANKS)
   const [lists, setLists] = useState([])
@@ -70,12 +77,12 @@ export default function CrewList() {
   async function loadAll() {
     setLoading(true); setError('')
     const [v, c, l, r] = await Promise.all([
-      supabase.from('vessel_details').select('*').maybeSingle(),
+      supabase.from('vessel_details').select('*'),
       supabase.from('crew').select('*').is('archived_at', null).neq('status', 'former').order('full_name'),
       supabase.from('crew_lists').select('*').order('departure_date', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('crew_ranks').select('code, label').order('sort'),
     ])
-    if (v.data) setVessel(v.data)
+    if (v.data) setVessel(pickDetails(v.data, boat.current))
     const cr = c.data || []
     const rk = (r.data && r.data.length) ? r.data : FALLBACK_RANKS
     setCrew(cr)

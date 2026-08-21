@@ -5,6 +5,8 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useCurrentVessel } from '../VesselContext'
+import { pickDetails } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import { certStatus, certUrgency, CERT_LEAD_DAYS } from '../lib/certs/certStatus'
 import { parseVesselCertFile } from '../lib/certs/parseCert'
@@ -80,6 +82,9 @@ export default function VesselCerts() {
 
   const [rows, setRows] = useState([])
   const [vessel, setVessel] = useState(null)
+  // The certificate register prints the boat's name and PLN on its header, so
+  // it needs to know which boat — one row per boat since Aug 2026.
+  const boat = useCurrentVessel()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all')
@@ -94,11 +99,11 @@ export default function VesselCerts() {
     setLoading(true); setError('')
     const [cRes, vRes] = await Promise.all([
       supabase.from('vessel_certificates').select('*'),
-      supabase.from('vessel_details').select('vessel_name, pln').maybeSingle(),
+      supabase.from('vessel_details').select('vessel_name, pln, vessel_id'),
     ])
     if (cRes.error) setError(cRes.error.message)
     setRows(cRes.data || [])
-    setVessel(vRes.data || null)
+    setVessel(pickDetails(vRes.data, boat.current))
     setLoading(false)
   }
   useEffect(() => { load() }, [])

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
+import { useCurrentVessel } from '../VesselContext'
+import { pickDetails } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import { keepsLogs } from '../lib/roles'
 import { maintenanceBoard, STATUS } from '../lib/maintenance'
@@ -67,6 +69,7 @@ export default function EngineerHome() {
   const [events, setEvents] = useState([])
   const [certs, setCerts] = useState([])
   const [vessel, setVessel] = useState(null)
+  const boat = useCurrentVessel()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -79,11 +82,11 @@ export default function EngineerHome() {
         readTable('maintenance_tasks', '*'),
         readTable('maintenance_events', '*', 'done_on'),
         readTable('vessel_certificates', 'id, cert_type, expiry_date, category'),
-        readTable('vessel_details', '*'),
+        readTable('vessel_details', '*'),   // one row per boat since Aug 2026
       ])
       if (!live) return
       setLogs({ engine_logs: eng, vessel_fuel_log: fuel, garbage_log: garb })
-      setTasks(t); setEvents(e); setCerts(vc); setVessel(vd[0] || null)
+      setTasks(t); setEvents(e); setCerts(vc); setVessel(pickDetails(vd, boat.current))   // one row per boat since Aug 2026
       setLoading(false)
     })()
     return () => { live = false }

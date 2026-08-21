@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { useCurrentVessel } from '../VesselContext'
+import { pickDetails, vesselName } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
@@ -42,6 +44,8 @@ export default function VesselDetails() {
   const isSkipper = appUser?.role === 'skipper'
   const [form, setForm] = useState(blank())
   const [loading, setLoading] = useState(true)
+  // Which boat these particulars are for. One row per boat since Aug 2026.
+  const boat = useCurrentVessel()
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [heroPath, setHeroPath] = useState(null)
@@ -112,12 +116,18 @@ export default function VesselDetails() {
   async function save() {
     if (!isSkipper) return
     setSaving(true); setMsg('')
-    const payload = { fleet_id: appUser.fleet_id, updated_at: new Date().toISOString() }
+    // The key is (fleet_id, vessel_id) now, so the upsert has to name the boat
+    // — without it a pair team's second save would overwrite the first boat.
+    const payload = {
+      fleet_id: appUser.fleet_id,
+      vessel_id: boat.current?.id ?? null,
+      updated_at: new Date().toISOString(),
+    }
     for (const f of FIELDS) {
       const v = form[f.key]
       payload[f.key] = v === '' ? null : (f.type === 'number' ? Number(v) : v)
     }
-    const { error } = await supabase.from('vessel_details').upsert(payload, { onConflict: 'fleet_id' })
+    const { error } = await supabase.from('vessel_details').upsert(payload, { onConflict: 'fleet_id,vessel_id' })
     setSaving(false)
     setMsg(error ? `Couldn’t save: ${error.message}` : 'Saved ✓')
     if (!error) setTimeout(() => setMsg(''), 2500)
@@ -125,10 +135,28 @@ export default function VesselDetails() {
 
   return (
     <AppShell maxWidth={640}>
-      <PageHeader title="Vessel Details" />
+      <PageHeader
+        title="Vessel Details"
+        sub={boat.current ? vesselName(boat.current) : undefined}
+      />
       <p style={{ color: 'var(--grey-400)', marginTop: '0.4rem' }}>
         Enter your vessel’s constants once — they’ll fill in automatically on every crew list.
       </p>
+
+      {/* A PAIR HAS NO PARTICULARS. Two boats have two registrations and two
+          tonnages, so showing a blank form here — or worse, one boat's figures
+          under the fleet's name — is how the wrong PLN ends up on a FAL 5.
+          Ask, and say where to answer. */}
+      {boat.multi && !boat.current && (
+        <div className="card" style={{ borderColor: 'var(--brass)', marginTop: '1rem' }}>
+          <h2 style={{ marginTop: 0, fontSize: '1rem' }}>Which boat?</h2>
+          <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
+            This fleet has {boat.vessels.length} boats and each keeps her own particulars —
+            her own registration, tonnage and dimensions. Pick one under <strong>Showing</strong>
+            {' '}in the menu and her details will load here.
+          </p>
+        </div>
+      )}
 
       {isSkipper && (
         <div className="card" style={{ marginTop: '1rem' }}>
