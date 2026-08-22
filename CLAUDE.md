@@ -2879,6 +2879,69 @@ shell — pages an engineer cannot open. It now uses `PageHeader` like everythin
 else, and the "set your vessel details" prompt is skipper-only for the same
 reason.
 
+## The demo fleet — `supabase/demo_fleet.sql` (Aug 2026)
+
+**`NORTH WIND PD999 (DEMO)`**, fleet id `…0000de`. Built so a potential
+customer can be shown the app without being shown AUDACIOUS's books — and not
+only hers: Sandy's and Colin's landings sit in the same database.
+
+**It is a FLEET, not a MODE.** Every parser, page and policy is the code the
+real boats run; the only difference is which rows RLS hands back. A "demo
+version" would drift and nobody would see it — the same failure as the two
+parser copies, where the browser path ran 1.2.1 against the webhook's 1.3.2 for
+months because the version that mattered lived on a server nobody looked at.
+
+**The boat**: a Peterhead prefix so the clocks, the market pages and the sales
+notes all make sense, and a registration far above any real PD boat. Every
+generated document carries a SAMPLE banner; the banner does the safety work,
+not the name. Crew, buyers and suppliers are all invented — a demo carrying a
+real firm's or a real crewman's details is somebody else's information however
+sample the rest of it is.
+
+**What it holds**: 25 landings / 838 rows / £2.28m / 599 t at £3.81 a kilo,
+25 logbook trips, 12 quota lines, 10 crew with 50 tickets, 8 vessel
+certificates, 18 engine logs, 14 fuel entries (with a **price per litre**,
+which Audacious's own log lacks), 6 garbage entries, 6 maintenance tasks.
+
+**The landing totals are written from the row sums**, exactly as the real
+ingest does it, so the demo reconciles for the same reason a real note does
+rather than because the totals were typed in to agree.
+
+**Some things are deliberately WRONG** — one passport expired, one falling due,
+a liferaft service run out. A demo where nothing is ever amiss shows none of
+the work the app actually does.
+
+**THE WIPE IS GENERATED FROM THE SCHEMA.** `wipe_demo_fleet()` walks every
+table in `public` carrying a `fleet_id` — 64 of them — so a table added next
+month is cleared without anyone remembering. A hand-written list would slowly
+fill the demo with the last visitor's typing, which is the shape of bug the
+role deny-loops exist to avoid.
+
+**`reset_demo_fleet()` takes NO ARGUMENT.** The fleet id is a constant inside
+the wipe, so there is nothing to get wrong at the call site — the only way to
+be sure a reset can never take a real boat's books with it.
+
+### `is_owner` is the PLATFORM owner flag, and must never be set on a customer
+
+Found while building this. It grants read **and update** on every row of
+`fleets` — every customer's boat name, and the ability to rename their fleet.
+That is **deliberate**: `VesselDetails.jsx` lets the owner administer branding
+across tenants. One account carries it.
+
+It was briefly "fixed" here on the reading that it meant *owner of this fleet*,
+which broke that picker. **It does not mean that.** The real hazard is not the
+policy but the flag: a demo login or a customer given `is_owner` would list
+every real vessel. The demo login is created with `is_owner = false`.
+
+The auth user is made in the Supabase dashboard, not in a migration, so the
+password never passes through a file or a transcript; only the `app_users` row
+binding it to the demo fleet is version-controlled.
+
+Probed as that login, not inspected: `fleets` = the demo fleet alone, another
+fleet's rename affects **0 rows**, and it reads its own 25 landings, 10 crew and
+1 `app_users` row.
+
+
 ## Outstanding work
 
 - **Vessels — stage 1 DONE Aug 2026** (`supabase/vessels_schema.sql`).
