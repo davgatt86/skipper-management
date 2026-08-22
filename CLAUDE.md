@@ -1395,11 +1395,15 @@ In the order agreed:
    exactly as the list views do, so a trip typed in either place lands on the
    same figure. The `£/day at sea` KPI used to read "add days below" in a view
    that has no table below it.
-   **14 of Audacious's 121 landings still have no days at sea** — re-counted
-   Aug 2026, and the old note here said *79 of 118*, which was badly stale.
-   `£/day` is broadly sound now. It also matters less than it did: `Trips.jsx`
-   takes days from the LOGBOOK and only reports the typed figure beside it,
-   rather than depending on it.
+   **Audacious now has days on every landing** — re-counted Aug 2026: 0 of 121
+   missing, and every one attaches to a logbook trip. The note here has said
+   *79 of 118* and then *14 of 121*; both were stale by the time they were
+   read, which is the argument for measuring rather than quoting this file.
+   The other fleets are largely blank — Guiding Light + Faithlie 73 of 73,
+   Boy John + Rosebloom 62 of 62, Beryl 31 of 32, Boy Andrew 25 of 25 — so
+   `£/day` is sound for Audacious and means little elsewhere. It matters less
+   than it did either way: `Trips.jsx` takes days from the LOGBOOK and only
+   reports the typed figure beside it, rather than depending on it.
 5. ~~**Vessel certificates page.**~~ — **done Aug 2026.** `VesselCerts.jsx`
    at `/vessel-certs`, under Vessel in the sidebar (kept apart from crew
    certificates on purpose — they expire on different clocks and are chased
