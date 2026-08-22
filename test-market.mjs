@@ -354,8 +354,63 @@ const bandsOf = (sp) => new Set([
     lines.reduce((a, l) => a + l.boxes, 0))
 }
 
+/* ---- A SPECIES STAYS IN ONE ROW — UNLESS IT IS THE WHOLE MARKET --------
+ *
+ * The rule exists so a buyer following a fish walks it once instead of up one
+ * row and back along the other. It stops meaning anything when the fish IS the
+ * market: Trip 60 landed 1,626 boxes of which 1,602 were haddock, and holding
+ * that to one row is 30 tiers with the top empty in 29 of them, against a
+ * floor of 17. Trip 57 is the same, 28 against 16.
+ *
+ * There is no arrangement that avoids it. At 17 tiers the market has 357
+ * places on the top row and 442 on the bottom, and the haddock alone needs
+ * 757. It goes down both sides because there is nowhere else.
+ *
+ * The sheet is then laid in WALK order — 21 into a tier's top, 26 into its
+ * bottom, on to the next — which is the order a tier is walked, so the fish
+ * still reads as one unbroken run. That is a stronger guarantee than one row,
+ * not a weaker one, and the plan says so in its warnings rather than quietly
+ * changing shape.
+ *
+ * This fixture is 65 of its 91 footprints haddock, so it takes that path: two
+ * tiers reading COD · HADDOCK ×65 · BLACK · HAKE, against three with haddock
+ * held to one row.
+ */
 eq('cod stays in one row', bandsOf('COD').size <= 1, true)
-eq('haddock stays in one row', bandsOf('HADDOCK').size <= 1, true)
+eq('a fish that fills the market goes down both rows', bandsOf('HADDOCK').size, 2)
+eq('and the sheet says why', plan.warnings.some((w) => w.includes('down BOTH rows')), true)
+eq('it saves the tier it claims to', plan.tiers, 2)
+
+/* And it still reads as ONE RUN in walk order — tier 1 top, tier 1 bottom,
+ * tier 2 top, tier 2 bottom — which is the whole justification. */
+{
+  const walk = []
+  for (const t of plan.byTier) for (const s of [...t.top, ...t.bottom]) {
+    if (walk[walk.length - 1] !== s.species) walk.push(s.species)
+  }
+  eq('every fish is one unbroken run along the walk',
+    walk.length, new Set(walk).size)
+  eq('and it reads in clock order', walk, ['COD', 'HADDOCK', 'BLACK', 'HAKE'])
+}
+
+/* A MIXED trip is untouched by any of that — the rule still holds where it
+ * means something. Nothing here is more than a third of the fish. */
+{
+  const mixed = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 40, seq: 0 },
+    { species: 'HADDOCK', grade: 'Med (3)', day: 1, boxes: 60, seq: 1 },
+    { species: 'MONKS', grade: 'Large', day: 1, boxes: 35, seq: 2 },
+    { species: 'LING', grade: 'Large', day: 1, boxes: 45, seq: 3 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 40, seq: 4 },
+  ])
+  const rows = {}
+  for (const [r, l] of [['top', mixed.rows.top], ['bottom', mixed.rows.bottom]])
+    for (const s of l) (rows[s.species] = rows[s.species] || new Set()).add(r)
+  eq('a mixed trip still keeps every fish in one row',
+    Object.values(rows).every((v) => v.size === 1), true)
+  eq('and says nothing about both rows',
+    mixed.warnings.some((w) => w.includes('down BOTH rows')), false)
+}
 eq('black stays in one row', bandsOf('BLACK').size <= 1, true)
 
 // Day order within a grade must run high to low.

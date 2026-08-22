@@ -130,7 +130,21 @@ export function solveDrops(gradeList, budget) {
 
 /* One pass at a fixed set of heights. `heightOf(grade)` returns the height to
  * lay each bucket at; the two-pass planner below calls this twice. */
-function layoutOnce(clean, totalBoxes, heightOf, rules) {
+/* `forceMode` pins the shape to whatever the CEILING pass chose.
+ *
+ * The tier count is decided by that first pass and nothing below may raise it.
+ * The single-species fallback exists to bring the tier count down, so letting
+ * the second pass re-decide it is wrong twice over: it changes the shape of a
+ * sheet whose tier count is already settled, and it fires on trips where it
+ * saves nothing.
+ *
+ * Trip 61 is the case. Row bands gave 18 tiers at ceiling heights. The drops
+ * pass lays fish lower, so row bands then wanted 19 and the fallback stepped
+ * in at 18 — flipping a perfectly good sheet into one where cod, haddock,
+ * black, ling, lythe, hake and lemons were ALL split across the two rows, for
+ * no tier at all. That is the "why is the flats doubled" complaint applied to
+ * every fish on the market. */
+function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
   const warnings = []
   const gradeList = bucketGrades(clean, rules)
 
@@ -357,6 +371,47 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
     else byClock.push({ id: sp.auction, stacks: [...sp.stacks] })
   }
 
+  let looseTiers = null
+
+  /* Everything from a pair of rows to a finished plan. Shared, because the
+   * single-species fallback above builds its rows a different way and must
+   * come out of the same door — tiers, spans and warnings all alike. */
+  const finish = (rows, mode) => {
+    // Tiers are set by whichever row runs out first.
+    const tiers = tiersFor(rows.top.length, rows.bottom.length)
+
+    const byTier = []
+    for (let t = 0; t < tiers; t++) {
+      byTier.push({
+        tier: t + 1,
+        top: rows.top.slice(t * TOP_ROW, (t + 1) * TOP_ROW),
+        bottom: rows.bottom.slice(t * BOTTOM_ROW, (t + 1) * BOTTOM_ROW),
+      })
+    }
+
+    // Which tiers each clock lands on — what you actually tell the market.
+    const auctionSpans = rules.clocks.map((a) => {
+      const hits = []
+      byTier.forEach((t, i) => {
+        if ([...t.top, ...t.bottom].some((s) => s.auction === a.id)) hits.push(i + 1)
+      })
+      const boxes = species.filter((s) => s.auction === a.id)
+        .reduce((sum, s) => sum + s.stacks.reduce((x, st) => x + st.boxes, 0), 0)
+      return { ...a, boxes, from: hits[0] || null, to: hits[hits.length - 1] || null, tiers: hits.length }
+    }).filter((a) => a.boxes > 0)
+
+    for (const a of auctionSpans) {
+      if (a.tiers && a.to - a.from + 1 !== a.tiers) {
+        warnings.push(`${a.label} is split across tiers ${a.from}–${a.to} rather than sitting in one run.`)
+      }
+    }
+
+    /* `looseTiers` is what the SAME tally would come to if the spill were
+     * allowed to break a second fish. Reported, never laid out — and read off
+     * the CEILING pass, see planLayout. */
+    return { tiers, looseTiers, mode, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species, gradeList }
+  }
+
   const layFor = (mask) => {
     const top = [], bottom = []
     byClock.forEach((cl, i) => ((mask >> i) & 1 ? bottom : top).push(...cl.stacks))
@@ -372,7 +427,6 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
    * and the spill may only take from the FULLER row, so it could do nothing
    * about it and the sheet ran a tier long. Scoring the finished thing lets
    * the search pick a layout the spill can then rescue. */
-  let looseTiers = null
   let best = null
   const combos = byClock.length <= 12 ? 1 << byClock.length : 1
   for (let mask = 0; mask < combos; mask++) {
@@ -390,42 +444,60 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
     const level = Math.abs(lay.top.length / TOP_ROW - lay.bottom.length / BOTTOM_ROW)
     if (!best || t < best.t || (t === best.t && level < best.level)) best = { t, level, lay }
   }
-  const rows = best.lay
 
-
-  // Tiers are set by whichever row runs out first.
-  const tiers = tiersFor(rows.top.length, rows.bottom.length)
-
-  const byTier = []
-  for (let t = 0; t < tiers; t++) {
-    byTier.push({
-      tier: t + 1,
-      top: rows.top.slice(t * TOP_ROW, (t + 1) * TOP_ROW),
-      bottom: rows.bottom.slice(t * BOTTOM_ROW, (t + 1) * BOTTOM_ROW),
-    })
-  }
-
-  // Which tiers each clock lands on — what you actually tell the market.
-  const auctionSpans = rules.clocks.map((a) => {
-    const hits = []
-    byTier.forEach((t, i) => {
-      if ([...t.top, ...t.bottom].some((s) => s.auction === a.id)) hits.push(i + 1)
-    })
-    const boxes = species.filter((s) => s.auction === a.id)
-      .reduce((sum, s) => sum + s.stacks.reduce((x, st) => x + st.boxes, 0), 0)
-    return { ...a, boxes, from: hits[0] || null, to: hits[hits.length - 1] || null, tiers: hits.length }
-  }).filter((a) => a.boxes > 0)
-
-  for (const a of auctionSpans) {
-    if (a.tiers && a.to - a.from + 1 !== a.tiers) {
-      warnings.push(`${a.label} is split across tiers ${a.from}–${a.to} rather than sitting in one run.`)
+  /* WHEN ONE FISH IS THE WHOLE MARKET, IT HAS TO GO DOWN BOTH ROWS.
+   *
+   * "A species goes into a row WHOLE" is right for a mixed trip and absurd for
+   * a single-species one. Trip 60 landed 1,626 boxes of which 1,602 were
+   * haddock — 757 footprints. Held to one row that is 757 ÷ 26 = 30 tiers with
+   * the top row empty in 29 of them, against a floor of 17. Trip 57 is the
+   * same shape: 28 against 16. The sheet asked Peterhead for thirteen tiers of
+   * market that were never going to hold a fish.
+   *
+   * No arrangement avoids it. At 17 tiers the market offers 357 places on the
+   * top row and 442 on the bottom; the haddock alone needs 757. It goes down
+   * both sides of the walkway because there is nowhere else for it.
+   *
+   * So the sheet is laid in WALK ORDER instead — 21 into the top of a tier, 26
+   * into the bottom, then on to the next. That is exactly the order a tier is
+   * walked, so every species still reads as one unbroken run to a buyer
+   * following it, which is a stronger guarantee than keeping it in one row,
+   * not a weaker one.
+   *
+   * The alternative was to band the grades, the first half along the top row
+   * and the rest along the bottom, and it breaks David's own rule: a fish that
+   * starts at tier 15 top continues at tier 15 bottom, it does not reappear
+   * ten tiers away.
+   *
+   * IT IS DECIDED ON THE OUTCOME, NOT THE SHAPE. An earlier version fired
+   * whenever a clock was bigger than a row could hold, which caught trips
+   * where the spill already deals with it perfectly well and cost nothing. It
+   * now runs only when it actually saves tiers AND the clock genuinely cannot
+   * be held in one row at that count. Every tally that already sat on its
+   * floor is untouched — checked against all twelve, not assumed.
+   */
+  const floorTiers = Math.max(1, Math.ceil(footprints / (TOP_ROW + BOTTOM_ROW)))
+  if (forceMode !== 'rows' && best.t > floorTiers) {
+    const all = byClock.flatMap((c) => c.stacks)
+    const walk = { top: [], bottom: [] }
+    for (let i = 0; i < all.length;) {
+      walk.top.push(...all.slice(i, i + TOP_ROW)); i += TOP_ROW
+      walk.bottom.push(...all.slice(i, i + BOTTOM_ROW)); i += BOTTOM_ROW
+    }
+    const walkTiers = tiersFor(walk.top.length, walk.bottom.length)
+    const forced = byClock.some((c) => c.stacks.length > BOTTOM_ROW * walkTiers)
+    if (walkTiers < best.t && forced) {
+      warnings.push(
+        `One fish fills the market here, so it is laid down BOTH rows in the order a tier is `
+        + `walked. Keeping it to one row would take ${best.t} tiers instead of ${walkTiers}, `
+        + `with the other row standing empty.`,
+      )
+      return finish(walk, 'walk')
     }
   }
 
-  /* `looseTiers` is what the SAME tally would come to if the spill were
-   * allowed to break a second fish. Reported, never laid out — and read off
-   * the CEILING pass, see planLayout. */
-  return { tiers, looseTiers, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species, gradeList }
+  return finish(best.lay, 'rows')
+
 }
 
 /* → { tiers, ruleOfThumb, totalBoxes, footprints, rows, auctionSpans, warnings }
@@ -482,7 +554,7 @@ export function planLayout(lines, opts = {}) {
     // rather than trusting the arithmetic.
     while (budget > 0) {
       const tryHeights = solveDrops(plan.gradeList, budget)
-      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max, rules)
+      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max, rules, plan.mode)
       if (candidate.tiers <= ceiling) { plan = candidate; heights = tryHeights; break }
       budget -= 1
     }
@@ -561,7 +633,7 @@ export function planLayout(lines, opts = {}) {
   }
 
   return {
-    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints,
+    tiers: plan.tiers, mode: plan.mode, ruleOfThumb, totalBoxes, footprints: plan.footprints,
     spare, spareTop, spareBottom, lowered, held, unfiled,
     rows: plan.rows, byTier: plan.byTier, auctionSpans: plan.auctionSpans,
     warnings, species: plan.species, clocks: rules.clocks,
