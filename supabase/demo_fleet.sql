@@ -384,3 +384,20 @@ grant execute on function public.reset_demo_fleet() to authenticated;
 --
 -- The page says so instead of offering a form that will be turned down, which
 -- is a worse way to find out. That is presentation; the refusal is the boundary.
+
+-- ---------------------------------------------------------------------------
+-- 9. ONE EXPIRED TICKET, NOT NINETEEN  `seed_demo_crew_certs_dates()`
+--
+-- The certificate expiries were spread over a 900-day window either side of
+-- today, so a third of them had run out — NINETEEN expired certificates on a
+-- ten-man crew. That reads as a shambles rather than as a demonstration, and a
+-- reader learns to scroll past noise. One expired ticket is the thing the page
+-- exists to catch.
+--
+-- Now: one run out, one falling due inside the 60-day alert window, the rest in
+-- date. It runs as part of the reset, or the next one puts the nineteen back.
+--
+-- AND THE ALERTS ARE RAISED AT THE END OF THE RESET rather than waiting for the
+-- 06:00 cron. A demo boat with an expired liferaft certificate and an empty
+-- Alerts page is showing the opposite of the thing that matters. 12 alerts:
+-- crew certs, passports, vessel certs, maintenance due, and the garbage book.
