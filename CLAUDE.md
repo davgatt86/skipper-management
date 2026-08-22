@@ -434,28 +434,53 @@ spill may only take from the FULLER row, so it could do nothing about it and
 the sheet ran a tier long. Scoring the finished thing lets the search pick a
 layout the spill can then rescue.
 
-**THE SPILL'S LANDING POINT MUST BE A SPECIES BOUNDARY.** It shuffles whatever
-is already in the receiving row along behind it, which costs those species
-nothing *provided the cut falls between two of them*. It does not always: on a
-four-clock tally the tier boundary landed inside the lythe and a whole run came
-out as `LYTHE x16 | LEMONS x8 | LYTHE x14` — the flats carried over correctly
-and broke a rough fish in half doing it, which is the same complaint one fish
-further along. Nothing to weigh up: a tier is not worth splitting a second
-species to save.
+**THE SPILL MUST NOT CUT A RUN — SPECIES *OR* CLOCK.** It shuffles whatever is
+already in the receiving row along behind it, which costs those fish nothing
+*provided the cut falls between two runs*. It does not always, and checking the
+species alone was not enough. Both failures came off real tallies:
+
+- **Trip 63** — the tier boundary landed inside the lythe, and a whole run came
+  out `LYTHE x16 | LEMONS x8 | LYTHE x14`.
+- **Trip 55** — it landed cleanly BETWEEN two species and still inside the rough
+  clock, giving `rough x442 | flats x19 | rough x3`. A buyer following the rough
+  walks past the flats and back — the same complaint one level up.
+
+Nothing to weigh up: a tier is not worth breaking a second run to save.
 
 **WHEN THE RULE COSTS A TIER, THE PAGE SAYS SO.** Refusing that spill, or one
-whose halves would land in different tiers, is right — but a tier is real
-market floor and this codebase does not spend one silently. `planLayout` runs
-the same search with both guards relaxed purely to report the difference, and
-warns *"8 tiers keeps every fish in one run. 7 would fit (1 fewer), but only by
-splitting one so it reads as two lots on the floor."* On Trip 56 it costs
-nothing and nothing is said — a warning that is almost always there carries no
-information, the same reason day changes are only marked within a grade.
+whose halves would land in different tiers, is right — but a tier is real market
+floor and this codebase does not spend one silently. `planLayout` runs the same
+search with both guards relaxed purely to report the difference, and warns
+*"18 tiers keeps every fish in one run. 17 would fit (1 fewer), but only by
+splitting one so it reads as two lots on the floor."*
 
-Measured across six tally shapes: nothing costs a tier that did not before
-except two synthetic ones, both of which now name their own cost; three save
-one or two. **Trip 56 stays at 15 tiers with every clock AND every species in a
-single run.**
+Two things about that figure, both found by it staying silent when it should not
+have:
+
+- **It is read off the CEILING pass, not the finished plan.** The ceiling pass
+  fixes the tier count; `solveDrops` then spends the room inside those tiers.
+  Ask the finished plan and the comparison is already gone — Trip 64 is 18
+  against a possible 17 and said nothing, because by then the drops had taken
+  795 footprints to 803 and 18 was the floor either way.
+- **The loose pass takes the BEST spill, not the first.** The strict path moves
+  the fewest that drops a tier, deliberately, to keep the split small. A figure
+  that only exists to answer "what did the rule cost?" has to be the best the
+  tally could have done, or the answer flatters itself.
+
+**MEASURED ON 13 REAL AUDACIOUS TALLIES, trips 52–64:**
+
+| | before | after |
+|---|---|---|
+| a clock split across both rows | **12 of 13** | **0** |
+| a run physically broken (`X ǀ Y ǀ X`) | **7 of 13** | **0** |
+
+The tier cost is real and is not hidden: **5 trips need one more tier, 1 needs
+one fewer, 7 are unchanged.** Trips 53, 58, 61 and 63 go up by one, trip 64
+goes 17 → 18, and trip 62 goes 17 → 16. Every one of the five says so on the
+page. Trip 56 is unchanged at 15 with every clock and every species in a single
+run — where before it had the rough split BLACK/CAT/SQUID above against
+LING/MONKS/LYTHE below, **at the same 15 tiers**.
+
 
 
 **Every species goes into a row WHOLE, flats included.** The flats exception is

@@ -211,6 +211,7 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
      * and wear the extra tier — a sheet that reads correctly is worth more than
      * a tier, and this is the flats, which is a handful of boxes. */
     let take = 0
+    let bestT = 0
     for (let mv = 1; mv <= movable; mv++) {
       const fromLen = r[from].length - mv
       const toLen = r[to].length + mv
@@ -223,22 +224,35 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
       const destTier = Math.max(1, Math.ceil(fromLen / rowSize(from)))
       const at = (destTier - 1) * rowSize(to)
       if (strict && r[to].length < at) continue
-      /* AND THE INSERTION POINT MUST BE A SPECIES BOUNDARY.
+      /* AND THE INSERTION POINT MUST NOT CUT A RUN — SPECIES OR CLOCK.
        *
-       * The spill shuffles everything already in the receiving row along
-       * behind it, which costs those species nothing PROVIDED the cut falls
-       * between two of them. It does not always: on a four-clock tally the
-       * tier boundary landed in the middle of the lythe, so a run that had
-       * been whole came out as LYTHE x16 | LEMONS x8 | LYTHE x14 — the
-       * flats carried over correctly and broke a rough fish in half doing
-       * it, which is the same complaint one species further along.
+       * The spill shuffles whatever is already in the receiving row along
+       * behind it, which costs those fish nothing PROVIDED the cut falls
+       * between two runs. It does not always. Checking the species alone was
+       * not enough, and both failures came off real tallies:
        *
-       * There is nothing to weigh up here: a tier is not worth splitting a
-       * second species to save. If the boundary does not fall cleanly, this
-       * many is not spillable and the loop tries the next. */
-      if (strict && at > 0 && at < r[to].length && r[to][at - 1].species === r[to][at].species) continue
-      take = mv
-      break
+       *   Trip 63  the tier boundary landed inside the lythe, and a whole
+       *            run came out LYTHE x16 | LEMONS x8 | LYTHE x14.
+       *   Trip 55  it landed cleanly BETWEEN two species and still inside
+       *            the rough clock, giving rough x442 | flats x19 | rough x3
+       *            — a buyer following the rough walks past the flats and
+       *            back, which is the complaint this whole change is about.
+       *
+       * Nothing to weigh up: a tier is not worth breaking a second run to
+       * save. If the boundary does not fall cleanly this many is not
+       * spillable and the loop tries the next. */
+      const cuts = (k) => at > 0 && at < r[to].length && r[to][at - 1][k] === r[to][at][k]
+      if (strict && (cuts('species') || cuts('auction'))) continue
+      if (strict) { take = mv; break }
+      /* THE LOOSE PASS TAKES THE BEST, NOT THE FIRST.
+       *
+       * The strict path deliberately moves the FEWEST that drops a tier, to
+       * keep the split as small as possible. The loose figure is not laying
+       * anything out — it exists only to answer "what did the rule cost?" —
+       * so it has to be the best the tally could have done, or the answer is
+       * too flattering. On Trip 64 the first-that-drops reading said 18 both
+       * ways and the page stayed silent, when 17 was genuinely available. */
+      if (!bestT || t < bestT) { bestT = t; take = mv }
     }
     if (take) {
       const moved = r[from].splice(r[from].length - take, take)
@@ -361,33 +375,16 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
     return { ...a, boxes, from: hits[0] || null, to: hits[hits.length - 1] || null, tiers: hits.length }
   }).filter((a) => a.boxes > 0)
 
-  /* WHAT KEEPING EVERY FISH IN ONE RUN COST, IF IT COST ANYTHING.
-   *
-   * Every rule on this page is a trade against floor space, and these ones
-   * can take a tier. A spill that would drop one is refused twice over: when
-   * its landing point falls inside another species (carrying the flats over
-   * cleanly by cutting the lythe in half is the same complaint one fish
-   * further along), and when the receiving row does not reach that tier at
-   * all, which puts the two halves in different tiers.
-   *
-   * Both refusals are right — a sheet that reads correctly is worth more
-   * than a tier of flats — but a tier is real market, so it is said out loud
-   * rather than quietly spent. Same argument as `plan.held`, which reports
-   * only where a floor actually bit. On the real Trip 56 tally it costs
-   * nothing and nothing is said. */
-  if (looseTiers !== null && looseTiers < tiers) {
-    const n = tiers - looseTiers
-    warnings.push(`${tiers} tiers keeps every fish in one run. ${looseTiers} would fit `
-      + `(${n} fewer), but only by splitting one so it reads as two lots on the floor.`)
-  }
-
   for (const a of auctionSpans) {
     if (a.tiers && a.to - a.from + 1 !== a.tiers) {
       warnings.push(`${a.label} is split across tiers ${a.from}–${a.to} rather than sitting in one run.`)
     }
   }
 
-  return { tiers, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species, gradeList }
+  /* `looseTiers` is what the SAME tally would come to if the spill were
+   * allowed to break a second fish. Reported, never laid out — and read off
+   * the CEILING pass, see planLayout. */
+  return { tiers, looseTiers, totalBoxes, footprints, rows, byTier, auctionSpans, warnings, species, gradeList }
 }
 
 /* → { tiers, ruleOfThumb, totalBoxes, footprints, rows, auctionSpans, warnings }
@@ -410,6 +407,28 @@ export function planLayout(lines, opts = {}) {
   // Pass one: everything at its ceiling. This is what sets the tier count, and
   // nothing below is allowed to raise it.
   let plan = layoutOnce(clean, totalBoxes, fixed || ((g) => g.max), rules)
+
+  /* WHAT KEEPING EVERY FISH IN ONE RUN COST, IF IT COST ANYTHING.
+   *
+   * Every rule on this page is a trade against floor space, and these ones
+   * can take a tier. A spill that would drop one is refused twice over: when
+   * its landing point falls inside another species (carrying the flats over
+   * cleanly by cutting the lythe in half is the same complaint one fish
+   * further along), and when the receiving row does not reach that tier at
+   * all, which puts the two halves in different tiers.
+   *
+   * Both refusals are right — a sheet that reads correctly is worth more
+   * than a tier of flats — but a tier is real market floor, and this page
+   * does not spend one silently. Same argument as `plan.held`, which reports
+   * only where a floor actually bit.
+   *
+   * IT IS READ OFF THIS PASS, NOT THE FINISHED PLAN. The ceiling pass is
+   * what fixes the tier count; `solveDrops` then spends the room inside
+   * those tiers laying dear fish flatter. Ask the finished plan and the
+   * comparison is already gone — Trip 64 is 18 tiers against a possible 17
+   * and said nothing at all, because by then the drops had taken the 795
+   * footprints to 803 and 18 was the floor for both. */
+  const looseCeiling = plan.looseTiers
   let heights = null
 
   if (!fixed && opts.drop !== false) {
@@ -426,6 +445,12 @@ export function planLayout(lines, opts = {}) {
       if (candidate.tiers <= ceiling) { plan = candidate; heights = tryHeights; break }
       budget -= 1
     }
+  }
+
+  if (looseCeiling != null && looseCeiling < plan.tiers) {
+    const n = plan.tiers - looseCeiling
+    plan.warnings.push(`${plan.tiers} tiers keeps every fish in one run. ${looseCeiling} would `
+      + `fit (${n} fewer), but only by splitting one so it reads as two lots on the floor.`)
   }
 
   const ruleOfThumb = tiersByRuleOfThumb(totalBoxes)

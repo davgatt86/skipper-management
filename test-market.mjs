@@ -213,6 +213,38 @@ const bandsOf = (sp) => new Set([
   eq('a tally that costs nothing is not warned about',
     roomy.warnings.some((w) => w.includes('keeps every fish in one run')), false)
 
+  /* THE SPILL MUST NOT CUT A CLOCK EITHER, not just a species.
+   *
+   * Checking the species alone let it land cleanly BETWEEN two fish and still
+   * inside the rough clock. On the real Trip 55 tally that gave a bottom row
+   * of rough x442 | flats x19 | rough x3 — a buyer following the rough walked
+   * past the flats and back, which is the complaint this whole change is
+   * about, one level up.
+   *
+   * The shape that produced it: a big rough clock whose LAST species is small,
+   * so a species boundary sits a few footprints from the end of the run. */
+  const noRunBroken = (list, key) => {
+    const seen = new Set(); let last = null
+    for (const s of list) {
+      if (s[key] !== last) { if (seen.has(s[key])) return false; seen.add(s[key]); last = s[key] }
+    }
+    return true
+  }
+  const midClock = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 60, seq: 0 },
+    { species: 'HADDOCK', grade: 'Med (3)', day: 1, boxes: 180, seq: 1 },
+    { species: 'BLACK', grade: 'Sma (4a)', day: 1, boxes: 400, seq: 2 },
+    { species: 'LING', grade: 'Large', day: 1, boxes: 100, seq: 3 },
+    { species: 'SQUID', grade: 'Large', day: 1, boxes: 1, seq: 4 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 75, seq: 5 },
+    { species: 'MEGS', grade: 'Large', day: 1, boxes: 5, seq: 6 },
+  ])
+  eq('no clock is ever cut in two within a row',
+    [noRunBroken(midClock.rows.top, 'auction'), noRunBroken(midClock.rows.bottom, 'auction')], [true, true])
+  eq('and no species is either',
+    [noRunBroken(midClock.rows.top, 'species'), noRunBroken(midClock.rows.bottom, 'species')], [true, true])
+
+
 
 
   /* And where it DOES split, it carries straight over. A tier is walked top
