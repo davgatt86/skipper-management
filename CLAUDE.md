@@ -2881,7 +2881,7 @@ reason.
 
 ## The demo fleet — `supabase/demo_fleet.sql` (Aug 2026)
 
-**`NORTH WIND PD999 (DEMO)`**, fleet id `…0000de`. Built so a potential
+**`NORTH WIND BCK500 (DEMO)`**, fleet id `…0000de`. Built so a potential
 customer can be shown the app without being shown AUDACIOUS's books — and not
 only hers: Sandy's and Colin's landings sit in the same database.
 
@@ -2891,8 +2891,8 @@ version" would drift and nobody would see it — the same failure as the two
 parser copies, where the browser path ran 1.2.1 against the webhook's 1.3.2 for
 months because the version that mattered lived on a server nobody looked at.
 
-**The boat**: a Peterhead prefix so the clocks, the market pages and the sales
-notes all make sense, and a registration far above any real PD boat. Every
+**The boat** lands at Peterhead and is registered at Buckie, which is the
+ordinary arrangement anyway — AUDACIOUS is BF83 and sells here too. Every
 generated document carries a SAMPLE banner; the banner does the safety work,
 not the name. Crew, buyers and suppliers are all invented — a demo carrying a
 real firm's or a real crewman's details is somebody else's information however
@@ -2941,6 +2941,47 @@ Probed as that login, not inspected: `fleets` = the demo fleet alone, another
 fleet's rename affects **0 rows**, and it reads its own 25 landings, 10 crew and
 1 `app_users` row.
 
+
+### The sample documents — `scripts/make-sample-docs.mjs`
+
+A demo you can only look at is a slideshow. What is worth showing is a man
+dropping a sales note on the page and watching the rows, the buyer league and
+the quota position come out of it — so the files go through the REAL parsers.
+
+**EVERY FILE IS PARSED BACK BEFORE IT IS WRITTEN**, and if one does not parse
+the script fails and writes nothing. A sample note that quietly stopped parsing
+after a parser change would otherwise be found by a prospect, in front of David.
+
+Written to `public/samples/`, so the app serves them itself:
+
+- **`sample-sales-note.pdf`** — 57 rows, 768 boxes, 27,874 kg, £111,800.76,
+  reconciling to the penny against its own printed TOTAL. Courier, one draw call
+  per row, because pdf.js groups text by y-position and a row drawn in columns
+  comes back to the parser in pieces.
+- **`sample-day-tally.xlsx`** — 1,954 boxes over 5 days, 25 tiers, 1,173 of
+  1,175 footprints used.
+
+**Both are deterministic**, so the same bytes come out every run — a document
+that changed on every build would make "did this change break it?"
+unanswerable.
+
+**Two things only running it could have found:**
+
+- **PD999 could not be read off her own note.** `VESSEL_STOP` holds `"PD"` on
+  purpose — a note prints PD as the PORT code and matching it would name a
+  phantom vessel — so **no Peterhead-registered boat is auto-detected**. None of
+  the thirteen real fleets is PD-registered, so it has never bitten, but it
+  would for a Peterhead customer. **Not a thing to change without real notes to
+  test against**; two P&J buyer fixes already failed for being written blind.
+- **The first tally wanted 30 tiers for 1,711 boxes**, against a rule of thumb
+  of 19. Spreading volume evenly across grades is mostly premium flat fish, and
+  flat fish costs a footprint a box. Weighted like a real trip — hundreds of
+  boxes of haddock metro, a handful of turbot — it comes out at 25 for 1,954.
+
+The parsed market reads **"Don Fishing · Peterhead"**, which is the parser's
+name for the FORMAT rather than a claim about who issued it; the document
+itself is headed SAMPLE FISH SELLING CO and carries the SAMPLE banner in its
+text.
 
 ## Outstanding work
 

@@ -14,7 +14,7 @@
 -- months against the webhook's 1.3.2 and it was invisible because the version
 -- that mattered lived on a server nobody looked at.
 --
--- THE BOAT. `NORTH WIND PD999`. A Peterhead prefix so the market pages, the
+-- THE BOAT. `NORTH WIND BCK500`. A Peterhead prefix so the market pages, the
 -- clocks and the sales notes all make sense, and a registration number far
 -- above any real PD boat so it cannot be mistaken for one. Every sample
 -- document generated for this fleet carries a SAMPLE banner as well; the
@@ -29,13 +29,13 @@
 -- ---------------------------------------------------------------------------
 
 insert into public.fleets (id, name)
-values ('00000000-0000-0000-0000-0000000000de', 'NORTH WIND PD999 (DEMO)')
+values ('00000000-0000-0000-0000-0000000000de', 'NORTH WIND BCK500 (DEMO)')
 on conflict (id) do update set name = excluded.name;
 
 insert into public.vessels (id, fleet_id, name, pln, label, active, sort)
 values ('00000000-0000-0000-0000-00000000d001',
         '00000000-0000-0000-0000-0000000000de',
-        'NORTH WIND', 'PD999', 'NORTH WIND PD999', true, 1)
+        'NORTH WIND', 'BCK500', 'NORTH WIND BCK500', true, 1)
 on conflict (id) do update
   set name = excluded.name, pln = excluded.pln, label = excluded.label;
 
@@ -110,7 +110,7 @@ as $function$
 declare
   demo    constant uuid := '00000000-0000-0000-0000-0000000000de';
   boat    constant uuid := '00000000-0000-0000-0000-00000000d001';
-  label   constant text := 'NORTH WIND PD999';
+  label   constant text := 'NORTH WIND BCK500';
   -- Peterhead's own species, priced from the real board so the figures read
   -- like a market and not like a random number generator.
   sp      text[] := array['COD','HADDOCK','WHITING','MONKS','LING','LYTHE','BLACK','CAT',
@@ -231,7 +231,7 @@ begin
     (fleet_id, vessel_id, vessel_name, pln, call_sign, home_port, owner,
      skipper_name, flag_state, length_overall, breadth, depth, gross_tonnage,
      net_tonnage, year_built, engine_make, engine_kw)
-  values (demo, boat, 'NORTH WIND', 'PD999', 'MSAMPLE', 'Peterhead',
+  values (demo, boat, 'NORTH WIND', 'BCK500', 'MSAMPLE', 'Peterhead',
           'North Wind Fishing Co (sample)', 'Alan Reid', 'United Kingdom',
           26.5, 8.2, 5.4, 320, 96, 2014, 'Sample Marine 8L', 1100)
   on conflict (fleet_id, vessel_id) do update
@@ -300,7 +300,7 @@ begin
   insert into public.quota_snapshots
     (id, fleet_id, vessel_id, year, vessel, last_landing_date, last_updated,
      filename, reconcile_ok)
-  values (sid, demo, boat, 2026, 'NORTH WIND PD999', date '2026-08-10', now(),
+  values (sid, demo, boat, 2026, 'NORTH WIND BCK500', date '2026-08-10', now(),
           'SAMPLE quota statement 2026-08.pdf', true);
 
   insert into public.quota_lines
@@ -466,7 +466,7 @@ revoke all on function public.reset_demo_fleet() from public, anon, authenticate
 --           'skipper', 'Demo Skipper', '<the demo address>', false);
 --
 -- Probed as that user, not inspected:
---   fleets=[NORTH WIND PD999 (DEMO)]  ·  another fleet's rename -> 0 rows
+--   fleets=[NORTH WIND BCK500 (DEMO)]  ·  another fleet's rename -> 0 rows
 --   landings=25  rows=838  trips=25  quota=12  crew=10  crew certs=50
 --   vessel certs=8  engine=18  fuel=14  garbage=6  maintenance=6
 --   app_users=1 (its own)
