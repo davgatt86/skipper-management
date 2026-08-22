@@ -3130,6 +3130,58 @@ else.
 The files are static, served out of `public/samples/` by the app itself, so
 there is no second host and nothing to keep in step by hand.
 
+## The fuel price is DERIVED, and the loop is closed (Aug 2026)
+
+Not one of the 44 bunkerings carried a price per litre and David will not be
+entering them. But the two books the boat already keeps have it between them:
+the settlement carries what the fuel COST, the fuel log carries the LITRES.
+
+**AND THE TWO AGREE, which is what makes it safe rather than a guess.**
+`su_settlements.fuel_used` matched the litres bunkered between one settling date
+and the next **to the litre on 10 of 13 sheets**, and within 1.7% on the other
+three — two records kept by different people for different reasons landing on
+the same number. That also settles what `fuel_used` is for good: **litres, not
+money.**
+
+`derive_fuel_prices(fleet)` writes the settlement's Fuel line ÷ its `fuel_used`
+onto every bunkering inside that settling window. Re-runnable as sheets arrive.
+
+    29 of 29 priced · £0.4949 – £0.9472 · 1,221,621 L · £862,504
+    weighted average £0.7060 a litre
+
+**It is a period AVERAGE, and every row says so in its notes.** Two lifts at
+different prices in one window both get the average and nothing here can tell
+them apart — a figure that looks measured but is not is worse than no figure.
+
+### Square Up worksheets are WRITE-ONLY (found Aug 2026)
+
+David: *"I can't see / recall saved worksheets."* He is right, and there are
+three separate faults:
+
+- **Nothing ever reads one back.** `loadLatestWorksheet()` is exported from
+  `src/lib/su/worksheet.js` and **called by nothing** — `SquareUp.jsx` imports
+  only `getWorksheetBoat` and `saveWorksheet`. The working copy lives in
+  localStorage; the database copy is written and never opened. Change device or
+  clear storage and the worksheet is gone even though it is in the database.
+- **There is no list.** The library has no "list worksheets" call at all, so
+  there is no way to reach anything but the latest even once the read is wired.
+- **Four head columns can never be filled.** `saveWorksheet` destructures
+  `tripNo`, `market`, `daysAtSea` and `boxesLanded` out of its state, and
+  `SquareUp.jsx` passes none of them — those fields do not exist on the form.
+  Both saved rows carry nulls for all four.
+
+Fixed in passing: `notes: haulageNote?.trim() ? null : null` — a ternary whose
+arms were both `null`, so the haulage note was discarded whether there was one
+or not.
+
+### Engine limits — confirmed Aug 2026, and they do bite
+
+All 50 accepted by David as derived from the boat's own history. Worth knowing
+they are not decoration: **0 of 857 current readings breach one** (the data is
+clean), and all three known historical slips WOULD have been caught —
+charge air 150, lube oil 42, and gearbox oil press 2.8, which is the one where a
+rolling average would have flagged the *correct* readings instead.
+
 ## Outstanding work
 
 - **Vessels — stage 1 DONE Aug 2026** (`supabase/vessels_schema.sql`).

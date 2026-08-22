@@ -45,7 +45,9 @@ export async function saveWorksheet(state, boatId, existingId) {
     days_at_sea: num(daysAtSea),
     boxes_landed: num(boxesLanded),
     quota_recovery_pct: num(quota),
-    notes: haulageNote?.trim() ? null : null,
+    // Both arms of this were `null`, so the haulage note was discarded whether
+    // there was one or not — a ternary that cannot branch.
+    notes: haulageNote?.trim() || null,
     status: 'draft',
   }
 
