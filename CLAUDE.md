@@ -447,6 +447,56 @@ species alone was not enough. Both failures came off real tallies:
 
 Nothing to weigh up: a tier is not worth breaking a second run to save.
 
+### When one fish is the whole market
+
+**Trip 60 asked for 30 tiers when 17 would do.** It landed 1,626 boxes of which
+**1,602 were haddock** — 757 footprints. Held to one row that is 757 ÷ 26 = 30
+tiers, the top row empty in 29 of them, against a floor of 17. **Trip 57 is the
+same shape: 28 against 16.** Pre-existing, identical at every commit back to
+e30c36c — it comes straight out of "a species goes into a row WHOLE".
+
+No arrangement avoids it. At 17 tiers the market has 357 places on the top row
+and 442 on the bottom; the haddock alone needs 757. **It goes down both sides
+of the walkway because there is nowhere else for it.**
+
+So when a fish fills the market the sheet is laid in **WALK order** — 21 into a
+tier's top, 26 into its bottom, on to the next. That is exactly the order a
+tier is walked, so every species still reads as **one unbroken run**, which is
+a stronger guarantee than keeping it in one row, not a weaker one. Trip 60 comes
+out COD · HADDOCK · MONKS · LYTHE · HAKE · LEMONS · PLAICE · HALIBUT · TURBOT ·
+BRILL in a single sequence.
+
+Banding the grades instead — the first half along the top row, the rest along
+the bottom — was the alternative and it breaks David's own rule: a fish that
+starts at tier 15 top continues at tier 15 bottom, it does not reappear ten
+tiers away.
+
+**DECIDED ON THE OUTCOME, NOT THE SHAPE.** The first version fired whenever a
+clock was bigger than a row could hold, which caught trips where the spill
+already handles it perfectly well and cost nothing. It runs only when it
+actually saves tiers **and** the clock genuinely cannot be held in one row at
+that count.
+
+**AND DECIDED ONCE, IN THE CEILING PASS.** That pass sets the tier count and
+nothing below may raise it. Letting the drops pass re-decide flipped **Trip 61**
+— a perfectly good 18-tier sheet — into one where cod, haddock, black, ling,
+lythe, hake and lemons were **all** split across the two rows, for no tier at
+all: the "why is the flats doubled" complaint applied to every fish on the
+market. `layoutOnce` takes `forceMode` from the ceiling pass, and `plan.mode`
+is `rows` or `walk`.
+
+Measured across all twelve real tallies under Audacious's own stored rules:
+**every one now sits exactly on its floor**, only trips 57 and 60 take the new
+path, and no other tally changed tier count or shape. The plan warns when it
+happens rather than quietly changing shape.
+
+**A residual worth knowing.** On Trip 63 the spill puts halibut and turbot in
+tier 16's TOP row, which is walked before that tier's bottom — so the last tier
+reads halibut, turbot, then lemons, plaice, megrim, witch, against the
+catalogue's sale order. Each fish is whole and in one place; the order within
+that one tier is the price of the tier it saves.
+
+
 **A SPECIES MAY ONLY BE CUT BY A TOP-TO-BOTTOM SPILL.** Splitting one flat is
 the documented exception and it works in one direction: Trip 64 carries hake
 62/9 off the end of tier 17's top into the start of tier 17's bottom, the very
