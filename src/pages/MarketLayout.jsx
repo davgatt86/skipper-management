@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
@@ -42,6 +42,7 @@ export default function MarketLayout() {
   const [sheet, setSheet] = useState(false)
   const [ruleBusy, setRuleBusy] = useState(false)
   const [ruleMsg, setRuleMsg] = useState('')
+  const [pendingRule, setPendingRule] = useState(null)
   const inputRef = useRef(null)
 
   const canEdit = appUser?.role === 'skipper'
@@ -64,9 +65,20 @@ export default function MarketLayout() {
     setRuleBusy(false)
     if (err) setRuleMsg('Could not save: ' + err.message)
     else {
+      /* REPORT THE OUTCOME, NOT THE INTENTION.
+       *
+       * "Chipper (2b) may now be laid flat" is what the rule says, and on a
+       * full trip nothing whatever happens: releasing a floor only lets the
+       * drop solver spend room that may not exist. David clicked it on Trip 63
+       * and read it as the button not working — the rule had saved perfectly
+       * well and there was no room to use it.
+       *
+       * So the grade is remembered and checked once the new plan is in, and
+       * the page says where it actually ended up. */
+      setPendingRule({ species, grade, floor })
       setRuleMsg(floor > 1
         ? `${species} ${grade} will not be laid below ${floor} high.`
-        : `${species} ${grade} may now be laid flat.`)
+        : `${species} ${grade} may now be laid flat — working out the sheet again…`)
       reloadRules()
     }
   }
@@ -75,6 +87,51 @@ export default function MarketLayout() {
     () => (parsed?.lines && !rulesLoading ? planLayout(parsed.lines, { rules }) : null),
     [parsed, rules, rulesLoading],
   )
+
+  /* DID THE RULE ACTUALLY CHANGE ANYTHING?
+   *
+   * Releasing a floor does not lay a fish flat — it only lets the drop solver
+   * spend room on it, and on a full trip there is none. Trip 63 came out with
+   * fifteen places spare, twelve of them on the top row, while the chipper
+   * that had just been released sits on the bottom, which was full to the last
+   * place. Nothing moved, and "Chipper (2b) may now be laid flat" read as the
+   * button having done nothing.
+   *
+   * This waits for the new plan and says where the grade really ended up, with
+   * the figures — so a rule that could not bite is visibly a lack of room
+   * rather than a lack of a working button.
+   */
+  useEffect(() => {
+    if (!pendingRule || !plan) return
+    const { species, grade, floor } = pendingRule
+    setPendingRule(null)
+    if (floor > 1) return            // holding a grade up always takes effect
+
+    const dropped = plan.lowered.find((l) => l.species === species && l.grade === grade)
+    if (dropped) {
+      setRuleMsg(`${species} ${grade} is now laid ${dropped.to === 1 ? 'flat' : `${dropped.to} high`}.`)
+      return
+    }
+
+    /* It did not come down. Say what it would have cost against what is there
+     * — and in WHICH row, since a grade can only use the room in its own. */
+    const mine = (list) => list.filter((s) => s.species === species && s.grade === grade)
+    const onTop = mine(plan.rows.top)
+    const stacks = onTop.length ? onTop : mine(plan.rows.bottom)
+    if (!stacks.length) { setRuleMsg(`${species} ${grade} may now be laid flat.`); return }
+
+    const row = onTop.length ? 'top' : 'bottom'
+    const room = onTop.length ? plan.spareTop : plan.spareBottom
+    const boxes = stacks.reduce((n, s) => n + s.boxes, 0)
+    const need = boxes - stacks.length          // footprints to go from here to flat
+    setRuleMsg(
+      `${species} ${grade} may now be laid flat, but there is no room this trip. `
+      + `It is on the ${row} row, which has ${room === 0 ? 'nothing' : room} spare, `
+      + `and laying its ${boxes} boxes flat would need ${need} more. `
+      + `It stays at ${stacks[0].height} high.`,
+    )
+  }, [plan, pendingRule])
+
 
   /* THE BUYERS' CATALOGUE — the same tally, turned round to face the market.
    *
@@ -242,10 +299,21 @@ export default function MarketLayout() {
               )}
 
               {ruleMsg && <p style={{ fontSize: '0.82rem', margin: '0.6rem 0 0', color: 'var(--kelp)' }}>{ruleMsg}</p>}
+              {/* WHERE the spare room is, not just how much.
+                  The rows fill independently, so a total is not a budget: on
+                  Trip 63 all fifteen spare places were on the top row while the
+                  megrim that could have come down are on the bottom, which was
+                  full to the last place. "Not enough to drop another grade"
+                  reads as an arithmetic shortfall when it is nothing of the
+                  kind. */}
               {plan.spare > 0 && (
                 <p className="muted" style={{ fontSize: '0.82rem', margin: '0.6rem 0 0' }}>
-                  {plan.spare} {plan.spare === 1 ? 'footprint' : 'footprints'} still spare — not enough to drop
-                  another grade a full level.
+                  {plan.spare} {plan.spare === 1 ? 'footprint' : 'footprints'} still spare
+                  {plan.spareTop > 0 && plan.spareBottom > 0
+                    ? ` — ${plan.spareTop} on the top row, ${plan.spareBottom} on the bottom.`
+                    : ` — all of ${plan.spare === 1 ? 'it' : 'them'} on the ${plan.spareBottom > 0 ? 'bottom' : 'top'} row.`}
+                  {' '}A grade can only use the room in its <em>own</em> row, so spare space on one side
+                  cannot bring a fish down on the other.
                 </p>
               )}
             </div>

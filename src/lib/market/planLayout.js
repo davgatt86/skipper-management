@@ -232,6 +232,32 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
       const toLen = r[to].length + mv
       const t = from === 'top' ? tiersFor(fromLen, toLen) : tiersFor(toLen, fromLen)
       if (t >= start) continue
+      /* A SPECIES MAY ONLY BE CUT BY A TOP-TO-BOTTOM SPILL.
+       *
+       * Splitting one flat is the documented exception and it works: Trip 64
+       * carries hake 62/9 off the end of tier 17's top into the start of tier
+       * 17's bottom, which is the very next thing walked, so it reads as one
+       * run.
+       *
+       * The other direction can never do that. A tier is walked top row then
+       * bottom row, so a chunk moved from the BOTTOM into the same tier's top
+       * is walked BEFORE the part it was taken from — the halves come out back
+       * to front with the whole tier between them. On David's Trip 63 sheet
+       * the spill took 5 of the 8 halibut off the bottom and left 3:
+       *
+       *     tier 16 top     HALIBUT x5 | TURBOT x1
+       *     tier 16 bottom  LEMONS x6 | PLAICE x4 | MEGS x12 | WITCH x1 | HALIBUT x3
+       *
+       * — the same fish at both ends of one tier. David: "in that last tier
+       * the halibut isn't next to each other."
+       *
+       * So a bottom-to-top spill must take WHOLE species. On Trip 63 that
+       * moves all 8 halibut and the turbot, fits in the same 16 tiers, and
+       * leaves every fish in one place.
+       */
+      const cut = r[from].length - mv
+      if (strict && from === 'bottom' && cut > 0 && cut < r[from].length
+          && r[from][cut - 1].species === r[from][cut].species) continue
       // Does the receiving row ALREADY reach the tier the donor now ends on?
       // Its current length is what decides where the spill can be inserted; if
       // the row stops short of that tier the two halves land in different tiers
@@ -471,6 +497,24 @@ export function planLayout(lines, opts = {}) {
   const ruleOfThumb = tiersByRuleOfThumb(totalBoxes)
   const spare = plan.tiers * PER_TIER_FLAT - plan.footprints
 
+  /* WHERE THE SPARE ROOM IS, not just how much of it there is.
+   *
+   * The rows fill independently, so a total is not a budget. On Trip 63 the
+   * sheet came out with 15 footprints going spare and the megrim still stacked
+   * two high — David, looking at the printed page: "the megs could go flat to
+   * use up some of the space left."
+   *
+   * They could not. Every one of those 15 places was on the TOP row of the
+   * last tier, and the megrim are on the BOTTOM row, which is full to the last
+   * place. Laying them flat would have added a seventeenth tier.
+   *
+   * The page used to say "15 footprints still spare — not enough to drop
+   * another grade a full level", which is true and reads as an arithmetic
+   * shortfall when it is nothing of the kind. Reporting the two rows lets it
+   * say the real reason. */
+  const spareTop = plan.tiers * TOP_ROW - plan.rows.top.length
+  const spareBottom = plan.tiers * BOTTOM_ROW - plan.rows.bottom.length
+
   // What ended up laid lower than its ceiling, for the page to show — this is
   // a decision the skipper should be able to see and overrule, not a silent one.
   const lowered = []
@@ -517,7 +561,8 @@ export function planLayout(lines, opts = {}) {
   }
 
   return {
-    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints, spare, lowered, held, unfiled,
+    tiers: plan.tiers, ruleOfThumb, totalBoxes, footprints: plan.footprints,
+    spare, spareTop, spareBottom, lowered, held, unfiled,
     rows: plan.rows, byTier: plan.byTier, auctionSpans: plan.auctionSpans,
     warnings, species: plan.species, clocks: rules.clocks,
   }

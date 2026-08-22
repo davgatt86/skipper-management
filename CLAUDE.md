@@ -447,6 +447,49 @@ species alone was not enough. Both failures came off real tallies:
 
 Nothing to weigh up: a tier is not worth breaking a second run to save.
 
+**A SPECIES MAY ONLY BE CUT BY A TOP-TO-BOTTOM SPILL.** Splitting one flat is
+the documented exception and it works in one direction: Trip 64 carries hake
+62/9 off the end of tier 17's top into the start of tier 17's bottom, the very
+next thing walked, so it reads as one run.
+
+The other direction can never do that — a chunk moved from the BOTTOM into the
+same tier's top is walked BEFORE the part it came from. On Trip 63 the spill
+took 5 of the 8 halibut off the bottom row and left 3, so the last tier read:
+
+    tier 16 top     HALIBUT x5 | TURBOT x1
+    tier 16 bottom  LEMONS x6 | PLAICE x4 | MEGS x12 | WITCH x1 | HALIBUT x3
+
+David, on the printed sheet: *"in that last tier the halibut isn't next to each
+other."* Taking whole species when the donor is the bottom row moves all 8 and
+the turbot, fits in the same 16 tiers, and leaves every fish in one place.
+
+**Guarding the donor unconditionally was the first attempt and it was WRONG** —
+it also forbade Trip 64's hake split, which is the wanted case. The rule is
+about direction, not about cutting.
+
+**SPARE ROOM IS PER ROW, AND THE PAGE NOW SAYS WHICH.** The rows fill
+independently, so a total is not a budget. Trip 63 came out with 15 places
+spare — **12 on the top row, 3 on the bottom** — while the megrim that could
+have come down are on the bottom. David: *"the megs could go flat to use up
+some of the space left."* They could not; laying them flat would have added a
+seventeenth tier. The old line, *"15 footprints still spare — not enough to
+drop another grade a full level"*, reads as an arithmetic shortfall when it is
+nothing of the kind. `plan.spareTop` / `plan.spareBottom`.
+
+**AND A FLOOR THAT COULD NOT BITE NOW SAYS SO.** Releasing a floor does not lay
+a fish flat; it only lets the drop solver spend room that may not exist. David
+clicked *Let it drop* on Chipper (2b) and read it as the button not working —
+the rule had saved perfectly well. The page now waits for the new plan and
+reports where the grade actually ended up:
+
+> HADDOCK Chipper (2b) may now be laid flat, but there is no room this trip. It
+> is on the bottom row, which has 3 spare, and laying its 124 boxes flat would
+> need 62 more. It stays at 2 high.
+
+Reporting the intention rather than the outcome is what made a working button
+look broken.
+
+
 **WHEN THE RULE COSTS A TIER, THE PAGE SAYS SO.** Refusing that spill, or one
 whose halves would land in different tiers, is right — but a tier is real market
 floor and this codebase does not spend one silently. `planLayout` runs the same

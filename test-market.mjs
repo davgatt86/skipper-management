@@ -213,6 +213,73 @@ const bandsOf = (sp) => new Set([
   eq('a tally that costs nothing is not warned about',
     roomy.warnings.some((w) => w.includes('keeps every fish in one run')), false)
 
+  /* A SPECIES MAY ONLY BE CUT BY A TOP-TO-BOTTOM SPILL.
+   *
+   * Splitting one flat is the documented exception and it works in one
+   * direction: Trip 64 carries hake 62/9 off the end of tier 17's top into the
+   * start of tier 17's bottom, the very next thing walked, so it reads as one
+   * run.
+   *
+   * The other direction can never do that — a chunk moved from the BOTTOM into
+   * the same tier's top is walked BEFORE the part it came from. On David's
+   * Trip 63 sheet the spill took 5 of the 8 halibut off the bottom and left 3:
+   *
+   *     tier 16 top     HALIBUT x5 | TURBOT x1
+   *     tier 16 bottom  LEMONS x6 | PLAICE x4 | MEGS x12 | WITCH x1 | HALIBUT x3
+   *
+   * The same fish at both ends of one tier with four species between it.
+   * David: "in that last tier the halibut isn't next to each other."
+   *
+   * Taking whole species instead moved all 8 and the turbot, which fitted just
+   * as well — 16 tiers either way — and left every fish in one place.
+   *
+   * This fixture reproduces it: it fails without the guard and passes with it,
+   * checked both ways rather than assumed. */
+  const oneRow = (p) => {
+    const rows = {}
+    for (const [r, l] of [['top', p.rows.top], ['bottom', p.rows.bottom]])
+      for (const s of l) (rows[s.species] = rows[s.species] || new Set()).add(r)
+    return Object.entries(rows).filter(([, v]) => v.size > 1).map(([k]) => k)
+  }
+  const oncePerTier = (p) => {
+    const bad = []
+    for (const t of p.byTier) {
+      const seen = new Set(); let last = null
+      for (const s of [...t.top, ...t.bottom]) {
+        if (s.species !== last) {
+          if (seen.has(s.species)) bad.push(`${s.species}@t${t.tier}`)
+          seen.add(s.species); last = s.species
+        }
+      }
+    }
+    return bad
+  }
+
+  const donor = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 60, seq: 0 },
+    { species: 'HADDOCK', grade: 'Med (3)', day: 1, boxes: 200, seq: 1 },
+    { species: 'BLACK', grade: 'Sma (4a)', day: 1, boxes: 150, seq: 2 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 60, seq: 3 },
+    { species: 'LEMONS', grade: 'Med', day: 1, boxes: 30, seq: 4 },
+    { species: 'HALIBUT', grade: 'Large', day: 1, boxes: 8, seq: 5 },
+    { species: 'TURBOT', grade: 'Small', day: 1, boxes: 1, seq: 6 },
+  ])
+  eq('a bottom-to-top spill never leaves half a species behind', oneRow(donor), [])
+  eq('so no fish appears twice in one tier', oncePerTier(donor), [])
+
+  /* SPARE ROOM IS PER ROW, and the two must add up to the total.
+   *
+   * The rows fill independently, so a total is not a budget: Trip 63 came out
+   * with 15 places spare, 12 of them on the top row, while the megrim that
+   * could have come down are on the bottom, which had 3. "Not enough to drop
+   * another grade" read as an arithmetic shortfall when it was nothing of the
+   * kind. */
+  eq('spare splits into the two rows and adds up',
+    donor.spareTop + donor.spareBottom, donor.spare)
+  eq('and neither row is ever negative',
+    donor.spareTop >= 0 && donor.spareBottom >= 0, true)
+
+
   /* THE SPILL MUST NOT CUT A CLOCK EITHER, not just a species.
    *
    * Checking the species alone let it land cleanly BETWEEN two fish and still
