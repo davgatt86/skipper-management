@@ -491,3 +491,101 @@ revoke all on function public.reset_demo_fleet() from public, anon, authenticate
 --   vessel certs=8  engine=18  fuel=14  garbage=6  maintenance=6
 --   app_users=1 (its own)
 -- ---------------------------------------------------------------------------
+
+create or replace function public.seed_demo_settlements()
+returns text
+language plpgsql security definer set search_path to 'public'
+as $function$
+declare
+  demo constant uuid := '00000000-0000-0000-0000-0000000000de';
+  bid  constant uuid := '00000000-0000-0000-0000-00000000d0b1';
+  sid  uuid;
+  i    int;
+  fish numeric; tow numeric; exp numeric; rec numeric;
+  wt numeric; days numeric; nland int;
+  share numeric; wages numeric;
+  made int := 0;
+  r    record;
+begin
+  insert into public.su_boats (id, fleet_id, name, registration, format, agent, active, ledger_no)
+  values (bid, demo, 'North Wind', 'BCK500', 'audacious', 'Sample Fish Selling Co', true, '99')
+  on conflict (id) do update set name = excluded.name, registration = excluded.registration;
+
+  /* EIGHT SETTLEMENTS OVER TWENTY-FOUR LANDINGS, three to a sheet.
+   *
+   * The twenty-fifth is left UNSETTLED on purpose. The office settles a run of
+   * trips at a time and the most recent one has not been paid yet, so a landing
+   * with no settlement is the normal state — and `solveSettlementRuns` is built
+   * to leave leading and trailing landings unassigned rather than force them
+   * onto a sheet. A demo where every landing is settled would hide the one
+   * behaviour that took the most work to get right. */
+  for i in 0..7 loop
+    select sum(l.value), sum(l.weight_kg), sum(coalesce(l.days_at_sea, 0)), count(*)
+      into fish, wt, days, nland
+      from (select * from public.sales_landings
+             where fleet_id = demo order by landing_date
+             offset i * 3 limit 3) l;
+    exit when nland < 3;
+
+    /* TOWAGE ON ONE SHEET, and it is the point of putting it there.
+     *
+     * `Reconcile.jsx` compares against the FISH SALES line, never
+     * `total_income`, because a settlement can carry income the boat never
+     * landed — the real books show towage of £73,347 on one sheet, against
+     * which the boat looked as though she had earned fish she never caught.
+     * The demo carries one so the page can be shown doing the right thing. */
+    tow := case when i = 4 then 18400.00 else 0 end;
+
+    exp := round(fish * 0.446, 2);
+    rec := round(fish * 0.011, 2);
+    share := round(fish + tow - exp + rec, 2);
+    wages := round(share * 0.40, 2);
+
+    sid := gen_random_uuid();
+    insert into public.su_settlements
+      (id, boat_id, reference, settling_date, period, status,
+       total_income, total_expenses, total_recoveries,
+       crew_owners_share, crew_wages_total, owners_share,
+       trips, days_at_sea, fuel_used, weight_landed, trip_type)
+    values (sid, bid, 'SAMPLE/' || lpad((i + 1)::text, 3, '0'),
+            (select max(landing_date) + 5 from
+              (select landing_date from public.sales_landings
+                where fleet_id = demo order by landing_date offset i * 3 limit 3) z),
+            'Trips ' || (i * 3 + 1) || '–' || (i * 3 + 3), 'final',
+            fish + tow, exp, rec, share, wages, round(share - wages, 2),
+            3, days,
+            /* LITRES, not pounds. `su_settlements.fuel_used` is a volume — it
+             * averages 74% of the expense bill on the real sheets, which is
+             * impossible for a cost, and works out at a working day's burn per
+             * day at sea. Seeding it as money would teach the wrong thing. */
+            round(days * 5846, 0),
+            wt, 'fishing');
+
+    insert into public.su_settlement_lines (id, settlement_id, section, label, amount, sort)
+    values (gen_random_uuid(), sid, 'income', 'Fish Sales', fish, 1);
+    if tow > 0 then
+      insert into public.su_settlement_lines (id, settlement_id, section, label, amount, sort)
+      values (gen_random_uuid(), sid, 'income', 'Towage', tow, 2);
+    end if;
+
+    -- The expense labels the real sheets carry, in the proportions they run at.
+    insert into public.su_settlement_lines (id, settlement_id, section, label, amount, sort)
+    select gen_random_uuid(), sid, 'expense', e.l, round(exp * e.f, 2), e.s
+      from (values ('Fuel', 0.497, 10), ('Ice', 0.041, 11), ('Boxes', 0.052, 12),
+                   ('Landing Dues', 0.063, 13), ('Harbour Dues', 0.028, 14),
+                   ('Commission', 0.092, 15), ('Provisions', 0.048, 16),
+                   ('Stores', 0.037, 17), ('Insurance / Rentals', 0.055, 18),
+                   ('Levies', 0.031, 19), ('Crew Pro', 0.026, 20),
+                   ('Sundries', 0.030, 21)) as e(l, f, s);
+
+    insert into public.su_settlement_lines (id, settlement_id, section, label, amount, sort)
+    select gen_random_uuid(), sid, 'recovery', v.l, round(rec * v.f, 2), v.s
+      from (values ('Rec. Stores', 0.55, 30), ('Rec. Sundries', 0.45, 31)) as v(l, f, s);
+
+    made := made + 1;
+  end loop;
+
+  return made || ' settlements over ' || (made * 3) || ' landings, one carrying towage';
+end $function$;
+
+revoke all on function public.seed_demo_settlements() from public, anon, authenticated;

@@ -11,6 +11,19 @@ const hintStyle = { fontSize: '0.8rem', color: 'var(--grey-400)', marginTop: '0.
 const ROLE_LABEL = { skipper: 'Skipper', office: 'Office', crew: 'Crew', viewer: 'Viewer', officer: 'Officer', engineer: 'Officer', cook: 'Cook' }
 
 export default function Users() {
+  const [confirmReset, setConfirmReset] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetMsg, setResetMsg] = useState('')
+
+  /* The database refuses anyone but the platform owner, so this is a button
+   * and not a boundary. The message it returns is the row counts, which is
+   * worth showing: a reset that says nothing looks like one that did nothing. */
+  async function resetDemo() {
+    setResetBusy(true); setResetMsg('')
+    const { data, error: e } = await supabase.rpc('reset_demo_fleet')
+    setResetBusy(false); setConfirmReset(false)
+    setResetMsg(e ? 'Could not reset: ' + e.message : 'Demo fleet reset — ' + data)
+  }
   const { appUser } = useAuth()
   const isSkipper = appUser?.role === 'skipper'
 
@@ -264,6 +277,50 @@ export default function Users() {
           </form>
         )}
       </div>
+
+      {/* ---- THE DEMONSTRATION FLEET -------------------------------------
+          Platform owner only, and the database says so too: the guard lives
+          inside `reset_demo_fleet()`, so hiding this card hides a button and
+          nothing else. A visitor calling the function from a console is
+          refused by name.
+
+          It runs nightly at 03:30 as well. This is for the other case — the
+          last visitor made a mess and the next one is due in ten minutes. */}
+      {appUser?.is_owner && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
+          <h2 style={{ marginTop: 0 }}>Demonstration fleet</h2>
+          <p className="muted" style={{ marginTop: 0, fontSize: '0.88rem' }}>
+            Puts <strong>NORTH WIND BCK500</strong> back exactly as she ships — 25 landings,
+            10 crew, the certificates, the logs — and empties her audit book. Anything a
+            visitor typed is discarded. It runs on its own every night at 03:30;
+            this is for when you need her clean now.
+          </p>
+          <p className="muted" style={{ fontSize: '0.82rem' }}>
+            No other fleet is touched: the fleet id is a constant inside the function and
+            it takes no argument, so there is nothing to point at the wrong boat.
+          </p>
+
+          {/* Two clicks. It destroys a visitor's work, which is the point, but
+              a single click beside "Add user" is too easy to hit by accident. */}
+          {!confirmReset ? (
+            <button onClick={() => setConfirmReset(true)} disabled={resetBusy}>
+              Reset the demo fleet…
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <strong style={{ fontSize: '0.88rem' }}>Discard everything on the demo boat?</strong>
+              <button onClick={resetDemo} disabled={resetBusy}
+                      style={{ background: 'var(--rust)', color: '#fff', border: 'none' }}>
+                {resetBusy ? 'Resetting…' : 'Yes, reset her'}
+              </button>
+              <button onClick={() => setConfirmReset(false)} disabled={resetBusy}>Cancel</button>
+            </div>
+          )}
+          {resetMsg && (
+            <p style={{ fontSize: '0.82rem', marginBottom: 0, color: 'var(--kelp)' }}>{resetMsg}</p>
+          )}
+        </div>
+      )}
     </AppShell>
   )
 }
