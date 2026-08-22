@@ -308,3 +308,55 @@ grant execute on function public.reset_demo_fleet() to authenticated;
 --   vessel certs 8 · engine 18 · fuel 14 · maintenance 6 · particulars 1
 --   audit 0 · app_users 1 (its own) · payments 0
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 6. THE LOGBOOK CATCH DETAIL  `seed_demo_catches()`
+--
+-- The only thing `gear_ground_days()` reads. Without it the whole Grounds tab
+-- is dead — no wear-by-ground table, no ground mix on a renewal, and the
+-- confidence line stuck on "no finished sets yet".
+--
+-- BUILT FROM THE LANDINGS, not invented beside them: each trip's catch is its
+-- own landing's weight spread over its days at sea and its species, lifted 8%
+-- for gutting loss — the same figure the trip's `total_live_kg` carries. Two
+-- records of one trip that disagree is the thing this app exists to catch.
+--
+-- FOUR GROUNDS ON A ROTATION. `groundConfidence()` is deliberately strict: three
+-- finished sets AND two grounds carrying 20+ days and 2+ sets before it ranks
+-- anything, because a ground with four days shows the most extreme figure on
+-- the page and means nothing. Measured after seeding:
+--
+--     27.4.b (GBR)   41 days   17 sets   counts
+--     27.6.a (GBR)   37 days   20 sets   counts
+--     27.4.a (NOR)   35 days   20 sets   counts
+--     27.4.a (GBR)   24 days   15 sets   counts
+--
+-- AND A FEW DAYS ON 27.6.a.s, on purpose. The logbook writes that local south
+-- tag on the West of Scotland ground and it is NOT a division of its own —
+-- `normaliseArea()` folds it into 27.6.a in the KEY and not merely the label,
+-- or VIa (GBR) appears twice in the wear table. The 37 days above are the fold
+-- working; without it there would be a fifth row.
+--
+-- Probed as the demo login: 137 ground-days, 1,502 catch rows, 25 trip dates,
+-- and 0 for another fleet's boat.
+
+-- ---------------------------------------------------------------------------
+-- 7. PRICE VS FLEET IS OFF THE DEMO, in both directions
+--
+-- OUTWARD: `price_vs_fleet_species/grades` read every fleet's rows with no
+-- exclusion, so the demo's 838 invented rows sat in the average REAL customers
+-- are measured against. Nothing was corrupted — the demo writes species upper
+-- case (COD) and real notes canonicalise to proper case (Cod), so they never
+-- grouped — but that is luck, not design, and it breaks the first time either
+-- naming changes. Both functions now join `fleets` and require `not is_demo`.
+--
+-- INWARD: the demo login goes to strangers and competitors, and this is the one
+-- page that is deliberately cross-fleet. Excluding demo fleets from `base` does
+-- both at once — the caller's own figures come back empty, so there is nothing
+-- to show. Probed: demo login 0 species rows, real skipper 33 species and 23
+-- cod grades, unchanged.
+--
+-- The menu entry carries `notOnDemo: true` as well. That hides a MENU ITEM and
+-- nothing else — nav.js is presentation, the RPC is the boundary — but a page
+-- answering "No sales in 2026" to a boat with 25 landings looks broken rather
+-- than withheld.

@@ -3006,17 +3006,37 @@ overflowed `numeric(5,4)`); a current contract carrying a planned end date, when
 the constraint rightly requires none until the man actually goes home; and
 MARPOL garbage categories in plain English where the record book has coded ones.
 
-**Still empty, and each needs a document rather than a seed**:
-`quota_trip_catches` (logbook catch detail, which the gear grounds analysis
-needs), `stowage_plans`, `crew_lists`. `market_prices` needs nothing — it has no
-`fleet_id`, so the demo already reads the real Peterhead and Denmark board,
-44,623 rows back to 2022, which is what makes Daily Prices and the Estimator
-work out of the box.
+**THE LOGBOOK CATCH DETAIL is seeded too** — 1,502 rows over 137 fished days,
+built FROM the landings (each trip's own weight spread over its days and
+species, lifted 8% for gutting loss) so the logbook and the sales notes tell the
+same story. Four grounds on a rotation, because `groundConfidence()` wants three
+finished sets AND two grounds carrying 20+ days and 2+ sets before it ranks
+anything:
 
-**One thing for David to decide, not me:** the demo login sees **14 rows** of
-the cross-fleet Price vs Fleet benchmark. Anonymised and behind the
-minimum-three-boats guard, working as designed for a real customer — but this
-login goes to competitors.
+    27.4.b (GBR)  41 days · 17 sets      27.4.a (NOR)  35 days · 20 sets
+    27.6.a (GBR)  37 days · 20 sets      27.4.a (GBR)  24 days · 15 sets
+
+**A few days are logged on `27.6.a.s` on purpose.** That local south tag is not
+a division of its own and `normaliseArea()` folds it into `27.6.a` in the KEY
+rather than only the label — the 37 days above ARE the fold; without it there
+would be a fifth row reading VIa (GBR) twice.
+
+**PRICE VS FLEET IS OFF THE DEMO, in both directions.** The RPCs read every
+fleet's rows with no exclusion, so the demo's 838 invented rows sat in the
+average REAL customers are measured against. Nothing was corrupted — the demo
+writes species upper case (`COD`) and real notes canonicalise to proper case
+(`Cod`), so they never grouped — but **that is luck, not design**, and it breaks
+the first time either naming changes. Both functions now require
+`not fleets.is_demo`, which also empties the demo caller's own figures, so there
+is nothing for the page to show. Probed: demo 0 rows, real skipper 33 species
+and 23 cod grades, unchanged. The menu entry carries `notOnDemo: true` as well —
+that hides a MENU ITEM and nothing else, but a page answering "No sales in 2026"
+to a boat with 25 landings looks broken rather than withheld.
+
+**Still empty, and each needs a document rather than a seed**: `stowage_plans`
+and `crew_lists`. `market_prices` needs nothing — it has no `fleet_id`, so the
+demo already reads the real Peterhead and Denmark board, 44,623 rows back to
+2022, which is what makes Daily Prices and the Estimator work out of the box.
 
 ### The sample documents — `scripts/make-sample-docs.mjs`
 

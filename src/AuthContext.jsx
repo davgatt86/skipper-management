@@ -117,7 +117,7 @@ export function AuthProvider({ children }) {
 
     const { data, error } = await supabase
       .from('app_users')
-      .select('*, crew(full_name)')
+      .select('*, crew(full_name), fleets(is_demo)')
       .eq('id', userId)
       .maybeSingle()
 
@@ -129,8 +129,12 @@ export function AuthProvider({ children }) {
       setLoading(false)
       return
     }
-    if (data) writeCachedUser(data)
-    setAppUser(data || null)
+    /* Flattened onto the record itself, so callers ask `appUser.is_demo`
+     * rather than reaching through the join — and so the CACHED copy carries it
+     * too, which matters because that cache is what the app boots from at sea. */
+    const me = data ? { ...data, is_demo: !!data.fleets?.is_demo } : null
+    if (me) writeCachedUser(me)
+    setAppUser(me)
     setLoading(false)
   }
 

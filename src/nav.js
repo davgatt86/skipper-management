@@ -44,7 +44,12 @@ export const NAV = [
       // landing — see src/lib/tripAgg.js for why that distinction matters.
       { to: '/trips', label: 'Trip Rates', access: 'fleetTools' },
       { to: '/sales-compare', label: 'Compare Sales', access: 'skipper' },
-      { to: '/price-vs-fleet', label: 'Price vs Fleet', access: 'skipper' },
+      /* NOT ON THE DEMO. It is the one page that is deliberately cross-fleet,
+         and the demo login goes to strangers and competitors. The RPCs
+         exclude demo fleets on their own — that is the boundary — but a page
+         that answers "No sales in 2026" for a boat with 25 landings looks
+         broken rather than withheld, so it comes off the menu too. */
+      { to: '/price-vs-fleet', label: 'Price vs Fleet', access: 'skipper', notOnDemo: true },
     ],
   },
   {
@@ -139,7 +144,15 @@ export const NAV = [
   },
 ]
 
-export function canSee(access, appUser) {
+export function canSee(access, appUser, item) {
+  /* A page can be withheld from the DEMONSTRATION tenant. This hides a MENU
+   * ENTRY and nothing else — nav.js is presentation and RLS is the boundary,
+   * so anything genuinely withheld is withheld at the database too. It exists
+   * so a visitor is not shown a page that can only ever answer "nothing":
+   * Price vs Fleet reads across fleets by design, the RPCs now exclude demo
+   * fleets, and the page would otherwise say "No sales in 2026" to a boat
+   * with twenty-five landings. */
+  if (item?.notOnDemo && appUser?.is_demo) return false
   const list = Array.isArray(access) ? access : [access]
   // Deliberately first, and deliberately allow-lists: an officer sees the pages
   // marked `officer` and nothing else, including nothing marked 'all'; a cook
@@ -187,6 +200,6 @@ export function accessForPath(pathname) {
 // never sees an empty "Quota" heading.
 export function navFor(appUser) {
   return NAV
-    .map(g => ({ ...g, items: g.items.filter(i => canSee(i.access, appUser)) }))
+    .map(g => ({ ...g, items: g.items.filter(i => canSee(i.access, appUser, i)) }))
     .filter(g => g.items.length > 0)
 }

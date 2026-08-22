@@ -26,7 +26,7 @@ const SECTIONS = (CREW_GROUP ? CREW_GROUP.items : []).map((i) => ({
 
 export default function CrewTabs() {
   const { appUser } = useAuth()
-  const visible = SECTIONS.filter((s) => canSee(s.access, appUser))
+  const visible = SECTIONS.filter((s) => canSee(s.access, appUser, s))
   if (visible.length < 2) return null
 
   return (
