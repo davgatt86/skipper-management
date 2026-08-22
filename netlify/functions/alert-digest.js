@@ -225,6 +225,20 @@ export const handler = async () => {
   if (!URL || !SERVICE_KEY) return { statusCode: 500, body: 'missing supabase env' }
   const svc = createClient(URL, SERVICE_KEY, { auth: { persistSession: false } })
 
+  /* RE-CHECK BEFORE SENDING, not just at 06:00.
+   *
+   * The generator runs an hour before this on cron, and it now closes any
+   * activity alert whose book has been written in. But a man who writes his
+   * engine log at half past six would still have been told at seven that he
+   * had not — which is exactly the mail that teaches a reader to ignore the
+   * sender. Running the generator here costs one call and makes the digest
+   * report the state at SEND time rather than an hour earlier.
+   *
+   * One source of truth, invoked twice, rather than a second copy of the
+   * staleness rules living in this file. */
+  const { error: ge } = await svc.rpc('generate_activity_alerts')
+  if (ge) console.error('activity alerts refresh failed, sending on the 06:00 state:', ge.message)
+
   // Outstanding expiry alerts, oldest first. Read or dismissed ones are gone:
   // acting on it in the app is what stops it being chased.
   const { data: alerts, error: ae } = await svc

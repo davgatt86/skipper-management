@@ -1857,8 +1857,32 @@ Also agreed, not yet scheduled:
 
   **One alert per episode, not one per day.** The dedup key carries the date of
   the LAST ENTRY, so a stale book raises one alert and stays quiet until someone
-  writes in it and lets it go stale again. The repetition comes from the digest
-  re-listing unread alerts, not from the table filling up.
+  writes in it and lets it go stale again.
+
+  **AND IT CLEARS ITSELF — `supabase/resolve_activity_alerts.sql`, Aug 2026.**
+  The generator only ever INSERTED, so an alert stayed open until somebody read
+  or dismissed it by hand, and the digest re-listed every unread one each
+  morning. David got told on 22-08 that the engine log was two days stale —
+  TWICE, with two different dates — and that bunkering was seven days overdue,
+  on a morning the engine log had an entry and the fuel log was three days old.
+  All three were wrong.
+
+  Two faults in one: a book going stale from a new last-entry date raises a new
+  alert (right) but never closed the previous episode (wrong), and writing in
+  the book cleared nothing at all. The rule now: **for each fleet and each book,
+  at most ONE open alert, and only while the book is actually stale** — the same
+  principle as the re-upload banner, driven by the data so there is nothing to
+  remember to take down. Maintenance too: a job done since is not due.
+
+  **The digest calls the generator before building the mail.** Cron runs at
+  06:00 and the digest at 07:00, so a man writing his log at half past six was
+  told at seven that he had not.
+
+  A limit worth knowing: the unique key is (fleet_id, dedup_key) regardless of
+  dismissal, so a key that has ever been used cannot raise again. Normal running
+  is fine — each new episode has a later last-entry date — but you cannot
+  resurrect an old alert by rolling the data back, and the first probe of this
+  fix reported 0 where it wanted 1 for exactly that reason.
 
   Maintenance uses both clocks: days-based alerts 2 days before the due date,
   hours-based at 95% of the interval — "48 hours before due" is meaningless for
