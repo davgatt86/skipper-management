@@ -496,6 +496,57 @@ the species averages the same room went to the black. The page names every
 grade it dropped: this is a decision the skipper should see, not one made
 silently under him.
 
+### The buyers' catalogue — `src/lib/market/catalogue.js`
+
+The same day tally as the chalk sheet, turned round to face the other way. The
+chalk sheet tells the BOAT where to lay the fish; this tells the BUYER what is
+there and in what order it comes up.
+
+**Why it exists** (David, Aug 2026): buyers are complaining the auction is not
+clear. The market staff catalogue it, and once selling is under way a buyer
+cannot tell whether the next lot of a grade is day 5 fish or day 1.
+
+**THE FRESHEST DAY SELLS AS A+, EVERYTHING ELSE AS A.** That is the whole reason
+the day matters to a buyer and the reason this sheet is not just a species list.
+
+**Which day is freshest is a SETTING, not my reading of it.** A boat fills day 1
+first, so day 5 of a five-day trip should be the last caught — but getting it
+backwards would print A+ on the OLDEST fish on every sheet the market hands out.
+The page asks; it defaults to the highest day number.
+
+**The tag colours are the MARKET'S, off the tally workbook's own "Tag Colours"
+tab** — Black, Purple, Red, Orange, Green, Light Blue, Yellow, Grey, Pink,
+White for days 1–10. **Not `DAY_INK` in `sheet.js`**, which is brand colour
+for the boat's own chalk marking. A buyer is looking at the tag stapled to the
+box, so the catalogue prints each tag cell in its real colour, with dark ink on
+the pale ones.
+
+**One clock per page.** The four clocks sell separately and a buyer follows one
+or two — a sheet where his clock starts halfway down page 2 is handing him
+somebody else's document as well. **The A+ rule is restated at the top of every
+page**, because a man picking up page 3 has not read page 1.
+
+**LEFT is the column that answers the real question.** Crossing a lot off, a
+buyer wants to know what remains of that grade after it — so each row carries
+what is still to come, and the days run freshest first because that is the order
+the lots appear.
+
+**Only what is aboard.** A catalogue listing every grade the market recognises
+is a worse document than none: the buyer has to read past the fish that is not
+there. An unfiled species still prints, on its own page at the back and named on
+the layout page — quietly leaving a fish off a sheet the buyers are working from
+is the failure worth guarding against.
+
+**Column widths were measured, not guessed.** Nine columns did not fit A4
+portrait, and squeezing them made it WORSE — `cellWidth` is a minimum, so the
+overflow grew by exactly what was taken away and the TAG cell wrapped onto its
+own line, breaking the alignment of every row. Size folded into the grade cell,
+the two text columns left to autoTable, and the rendered page checked with
+pdf.js: rightmost ink 559.6pt against a 559.3pt margin.
+
+`scripts/catalogue-preview.mjs` renders the real document and asserts every
+page states the A+ rule and names its clock. `test-catalogue.mjs` — 41 checks.
+
 ### The chalk sheet — `MarketSheet.jsx`, `src/lib/market/sheet.js`
 
 The screen view is a picture of the market; this is the working document, and

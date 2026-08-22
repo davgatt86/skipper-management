@@ -4,6 +4,8 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { useAuth } from '../AuthContext'
 import { parseDayTally } from '../lib/market/parseDayTally'
+import { buildCatalogue, freshestNote } from '../lib/market/catalogue'
+import { exportCataloguePdf } from '../lib/market/exportCatalogue'
 import { planLayout } from '../lib/market/planLayout'
 import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, gradeKey } from '../lib/market/layoutRules'
 import { useMarketRules, saveMarketRules } from '../lib/market/useMarketRules'
@@ -72,6 +74,26 @@ export default function MarketLayout() {
   const plan = useMemo(
     () => (parsed?.lines && !rulesLoading ? planLayout(parsed.lines, { rules }) : null),
     [parsed, rules, rulesLoading],
+  )
+
+  /* THE BUYERS' CATALOGUE — the same tally, turned round to face the market.
+   *
+   * The chalk sheet tells the boat where to lay the fish. This tells the buyer
+   * what is there and in what order it comes up, because the freshest day sells
+   * as A+ and everything else as A — and buyers have been complaining they
+   * cannot tell which is which once the auction is under way.
+   *
+   * Which day is freshest is a SETTING rather than my reading of it. A boat
+   * fills day 1 first, so day 5 of a five-day trip should be the last caught
+   * and the freshest — but getting it backwards would print A+ on the OLDEST
+   * fish on every sheet the market hands out, and that is not worth risking on
+   * an inference. */
+  const [freshest, setFreshest] = useState('high')
+  const catalogue = useMemo(
+    () => (parsed?.lines && !rulesLoading
+      ? buildCatalogue({ lines: parsed.lines, rules, freshest })
+      : null),
+    [parsed, rules, rulesLoading, freshest],
   )
 
   async function onFile(e) {
@@ -224,6 +246,53 @@ export default function MarketLayout() {
                 <p className="muted" style={{ fontSize: '0.82rem', margin: '0.6rem 0 0' }}>
                   {plan.spare} {plan.spare === 1 ? 'footprint' : 'footprints'} still spare — not enough to drop
                   another grade a full level.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ---- THE BUYERS' CATALOGUE ----------------------------------
+              A second sheet off the same tally, for the market rather than
+              the boat. Buyers cannot tell which lot is the freshest once the
+              auction is under way, and only the freshest day sells as A+. */}
+          {catalogue && catalogue.totalBoxes > 0 && (
+            <div className="card">
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ flex: '1 1 18rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Buyers&rsquo; catalogue</h3>
+                  <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.82rem' }}>
+                    {freshestNote(catalogue)} One page per clock, only what is aboard, with a
+                    column to cross lots off as they sell.
+                  </p>
+                </div>
+
+                {/* WHICH DAY IS FRESHEST is asked, not assumed. Getting it
+                    backwards would print A+ on the oldest fish on every sheet
+                    the market hands out. */}
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                  <span className="muted" style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Freshest day
+                  </span>
+                  <select value={freshest} onChange={(e) => setFreshest(e.target.value)}>
+                    <option value="high">Highest number ({Math.max(...catalogue.days)})</option>
+                    <option value="low">Lowest number ({Math.min(...catalogue.days)})</option>
+                  </select>
+                </label>
+
+                <button onClick={() => exportCataloguePdf(catalogue, {
+                  vessel: parsed.meta?.vessel || null,
+                  port: parsed.meta?.port || null,
+                  saleDate: parsed.meta?.saleDate || null,
+                })}>📄 Catalogue for buyers</button>
+              </div>
+
+              {/* An unfiled species is NAMED rather than quietly dropped — the
+                  buyers are working from this. */}
+              {catalogue.unfiled.length > 0 && (
+                <p className="muted" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--brass)' }}>
+                  {catalogue.unfiled.map((s) => s.species).join(', ')} {catalogue.unfiled.length === 1 ? 'is' : 'are'} not on a clock yet,
+                  so {catalogue.unfiled.length === 1 ? 'it prints' : 'they print'} on their own page at the back.{' '}
+                  <Link to="/market-rules">Put {catalogue.unfiled.length === 1 ? 'it' : 'them'} on one</Link>.
                 </p>
               )}
             </div>
