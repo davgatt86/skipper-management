@@ -55,6 +55,28 @@ const handleRequest = async (event) => {
   if (me.role !== 'skipper') return json(403, { error: 'only the skipper can manage users' })
   const fleet = me.fleet_id
 
+  /* THE DEMONSTRATION FLEET MAY LOOK BUT NOT TOUCH.
+   *
+   * The demo login is handed to strangers, and this is the one page in the app
+   * that creates something OUTSIDE the tenant: a real auth account on the
+   * project. Scoping is not the issue — the fleet checks below are sound and a
+   * visitor cannot reach another boat's users — the issue is that a visitor
+   * could mint accounts on the project without limit.
+   *
+   * And they would OUTLIVE the demo. app_users is on the reset's skip list on
+   * purpose, because the wipe took the demo login itself once and locked the
+   * visitor out of the boat he was being shown; the cost of that is that
+   * anything created here is never cleared, so the user list would grow for
+   * ever and never come back to "Demo Skipper · you".
+   *
+   * READING IS LEFT ALONE, deliberately. "No Supabase dashboard required" is
+   * worth showing and the list is worth seeing; it is only the writes that
+   * leave something behind.
+   */
+  const { data: myFleet } = await svc.from('fleets').select('is_demo').eq('id', fleet).maybeSingle()
+  const isDemoFleet = !!myFleet?.is_demo
+  const DEMO_REFUSAL = 'This is the demonstration boat — she does not create or remove logins. Everything else on her is yours to try.'
+
   let body
   try { body = JSON.parse(event.body || '{}') } catch { return json(400, { error: 'bad json' }) }
   const action = body.action
@@ -71,6 +93,7 @@ const handleRequest = async (event) => {
 
   // ---------------- CREATE ----------------
   if (action === 'create') {
+    if (isDemoFleet) return json(403, { error: DEMO_REFUSAL })
     const email = String(body.email || '').trim().toLowerCase()
     const displayName = String(body.displayName || '').trim()
     const role = String(body.role || '').trim()
@@ -126,6 +149,7 @@ const handleRequest = async (event) => {
   // to delete the login and make a new one — which is how a relief skipper ends
   // up filed as 'office' and stays there.
   if (action === 'update') {
+    if (isDemoFleet) return json(403, { error: DEMO_REFUSAL })
     const userId = String(body.userId || '')
     if (!userId) return json(422, { error: 'userId required' })
 
@@ -180,6 +204,7 @@ const handleRequest = async (event) => {
 
   // ---------------- DELETE ----------------
   if (action === 'delete') {
+    if (isDemoFleet) return json(403, { error: DEMO_REFUSAL })
     const userId = String(body.userId || '')
     if (!userId) return json(422, { error: 'userId required' })
     if (userId === me.id) return json(409, { error: "you can't delete your own account" })

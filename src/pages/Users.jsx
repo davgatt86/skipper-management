@@ -116,10 +116,14 @@ export default function Users() {
     setBusy(false)
   }
 
-  const canDelete = (u) => u.id !== meId && !u.is_owner && u.role !== 'skipper'
+  /* The demonstration boat may look but not touch. The refusal is enforced in
+   * `manage-users.js` — this only stops the page offering a form that will be
+   * turned down, which is a worse way to find out. */
+  const isDemo = !!appUser?.is_demo
+  const canDelete = (u) => !isDemo && u.id !== meId && !u.is_owner && u.role !== 'skipper'
   // You cannot change your own role — that is how you lock yourself out of this
   // page — nor the owner's. Everything else is fair game.
-  const canEdit = (u) => u.id !== meId && !u.is_owner
+  const canEdit = (u) => !isDemo && u.id !== meId && !u.is_owner
 
   async function saveEdit(u) {
     setError(''); setResult(null); setBusy(true)
@@ -215,7 +219,23 @@ export default function Users() {
         )}
 
         <h2 style={{ fontSize: '1.05rem' }}>Add a user</h2>
-        {result ? (
+        {isDemo ? (
+          /* Reading the list is left alone on purpose — "no Supabase dashboard
+             required" is worth showing. It is only the WRITES that would leave a
+             real auth account behind on the project, and outlive the nightly
+             reset, since app_users is on its skip list. */
+          <div className="card" style={{ borderColor: 'var(--brass)' }}>
+            <p style={{ margin: 0, fontSize: '0.9rem' }}>
+              <strong>This is the demonstration boat.</strong> She does not create or remove
+              logins — everything else on her is yours to try, and she is put back the way
+              she came every night.
+            </p>
+            <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.82rem' }}>
+              On your own boat this is where you add crew, officer, cook, office and viewer
+              accounts and hand out a temporary password. No database console needed.
+            </p>
+          </div>
+        ) : result ? (
           <div className="card" style={{ background: 'var(--grey-50)' }}>
             <p style={{ color: 'var(--success, #197b30)', fontWeight: 600 }}>User added.</p>
             <div><strong>Email:</strong> {result.email}</div>

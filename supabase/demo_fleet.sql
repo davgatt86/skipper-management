@@ -360,3 +360,27 @@ grant execute on function public.reset_demo_fleet() to authenticated;
 -- nothing else — nav.js is presentation, the RPC is the boundary — but a page
 -- answering "No sales in 2026" to a boat with 25 landings looks broken rather
 -- than withheld.
+
+-- ---------------------------------------------------------------------------
+-- 8. THE DEMO MAY LOOK BUT NOT TOUCH — user management
+--
+-- Spotted on the demo login's own Users page: a visitor could ADD LOGINS.
+--
+-- Scoping was never the problem — `manage-users.js` checks the caller's fleet
+-- on every branch and a visitor cannot reach another boat's users. The problem
+-- is that this is the one page in the app that creates something OUTSIDE the
+-- tenant: a real auth account on the project, with no limit on how many.
+--
+-- AND THEY WOULD OUTLIVE THE DEMO. `app_users` is on the reset's skip list on
+-- purpose — the wipe took the demo login itself once and locked the visitor out
+-- of the boat he was being shown — and the cost of that is that anything
+-- created here is never cleared. The user list would grow for ever and never
+-- come back to "Demo Skipper · you".
+--
+-- So `create`, `update` and `delete` are refused for a demo fleet, in the
+-- function, with a sentence rather than a status code. READING IS LEFT ALONE:
+-- "no Supabase dashboard required" is worth showing and the list is worth
+-- seeing; it is only the writes that leave something behind.
+--
+-- The page says so instead of offering a form that will be turned down, which
+-- is a worse way to find out. That is presentation; the refusal is the boundary.
