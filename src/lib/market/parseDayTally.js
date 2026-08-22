@@ -21,7 +21,46 @@ import * as XLSX from 'xlsx'
 
 const norm = (v) => String(v ?? '').trim()
 
+/* WHAT KIND OF FILE IS THIS, ACTUALLY.
+ *
+ * A spreadsheet starts `PK` (it is a zip) or `\xD0\xCF` for the old .xls
+ * compound format. Anything else with an .xlsx name is not a workbook, whatever
+ * the name says — and SheetJS will not refuse it, it will parse a PDF as one
+ * long column of text and hand back a sheet with no SPECIES header.
+ *
+ * That produced "No sheet in that workbook has a SPECIES column — is it the day
+ * tally?", which sends the skipper looking for a missing column in a file that
+ * is not a spreadsheet at all. It happened for real: two of the boat's day
+ * tallies were overwritten by a rendered PDF that kept the .xlsx name, and the
+ * message pointed nowhere near the cause.
+ *
+ * Naming the actual file type costs four bytes of checking and turns a
+ * confusing message into an obvious one. */
+function fileKind(buf) {
+  const b = buf instanceof Uint8Array ? buf : new Uint8Array(buf)
+  const at = (...bytes) => bytes.every((v, i) => b[i] === v)
+  if (at(0x50, 0x4b)) return null                        // PK — xlsx/xlsm, fine
+  if (at(0xd0, 0xcf, 0x11, 0xe0)) return null            // old .xls, fine
+  if (at(0x25, 0x50, 0x44, 0x46)) return 'a PDF'
+  if (at(0x89, 0x50, 0x4e, 0x47)) return 'a PNG image'
+  if (at(0xff, 0xd8, 0xff)) return 'a JPEG image'
+  if (at(0x7b) || at(0x5b)) return 'a JSON file'
+  return 'not a spreadsheet'
+}
+
 export function parseDayTally(buf) {
+  /* Checked BEFORE handing it to SheetJS, which will happily read almost
+   * anything and leave the real problem two errors downstream. */
+  const kind = fileKind(buf)
+  if (kind) {
+    return {
+      error: kind === 'not a spreadsheet'
+        ? 'That file is not a spreadsheet — the day tally is an .xlsx workbook.'
+        : `That file is ${kind}, not a spreadsheet. The day tally is an .xlsx workbook — `
+          + 'check the file has not been replaced by something else with the same name.',
+    }
+  }
+
   const wb = XLSX.read(buf, { type: 'array' })
 
   // The tally sheet is whichever one carries a SPECIES header — the workbook
