@@ -103,6 +103,52 @@ client in `src/lib/su/parse.js`.
   was only used once, to load their historical settlements. Ongoing sheets
   arrive as a PDF.
 
+### The worksheet had no read path — fixed Aug 2026
+
+**Nothing ever opened a saved worksheet again.** `saveWorksheet` was written
+first; `loadLatestWorksheet` returned only the HEAD — no lines, no crew — and
+was exported and then called by nothing at all. So a sheet went into the
+database and stayed there while the working copy lived in localStorage, gone on
+a new device or a cleared browser though it was sitting in the table all along.
+David: *"su_worksheets. i can't see / recall saved worksheets."*
+
+`listWorksheets` / `loadWorksheet` / `deleteWorksheet` close it, with a kept-
+sheets panel on the page. **Opening one asks first** — it replaces what is on
+the form, and the form is the working copy.
+
+**THE SHAPING IS SPLIT FROM THE IO** — `src/lib/su/worksheetShape.js`,
+`stateToRows` / `rowsToState` — so save and load are two halves of one thing
+that can be tested against each other without a database. That is the whole
+reason the next two paragraphs exist.
+
+**THE BOND WAS SAVED AS ZERO FOR EVERY MAN, ON EVERY SHEET EVER KEPT.** A bond
+item is assigned by crew **id** — `BondSection`, `Preview` and `pdfGenerator`
+all read `sumBondFor(items, c.id)` — and the save totalled on his **name**, so
+it always matched nothing. Both worksheets in the database show it: fourteen
+men apiece, `bond` zero on all twenty-eight. The page, the preview and the PDF
+agreed with each other; only the column nobody could read disagreed. **It
+survived precisely because the read path did not exist.**
+
+**And the haulage note was discarded by a ternary that could not branch** —
+`haulageNote?.trim() ? null : null`, both arms null.
+
+**Four columns were waiting for inputs that were never made.**
+`su_worksheets` has carried `trip_no`, `market`, `days_at_sea` and
+`boxes_landed` since it was built, and `saveWorksheet` had always destructured
+them out of its state — but the form had no such fields, so every sheet went in
+with four nulls. They are on the Trip section now.
+
+**What cannot come back, and the page says so before you load over live work:**
+the vessel name (no column for it) and the bond ITEMISATION — only each man's
+total is stored, so his items return as one line for that total. The arithmetic
+is right; the breakdown has gone. A stores or unassigned bond hangs off no crew
+row and is not kept at all.
+
+`test-worksheet.mjs` — 40 checks, including that a second trip through changes
+no figure, which is what makes the id keying safe: the ids `rowsToState` mints
+have to be the ones `stateToRows` then totals on.
+
+
 **One vessel per fleet is baked into `vessel_details`**, whose primary key is
 `fleet_id`, and no table carries a `vessel_id`.
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../AppShell';
 import PageHeader from '../PageHeader';
 import { supabase } from '../supabaseClient';
@@ -10,7 +10,7 @@ import {
 import { SHARE_OPTIONS, QUOTA_OPTS } from './constants.js';
 import { uid, todayISO, shareValOf, fmtShares, fmtMoney } from './helpers.js';
 import { loadRoster, saveRoster, loadForeignRoster, saveForeignRoster, loadTrip, saveTrip } from './storage.js';
-import { getWorksheetBoat, saveWorksheet } from '../lib/su/worksheet.js';
+import { getWorksheetBoat, saveWorksheet, listWorksheets, loadWorksheet, deleteWorksheet } from '../lib/su/worksheet.js';
 import { Section, IconBtn, MoneyInput, PercentInput, Label, selectStyle, inputStyle } from './ui.jsx';
 import BondSection from './BondSection.jsx';
 import { ForeignCrewRow, AddForeignMenu } from './ForeignCrewSection.jsx';
@@ -131,6 +131,13 @@ export default function SquareUp() {
   const [foreignCrew, setForeignCrew] = useState([]);
   const [showAddForeign, setShowAddForeign] = useState(false);
   const [bondItems, setBondItems] = useState([]);
+  // The four the office asks for. The database has carried these columns and
+  // saveWorksheet has always looked for them; the form never had the fields,
+  // so every kept sheet went in with four nulls.
+  const [tripNo, setTripNo] = useState('');
+  const [market, setMarket] = useState('');
+  const [daysAtSea, setDaysAtSea] = useState('');
+  const [boxesLanded, setBoxesLanded] = useState('');
 
   // Keeping the worksheet: localStorage stays the working copy, this is the
   // deliberate save so it survives and can be reconciled later.
@@ -138,6 +145,9 @@ export default function SquareUp() {
   const [worksheetId, setWorksheetId] = useState(null);
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved | error
   const [saveMsg, setSaveMsg] = useState('');
+  const [kept, setKept] = useState([]);
+  const [keptOpen, setKeptOpen] = useState(false);
+  const [loadingId, setLoadingId] = useState(null);
 
   // Load on mount
   useEffect(() => {
@@ -177,18 +187,75 @@ export default function SquareUp() {
     return () => clearTimeout(t);
   }, [vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew, bondItems, loaded]);
 
+
+  // The kept sheets for this boat. Refreshed after every save and every delete
+  // so the list is never a stale picture of the thing it is listing.
+  const refreshKept = useCallback(async (boatId) => {
+    if (!boatId) return;
+    setKept(await listWorksheets(boatId));
+  }, []);
+
+  useEffect(() => { if (suBoat?.id) refreshKept(suBoat.id); }, [suBoat?.id, refreshKept]);
+
+  /* OPENING ONE REPLACES WHAT IS ON THE FORM, so it asks first — the working
+   * copy is whatever you have typed since, and it only lives in localStorage.
+   *
+   * Two things do not come back, and saying so here is the point: the vessel
+   * name was never stored, and the bond ITEMS were never stored either — only
+   * each man's total, which returns as a single line against his name. */
+  async function openKept(w) {
+    const dirty = crew.length || fuel.length || labour.length || haulage.length
+      || foreignCrew.length || bondItems.length;
+    if (dirty && !window.confirm(
+      'Open this kept worksheet? It replaces what is on the form now.\n\n'
+      + 'The bond breakdown does not come back — each man returns with his bond '
+      + 'total on one line, because only the total was ever kept.')) return;
+
+    setLoadingId(w.id); setSaveMsg('');
+    try {
+      const t = await loadWorksheet(w.id);
+      if (!t) { setSaveState('error'); setSaveMsg('That worksheet has gone — it may have been deleted on another device.'); return; }
+      setTripDate(t.tripDate || todayISO());
+      setTripNo(t.tripNo); setMarket(t.market);
+      setDaysAtSea(t.daysAtSea); setBoxesLanded(t.boxesLanded);
+      setQuota(t.quota || '10');
+      setCrew(t.crew); setFuel(t.fuel); setLabour(t.labour);
+      setHaulage(t.haulage); setHaulageNote(t.haulageNote);
+      setForeignCrew(t.foreignCrew); setBondItems(t.bondItems);
+      setWorksheetId(t.worksheetId);
+      setSaveState('saved');
+      setSaveMsg('Opened. Keeping it again writes back to this same worksheet.');
+      setKeptOpen(false);
+    } catch (e) {
+      setSaveState('error'); setSaveMsg(e.message || String(e));
+    } finally { setLoadingId(null); }
+  }
+
+  async function removeKept(w) {
+    if (!window.confirm(`Delete the worksheet of ${w.landed_date || 'no date'}? This cannot be undone.`)) return;
+    try {
+      await deleteWorksheet(w.id);
+      // If the one on screen was the one deleted, it is a new sheet now —
+      // otherwise keeping it would recreate the row we just removed.
+      if (worksheetId === w.id) { setWorksheetId(null); setSaveState('idle'); }
+      await refreshKept(suBoat?.id);
+    } catch (e) { setSaveState('error'); setSaveMsg(e.message || String(e)); }
+  }
+
   async function keepWorksheet() {
     if (!suBoat) return;
     setSaveState('saving'); setSaveMsg('');
     try {
       const id = await saveWorksheet(
-        { tripDate, quota, crew, fuel, haulage, haulageNote, labour, foreignCrew, bondItems },
+        { tripDate, quota, crew, fuel, haulage, haulageNote, labour, foreignCrew, bondItems,
+          tripNo, market, daysAtSea, boxesLanded },
         suBoat.id,
         worksheetId
       );
       setWorksheetId(id);
       setSaveState('saved');
       setSaveMsg('Kept. It will be here on any device you sign in from.');
+      await refreshKept(suBoat.id);
     } catch (e) {
       setSaveState('error');
       setSaveMsg(e.message || String(e));
@@ -316,6 +383,13 @@ export default function SquareUp() {
     if (!window.confirm('Start a new trip? This clears the current form. Your saved crew rosters stay.')) return;
     setTripDate(todayISO()); setCrew([]); setQuota('10');
     setFuel([]); setLabour([]); setHaulage([]); setHaulageNote(''); setForeignCrew([]); setBondItems([]);
+    setTripNo(''); setMarket(''); setDaysAtSea(''); setBoxesLanded('');
+    /* AND IT LETS GO OF THE KEPT SHEET. `worksheetId` is what `keepWorksheet`
+     * updates in place, so a new trip that held on to it would write this
+     * trip's figures over the worksheet you opened — silently, and only
+     * noticed when you went looking for the old one. Reachable the moment
+     * opening a kept sheet became possible. */
+    setWorksheetId(null); setSaveState('idle'); setSaveMsg('');
   };
 
   // ── Fuel/labour ──────────────────────────────────────────────────────
@@ -373,6 +447,20 @@ export default function SquareUp() {
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10 }}>
             <div><Label>Vessel</Label><input value={vessel} onChange={(e) => setVessel(e.target.value)} placeholder="Boat name" style={inputStyle} /></div>
             <div><Label>Trip date</Label><input type="date" value={tripDate} onChange={(e) => setTripDate(e.target.value)} style={inputStyle} /></div>
+          </div>
+          {/* THE FOUR THE OFFICE ASKS FOR.
+              `su_worksheets` has carried trip_no, market, days_at_sea and
+              boxes_landed since it was built, and `saveWorksheet` has always
+              destructured them out of its state — but the form had no such
+              fields, so every saved sheet went in with four nulls. The columns
+              were waiting for inputs that were never made. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: 10, marginTop: 10 }}>
+            <div><Label>Trip no.</Label><input value={tripNo} onChange={(e) => setTripNo(e.target.value)} placeholder="optional" style={inputStyle} /></div>
+            <div><Label>Market</Label><input value={market} onChange={(e) => setMarket(e.target.value)} placeholder="Peterhead, Scrabster, Hanstholm…" style={inputStyle} /></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+            <div><Label>Days at sea</Label><input value={daysAtSea} onChange={(e) => setDaysAtSea(e.target.value)} inputMode="decimal" placeholder="e.g. 6.75" style={inputStyle} /></div>
+            <div><Label>Boxes landed</Label><input value={boxesLanded} onChange={(e) => setBoxesLanded(e.target.value)} inputMode="numeric" placeholder="e.g. 1192" style={inputStyle} /></div>
           </div>
         </Section>
 
@@ -571,6 +659,11 @@ export default function SquareUp() {
               <button className="secondary" onClick={keepWorksheet} disabled={saveState === 'saving'}>
                 {saveState === 'saving' ? 'Keeping…' : worksheetId ? 'Update kept worksheet' : 'Keep this worksheet'}
               </button>
+              {kept.length > 0 && (
+                <button className="secondary" onClick={() => setKeptOpen(o => !o)}>
+                  {keptOpen ? 'Hide kept worksheets' : `Kept worksheets (${kept.length})`}
+                </button>
+              )}
               {saveMsg && (
                 <span className={saveState === 'error' ? 'error' : 'muted'} style={{ fontSize: '0.82rem' }}>
                   {saveMsg}
@@ -582,6 +675,48 @@ export default function SquareUp() {
               Kept on this device only — settlements are not set up for your boat yet,
               so there is nowhere on the fleet record to store it.
             </p>
+          )}
+
+          {/* THE KEPT SHEETS. Saving was built first and nothing ever opened one
+              again, so a worksheet went into the database and stayed there while
+              the working copy lived in localStorage — gone on a new device or a
+              cleared browser, though it was sitting in the table all along. */}
+          {suBoat && keptOpen && kept.length > 0 && (
+            <div className="card" style={{ marginTop: 12 }}>
+              <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.82rem' }}>
+                Kept on the fleet record, so they are here on any device you sign in from.
+                Opening one replaces what is on the form.
+              </p>
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {kept.map(w => (
+                  <li key={w.id} style={{
+                    display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap',
+                    padding: '0.5rem 0', borderTop: '1px solid var(--line)',
+                  }}>
+                    <span style={{ fontFamily: 'var(--mono, monospace)', minWidth: '6rem' }}>
+                      {w.landed_date || 'no date'}
+                    </span>
+                    <span style={{ flex: '1 1 8rem', fontSize: '0.88rem' }}>
+                      {[w.trip_no && `Trip ${w.trip_no}`, w.market,
+                        w.boxes_landed && `${Number(w.boxes_landed).toLocaleString('en-GB')} bx`,
+                        w.days_at_sea && `${w.days_at_sea} days`]
+                        .filter(Boolean).join(' · ') || <span className="muted">no trip details</span>}
+                    </span>
+                    {w.id === worksheetId && (
+                      <span style={{
+                        fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: 3,
+                        background: 'var(--kelp)', color: '#fff',
+                      }}>on screen</span>
+                    )}
+                    <button className="secondary" onClick={() => openKept(w)} disabled={loadingId === w.id}>
+                      {loadingId === w.id ? 'Opening…' : 'Open'}
+                    </button>
+                    <button className="secondary" onClick={() => removeKept(w)}
+                            style={{ color: 'var(--rust)' }}>Delete</button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           <p style={{ textAlign: 'center', color: 'var(--mute)', fontSize: 11.5, marginTop: 10, letterSpacing: 0.3 }}>
             Form auto-saves on this device · Rosters persist across trips

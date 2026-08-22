@@ -1,4 +1,5 @@
 import { supabase } from '../../supabaseClient'
+import { stateToRows, rowsToState } from './worksheetShape'
 
 // Saving the Square Up worksheet to the database.
 //
@@ -20,36 +21,17 @@ export async function getWorksheetBoat() {
   return data || null
 }
 
-const num = v => {
-  if (v === '' || v == null) return null
-  const n = Number(String(v).replace(/[^0-9.-]/g, ''))
-  return Number.isFinite(n) ? n : null
-}
-
 /**
  * Write the worksheet. Children are replaced wholesale rather than diffed —
  * a worksheet is small and a clean replace cannot leave orphans behind.
  * Returns the worksheet id.
+ *
+ * The SHAPING lives in `worksheetShape.js`, so save and load are two halves of
+ * one thing that can be tested against each other without a database. This half
+ * is only the writing.
  */
 export async function saveWorksheet(state, boatId, existingId) {
-  const {
-    tripDate, quota, crew = [], fuel = [], haulage = [], haulageNote = '',
-    labour = [], foreignCrew = [], bondItems = [], boxesLanded, daysAtSea, market, tripNo,
-  } = state
-
-  const head = {
-    boat_id: boatId,
-    trip_no: tripNo || null,
-    landed_date: tripDate || null,
-    market: market || null,
-    days_at_sea: num(daysAtSea),
-    boxes_landed: num(boxesLanded),
-    quota_recovery_pct: num(quota),
-    // Both arms of this were `null`, so the haulage note was discarded whether
-    // there was one or not — a ternary that cannot branch.
-    notes: haulageNote?.trim() || null,
-    status: 'draft',
-  }
+  const { head, lines, crewRows } = stateToRows(state, boatId)
 
   let id = existingId
   if (id) {
@@ -64,85 +46,78 @@ export async function saveWorksheet(state, boatId, existingId) {
     id = data.id
   }
 
-  // Fuel and haulage carry quantities only — the office prices them.
-  const lines = []
-  let sort = 0
-  for (const f of fuel) {
-    if (!f.location && !f.litres) continue
-    lines.push({
-      worksheet_id: id, section: 'fuel', label: f.location || '',
-      entry_date: f.date || null, qty: num(f.litres), unit: 'lt', sort: sort++,
-    })
-  }
-  for (const h of haulage) {
-    if (!h.haulier && !h.loads) continue
-    lines.push({
-      worksheet_id: id, section: 'haulage', label: h.haulier || '',
-      detail: h.from || null, qty: num(h.loads), unit: 'loads', note: h.note || null, sort: sort++,
-    })
-  }
-  // The free text carried over from the old Logistics box, kept as its own row
-  // so nothing typed is lost even before it is split into hauliers.
-  if (haulageNote?.trim()) {
-    lines.push({
-      worksheet_id: id, section: 'haulage', label: 'Carried over from Logistics',
-      note: haulageNote.trim(), sort: sort++,
-    })
-  }
-  for (const l of labour) {
-    if (!l.name && !l.amount) continue
-    lines.push({
-      worksheet_id: id, section: 'labour', label: l.name || '',
-      basis: l.basis === 'flat' ? 'flat' : 'box',
-      qty: l.basis === 'flat' ? null : num(l.boxes),
-      unit: l.basis === 'flat' ? null : 'boxes',
-      rate: num(l.rate), amount: num(l.amount), sort: sort++,
-    })
-  }
-  for (const c of foreignCrew) {
-    if (!c.name && !c.bonus) continue
-    lines.push({
-      worksheet_id: id, section: 'bonus', label: c.name || '',
-      amount: num(c.bonus), sort: sort++,
-    })
-  }
   if (lines.length) {
-    const { error } = await supabase.from('su_worksheet_lines').insert(lines)
+    const { error } = await supabase
+      .from('su_worksheet_lines')
+      .insert(lines.map(l => ({ ...l, worksheet_id: id })))
     if (error) throw error
   }
-
-  // share_value is stored as well as the key, so a saved worksheet keeps the
-  // fraction it was worked out on even if the share options change later.
-  const bondFor = (name) => bondItems
-    .filter(b => b.assignedTo === name)
-    .reduce((s, b) => s + (Number(b.amount) || 0), 0)
-
-  const crewRows = crew.filter(c => (c.name || '').trim()).map((c, i) => ({
-    worksheet_id: id,
-    crew_name: c.name.trim(),
-    share_key: c.shareKey || null,
-    share_value: num(c.shareCustom) ?? null,
-    bond: bondFor(c.name) || 0,
-    bonus: num(c.bonus) || 0,
-    sort: i,
-  }))
   if (crewRows.length) {
-    const { error } = await supabase.from('su_worksheet_crew').insert(crewRows)
+    const { error } = await supabase
+      .from('su_worksheet_crew')
+      .insert(crewRows.map(c => ({ ...c, worksheet_id: id })))
     if (error) throw error
   }
 
   return id
 }
 
-export async function loadLatestWorksheet(boatId) {
+/* ---------------------------------------------------------------------------
+ * READING ONE BACK.
+ *
+ * The save was written first and nothing was ever built to open it again:
+ * `loadLatestWorksheet` returned only the HEAD — no lines, no crew — and was
+ * exported and then called by nothing at all. So a worksheet went into the
+ * database and stayed there, while the working copy lived in localStorage. On a
+ * new device, or after a cleared browser, the sheet was gone even though it was
+ * sitting in the table. David: "I can't see / recall saved worksheets."
+ *
+ * WHAT COMES BACK, AND WHAT CANNOT.
+ *
+ * The lines and the crew round-trip. Two things do not, and the page says so
+ * rather than restoring something that looks complete and is not:
+ *
+ * - **The vessel name is not stored at all.** It stays whatever the form has.
+ * - **Bond ITEMS are not stored** — only each man's bond TOTAL, folded onto his
+ *   crew row. So a loaded sheet carries one bond line per man for his total
+ *   rather than the itemised list he typed. The arithmetic is right and the
+ *   breakdown is gone, which is worth knowing before you load over live work.
+ * --------------------------------------------------------------------------- */
+
+const HEAD = 'id, trip_no, landed_date, market, days_at_sea, boxes_landed, '
+  + 'quota_recovery_pct, status, notes, settlement_id, created_at, updated_at'
+
+/** Every kept worksheet for this boat, newest first. */
+export async function listWorksheets(boatId) {
+  if (!boatId) return []
   const { data, error } = await supabase
     .from('su_worksheets')
-    .select('id, trip_no, landed_date, status, updated_at')
+    .select(HEAD)
     .eq('boat_id', boatId)
-    .eq('status', 'draft')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) return null
-  return data || null
+  if (error) return []
+  return data || []
+}
+
+export async function deleteWorksheet(id) {
+  // The children go with it: both carry `worksheet_id` on delete cascade.
+  const { error } = await supabase.from('su_worksheets').delete().eq('id', id)
+  if (error) throw error
+}
+
+/**
+ * One worksheet, in the shape the form holds it — so loading is `setX(...)`
+ * per field and not a translation layer in the page.
+ *
+ * Returns `null` if it has gone (deleted on another device), rather than a
+ * half-built object.
+ */
+export async function loadWorksheet(id) {
+  const [{ data: head, error: he }, { data: lines }, { data: crewRows }] = await Promise.all([
+    supabase.from('su_worksheets').select(HEAD).eq('id', id).maybeSingle(),
+    supabase.from('su_worksheet_lines').select('*').eq('worksheet_id', id).order('sort'),
+    supabase.from('su_worksheet_crew').select('*').eq('worksheet_id', id).order('sort'),
+  ])
+  if (he || !head) return null
+  return rowsToState(head, lines || [], crewRows || [])
 }
