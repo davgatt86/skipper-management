@@ -1,4 +1,5 @@
 import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, tiersByRuleOfThumb, RULES, isPrime } from './layoutRules.js'
+import { bySaleOrder } from './auctionOrder.js'
 
 /* Turn a day tally into a market layout.
  *
@@ -147,14 +148,28 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
     speciesList.get(key).stacks.push(...stacks)
   }
 
-  // Order: clock 1→n; within a clock the biggest species first, so the awkward
-  // remainders are the small ones; within a species the prime grades first,
-  // which is what puts them low and at the head of the run.
+  /* Order: clock 1→n, then THE ORDER THE MARKET SELLS IN.
+   *
+   * Within a clock it used to be "biggest species first, so the awkward
+   * remainders are the small ones" — a packing convenience with nothing to
+   * do with the auction. It is now the sale order measured off Peterhead's
+   * own transaction export, so a buyer following the rough walks the fish in
+   * the order the clock will offer it. See `auctionOrder.js`.
+   *
+   * It orders species WITHIN a clock and never between: the measured
+   * sequence interleaves them — lemons sell between lythe and tusk — and
+   * reading it globally would undo keeping a clock in one run.
+   *
+   * A species the sale order has never seen keeps the tally's own position,
+   * which is the honest answer. Haddock and whiting are not on a live clock
+   * yet, so that is most of a Peterhead sheet by volume. */
   const order = new Map(rules.clocks.map((a, i) => [a.id, i]))
+  const seqOfSpecies = new Map([...speciesList.values()]
+    .map((s) => [s.species, Math.min(...s.stacks.map((st) => st.seq))]))
+  const saleOrder = bySaleOrder(rules.auctionOrder, (sp) => seqOfSpecies.get(sp) ?? 0)
   const species = [...speciesList.values()].sort((a, b) =>
     order.get(a.auction) - order.get(b.auction) ||
-    b.stacks.length - a.stacks.length ||
-    a.species.localeCompare(b.species))
+    saleOrder(a.species, b.species))
   // Grades in the order the tally lists them, which is the grading order the
   // market itself uses — biggest first. Sorting by grade NAME put Sprag above
   // Med and Cod above Large, which is not how anyone reads a market.

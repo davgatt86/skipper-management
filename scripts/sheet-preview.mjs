@@ -14,9 +14,11 @@ import { pathToFileURL } from 'node:url'
 import esbuild from 'esbuild'
 import { parseDayTally } from '../src/lib/market/parseDayTally.js'
 import { planLayout } from '../src/lib/market/planLayout.js'
+import { safeOut } from './safeOut.mjs'
 
 const file = process.argv[2]
 const out = process.argv[3] || 'sheet-preview.html'
+safeOut(out, '.html')
 if (!file) { console.error('usage: node scripts/sheet-preview.mjs <tally.xlsx> [out.html]'); process.exit(1) }
 
 const parsed = parseDayTally(readFileSync(file))

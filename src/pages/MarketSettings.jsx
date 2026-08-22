@@ -7,6 +7,9 @@ import {
   DEFAULT_CLOCKS, DEFAULT_SPECIES_CLOCK, DEFAULT_HEIGHTS, DEFAULT_FLOORS, DEFAULT_GRADE_RULES,
   resolveRules, knownSpecies, BANDS, FALLBACK_HEIGHT, gradeKey,
 } from '../lib/market/layoutRules'
+import {
+  DEFAULT_AUCTION_ORDER, parseTransactions, mergeOrders, clockOrders,
+} from '../lib/market/auctionOrder'
 
 /* Market Rules — the clocks, what goes on each, and how high it may go.
  *
@@ -38,6 +41,8 @@ export default function MarketSettings() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [newSpecies, setNewSpecies] = useState('')
+  const [auctionOrder, setAuctionOrder] = useState(DEFAULT_AUCTION_ORDER)
+  const [orderNote, setOrderNote] = useState('')
   const [newRuleSp, setNewRuleSp] = useState('')
   const [newRuleGr, setNewRuleGr] = useState('')
 
@@ -48,12 +53,14 @@ export default function MarketSettings() {
     setHeights({ ...DEFAULT_HEIGHTS, ...(settings?.heights || {}) })
     setFloors({ ...DEFAULT_FLOORS, ...(settings?.floors || {}) })
     setGradeRules({ ...DEFAULT_GRADE_RULES, ...(settings?.gradeRules || {}) })
+    setAuctionOrder(settings?.auctionOrder?.length ? settings.auctionOrder : DEFAULT_AUCTION_ORDER)
+    setOrderNote('')
     setDirty(false)
   }, [loading, settings])
 
   const rules = useMemo(
-    () => resolveRules({ clocks, speciesClock, heights, floors, gradeRules }),
-    [clocks, speciesClock, heights, floors, gradeRules],
+    () => resolveRules({ clocks, speciesClock, heights, floors, gradeRules, auctionOrder }),
+    [clocks, speciesClock, heights, floors, gradeRules, auctionOrder],
   )
   const species = useMemo(() => knownSpecies(rules), [rules])
 
@@ -115,6 +122,11 @@ export default function MarketSettings() {
       heights: onlyChangedDeep(heights, DEFAULT_HEIGHTS),
       floors: onlyChangedDeep(floors, DEFAULT_FLOORS),
       gradeRules,          // entirely the skipper's own; there are no defaults
+      /* Only stored when it DIFFERS from the shipped order, same as
+       * everything else here — a fleet that has never uploaded a sale
+       * sheet still picks up a later correction to the measured one. */
+      auctionOrder: JSON.stringify(auctionOrder) === JSON.stringify(DEFAULT_AUCTION_ORDER)
+        ? undefined : auctionOrder,
     }
     const { error } = await saveMarketRules(appUser.fleet_id, doc)
     setSaving(false)
@@ -129,6 +141,7 @@ export default function MarketSettings() {
       setHeights({ ...DEFAULT_HEIGHTS })
       setFloors({ ...DEFAULT_FLOORS })
       setGradeRules({ ...DEFAULT_GRADE_RULES })
+      setAuctionOrder(DEFAULT_AUCTION_ORDER)
     })
   }
 
@@ -236,6 +249,81 @@ export default function MarketSettings() {
           </div>
         )}
       </div>
+
+      {/* ---- 2b. THE ORDER THE MARKET SELLS IN ----------------------------
+
+          The chalk sheet and the buyers' catalogue both lay a clock's species
+          out in this order, so a buyer following the rough walks the fish in
+          the order the clock will offer it.
+
+          It ships MEASURED, off Peterhead's own transaction export for two
+          real Audacious sales — not guessed. This panel is here so the boat
+          can refresh it from a newer sale sheet when the market changes, the
+          same as everything else on this page. */}
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>The order the market sells in</h2>
+        <p className="muted" style={{ marginTop: 0, fontSize: '0.85rem' }}>
+          Within a clock, which species comes up first. Measured from Peterhead&rsquo;s
+          &ldquo;Transactions per supplier&rdquo; sheet &mdash; the chalk sheet and the
+          buyers&rsquo; catalogue both follow it, so the two documents always agree.
+        </p>
+
+        <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+          {clocks.map((c) => {
+            const run = clockOrders(auctionOrder, rules)[c.id] || []
+            return (
+              <div key={c.id} style={{ border: '1px solid var(--grey-300, #ddd)', borderRadius: 6, padding: '0.6rem' }}>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--mute)' }}>
+                  {c.n} · {c.label}
+                </div>
+                {/* A clock with nothing measured says so rather than showing a
+                    blank, or "not on a live auction yet" reads as an oversight. */}
+                <div style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                  {run.length
+                    ? run.join(' → ')
+                    : <span className="muted">not on a live auction clock yet &mdash; laid out in the tally&rsquo;s own order</span>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {canEdit && (
+          <div style={{ marginTop: '0.8rem' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+              <span>Update from a sale sheet</span>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  const r = parseTransactions(await f.text())
+                  if (r.error) { setOrderNote(r.error); return }
+                  /* MERGED, NOT REPLACED. One sale only carries what was landed
+                   * that day — the 13-08 sheet has no tusk on it at all — so
+                   * taking a single sale as the whole order would drop every
+                   * species that happened not to be on the market. */
+                  const merged = mergeOrders(auctionOrder, r.order)
+                  touch(() => setAuctionOrder(merged))
+                  setOrderNote(
+                    `Read ${r.lines} transactions from the ${r.saleDate || 'sale'} sheet`
+                    + ` (${r.order.length} species).`
+                    + (r.unmapped.length
+                      ? ` Not recognised, kept under their own codes: ${r.unmapped.join(', ')}.`
+                      : ''),
+                  )
+                }}
+              />
+            </label>
+            {orderNote && (
+              <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.82rem' }}>{orderNote}</p>
+            )}
+          </div>
+        )}
+      </div>
+
 
       {/* ---- 3. heights and floors ---- */}
       <div className="card">

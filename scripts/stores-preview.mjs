@@ -16,8 +16,10 @@
 import { writeFileSync } from 'node:fs'
 import { buildStoresDoc } from '../src/lib/stores/exportStores.js'
 import { DEFAULT_ITEMS } from '../src/lib/stores/catalogue.js'
+import { safeOut } from './safeOut.mjs'
 
 const out = process.argv[2] || 'stores-preview.pdf'
+safeOut(out, '.pdf')
 
 // A realistic trip order across enough categories to break a page.
 const want = [

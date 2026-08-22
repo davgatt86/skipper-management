@@ -10,8 +10,10 @@ import { writeFileSync } from 'node:fs'
 import { buildCatalogue } from '../src/lib/market/catalogue.js'
 import { buildCatalogueDoc } from '../src/lib/market/exportCatalogue.js'
 import { resolveRules } from '../src/lib/market/layoutRules.js'
+import { safeOut } from './safeOut.mjs'
 
 const out = process.argv[2] || 'catalogue-preview.pdf'
+safeOut(out, '.pdf')
 const L = (species, grade, size, day, boxes, seq) =>
   ({ species, grade, size, boxKg: '30kg', day, boxes, seq })
 

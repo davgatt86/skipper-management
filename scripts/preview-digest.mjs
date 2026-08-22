@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { safeOut } from './safeOut.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const src = readFileSync(join(root, 'netlify/functions/alert-digest.js'), 'utf8')
@@ -34,6 +35,7 @@ const sample = [
 ]
 
 const argFile = process.argv[2] || join(root, 'digest-preview.html')
+safeOut(argFile, '.html')
 let alerts = sample
 if (!process.stdin.isTTY) {
   const raw = readFileSync(0, 'utf8').trim()

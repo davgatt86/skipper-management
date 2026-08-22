@@ -515,6 +515,84 @@ Trip 64 stays at 17 tiers with hake alone split 62/9, carrying tier 17 top into
 tier 17 bottom. Trip 63 splits nothing at all, because there the split was
 earning nothing.
 
+### The order the market sells in — `src/lib/market/auctionOrder.js`
+
+**Within a clock, species now come up in the order the auction sells them.**
+It used to be "biggest species first, so the awkward remainders are the small
+ones" — a packing convenience with nothing to do with the market.
+
+David, Aug 2026: *"not only can we create a market layout, we could lay the
+rough/flats out in the order it is sold on the auction."*
+
+**IT IS MEASURED, NOT GUESSED** — off Peterhead's own *Transactions per
+supplier* export for the Audacious sales of **13-08-2026 and 20-08-2026**,
+every transaction from first to last. **Both sales give the same sequence**,
+which is what makes it an auction order rather than one day's quirk:
+
+    POK → HKE → COD → ANF → LIN → POL → LEM → USK → CAT → PLE → LEZ → WIT
+        → HAL → TUR
+
+(USK appears only on the 20th; no tusk was landed on the 13th.)
+
+**IT IS THREE LIVE CLOCKS BLENDED, NOT ONE RUNNING ORDER** — David's own
+reading, and the data agrees: lemons, a flat, sell between lythe and tusk,
+which are rough. De-blended through each species' clock:
+
+    cod     COD
+    rough   black · monks · ling · lythe · tusk · cat
+    flats   hake · lemons · plaice · megrim · witch · halibut · turbot
+
+**The blended sequence is what is STORED; the per-clock order is derived.** Two
+things fall out of that rather than keeping three lists: a species moved
+between clocks on the rules page carries its sale position with it, and there
+is no second copy to drift. `clockOrders()` de-blends it for display and for
+the test that asserts those three runs are exactly what David listed.
+
+**Read globally it would be wrong twice** — it would undo keeping a clock in
+one run, and the clock ORDER itself is fixed: cod, then haddock and whiting,
+then rough, then flats, with only the flats free to change rows.
+
+**Haddock and whiting are deliberately absent.** They are not on a live
+e-auction clock yet, so there is no transaction order to read; they keep the
+tally's own order. Any species the export has never seen does the same, and
+sorts **after** everything measured — letting it land in the middle would make
+the measured part look wrong.
+
+**Grades inside a species are untouched** and still follow the tally's `seq`.
+The export agrees with David: every block runs its grades 1 → 5.
+
+**THE CHALK SHEET AND THE CATALOGUE MUST AGREE, and one function is why.**
+`bySaleOrder()` is imported by both. That is not decoration: the first cut
+passed the catalogue objects where the comparator wanted species names, so it
+silently fell back to the tally order while the sheet used the sale order.
+**Both documents rendered perfectly and disagreed with each other** — a buyer
+reads down for his next lot and finds it three species from where the fish
+actually is. `test-auction-order.mjs` asserts the two agree clock by clock.
+
+**A new sale sheet is uploaded on `/market-rules`, and it MERGES.** One sale
+only carries what was landed that day, so replacing the order with a single
+sale would drop every species that happened not to be on the market — the
+13-08 sheet has no tusk on it at all. Stored per fleet, and only when it
+differs from the shipped order.
+
+Measured across all 13 real tallies: **the reorder changed no tier count
+anywhere**, broke no run, and the sheet and catalogue agree on every one.
+
+### A SCRIPT ARGUMENT DESTROYED TWO REAL TALLIES — `scripts/safeOut.mjs`
+
+`scripts/catalogue-preview.mjs` takes its first positional argument as the
+**output** path and renders its own built-in data; most other scripts in that
+folder take an **input** tally there. Handing it a real tally therefore wrote a
+PDF straight over the workbook. **`trip 64 day tags.xlsx` and `trip 64.xlsx`
+were both destroyed this way in one session**, and the only reason they were
+recoverable is that they live in OneDrive.
+
+`safeOut(path, ext)` now refuses to write a preview over a file whose
+extension is not the one that script produces. Narrow on purpose — a preview
+overwritten by a later preview is the normal case and must stay silent, or the
+guard gets switched off. Applied to all six scripts that take an output path.
+
+
 **Day tags run high number to low**, and a stack may span two days rather than
 stand part-full. That is why `buildStacks` fills each stack right up before
 starting the next — which also makes a grade's footprint count exactly

@@ -1,3 +1,4 @@
+import { resolveAuctionOrder } from './auctionOrder.js'
 /* Peterhead market layout — the rules, kept apart from the allocator.
  *
  * Fish are displayed for auction in TIERS. A tier is two rows back to back
@@ -237,6 +238,10 @@ export function resolveRules(settings) {
 
   return {
     clocks,
+    /* The order the market sells a clock's species in, measured off
+     * Peterhead's transaction export. Stored per fleet like everything
+     * else here, so it holds only what DIFFERS from the shipped order. */
+    auctionOrder: resolveAuctionOrder(settings),
     speciesClock,
     heights,
     fallbackClock,

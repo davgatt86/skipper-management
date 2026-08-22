@@ -10,9 +10,11 @@
 import { writeFileSync } from 'node:fs'
 import { buildStoresDoc } from '../src/lib/stores/exportStores.js'
 import { DEFAULT_ITEMS, resolveCatalogue } from '../src/lib/stores/catalogue.js'
+import { safeOut } from './safeOut.mjs'
 
 const lang = process.argv[2] || 'da'
 const out = process.argv[3] || `stores-${lang}.pdf`
+safeOut(out, '.pdf')
 
 // A few translated, most not — which is the real state of a boat that has just
 // started filling them in, and the case the sheet has to be honest about.

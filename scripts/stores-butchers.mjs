@@ -15,8 +15,10 @@
 import { writeFileSync } from 'node:fs'
 import { buildStoresDoc, sectionsOf, unitCell } from '../src/lib/stores/exportStores.js'
 import { DEFAULT_ITEMS, resolveCatalogue } from '../src/lib/stores/catalogue.js'
+import { safeOut } from './safeOut.mjs'
 
 const out = process.argv[2] || 'stores-butchers.pdf'
+safeOut(out, '.pdf')
 const lang = process.argv[3] || 'en'
 
 const catalogue = resolveCatalogue([])

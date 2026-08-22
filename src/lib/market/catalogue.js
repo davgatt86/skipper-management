@@ -1,3 +1,4 @@
+import { bySaleOrder } from './auctionOrder.js'
 /* THE BUYERS' CATALOGUE — what is on the floor, by day, for the auction.
  *
  * David, Aug 2026: buyers are complaining the auction is not clear. The market
@@ -120,7 +121,21 @@ export function buildCatalogue({ lines, rules, freshest = 'high' }) {
         .sort((a, b) => a.seq - b.seq)
       return { ...s, grades, total: grades.reduce((n, g) => n + g.total, 0) }
     })
-    .sort((a, b) => a.seq - b.seq)
+
+  /* SPECIES COME UP IN THE ORDER THE MARKET SELLS THEM — the same order the
+   * chalk sheet lays them out in, off the same measured sequence.
+   *
+   * That is the whole use of this document. A buyer crossing a lot off wants
+   * to know what is coming next, so a catalogue in a different order from the
+   * floor is worse than no catalogue: he reads down for his next lot and finds
+   * it three species away from where the fish actually is.
+   *
+   * One function, imported by both, so the two can never drift. Grades inside
+   * a species keep the tally's own seq — the market's grading order, and the
+   * export agrees, every block running 1 → 5. */
+  const seqOf = new Map(speciesList.map((s) => [s.species, s.seq]))
+  const cmp = bySaleOrder(rules.auctionOrder, (sp) => seqOf.get(sp) ?? 0)
+  speciesList.sort((a, b) => cmp(a.species, b.species))
 
   // Group into the auction's clocks, in the clock's own order.
   const clocks = (rules.clocks || []).map((c) => ({
