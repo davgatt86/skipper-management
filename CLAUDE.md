@@ -2983,6 +2983,57 @@ name for the FORMAT rather than a claim about who issued it; the document
 itself is headed SAMPLE FISH SELLING CO and carries the SAMPLE banner in its
 text.
 
+### What the note just changed — `UploadSummary.jsx`, `src/lib/salesChange.js`
+
+Uploading a note used to answer with one line of log — *"✓ note.pdf: AUDACIOUS
+BF83 13-08-2026 — 1,192 bx, £136,656.50"* — which says the file was read and
+nothing about what it did.
+
+**It is for every fleet, not the demo.** A skipper wants the same three facts a
+visitor does, and building it demo-only would have been a second code path
+nobody exercises.
+
+The panel shows: rows, species and buyers read · boxes, kilos, gross, £/kg ·
+whether it reconciled · new landing or **re-read and replaced in place** · what
+carried it, with each species' share and price · buyers new to this boat · and
+the year before and after.
+
+**THE ARITHMETIC IS A PURE FUNCTION** in `salesChange.js` — no queries, no
+rendering — because the arithmetic is the part worth testing, and
+`test-sales-change.mjs` runs it against the REAL sample note as well as
+fixtures. Three things it pins down:
+
+- **Three reconciliation states, not two.** A note printing no total has not
+  failed; it cannot be checked, and calling that "reconciled" is a claim nobody
+  made. `reconcile_ok` is nullable for the same reason.
+- **"No new buyers" and "nobody looked" must not render alike.** `newBuyers()`
+  returns `null` rather than an empty list when the caller holds no known set.
+  And Sales.jsx reads the buyers **in full via `fetchAll` or not at all** — a
+  truncated 1,000-row read would announce a buyer as new to the boat who has
+  been buying off her all year.
+- **A replaced note adds no landing.** The count does not move and the value
+  moves by the DIFFERENCE. The first cut counted it as an extra and read
+  *"1 landing → 2"* for a note that added neither.
+
+`scripts/upload-panel-preview.mjs` server-renders the real component against
+the real sample note in all three states, because a preview showing only the
+happy case is how the other two ship broken.
+
+### Where the sample documents live — `SampleDocs.jsx`
+
+A card on the two pages that take an upload: **Fish Sales** (the note) and
+**Market Layout** (the day tally), above the upload prompt rather than below the
+result — a visitor needs the file in his hand before he has a sheet on screen.
+
+**Driven by `fleets.is_demo`, never by the fleet id.** "If this is fleet
+...00de" scattered through the pages is a branch on a magic value, and the point
+of the demo being a FLEET rather than a MODE is that there are no such branches.
+One column on the tenant, and the card renders off the data like everything
+else.
+
+The files are static, served out of `public/samples/` by the app itself, so
+there is no second host and nothing to keep in step by hand.
+
 ## Outstanding work
 
 - **Vessels — stage 1 DONE Aug 2026** (`supabase/vessels_schema.sql`).

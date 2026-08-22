@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import SampleDocs from '../SampleDocs'
 import { useAuth } from '../AuthContext'
 import { parseDayTally } from '../lib/market/parseDayTally'
 import { buildCatalogue, freshestNote } from '../lib/market/catalogue'
@@ -188,6 +189,8 @@ export default function MarketLayout() {
           <p className="error" style={{ margin: 0 }}>{error}</p>
         </div>
       )}
+
+      <SampleDocs kind="tally" />
 
       {!parsed && !error && (
         <div className="card">

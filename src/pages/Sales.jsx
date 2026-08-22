@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import UploadSummary from '../UploadSummary'
+import SampleDocs from '../SampleDocs'
+import { summariseNote } from '../lib/salesChange'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 // Shared with netlify/functions/ingest.js — the two upload paths must merge
 // buyer names identically, and they were two inline copies of the same code.
 import { canonBuyerFrom } from '../lib/buyerAliases'
+import { fetchAll } from '../lib/fetchAll'
 import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2,
   withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
@@ -91,6 +95,8 @@ export default function Sales() {
   // upload
   const [busy, setBusy] = useState(false)
   const [uploadLog, setUploadLog] = useState([])
+  // What each note CHANGED, beside the log line saying it was read.
+  const [uploadSummary, setUploadSummary] = useState([])
 
   async function loadLandings() {
     const all = []
@@ -192,9 +198,15 @@ export default function Sales() {
     const files = [...(e.target.files || [])]
     e.target.value = ''
     if (!files.length) return
-    setBusy(true); setUploadLog([]); setError('')
+    setBusy(true); setUploadLog([]); setUploadSummary([]); setError('')
     const log = []
+    const summary = []
     const byKey = new Map(landings.map(l => [l.dedup_key, l.id]))
+    /* The landings as they stood BEFORE this upload. Taken once, so a note
+     * that replaces one already on file is measured against the same
+     * starting point as a new one, and two notes in the same upload do not
+     * each count the other. */
+    const landingsBefore = landings
 
     // This fleet's buyer merges, loaded once for the whole upload. RLS scopes
     // the read to the fleet, so no filter is needed here. The matching itself
@@ -202,6 +214,20 @@ export default function Sales() {
     const { data: buyerFlags } = await supabase
       .from('sales_buyer_flags').select('canonical_name, aliases').not('canonical_name', 'is', null)
     const canonBuyer = canonBuyerFrom(buyerFlags)
+
+    /* Buyer names already on this fleet's notes, so the summary can say
+     * which are new to the boat.
+     *
+     * READ IN FULL OR NOT AT ALL. Supabase caps a response at 1,000 rows
+     * without saying so, and a truncated list is worse than none here: it
+     * would announce a buyer as new to the boat who has been buying off her
+     * all year. `newBuyers()` treats undefined as 'nobody looked' and says
+     * nothing, which is the honest failure. */
+    let knownBuyers
+    {
+      const { data: bs, error: be } = await fetchAll('sales_rows', 'buyer')
+      if (!be && bs) knownBuyers = new Set(bs.map(b => (b.buyer || '').trim()).filter(Boolean))
+    }
     for (const f of files) {
       try {
         let res = await parseSalesPdf(f)
@@ -262,6 +288,17 @@ export default function Sales() {
         }
         const warn = rec.found && !rec.ok ? `  ⚠ totals differ from the note's printed TOTAL (£ ${rec.diffs.value >= 0 ? '+' : ''}${rec.diffs.value})` : ''
         const fed = await feedCrewLanding(res.meta.isoDate, tot.boxes, key)
+        summary.push(summariseNote({ ...res, filename: f.name }, {
+          isNew: !dupId,
+          replacedId: dupId || null,
+          landings: landingsBefore,
+          /* Buyer names already on this fleet's notes, so the panel can say
+           * which are new. `knownBuyers` being undefined is a real state —
+           * see newBuyers() — so it is only passed when it was actually
+           * loaded. */
+          knownBuyers: knownBuyers || undefined,
+        }))
+        setUploadSummary([...summary])
         log.push(`✓ ${f.name}: ${res.meta.vessel} ${fmtDate(res.meta.isoDate)} — ${num(tot.boxes)} bx, ${gbp(tot.value)}${dupId ? ' ↻ re-parsed' : ''}${warn}${fed}`)
       } catch (err) {
         log.push(`✗ ${f.name}: ${err.message}`)
@@ -859,6 +896,10 @@ export default function Sales() {
         </p>
         <input type="file" accept="application/pdf" multiple onChange={onUpload} disabled={busy} />
         {busy && <p className="muted" style={{ marginTop: '0.5rem' }}>Parsing…</p>}
+        <SampleDocs kind="sales" />
+
+        <UploadSummary items={uploadSummary} />
+
         {uploadLog.length > 0 && (
           <ul style={{ listStyle: 'none', marginTop: '0.75rem', fontSize: '0.9rem' }}>
             {uploadLog.map((l, i) => <li key={i} style={{ padding: '0.15rem 0' }}>{l}</li>)}
