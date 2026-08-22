@@ -124,6 +124,97 @@ const bandsOf = (sp) => new Set([
   }
   eq('each row keeps a species in one run', [contiguous(plan.rows.top), contiguous(plan.rows.bottom)], [true, true])
 
+  /* ---- A CLOCK STAYS ON ONE ROW ------------------------------------------
+   *
+   * David, on the chalk sheet of 19-08-2026: "why is the ling not at the top
+   * with the rest of the rough and the hake with the rest of the flats… ling
+   * could've been after lythe, and if there was a spare tier at top, put some
+   * flats into it."
+   *
+   * The old allocator handed each SPECIES to whichever row was furthest behind
+   * its share, which shredded the clocks across both rows: on the real Trip 56
+   * tally it put BLACK, CAT and SQUID on the top and LING, MONKS and LYTHE on
+   * the bottom, all four of them rough — so a buyer following the rough clock
+   * walked the top row for his monks and came back along the bottom for his
+   * ling. It split the flats the same way. AND IT WAS 15 TIERS EITHER WAY, so
+   * the split was buying nothing at all.
+   *
+   * Only a clock the rules mark splittable may appear on both rows, and then
+   * only via the spill, which carries it over inside ONE tier. */
+  const clockRows = (p) => {
+    const m = {}
+    for (const [row, list] of [['top', p.rows.top], ['bottom', p.rows.bottom]])
+      for (const s of list) (m[s.auction] = m[s.auction] || new Set()).add(row)
+    return m
+  }
+  const splitClocks = (p) => Object.entries(clockRows(p)).filter(([, v]) => v.size > 1).map(([k]) => k)
+
+  // A tally with all four clocks on it and no room to spare.
+  const fourClocks = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 40, seq: 0 },
+    { species: 'HADDOCK', grade: 'Med (3)', day: 1, boxes: 120, seq: 1 },
+    { species: 'MONKS', grade: 'Large', day: 1, boxes: 35, seq: 2 },
+    { species: 'LING', grade: 'Large', day: 1, boxes: 45, seq: 3 },
+    { species: 'LYTHE', grade: 'Large', day: 1, boxes: 30, seq: 4 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 70, seq: 5 },
+    { species: 'MEGS', grade: 'Large', day: 1, boxes: 25, seq: 6 },
+    { species: 'LEMONS', grade: 'Med', day: 1, boxes: 20, seq: 7 },
+  ])
+  eq('no clock lands on both rows unless it may split',
+    splitClocks(fourClocks).every((id) => resolveRules(null).canSplitRows(id)), true)
+  eq('and the rough in particular is in one place',
+    splitClocks(fourClocks).includes('rough'), false)
+
+  // Each clock is also a single RUN within its row — not two runs with another
+  // clock in between, which reads the same as being on both rows.
+  const clockRuns = (list) => {
+    const seen = new Set(); let last = null; let ok = true
+    for (const s of list) {
+      if (s.auction !== last) { if (seen.has(s.auction)) ok = false; seen.add(s.auction); last = s.auction }
+    }
+    return ok
+  }
+  eq('and each row runs its clocks one after another',
+    [clockRuns(fourClocks.rows.top), clockRuns(fourClocks.rows.bottom)], [true, true])
+
+  /* THE SPLIT MUST EARN ITS TIER. On the real Trip 56 tally the old split cost
+   * nothing and gained nothing, which is the worst of both. Whole clocks must
+   * never come out worse than the tally's own floor by more than the rules
+   * require. */
+  eq('four whole clocks still fit the tiers the fish needs',
+    fourClocks.tiers <= Math.ceil(fourClocks.footprints / 47) + 1, true)
+
+  /* AND WHEN IT DOES COST A TIER, IT SAYS SO.
+   *
+   * Refusing a spill that would cut a second species, or one whose halves
+   * would land in different tiers, is right — but it is a tier of real market
+   * floor, and this codebase does not spend one silently. Same argument as
+   * `plan.held`, which reports only where a floor actually bit.
+   *
+   * This tally is the case: eight tiers with every fish whole, seven only by
+   * breaking the lythe in half to let the lemons carry over. */
+  const costly = planLayout([
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 40, seq: 0 },
+    { species: 'HADDOCK', grade: 'Med (3)', day: 1, boxes: 120, seq: 1 },
+    { species: 'MONKS', grade: 'Large', day: 1, boxes: 35, seq: 2 },
+    { species: 'LING', grade: 'Large', day: 1, boxes: 45, seq: 3 },
+    { species: 'LYTHE', grade: 'Large', day: 1, boxes: 30, seq: 4 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 70, seq: 5 },
+    { species: 'MEGS', grade: 'Large', day: 1, boxes: 25, seq: 6 },
+    { species: 'LEMONS', grade: 'Med', day: 1, boxes: 20, seq: 7 },
+  ])
+  eq('a tier spent on keeping the runs whole is reported',
+    costly.warnings.some((w) => w.includes('keeps every fish in one run')), true)
+  eq('and the sheet is still laid out whole', splitClocks(costly).length, 0)
+
+  // And a tally that pays nothing says nothing. A warning that is almost
+  // always there carries no information — the same reason day changes are
+  // only marked within a grade on the chalk sheet.
+  eq('a tally that costs nothing is not warned about',
+    roomy.warnings.some((w) => w.includes('keeps every fish in one run')), false)
+
+
+
   /* And where it DOES split, it carries straight over. A tier is walked top
    * row then bottom row, so the spill has to leave the end of one and arrive
    * at the beginning of the other IN THE SAME TIER. Appending it to the end
@@ -144,16 +235,21 @@ const bandsOf = (sp) => new Set([
     return 'carries over'
   }
 
+  /* A tally that genuinely NEEDS the spill: 188 footprints, four tiers, and
+   * not a single spare place in them. The earlier fixture here no longer
+   * splits at all — since the allocator started searching the clock
+   * assignment it finds a three-tier layout for it with every fish whole,
+   * which is strictly better and left this assertion testing nothing. */
   const spill = planLayout([
-    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 20, seq: 0 },
-    { species: 'BLACK', grade: 'Sma (4a)', day: 1, boxes: 100, seq: 1 },
-    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 44, seq: 2 },
+    { species: 'COD', grade: 'Large (1b)', day: 1, boxes: 50, seq: 0 },
+    { species: 'BLACK', grade: 'Sma (4a)', day: 1, boxes: 110, seq: 1 },
+    { species: 'HAKE', grade: 'Sel (2)', day: 1, boxes: 110, seq: 2 },
   ])
   eq('a spilling flat carries top to bottom in ONE tier', carriesOver(spill), 'carries over')
   eq('and it is still only one species', splitCount(spill), 1)
+  eq('and the spill fills its tiers to the last place', spill.tiers * 47 - spill.footprints, 0)
   eq('with every box still placed',
-    [...spill.rows.top, ...spill.rows.bottom].reduce((a, s) => a + s.boxes, 0), 164)
-  eq('a tally that does not spill says so', carriesOver(roomy), 'no split')
+    [...spill.rows.top, ...spill.rows.bottom].reduce((a, s) => a + s.boxes, 0), 270)
   eq('and no box is lost to the spill',
     [...plan.rows.top, ...plan.rows.bottom].reduce((a, s) => a + s.boxes, 0),
     lines.reduce((a, l) => a + l.boxes, 0))

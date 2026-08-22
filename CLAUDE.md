@@ -401,10 +401,62 @@ warnings with a link to the rules page. Falling to "whichever clock is last" is
 not a rule; quietly sending a fish to the wrong auction is the failure worth
 guarding against.
 
-**Both rows fill in proportion.** A tier hands you 21 and 26 at the same time —
-you cannot take one without the other — so the tier count is set by whichever
-row runs out first, and packing the bottom tight while the top sits half empty
-simply costs tiers. Species go to whichever row is furthest behind its share.
+**A WHOLE CLOCK GOES TO ONE ROW, and the assignment is SEARCHED.**
+
+Handing each SPECIES to whichever row was furthest behind its share balanced
+the rows beautifully and shredded the clocks across both. On the real Trip 56
+tally it put BLACK, CAT and SQUID on the top row and LING, MONKS and LYTHE on
+the bottom — all four of them ROUGH — and split the flats the same way, HAKE
+and HALIBUT below against LEMONS and MEGS above. So a buyer following the
+rough walked the top for his monks and came back along the bottom for his ling.
+
+**And it was 15 tiers either way.** The split was buying nothing at all.
+
+David, on the chalk sheet of 19-08-2026: *"why is the ling not at the top with
+the rest of the rough and the hake with the rest of the flats. in that example,
+ling could've been after lythe, and if there was a spare tier at top, put some
+flats into it."*
+
+Deciding only at CLOCK boundaries makes that impossible to produce. The second
+half of what he asks for — the flats moving up into the room the others leave —
+is the spill, which was already there and already knows how to carry a fish
+over inside one tier.
+
+**The assignment is searched, not guessed.** There are four clocks, so all 2^n
+ways of dealing them between the two rows are tried and the fewest tiers wins.
+Two greedy versions were written first and both cost a tier: filling the top to
+its 21/47ths share and switching, because a big clock packs better on the
+bottom row (26 to a tier) than the top (21) and greedy cannot see that coming.
+
+**Each assignment is scored AFTER its spill, not before.** Judged raw, a
+four-clock tally put the flats on whichever row came out emptier — and the
+spill may only take from the FULLER row, so it could do nothing about it and
+the sheet ran a tier long. Scoring the finished thing lets the search pick a
+layout the spill can then rescue.
+
+**THE SPILL'S LANDING POINT MUST BE A SPECIES BOUNDARY.** It shuffles whatever
+is already in the receiving row along behind it, which costs those species
+nothing *provided the cut falls between two of them*. It does not always: on a
+four-clock tally the tier boundary landed inside the lythe and a whole run came
+out as `LYTHE x16 | LEMONS x8 | LYTHE x14` — the flats carried over correctly
+and broke a rough fish in half doing it, which is the same complaint one fish
+further along. Nothing to weigh up: a tier is not worth splitting a second
+species to save.
+
+**WHEN THE RULE COSTS A TIER, THE PAGE SAYS SO.** Refusing that spill, or one
+whose halves would land in different tiers, is right — but a tier is real
+market floor and this codebase does not spend one silently. `planLayout` runs
+the same search with both guards relaxed purely to report the difference, and
+warns *"8 tiers keeps every fish in one run. 7 would fit (1 fewer), but only by
+splitting one so it reads as two lots on the floor."* On Trip 56 it costs
+nothing and nothing is said — a warning that is almost always there carries no
+information, the same reason day changes are only marked within a grade.
+
+Measured across six tally shapes: nothing costs a tier that did not before
+except two synthetic ones, both of which now name their own cost; three save
+one or two. **Trip 56 stays at 15 tiers with every clock AND every species in a
+single run.**
+
 
 **Every species goes into a row WHOLE, flats included.** The flats exception is
 "may be broken across the two rows to use up space the other three leave

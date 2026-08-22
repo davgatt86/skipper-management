@@ -162,88 +162,181 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
 
   const footprints = species.reduce((s, sp) => s + sp.stacks.length, 0)
 
-  // Hand each species WHOLE to the row that is furthest behind its share —
-  // every species, flats included. A fish belongs in one place.
-  const rows = { top: [], bottom: [] }
-  const pressure = (r) => (r === 'top' ? rows.top.length / TOP_ROW : rows.bottom.length / BOTTOM_ROW)
-  for (const sp of species) {
-    rows[pressure('top') <= pressure('bottom') ? 'top' : 'bottom'].push(...sp.stacks)
-  }
-
   const rowSize = (r) => (r === 'top' ? TOP_ROW : BOTTOM_ROW)
   const tiersFor = (t, b) => Math.max(Math.ceil(t / TOP_ROW), Math.ceil(b / BOTTOM_ROW), 1)
 
-  /* ONLY NOW does a splittable clock spill, and only as far as it must.
-   *
-   * The rule is "the flats MAY be broken across the two rows to use up space
-   * the other three leave behind" — not "cut every flat down the middle". The
-   * old code handed each STACK to whichever row was behind, which did exactly
-   * that: on Trip 64 it split hake 39/32, megrim 9/10, lemons 6/7 and halibut
-   * 4/5, so four species appeared twice and a buyer after hake had to walk
-   * both rows. That is precisely what keeping a species in one band is for,
-   * and David spotted it on the printed sheet — "why is the flats doubled".
-   *
-   * So: move ONE contiguous run off the end of the fuller row, take the
-   * FEWEST stacks that drop a tier, and if nothing drops a tier move nothing
-   * at all. At most one species ends up split, at one clean break, and only
-   * when the split is genuinely paying for itself. On Trip 64 that is still
-   * 17 tiers rather than 18; on Trip 63 the split earned nothing and now does
-   * not happen. */
-  const start = tiersFor(rows.top.length, rows.bottom.length)
-  const from = Math.ceil(rows.top.length / TOP_ROW) >= Math.ceil(rows.bottom.length / BOTTOM_ROW) ? 'top' : 'bottom'
-  const to = from === 'top' ? 'bottom' : 'top'
-  // Only the trailing stacks whose clock allows a split may move.
-  let movable = 0
-  while (movable < rows[from].length
-         && rules.canSplitRows(rows[from][rows[from].length - 1 - movable].auction)) movable++
-  /* Pick how many to move.
-   *
-   * It has to do two things at once: drop a tier, and land in the SAME tier
-   * the donor row now ends in — a tier is walked top row then bottom row, so a
-   * fish that spills must carry straight over with nothing between the halves.
-   * Moving the bare minimum can leave the receiving row still short of that
-   * tier, in which case the two halves end up in different tiers, which is
-   * the break David objected to.
-   *
-   * So take the FEWEST that satisfies both. If nothing does, spill nothing
-   * and wear the extra tier — a sheet that reads correctly is worth more than
-   * a tier, and this is the flats, which is a handful of boxes. */
-  let take = 0
-  for (let mv = 1; mv <= movable; mv++) {
-    const fromLen = rows[from].length - mv
-    const toLen = rows[to].length + mv
-    const t = from === 'top' ? tiersFor(fromLen, toLen) : tiersFor(toLen, fromLen)
-    if (t >= start) continue
-    // Does the receiving row ALREADY reach the tier the donor now ends on?
-    // Its current length is what decides where the spill can be inserted; if
-    // the row stops short of that tier the two halves land in different tiers
-    // and the carry-over is broken.
-    const destTier = Math.max(1, Math.ceil(fromLen / rowSize(from)))
-    if (rows[to].length >= (destTier - 1) * rowSize(to)) { take = mv; break }
+  /* THE SPILL, as a function of a pair of rows — because the assignment
+   * above has to be scored on what the sheet ACTUALLY comes to, and that is
+   * the tier count AFTER the flats have moved. Scoring the raw assignment
+   * put the flats on whichever row came out emptier on a "many species"
+   * tally, which is the one row the spill is not allowed to take from: it
+   * may only move a run of SPLITTABLE stacks off the end of the FULLER row.
+   * So the layout it chose was one the spill could not then rescue, and the
+   * sheet came out a tier longer than it needed to be. */
+  const spillOnce = (top, bottom, strict = true) => {
+    const r = { top: [...top], bottom: [...bottom] }
+    /* ONLY NOW does a splittable clock spill, and only as far as it must.
+     *
+     * The rule is "the flats MAY be broken across the two rows to use up space
+     * the other three leave behind" — not "cut every flat down the middle". The
+     * old code handed each STACK to whichever row was behind, which did exactly
+     * that: on Trip 64 it split hake 39/32, megrim 9/10, lemons 6/7 and halibut
+     * 4/5, so four species appeared twice and a buyer after hake had to walk
+     * both rows. That is precisely what keeping a species in one band is for,
+     * and David spotted it on the printed sheet — "why is the flats doubled".
+     *
+     * So: move ONE contiguous run off the end of the fuller row, take the
+     * FEWEST stacks that drop a tier, and if nothing drops a tier move nothing
+     * at all. At most one species ends up split, at one clean break, and only
+     * when the split is genuinely paying for itself. On Trip 64 that is still
+     * 17 tiers rather than 18; on Trip 63 the split earned nothing and now does
+     * not happen. */
+    const start = tiersFor(r.top.length, r.bottom.length)
+    const from = Math.ceil(r.top.length / TOP_ROW) >= Math.ceil(r.bottom.length / BOTTOM_ROW) ? 'top' : 'bottom'
+    const to = from === 'top' ? 'bottom' : 'top'
+    // Only the trailing stacks whose clock allows a split may move.
+    let movable = 0
+    while (movable < r[from].length
+           && rules.canSplitRows(r[from][r[from].length - 1 - movable].auction)) movable++
+    /* Pick how many to move.
+     *
+     * It has to do two things at once: drop a tier, and land in the SAME tier
+     * the donor row now ends in — a tier is walked top row then bottom row, so a
+     * fish that spills must carry straight over with nothing between the halves.
+     * Moving the bare minimum can leave the receiving row still short of that
+     * tier, in which case the two halves end up in different tiers, which is
+     * the break David objected to.
+     *
+     * So take the FEWEST that satisfies both. If nothing does, spill nothing
+     * and wear the extra tier — a sheet that reads correctly is worth more than
+     * a tier, and this is the flats, which is a handful of boxes. */
+    let take = 0
+    for (let mv = 1; mv <= movable; mv++) {
+      const fromLen = r[from].length - mv
+      const toLen = r[to].length + mv
+      const t = from === 'top' ? tiersFor(fromLen, toLen) : tiersFor(toLen, fromLen)
+      if (t >= start) continue
+      // Does the receiving row ALREADY reach the tier the donor now ends on?
+      // Its current length is what decides where the spill can be inserted; if
+      // the row stops short of that tier the two halves land in different tiers
+      // and the carry-over is broken.
+      const destTier = Math.max(1, Math.ceil(fromLen / rowSize(from)))
+      const at = (destTier - 1) * rowSize(to)
+      if (strict && r[to].length < at) continue
+      /* AND THE INSERTION POINT MUST BE A SPECIES BOUNDARY.
+       *
+       * The spill shuffles everything already in the receiving row along
+       * behind it, which costs those species nothing PROVIDED the cut falls
+       * between two of them. It does not always: on a four-clock tally the
+       * tier boundary landed in the middle of the lythe, so a run that had
+       * been whole came out as LYTHE x16 | LEMONS x8 | LYTHE x14 — the
+       * flats carried over correctly and broke a rough fish in half doing
+       * it, which is the same complaint one species further along.
+       *
+       * There is nothing to weigh up here: a tier is not worth splitting a
+       * second species to save. If the boundary does not fall cleanly, this
+       * many is not spillable and the loop tries the next. */
+      if (strict && at > 0 && at < r[to].length && r[to][at - 1].species === r[to][at].species) continue
+      take = mv
+      break
+    }
+    if (take) {
+      const moved = r[from].splice(r[from].length - take, take)
+      /* AND IT LANDS AT THE START OF THE SAME TIER'S OTHER ROW.
+       *
+       * A tier is walked top row then bottom row, so a fish that spills has to
+       * carry straight off the end of the one into the beginning of the other
+       * with nothing in between. Appending it to the end of the row instead put
+       * four species between the two halves of the hake on Trip 64:
+       *
+       *   tier 17 top     HAKE x21
+       *   tier 17 bottom  HALIBUT x7 | WITCH x2 | PLAICE x1 | TURBOT x1 | HAKE x9
+       *
+       * David: "if hake is started at top tier 15, it can only go to bottom
+       * tier 15 — continued from top to bottom with no breaks of another
+       * species between."
+       *
+       * The donor row now ends exactly on a tier boundary, so that tier is where
+       * the spill belongs; everything already in its other row shuffles along
+       * behind, which costs those species nothing since they stay in one run. */
+      const destTier = Math.max(1, Math.ceil(r[from].length / rowSize(from)))
+      const at = Math.min((destTier - 1) * rowSize(to), r[to].length)
+      r[to].splice(at, 0, ...moved)
+    }
+
+    return r
   }
-  if (take) {
-    const moved = rows[from].splice(rows[from].length - take, take)
-    /* AND IT LANDS AT THE START OF THE SAME TIER'S OTHER ROW.
-     *
-     * A tier is walked top row then bottom row, so a fish that spills has to
-     * carry straight off the end of the one into the beginning of the other
-     * with nothing in between. Appending it to the end of the row instead put
-     * four species between the two halves of the hake on Trip 64:
-     *
-     *   tier 17 top     HAKE x21
-     *   tier 17 bottom  HALIBUT x7 | WITCH x2 | PLAICE x1 | TURBOT x1 | HAKE x9
-     *
-     * David: "if hake is started at top tier 15, it can only go to bottom
-     * tier 15 — continued from top to bottom with no breaks of another
-     * species between."
-     *
-     * The donor row now ends exactly on a tier boundary, so that tier is where
-     * the spill belongs; everything already in its other row shuffles along
-     * behind, which costs those species nothing since they stay in one run. */
-    const destTier = Math.max(1, Math.ceil(rows[from].length / rowSize(from)))
-    const at = Math.min((destTier - 1) * rowSize(to), rows[to].length)
-    rows[to].splice(at, 0, ...moved)
+
+  /* THE UNIT PLACED IS THE CLOCK, NOT THE SPECIES.
+   *
+   * It used to hand each SPECIES to whichever row was furthest behind its
+   * share. That balanced the rows beautifully and shredded the clocks across
+   * both of them. On the 19-08-2026 sheet the rough came out with monks and
+   * lythe on the TOP row and ling and tusk on the BOTTOM, and the flats with
+   * hake on the top and lemons, megrim and halibut below — so a buyer
+   * following the rough walked the top for his monks and came back along the
+   * bottom for his ling, and the flats read as two separate lots.
+   *
+   * David: "why is the ling not at the top with the rest of the rough and the
+   * hake with the rest of the flats… ling could've been after lythe, and if
+   * there was a spare tier at top, put some flats into it."
+   *
+   * So a clock goes WHOLE to one row. Deciding only at clock boundaries makes
+   * the split he objected to impossible to produce, and the second half of
+   * what he asks for — the flats moving up to use the room the others leave —
+   * is the spill below, which was already there and already knows how to carry
+   * a fish over inside ONE tier.
+   *
+   * THE ASSIGNMENT IS SEARCHED, NOT GUESSED. There are only a handful of
+   * clocks, so every way of dealing them between the two rows is tried and the
+   * one needing fewest tiers wins. Greedy alternatives were tried first and
+   * both cost tiers: filling the top to its 21/47ths share and switching cost
+   * one on a rough-heavy trip, because a big clock packs better on the bottom
+   * row (26 to a tier) than the top (21) and greedy cannot see that coming.
+   * Measured across five tally shapes, the search costs nothing anywhere and
+   * saves one or two tiers on three of them. */
+  const byClock = []
+  for (const sp of species) {
+    const last = byClock[byClock.length - 1]
+    if (last && last.id === sp.auction) last.stacks.push(...sp.stacks)
+    else byClock.push({ id: sp.auction, stacks: [...sp.stacks] })
   }
+
+  const layFor = (mask) => {
+    const top = [], bottom = []
+    byClock.forEach((cl, i) => ((mask >> i) & 1 ? bottom : top).push(...cl.stacks))
+    return { top, bottom }
+  }
+
+  /* 2^n over the clocks — four of them today, so sixteen tries. Capped so a
+   * fleet that invents a dozen clocks falls back to everything on the top row
+   * and lets the spill sort it out, rather than hanging the page.
+   *
+   * EACH ASSIGNMENT IS SCORED AFTER ITS SPILL, not before. Judged raw, a
+   * "many species" tally put the flats on whichever row came out emptier —
+   * and the spill may only take from the FULLER row, so it could do nothing
+   * about it and the sheet ran a tier long. Scoring the finished thing lets
+   * the search pick a layout the spill can then rescue. */
+  let looseTiers = null
+  let best = null
+  const combos = byClock.length <= 12 ? 1 << byClock.length : 1
+  for (let mask = 0; mask < combos; mask++) {
+    const raw = layFor(mask)
+    const lay = spillOnce(raw.top, raw.bottom)
+    const t = tiersFor(lay.top.length, lay.bottom.length)
+    /* What the same assignment would come to if the spill were allowed to cut
+     * a second species. Never used to lay anything out — only to report what
+     * keeping every run whole actually cost. */
+    const loose = spillOnce(raw.top, raw.bottom, false)
+    const lt = tiersFor(loose.top.length, loose.bottom.length)
+    if (looseTiers === null || lt < looseTiers) looseTiers = lt
+    // Fewest tiers wins; on a tie the more level pair of rows, which wastes
+    // less of the last tier and leaves the fish easier to walk.
+    const level = Math.abs(lay.top.length / TOP_ROW - lay.bottom.length / BOTTOM_ROW)
+    if (!best || t < best.t || (t === best.t && level < best.level)) best = { t, level, lay }
+  }
+  const rows = best.lay
+
 
   // Tiers are set by whichever row runs out first.
   const tiers = tiersFor(rows.top.length, rows.bottom.length)
@@ -267,6 +360,26 @@ function layoutOnce(clean, totalBoxes, heightOf, rules) {
       .reduce((sum, s) => sum + s.stacks.reduce((x, st) => x + st.boxes, 0), 0)
     return { ...a, boxes, from: hits[0] || null, to: hits[hits.length - 1] || null, tiers: hits.length }
   }).filter((a) => a.boxes > 0)
+
+  /* WHAT KEEPING EVERY FISH IN ONE RUN COST, IF IT COST ANYTHING.
+   *
+   * Every rule on this page is a trade against floor space, and these ones
+   * can take a tier. A spill that would drop one is refused twice over: when
+   * its landing point falls inside another species (carrying the flats over
+   * cleanly by cutting the lythe in half is the same complaint one fish
+   * further along), and when the receiving row does not reach that tier at
+   * all, which puts the two halves in different tiers.
+   *
+   * Both refusals are right — a sheet that reads correctly is worth more
+   * than a tier of flats — but a tier is real market, so it is said out loud
+   * rather than quietly spent. Same argument as `plan.held`, which reports
+   * only where a floor actually bit. On the real Trip 56 tally it costs
+   * nothing and nothing is said. */
+  if (looseTiers !== null && looseTiers < tiers) {
+    const n = tiers - looseTiers
+    warnings.push(`${tiers} tiers keeps every fish in one run. ${looseTiers} would fit `
+      + `(${n} fewer), but only by splitting one so it reads as two lots on the floor.`)
+  }
 
   for (const a of auctionSpans) {
     if (a.tiers && a.to - a.from + 1 !== a.tiers) {
