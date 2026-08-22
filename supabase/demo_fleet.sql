@@ -52,8 +52,14 @@ on conflict (id) do update
 -- `sales_landings` whether or not it carries a fleet_id of its own. Deleting
 -- twice is harmless.
 --
--- `fleets` and `vessels` are skipped: they are the tenant itself, recreated
--- above, and everything else points at them.
+-- `fleets`, `vessels` and `app_users` are skipped: those three ARE the tenant,
+-- and everything else points at them.
+--
+-- `app_users` JOINED THAT LIST THE HARD WAY. It carries a `fleet_id`, so the
+-- generated loop took it, and the first real reset deleted the demo LOGIN and
+-- locked the visitor out of the boat he was being shown. Found by probing as
+-- the actual account AFTER a reset rather than before one — nothing about
+-- reading the function says it, the row count does.
 -- ---------------------------------------------------------------------------
 
 create or replace function public.wipe_demo_fleet()
@@ -85,7 +91,8 @@ begin
      where c.table_schema = 'public'
        and c.column_name = 'fleet_id'
        and tb.table_type = 'BASE TABLE'
-       and c.table_name not in ('fleets', 'vessels')
+       -- The tenant itself: the fleet, her boats, and the people who log in.
+       and c.table_name not in ('fleets', 'vessels', 'app_users')
      order by c.table_name
   loop
     execute format('delete from public.%I where fleet_id = $1', t.table_name)
@@ -435,12 +442,22 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $function$
-declare cleared int; a text; b text;
+declare cleared int; a text; b text; noise int;
 begin
   cleared := public.wipe_demo_fleet();
   a := public.seed_demo_sales();
   b := public.seed_demo_boat();
-  return 'cleared ' || cleared || ' rows; seeded ' || a || '; ' || b;
+
+  /* The seed writes through the audit triggers, so the demo boat opened her
+   * audit book on 312 machine entries done by nobody. That is a worse
+   * demonstration than an empty one: the page exists to show WHO changed WHAT.
+   * Cleared AFTER the seed, so the book fills with the visitor's own edits. */
+  delete from public.audit_log
+   where fleet_id = '00000000-0000-0000-0000-0000000000de';
+  get diagnostics noise = row_count;
+
+  return 'cleared ' || cleared || ' rows; seeded ' || a || '; ' || b
+      || '; audit book emptied of ' || noise || ' seeding entries';
 end $function$;
 
 revoke all on function public.reset_demo_fleet() from public, anon, authenticated;
@@ -464,6 +481,9 @@ revoke all on function public.reset_demo_fleet() from public, anon, authenticate
 --   insert into public.app_users (id, fleet_id, role, display_name, email, is_owner)
 --   values ('<auth user id>', '00000000-0000-0000-0000-0000000000de',
 --           'skipper', 'Demo Skipper', '<the demo address>', false);
+--
+-- Live as at Aug 2026: demo@skippermanagement.co.uk, and it SURVIVES a reset
+-- now that app_users is on the wipe's skip list.
 --
 -- Probed as that user, not inspected:
 --   fleets=[NORTH WIND BCK500 (DEMO)]  ·  another fleet's rename -> 0 rows

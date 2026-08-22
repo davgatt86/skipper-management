@@ -2917,6 +2917,26 @@ month is cleared without anyone remembering. A hand-written list would slowly
 fill the demo with the last visitor's typing, which is the shape of bug the
 role deny-loops exist to avoid.
 
+**THE FIRST REAL RESET DELETED THE DEMO LOGIN.** `app_users` carries a
+`fleet_id`, so the generated wipe took it and locked the visitor out of the boat
+he was being shown. `fleets`, `vessels` and `app_users` are the tenant itself
+and are skipped; everything else is what a visitor scribbles on. Found by
+probing as the actual account AFTER a reset rather than before one — nothing
+about reading the function says it, the row count does.
+
+**The audit book is emptied after the seed**, not before. Seeding writes 312
+rows through the triggers, so the demo opened her audit page on three hundred
+machine entries done by nobody — a worse demonstration than an empty one, since
+the page exists to show who changed what. It now fills with the visitor's own
+edits.
+
+**The live login is `demo@skippermanagement.co.uk`** (Aug 2026), skipper,
+`is_owner = false`. Probed as that account after a reset: fleets
+`[NORTH WIND BCK500 (DEMO)]`, 25 landings, 838 rows, 25 trips, 12 quota lines,
+10 crew, 50 crew certs, 8 vessel certs, 18 engine logs, 14 fuel, 6 maintenance,
+1 particulars, audit 0, app_users 1, payments 0, and renaming another fleet
+affects **0 rows**.
+
 **`reset_demo_fleet()` takes NO ARGUMENT.** The fleet id is a constant inside
 the wipe, so there is nothing to get wrong at the call site — the only way to
 be sure a reset can never take a real boat's books with it.
