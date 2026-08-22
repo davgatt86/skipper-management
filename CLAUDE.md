@@ -2962,6 +2962,62 @@ fleet's rename affects **0 rows**, and it reads its own 25 landings, 10 crew and
 1 `app_users` row.
 
 
+### The demo is now a whole boat, and it resets itself
+
+**Nightly at 03:30** (`demo-reset-nightly`), clear of the 06:00 alert run and
+the 07:00 digest and at an hour nobody is being shown a boat — deliberately not
+during the day, since a reset mid-conversation takes the visitor's work out from
+under him. **And a button on the Users page**, platform-owner only, for when the
+last visitor made a mess and the next is due in ten minutes.
+
+**The guard is INSIDE `reset_demo_fleet()`**, not in a handler holding the
+service key: no argument to get wrong, the privilege not copied to a second
+place, and cron — which has no `auth.uid()` — still passes. Probed both ways:
+the demo visitor is refused by name, the platform owner is allowed.
+
+**THE WIPE GOES ROUND AGAIN.** It walks tables alphabetically, which is
+arbitrary, and `crew` comes before `landing_crew` — whose FKs are ON DELETE
+RESTRICT so a crewman cannot be deleted out from under his settled share of real
+landings. **The first wipe worked and the second was refused halfway**, leaving
+the boat half cleared. Hand-ordering 64 tables would fix it and would rot, so
+each pass deletes what it can, swallows only foreign-key refusals, and stops
+when a pass clears nothing new. Two consecutive resets now return identical
+output.
+
+**What it holds**, every module live: 25 landings / 838 rows / £2.28m · 25
+logbook trips · **8 settlements over 24 landings** · 12 quota lines · 10 crew
+with 50 tickets · 4 contracts and one completed tour · 24 month closeouts · 12
+rota trips over two watches · 2 nets with 30 component lives · 10 spares · a
+stores list · 8 vessel certs · 18 engine logs · 14 fuel entries · 11 engine
+limits · the 42-item familiarisation list.
+
+**The settlements were verified by the app's own solver**, not by inspection:
+`solveSettlementRuns` confirms **8 of 8 exactly on both value and weight** and
+places 24 of 25 landings. The 25th is unsettled on purpose — the office settles
+a run at a time and the latest trip has not been paid — which is the leading and
+trailing behaviour that took the most work to get right. One sheet carries
+**£18,400 of towage** so Reconcile can be shown comparing against the Fish Sales
+line and never `total_income`.
+
+**Three things I got wrong by guessing rather than looking**, each caught by the
+database refusing them: the crew rates (£1,450 a month and 55p a box invented,
+against the real £350 and 15p — and `ghb_first_half_pct` is a *fraction*, so 50
+overflowed `numeric(5,4)`); a current contract carrying a planned end date, when
+the constraint rightly requires none until the man actually goes home; and
+MARPOL garbage categories in plain English where the record book has coded ones.
+
+**Still empty, and each needs a document rather than a seed**:
+`quota_trip_catches` (logbook catch detail, which the gear grounds analysis
+needs), `stowage_plans`, `crew_lists`. `market_prices` needs nothing — it has no
+`fleet_id`, so the demo already reads the real Peterhead and Denmark board,
+44,623 rows back to 2022, which is what makes Daily Prices and the Estimator
+work out of the box.
+
+**One thing for David to decide, not me:** the demo login sees **14 rows** of
+the cross-fleet Price vs Fleet benchmark. Anonymised and behind the
+minimum-three-boats guard, working as designed for a real customer — but this
+login goes to competitors.
+
 ### The sample documents — `scripts/make-sample-docs.mjs`
 
 A demo you can only look at is a slideshow. What is worth showing is a man
