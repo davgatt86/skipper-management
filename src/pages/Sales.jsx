@@ -478,6 +478,12 @@ export default function Sales() {
           way out for a note that genuinely cannot be got again. */}
       <ReconcileBanner />
 
+      {/* AT THE TOP, not beside the upload log at the foot of the page.
+          A visitor has to have the note in his hand before any of this means
+          anything, and the upload button is a thousand pixels down past a
+          year of somebody else's figures. */}
+      <SampleDocs kind="sales" />
+
       {/* scope selector */}
       <div className="card no-print" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         <select value={mode} onChange={e => { setMode(e.target.value); setOpenSpecies(''); setOpenBuyer('') }} style={{ width: 'auto' }}>
@@ -889,14 +895,13 @@ export default function Sales() {
       </div>
 
       {/* upload */}
-      {isSkipper && <div className="card no-print">
+      {isSkipper && <div className="card no-print" id="import-sales-notes">
         <h2>Import sales notes</h2>
         <p className="muted" style={{ marginBottom: '0.75rem' }}>
           Upload Don Fishing / Scrabster / Hanstholm / Shetland PDFs — duplicates are skipped automatically and totals are checked against each note's printed TOTAL.
         </p>
         <input type="file" accept="application/pdf" multiple onChange={onUpload} disabled={busy} />
         {busy && <p className="muted" style={{ marginTop: '0.5rem' }}>Parsing…</p>}
-        <SampleDocs kind="sales" />
 
         <UploadSummary items={uploadSummary} />
 

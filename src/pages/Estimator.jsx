@@ -1,3 +1,5 @@
+import { parseBoatText } from '../lib/estimator/parseBoatText'
+import SampleDocs from '../SampleDocs'
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import AppShell from "../AppShell";
 import PageHeader from "../PageHeader";
@@ -489,21 +491,6 @@ export default function Estimator(){
     finally{setBusy((b)=>({...b,[which]:false}));}
   }
 
-  function parseBoatText(txt){
-    const out=[];let curSp=null;
-    txt.split(/\r?\n/).forEach((line)=>{
-      const cells=line.split(/[\t,]/).map((c)=>c.trim().replace(/^"|"$/g,""));
-      if(cells.length<2)return;
-      const first=cells[0];
-      if(first&&first===first.toUpperCase()&&/[A-Z]/.test(first)&&cells[1]==="*"){curSp=first;return;}
-      if(/^total$/i.test(first))return;
-      if(!first&&curSp){
-        const size=cells[1];const boxes=+cells[2]||0;const wt=+cells[3]||0;
-        if(size&&wt)out.push({sp:curSp,size,boxes,wt});
-      }
-    });
-    return out;
-  }
 
   // Ask the AI parser for a clean tally array. Either pass {b64,mediaType} for a
   // PDF/image, or {text} for spreadsheet rows the browser already read.
@@ -682,6 +669,9 @@ export default function Estimator(){
       {boardMsg&&<div style={{fontSize:12,color:C.dim,marginBottom:10}}>{boardMsg}</div>}
 
       <div style={{paddingTop:14}}>
+        {/* On the tally step only: it is the one step that needs a file, and
+            every figure on the page is £0.00 until one is loaded. */}
+        {step===0&&<SampleDocs kind="boat"/>}
         {step===0&&<BoatStep tally={tally} setTally={setTally} setMap={setMap} mode={tallyMode} setMode={setTallyMode} effW={effW} onUpload={parseBoat} busy={busy.boat} msg={msg.boat} next={()=>setStep(1)}/>}
         {step===1&&<PriceStep which="pd" title="Peterhead price sheet" accent={C.pd} prices={pd} setPrices={setPd} onUpload={(f)=>parsePrice(f,"pd")} busy={busy.pd} msg={msg.pd} next={()=>setStep(2)}/>}
         {step===2&&<PriceStep which="dk" title="Hanstholm price sheet" accent={C.dk} prices={dk} setPrices={setDk} onUpload={(f)=>parsePrice(f,"dk")} busy={busy.dk} msg={msg.dk} next={()=>setStep(3)}/>}

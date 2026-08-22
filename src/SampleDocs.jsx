@@ -23,13 +23,25 @@ const DOCS = {
     name: 'Sample sales note (PDF)',
     what: '57 rows across 12 species and 6 buyers, 768 boxes, £111,800.76 — '
       + 'and it reconciles to the penny against its own printed total.',
-    then: 'Upload it above. The panel will show what it read and what it changed.',
+    /* The upload sits a thousand pixels down, past a year of figures — a
+     * visitor handed a file and no idea where it goes has been handed
+     * nothing. The anchor is on the import card. */
+    anchor: '#import-sales-notes',
+    then: 'Then drop it into Import sales notes, further down this page — the panel there '
+      + 'will say what it read and what it changed.',
+  },
+  boat: {
+    href: '/samples/sample-boat-tally.csv',
+    name: 'Sample boat tally (CSV)',
+    what: '825 boxes over 36 grades — a trip’s catch, in the species names the '
+      + 'price board itself uses so every line maps.',
+    then: 'Upload it under Boat tally and the two markets price it side by side.',
   },
   tally: {
     href: '/samples/sample-day-tally.xlsx',
     name: 'Sample day tally (Excel)',
     what: '1,954 boxes over five days, the wheelhouse tally as it is actually kept.',
-    then: 'Upload it above for the tier count, the chalk sheet and the buyers’ catalogue.',
+    then: 'Then upload it above for the tier count, the chalk sheet and the buyers’ catalogue.',
   },
 }
 
@@ -57,7 +69,13 @@ export default function SampleDocs({ kind }) {
       {/* A plain link, not a scripted download: the file is served by the app
           itself, so the browser handles it and there is nothing to go wrong
           offline or behind a sandbox. */}
-      <a href={doc.href} download style={{ fontWeight: 600 }}>⬇ {doc.name}</a>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <a href={doc.href} download style={{ fontWeight: 600 }}>⬇ {doc.name}</a>
+        {/* Takes him to the upload rather than leaving him to find it. */}
+        {doc.anchor && (
+          <a href={doc.anchor} style={{ fontSize: '0.85rem' }}>Jump to the upload ↓</a>
+        )}
+      </div>
       <p className="muted" style={{ margin: '0.6rem 0 0', fontSize: '0.78rem' }}>
         Invented figures for an invented boat. Nothing here belongs to a real vessel,
         buyer or crewman.

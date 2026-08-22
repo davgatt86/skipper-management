@@ -25,6 +25,10 @@ const ParseCore = require('../src/lib/parse-core.cjs')
 const { jsPDF } = require('jspdf')
 const XLSX = require('xlsx')
 
+/* The page's OWN reader, not a copy of it: a sample checked against a second
+ * implementation proves only that the two agree with each other. */
+const { parseBoatText } = await import('../src/lib/estimator/parseBoatText.js')
+
 const OUT = 'public/samples'
 mkdirSync(OUT, { recursive: true })
 
@@ -197,6 +201,59 @@ function buildDayTally() {
   return { bytes: XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }), total }
 }
 
+
+// ---------------------------------------------------------------------------
+// 3. THE BOAT TALLY FOR WHERE TO LAND
+//
+// The Estimator compares what a trip would make at Peterhead against Hanstholm,
+// off the real price board — so it needs a catch to price, and until one is
+// loaded every figure on the page is £0.00.
+//
+// ITS FORMAT IS NOT THE DAY TALLY'S. `parseBoatText` wants a species header row
+// whose second cell is a bare `*`, then one line per grade with an EMPTY first
+// cell: `,size,boxes,kg`. Feeding it the market day tally gets nothing, and it
+// falls back to the AI reader, which needs the network — no use for a sample
+// whose whole job is to work first time.
+//
+// THE SPECIES ARE THE BOARD'S OWN NAMES — Monkfish not MONKS, Lemon not LEMONS,
+// Pollack not LYTHE — because the page maps a tally line to a price by name. A
+// sample that half-maps would open on a list of things it could not price,
+// which is precisely the confusing state the page has a "check mapping" step
+// for.
+// ---------------------------------------------------------------------------
+
+const BOAT = [
+  ['COD', [['A1', 18, 690], ['A2', 34, 1290], ['A3', 41, 1560], ['A4', 22, 840]]],
+  ['HADDOCK', [['A1', 26, 990], ['A2', 88, 3340], ['A3', 132, 5010], ['A4', 61, 2320]]],
+  ['WHITING', [['A2', 14, 530], ['A3', 27, 1030], ['A4', 12, 455]]],
+  ['MONKFISH', [['A1', 9, 340], ['A2', 16, 610], ['A3', 11, 420]]],
+  ['LING', [['A1', 12, 455], ['A2', 21, 800], ['A3', 9, 340]]],
+  ['SAITHE', [['A2', 24, 910], ['A3', 46, 1750], ['A4', 31, 1180]]],
+  ['POLLACK', [['A2', 11, 420], ['A3', 17, 645]]],
+  ['HAKE', [['A1', 7, 265], ['A2', 19, 720], ['A3', 14, 530]]],
+  ['LEMON', [['A1', 6, 230], ['A2', 13, 495], ['A3', 8, 305]]],
+  ['MEGRIM', [['A1', 5, 190], ['A2', 12, 455], ['A3', 7, 265]]],
+  ['PLAICE', [['A2', 9, 340], ['A3', 15, 570]]],
+  ['CATFISH', [['U9', 18, 685]]],
+  ['WITCH', [['U9', 6, 230]]],
+  ['HALIBUT', [['U9', 4, 155]]],
+]
+
+function buildBoatTally() {
+  const out = ['NORTH WIND BCK500 - SAMPLE BOAT TALLY (demonstration data only),,,']
+  let boxes = 0
+  let kg = 0
+  for (const [sp, lines] of BOAT) {
+    out.push(`${sp},*,,`)
+    for (const [size, bx, w] of lines) {
+      out.push(`,${size},${bx},${w}`)
+      boxes += bx
+      kg += w
+    }
+  }
+  out.push(`TOTAL,,${boxes},${kg}`)
+  return { text: out.join('\n') + '\n', boxes, kg, lines: BOAT.reduce((n, s) => n + s[1].length, 0) }
+}
 // ---------------------------------------------------------------------------
 // BUILD, THEN PARSE BACK
 // ---------------------------------------------------------------------------
@@ -250,6 +307,22 @@ const wrote = []
     writeFileSync(join(OUT, 'sample-day-tally.xlsx'), bytes)
     wrote.push('sample-day-tally.xlsx')
   }
+}
+
+// --- boat tally for Where to Land ------------------------------------------
+{
+  const { text, boxes, kg, lines: n } = buildBoatTally()
+  /* Checked with the PAGE'S OWN reader, lifted out of Estimator.jsx, rather
+   * than a copy of it here: the point of a sample is that it goes through the
+   * real thing. */
+  const parsed = parseBoatText(text)
+  console.log()
+  console.log('boat tally    ', parsed.length, 'lines ·', boxes, 'boxes ·', kg, 'kg')
+  if (parsed.length !== n) problems.push(`boat tally: ${n} lines built, ${parsed.length} parsed`)
+  const pb = parsed.reduce((a, r) => a + r.boxes, 0)
+  const pk = parsed.reduce((a, r) => a + r.wt, 0)
+  if (pb !== boxes || pk !== kg) problems.push(`boat tally: parsed ${pb} boxes / ${pk} kg`)
+  if (!problems.length) { writeFileSync(join(OUT, 'sample-boat-tally.csv'), text); wrote.push('sample-boat-tally.csv') }
 }
 
 console.log()
