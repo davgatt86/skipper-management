@@ -129,6 +129,33 @@ men apiece, `bond` zero on all twenty-eight. The page, the preview and the PDF
 agreed with each other; only the column nobody could read disagreed. **It
 survived precisely because the read path did not exist.**
 
+**THE FIGURES ARE NOT RECOVERABLE FROM THE DATABASE.** Bond was never written
+anywhere else — not as a worksheet line — and `su_*` is deliberately outside
+the audit trail because settlements arrive on the service-role key. But the
+WORKING COPY on the device still has the bond items (`squareup_trip_v2` in
+localStorage), so the repair has to write the form over the kept sheet rather
+than the other way round.
+
+Hence **Keep over**, beside Open on each kept sheet. The two are opposites and
+the difference is which copy you trust: Open replaces the form with the sheet —
+which would destroy the only surviving copy of the bond — and Keep over
+replaces the sheet with the form. The confirmation states the DATE, crew count
+and bond total on both sides, because writing one trip over another's sheet is
+how this goes wrong. It is the ordinary "same trip, I have changed something"
+action too.
+
+A sheet is marked **no bond recorded** when it carries crew and no bond at all.
+Nought and never-recorded must not read alike.
+
+**AND THE FORM NOW REMEMBERS WHICH SHEET IT IS.** `worksheetId` was not in the
+working copy, so every save from a fresh page load minted a NEW worksheet —
+which is why the fleet record holds the 12-08 sheet **twice**, saved 14-08 and
+20-08 with identical lines and crew. The remembered id is validated against the
+boat's real sheets on load: one deleted on another device is forgotten, so the
+next save makes a new sheet rather than failing on an update that matches
+nothing, hours after the thing that caused it.
+
+
 **And the haulage note was discarded by a ternary that could not branch** —
 `haulageNote?.trim() ? null : null`, both arms null.
 

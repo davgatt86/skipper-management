@@ -87,16 +87,28 @@ export async function saveWorksheet(state, boatId, existingId) {
 const HEAD = 'id, trip_no, landed_date, market, days_at_sea, boxes_landed, '
   + 'quota_recovery_pct, status, notes, settlement_id, created_at, updated_at'
 
-/** Every kept worksheet for this boat, newest first. */
+/**
+ * Every kept worksheet for this boat, newest first.
+ *
+ * The crew rows come with it so the panel can say what a sheet actually holds
+ * — how many men, and whether any bond was recorded against them. That second
+ * one matters: the save keyed bond on the crewman's NAME while it is assigned
+ * by his ID, so every sheet kept before Aug 2026 has zero bond for every man.
+ * A figure of nought and a figure never recorded must not read alike.
+ */
 export async function listWorksheets(boatId) {
   if (!boatId) return []
   const { data, error } = await supabase
     .from('su_worksheets')
-    .select(HEAD)
+    .select(HEAD + ', su_worksheet_crew(bond)')
     .eq('boat_id', boatId)
     .order('updated_at', { ascending: false })
   if (error) return []
-  return data || []
+  return (data || []).map(({ su_worksheet_crew: c, ...w }) => ({
+    ...w,
+    crewCount: (c || []).length,
+    bondTotal: (c || []).reduce((s, r) => s + (Number(r.bond) || 0), 0),
+  }))
 }
 
 export async function deleteWorksheet(id) {

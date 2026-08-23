@@ -174,6 +174,16 @@ export default function SquareUp() {
       if (t.haulageNote !== undefined) setHaulageNote(t.haulageNote);
       if (Array.isArray(t.foreignCrew)) setForeignCrew(t.foreignCrew);
       if (Array.isArray(t.bondItems)) setBondItems(t.bondItems);
+      if (t.tripNo !== undefined) setTripNo(t.tripNo);
+      if (t.market !== undefined) setMarket(t.market);
+      if (t.daysAtSea !== undefined) setDaysAtSea(t.daysAtSea);
+      if (t.boxesLanded !== undefined) setBoxesLanded(t.boxesLanded);
+      /* WHICH KEPT SHEET THIS IS. Without it every save from a fresh page load
+         minted a NEW worksheet, so the same trip went in again and again — the
+         two rows on the fleet record are one sheet kept twice. It is validated
+         against the boat's real sheets below, so an id from a deleted or
+         another boat's worksheet cannot make the next save fail. */
+      if (t.worksheetId) setWorksheetId(t.worksheetId);
     }
     setLoaded(true);
   }, []);
@@ -182,17 +192,27 @@ export default function SquareUp() {
   useEffect(() => {
     if (!loaded) return;
     const t = setTimeout(() => {
-      saveTrip({ vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew, bondItems });
+      saveTrip({ vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote,
+                 foreignCrew, bondItems, tripNo, market, daysAtSea, boxesLanded, worksheetId });
     }, 400);
     return () => clearTimeout(t);
-  }, [vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew, bondItems, loaded]);
+  }, [vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew,
+      bondItems, tripNo, market, daysAtSea, boxesLanded, worksheetId, loaded]);
 
 
   // The kept sheets for this boat. Refreshed after every save and every delete
   // so the list is never a stale picture of the thing it is listing.
   const refreshKept = useCallback(async (boatId) => {
     if (!boatId) return;
-    setKept(await listWorksheets(boatId));
+    const rows = await listWorksheets(boatId);
+    setKept(rows);
+    /* THE REMEMBERED ID IS CHECKED AGAINST WHAT IS ACTUALLY THERE. A sheet
+       deleted on another device would otherwise leave the form pointing at a
+       row that has gone, and the next save would fail on an update matching
+       nothing — hours after the thing that caused it. Forgetting it makes the
+       next save a new sheet, which is the right way to be wrong. */
+    setWorksheetId(id => (id && !rows.some(r => r.id === id) ? null : id));
+    return rows;
   }, []);
 
   useEffect(() => { if (suBoat?.id) refreshKept(suBoat.id); }, [suBoat?.id, refreshKept]);
@@ -242,7 +262,9 @@ export default function SquareUp() {
     } catch (e) { setSaveState('error'); setSaveMsg(e.message || String(e)); }
   }
 
-  async function keepWorksheet() {
+  /* ONE WRITE PATH. `target` says which kept sheet this becomes: the one the
+     form is already linked to, or an existing one being written over. */
+  async function keepWorksheet(target = worksheetId, msg = 'Kept. It will be here on any device you sign in from.') {
     if (!suBoat) return;
     setSaveState('saving'); setSaveMsg('');
     try {
@@ -250,16 +272,40 @@ export default function SquareUp() {
         { tripDate, quota, crew, fuel, haulage, haulageNote, labour, foreignCrew, bondItems,
           tripNo, market, daysAtSea, boxesLanded },
         suBoat.id,
-        worksheetId
+        target
       );
       setWorksheetId(id);
       setSaveState('saved');
-      setSaveMsg('Kept. It will be here on any device you sign in from.');
+      setSaveMsg(msg);
       await refreshKept(suBoat.id);
     } catch (e) {
       setSaveState('error');
       setSaveMsg(e.message || String(e));
     }
+  }
+
+  /* KEEP THE FORM OVER AN EXISTING SHEET, rather than opening that sheet over
+     the form. The two are opposites and the difference is which copy you trust.
+     It exists for the case the bond bug left behind: the figures are on the
+     device in the working copy and NOT in the kept sheet, so opening the sheet
+     would destroy the only copy of them. Writing the other way repairs it.
+     It is the ordinary "same trip, I have changed something" action too. */
+  async function keepOver(w) {
+    const bondNow = bondItems.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+    const lines = [
+      `Keep what is on the form now over the worksheet of ${w.landed_date || 'no date'}?`,
+      '',
+      /* THE DATE IS THE STRONGEST SIGNAL THESE ARE THE SAME TRIP, so it is
+         stated on both sides rather than assumed. Writing one trip over
+         another's sheet is the way this goes wrong. */
+      `That sheet   ${w.landed_date || 'no date'} · ${w.crewCount} crew · ${fmtMoney(Number(w.bondTotal) || 0)} bond`,
+      `The form     ${tripDate || 'no date'} · ${crew.length} crew · ${fmtMoney(bondNow)} bond`,
+      '',
+      'The kept sheet is replaced by what is on screen. This cannot be undone.',
+    ];
+    if (!window.confirm(lines.join('\n'))) return;
+    await keepWorksheet(w.id, 'Kept over that sheet. Its figures now match the form.');
+    setKeptOpen(false);
   }
 
   const persistRoster = (next) => {
@@ -685,7 +731,10 @@ export default function SquareUp() {
             <div className="card" style={{ marginTop: 12 }}>
               <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.82rem' }}>
                 Kept on the fleet record, so they are here on any device you sign in from.
-                Opening one replaces what is on the form.
+                <b>Open</b> replaces the form with the kept sheet; <b>Keep over</b> replaces the
+                kept sheet with the form. A sheet marked <i>no bond recorded</i> was saved before
+                the bond was keyed correctly — if that trip is still on the form, Keep over it and
+                the figures go in right.
               </p>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {kept.map(w => (
@@ -702,6 +751,21 @@ export default function SquareUp() {
                         w.days_at_sea && `${w.days_at_sea} days`]
                         .filter(Boolean).join(' · ') || <span className="muted">no trip details</span>}
                     </span>
+                    <span className="muted" style={{ fontSize: '0.78rem' }}>
+                      {w.crewCount} crew
+                    </span>
+                    {/* NO BOND RECORDED is not the same as a bond of nought, and
+                        must not read like it. Every sheet kept before Aug 2026
+                        has this: the save totalled bond on the crewman's NAME
+                        while it is assigned by his ID, so it matched nothing and
+                        wrote zero for every man. */}
+                    {w.crewCount > 0 && !Number(w.bondTotal) && (
+                      <span title="The bond was keyed wrongly on save until Aug 2026, so it went in as nought for every man. If this trip is still on the form, Keep over it to put the figures right."
+                            style={{
+                              fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: 3,
+                              background: 'var(--brass)', color: '#fff', whiteSpace: 'nowrap',
+                            }}>no bond recorded</span>
+                    )}
                     {w.id === worksheetId && (
                       <span style={{
                         fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: 3,
@@ -711,6 +775,8 @@ export default function SquareUp() {
                     <button className="secondary" onClick={() => openKept(w)} disabled={loadingId === w.id}>
                       {loadingId === w.id ? 'Opening…' : 'Open'}
                     </button>
+                    <button className="secondary" onClick={() => keepOver(w)}
+                            title="Write what is on the form now over this kept sheet">Keep over</button>
                     <button className="secondary" onClick={() => removeKept(w)}
                             style={{ color: 'var(--rust)' }}>Delete</button>
                   </li>
