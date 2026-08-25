@@ -8,6 +8,7 @@ import { useOfflineTable } from '../lib/offline/useOfflineTable'
 import SyncStatus from '../components/SyncStatus'
 import {
   DEFAULT_PARTS, resolveParts, LENGTH_UNITS, toMm, fmtLength, ftInToValue, valueToFtIn,
+  partHasHalves, halvesCheck, fmtMm, sideLabel,
 } from '../lib/gear/parts'
 import {
   buildMatrix, historyFor, measurementsFor, daysBetween, lifeDays,
@@ -175,15 +176,26 @@ export default function GearLog() {
     await compsT.update(component.id, { removed_on: on || today() })
   }
 
-  async function addMeasurement(component, { done_on, kind, value, unit, notes }) {
+  async function addMeasurement(component, { done_on, kind, value, unit, notes, port, stbd }) {
     if (!canEdit) return
+    /* The overall stays in `value` — every existing reader uses it, so a part
+       measured the old way keeps working and the halves are purely additive.
+       The overall is NOT recomputed from the halves: it is a third act of
+       measuring along the whole rope, and a disagreement between it and them is
+       the check the paper method could never make. */
+    const anyLength = value != null || port != null || stbd != null
     await measT.insert({
       fleet_id: appUser.fleet_id, component_id: component.id,
       kind, done_on, notes: notes || null,
-      value: value ?? null, unit: value == null ? null : unit,
+      value: value ?? null,
+      port_value: port ?? null,
+      stbd_value: stbd ?? null,
+      unit: anyLength ? unit : null,
       // Stored twice on purpose: as written, and in millimetres so a series
       // survives the unit changing partway through it.
       value_mm: value == null ? null : toMm(value, unit),
+      port_mm: port == null ? null : toMm(port, unit),
+      stbd_mm: stbd == null ? null : toMm(stbd, unit),
       logged_by: (await supabase.auth.getUser()).data?.user?.id ?? null,
     })
   }
@@ -320,11 +332,23 @@ function Cell({ cell, trips: rawTrips, known }) {
         {Number.isFinite(trips) && <span className="muted" style={{ fontWeight: 400 }}> · {trips}t</span>}
       </div>
       <div className="muted" style={{ fontSize: '0.68rem' }}>{BASIS_WORD[cell.basis]}</div>
-      {cell.lastMeasured?.value != null && (
-        <div style={{ fontSize: '0.72rem' }}>
-          {fmtLength(cell.lastMeasured.value, cell.lastMeasured.unit)}
-        </div>
-      )}
+      {/* THE HALVES COUNT AS A LENGTH. Testing `value` alone left a cell
+          blank when the man measured both halves and did not take an overall —
+          a rope measured that morning reading as never measured. The total
+          falls back to the sum, and the cell marks which it is. */}
+      {(() => {
+        const m = cell.lastMeasured
+        if (!m) return null
+        const h = halvesCheck({ port: m.port_value, stbd: m.stbd_value,
+                                overall: m.value, unit: m.unit })
+        if (h.totalMm == null) return null
+        return (
+          <div style={{ fontSize: '0.72rem' }}>
+            {fmtMm(h.totalMm, m.unit)}
+            {h.basis === 'summed' && <span className="muted"> (halves)</span>}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -450,18 +474,51 @@ function PartBlock({ net, part, canEdit, components, measurements, onRenew, onRe
         <RenewForm onDone={(on, cost, notes) => { onRenew(net, part.key, on, cost, notes); setShowRenew(false) }} />
       )}
 
-      {fitted && canEdit && <MeasureForm component={fitted} onAdd={onMeasure} />}
+      {fitted && canEdit && (
+        <MeasureForm component={fitted} onAdd={onMeasure} halved={!!part.halves} />
+      )}
 
-      {fitted && measurementsFor(measurements, fitted.id).map((m) => (
-        <div key={m.id} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.8rem', padding: '0.12rem 0' }}>
-          <span className="muted" style={{ minWidth: '5.5rem' }}>{fmtDate(m.done_on)}</span>
-          <span style={{ minWidth: '4.5rem' }}>{m.kind}</span>
-          <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '5rem' }}>
-            {fmtLength(m.value, m.unit)}
-          </span>
-          <span className="muted">{m.notes}</span>
-        </div>
-      ))}
+      {fitted && measurementsFor(measurements, fitted.id).map((m) => {
+        const h = halvesCheck({ port: m.port_value, stbd: m.stbd_value,
+                                overall: m.value, unit: m.unit })
+        return (
+          <div key={m.id} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.8rem',
+                                   padding: '0.12rem 0', flexWrap: 'wrap', alignItems: 'baseline' }}>
+            <span className="muted" style={{ minWidth: '5.5rem' }}>{fmtDate(m.done_on)}</span>
+            <span style={{ minWidth: '4.5rem' }}>{m.kind}</span>
+            <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '5rem' }}>
+              {fmtMm(h.totalMm, m.unit)}
+            </span>
+            {/* A SUMMED TOTAL AND A MEASURED ONE MUST NOT READ ALIKE — the same
+                rule as the "since measured / since fitted / since aboard" basis
+                on the matrix. Only the summed case is marked; a measured
+                overall is the ordinary thing and needs no word. */}
+            {h.basis === 'summed' && (
+              <span className="muted" style={{ fontSize: '0.72rem' }}>from the halves</span>
+            )}
+            {h.haveBoth && (
+              <span className="muted" style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.75rem' }}>
+                P {fmtMm(h.portMm, m.unit)} · S {fmtMm(h.stbdMm, m.unit)}
+              </span>
+            )}
+            {/* Reported, never judged. Whether two inches on a headline matters
+                is the skipper's call, not a threshold I invented — the engine
+                limits settled that argument. */}
+            {h.imbalanceMm > 0 && (
+              <span className="muted" style={{ fontSize: '0.75rem' }}>
+                {sideLabel(h.longer)} +{fmtMm(h.imbalanceMm, m.unit)}
+              </span>
+            )}
+            {h.agrees === false && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--brass)' }}
+                    title={`Halves add to ${fmtMm(h.sumMm, m.unit)}, overall measured ${fmtMm(h.overallMm, m.unit)}`}>
+                halves and overall {fmtMm(Math.abs(h.diffMm), m.unit)} apart
+              </span>
+            )}
+            <span className="muted">{m.notes}</span>
+          </div>
+        )
+      })}
 
       {history.filter((c) => c.removed_on).length > 0 && (
         <details style={{ marginTop: '0.3rem' }}>
@@ -501,60 +558,123 @@ function RenewForm({ onDone }) {
   )
 }
 
-function MeasureForm({ component, onAdd }) {
+/* A length in one unit, entered as one box or two.
+ * Feet-and-inches is compound on the page and decimal underneath, so the
+ * arithmetic stays ordinary and only the display is awkward. */
+function LengthInput({ label, unit, val, setVal, ft, setFt, inch, setInch, width = 78 }) {
+  if (unit === 'ft_in') {
+    return (
+      <label style={LBL}>
+        <span className="muted" style={CAP}>{label}</span>
+        <span style={{ display: 'flex', gap: 3 }}>
+          <input type="number" min="0" value={ft} placeholder="ft"
+                 onChange={(e) => setFt(e.target.value)} style={{ width: width / 2 }} />
+          <input type="number" min="0" max="11" value={inch} placeholder="in"
+                 onChange={(e) => setInch(e.target.value)} style={{ width: width / 2 }} />
+        </span>
+      </label>
+    )
+  }
+  return (
+    <label style={LBL}>
+      <span className="muted" style={CAP}>{label}</span>
+      <input type="number" min="0" step="0.01" value={val} placeholder="—"
+             onChange={(e) => setVal(e.target.value)} style={{ width }} />
+    </label>
+  )
+}
+
+/* MEASURING A ROPE IN TWO HALVES AND AN OVERALL.
+ *
+ * David, Aug 2026: "when measuring a headline/footrope/ground gear we do in 2x
+ * halves & total overall." He was already doing it — the ground-gear record of
+ * 19-08-2026 has `Stb 60'3"/Port 60'5"` typed into the NOTES of a separate
+ * inspected row, because this form had nowhere to put it, and those two halves
+ * are the 120'8" of that day's measured row.
+ *
+ * THE OVERALL IS STILL MEASURED, not filled in from the halves. Deriving it
+ * would throw away the only cross-check there is: three readings of one rope,
+ * and if the halves do not add up to the overall then one of the three is
+ * wrong. The form says so as you type. */
+function MeasureForm({ component, onAdd, halved }) {
   const [on, setOn] = useState(today())
   const [kind, setKind] = useState('measured')
   const [unit, setUnit] = useState('fathom')
-  const [val, setVal] = useState('')
-  const [ft, setFt] = useState('')
-  const [inch, setInch] = useState('')
   const [notes, setNotes] = useState('')
 
-  const value = kind !== 'measured' ? null
-    : unit === 'ft_in' ? ftInToValue(ft, inch)
-    : (val === '' ? null : Number(val))
+  const [val, setVal] = useState(''); const [ft, setFt] = useState(''); const [inch, setInch] = useState('')
+  const [pVal, setPVal] = useState(''); const [pFt, setPFt] = useState(''); const [pIn, setPIn] = useState('')
+  const [sVal, setSVal] = useState(''); const [sFt, setSFt] = useState(''); const [sIn, setSIn] = useState('')
+
+  const read = (v, f, i) => unit === 'ft_in' ? ftInToValue(f, i) : (v === '' ? null : Number(v))
+  const measuring = kind === 'measured'
+  const value = measuring ? read(val, ft, inch) : null
+  const port = measuring && halved ? read(pVal, pFt, pIn) : null
+  const stbd = measuring && halved ? read(sVal, sFt, sIn) : null
+
+  const h = halvesCheck({ port, stbd, overall: value, unit })
+
+  const clear = () => {
+    setVal(''); setFt(''); setInch(''); setNotes('')
+    setPVal(''); setPFt(''); setPIn(''); setSVal(''); setSFt(''); setSIn('')
+  }
 
   return (
-    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end', margin: '0.4rem 0' }}>
-      <label style={LBL}><span className="muted" style={CAP}>Date</span>
-        <input type="date" value={on} onChange={(e) => setOn(e.target.value)} /></label>
-      <label style={LBL}><span className="muted" style={CAP}>What</span>
-        <select value={kind} onChange={(e) => setKind(e.target.value)}>
-          <option value="measured">Measured</option>
-          <option value="inspected">Inspected</option>
-          <option value="repaired">Repaired</option>
-        </select></label>
-      {kind === 'measured' && (
-        <>
-          <label style={LBL}><span className="muted" style={CAP}>Unit</span>
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}>
-              {LENGTH_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
-            </select></label>
-          {unit === 'ft_in' ? (
-            <>
-              <label style={LBL}><span className="muted" style={CAP}>Feet</span>
-                <input type="number" min="0" value={ft} onChange={(e) => setFt(e.target.value)}
-                       style={{ width: 70 }} /></label>
-              <label style={LBL}><span className="muted" style={CAP}>Inches</span>
-                <input type="number" min="0" max="11" value={inch} onChange={(e) => setInch(e.target.value)}
-                       style={{ width: 70 }} /></label>
-            </>
-          ) : (
-            <label style={LBL}><span className="muted" style={CAP}>Length</span>
-              <input type="number" min="0" step="0.01" value={val}
-                     onChange={(e) => setVal(e.target.value)} style={{ width: 100 }} /></label>
+    <div style={{ margin: '0.4rem 0' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <label style={LBL}><span className="muted" style={CAP}>Date</span>
+          <input type="date" value={on} onChange={(e) => setOn(e.target.value)} /></label>
+        <label style={LBL}><span className="muted" style={CAP}>What</span>
+          <select value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="measured">Measured</option>
+            <option value="inspected">Inspected</option>
+            <option value="repaired">Repaired</option>
+          </select></label>
+        {measuring && (
+          <>
+            <label style={LBL}><span className="muted" style={CAP}>Unit</span>
+              <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+                {LENGTH_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+              </select></label>
+            {halved && (
+              <>
+                <LengthInput label="Port half" unit={unit} val={pVal} setVal={setPVal}
+                             ft={pFt} setFt={setPFt} inch={pIn} setInch={setPIn} />
+                <LengthInput label="Stbd half" unit={unit} val={sVal} setVal={setSVal}
+                             ft={sFt} setFt={setSFt} inch={sIn} setInch={setSIn} />
+              </>
+            )}
+            <LengthInput label={halved ? 'Overall' : 'Length'} unit={unit} val={val} setVal={setVal}
+                         ft={ft} setFt={setFt} inch={inch} setInch={setInch} />
+          </>
+        )}
+        <label style={LBL}><span className="muted" style={CAP}>Note</span>
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: 160 }} /></label>
+        <button className="secondary"
+                onClick={() => { onAdd(component, { done_on: on, kind, value, unit, notes, port, stbd }); clear() }}>
+          Log it
+        </button>
+      </div>
+
+      {/* What the three readings say about each other, while he can still fix
+          a mis-keyed figure. A disagreement is REPORTED, never corrected. */}
+      {measuring && halved && (h.haveBoth || h.imbalanceMm != null) && (
+        <p className="muted" style={{ margin: '0.3rem 0 0', fontSize: '0.78rem' }}>
+          {h.haveBoth && (
+            h.imbalanceMm === 0
+              ? 'Halves level. '
+              : `${sideLabel(h.longer)} is ${fmtMm(h.imbalanceMm, unit)} longer. `
           )}
-        </>
+          {h.agrees === true && `They add to the ${fmtMm(h.overallMm, unit)} you measured.`}
+          {h.agrees === false && (
+            <b style={{ color: 'var(--brass)' }}>
+              The halves add to {fmtMm(h.sumMm, unit)} against an overall of {fmtMm(h.overallMm, unit)}
+              {' '}— {fmtMm(Math.abs(h.diffMm), unit)} apart, so one of the three is out.
+            </b>
+          )}
+          {h.agrees === null && h.haveBoth && `They add to ${fmtMm(h.sumMm, unit)} — the overall is worth taking too.`}
+        </p>
       )}
-      <label style={LBL}><span className="muted" style={CAP}>Note</span>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: 180 }} /></label>
-      <button className="secondary"
-              onClick={() => {
-                onAdd(component, { done_on: on, kind, value, unit, notes })
-                setVal(''); setFt(''); setInch(''); setNotes('')
-              }}>
-        Log it
-      </button>
     </div>
   )
 }

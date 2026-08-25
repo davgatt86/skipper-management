@@ -1727,7 +1727,66 @@ Also agreed, not yet scheduled:
   Probed: officer reads `quota_trip_catches` as **0**, gets **1,240 day-ground
   rows across 17 grounds** for his own boat and **0** for another fleet's.
 
-  `test-gear.mjs` — **185 checks**.
+  **HALVES AND AN OVERALL — built Aug 2026.** `supabase/gear_halves.sql`
+  (applied), `halvesCheck()` in `src/lib/gear/parts.js`.
+
+  David: *"when measuring a headline/footrope/ground gear we do in 2x halves &
+  total overall."* **He was already doing it.** The ground-gear record of
+  19-08-2026 carries `Stb 60'3"/Port 60'5"` typed into the NOTES of a separate
+  `inspected` row, because the form had nowhere else to put it — and 60'3" plus
+  60'5" is exactly the 120'8" of that day's `measured` row. The feature is his
+  method turned from prose into data.
+
+  **FOOTROPE WAS NOT IN THE PARTS LIST AT ALL.** The five shipped names were
+  ground gear, headline, bridles, legs, codend. He named a sixth in the same
+  breath as the request; it ships now, and `resolveParts()` means every fleet
+  picks it up without a seed.
+
+  **THE OVERALL IS MEASURED, NEVER DERIVED**, and there is deliberately no
+  generated column doing it. It is a third act of measuring along the whole
+  rope, so it can disagree with the two halves — and when it does, one of the
+  three is wrong. That is a check the paper method could never make, and
+  computing the total away would destroy it. A disagreement is REPORTED, the
+  same rule the settlement reconciliation follows.
+
+  **A SUMMED TOTAL AND A MEASURED TOTAL MUST NOT READ ALIKE.** With no overall
+  taken the halves are summed and `basis` says `summed`; the matrix cell marks
+  it *(halves)*. Same discipline as *since measured / since fitted / since
+  aboard*.
+
+  **THE MATRIX CELL COUNTS THE HALVES AS A LENGTH.** It tested `value` alone,
+  so a rope measured that morning in both halves with no overall read as never
+  measured at all.
+
+  **THE IMBALANCE IS REPORTED AND NEVER JUDGED** — port 60'5" against starboard
+  60'3" is a real two inches on David's own net, and whether that matters is his
+  call, not a threshold I invented. The engine limits settled that argument: a
+  limit derived from history alone would have flagged the CORRECT readings.
+
+  **Bridles and legs are NOT halved.** There is one of each per side already, so
+  they are two components, not one rope with two halves — halving them would
+  quarter the gear. A codend has no halves. Overridable per fleet all the same
+  (`gear_parts.halves`, null = keep the shipped answer).
+
+  **One half on its own is kept**, not refused: a man who measured the port side
+  before the weather came in has a real reading. Nothing is inferred from it —
+  no sum, no imbalance, no total until both are there.
+
+  The tolerance is **one inch**, the resolution `ft_in` rounds to, and it needs
+  an epsilon: 120'1" minus 120' comes out of decimal feet as 25.400000000001455
+  mm, so a bare `<= 25.4` calls an exact inch a disagreement.
+
+  Probed as an officer: writes both halves and the overall, one half alone is
+  allowed, a negative half is refused by CHECK, and he still reads sales **0**
+  and payments **0**.
+
+  **The 19-08 halves are still in that note, not in the columns.** They are
+  David's own record and reconcile to the inch, so folding them onto the
+  measured row is a one-liner — but it is a write to real gear records and his
+  to ask for.
+
+
+  `test-gear.mjs` — **227 checks**.
 
   **All three stages are built.**
 

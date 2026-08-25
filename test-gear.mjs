@@ -12,6 +12,7 @@
  */
 import {
   DEFAULT_PARTS, resolveParts, LENGTH_UNITS, toMm, fmtLength, ftInToValue, valueToFtIn, unitMm,
+  partHasHalves, halvesCheck, fmtMm, HALVES_TOLERANCE_MM,
 } from './src/lib/gear/parts.js'
 import {
   daysBetween, fittedComponent, historyFor, measurementsFor, lifeDays,
@@ -33,8 +34,8 @@ const eq = (label, got, want) => {
 }
 
 // ---- the parts vocabulary --------------------------------------------------
-eq('the five David named ship', DEFAULT_PARTS.map((p) => p.key),
-  ['ground_gear', 'headline', 'bridles', 'legs', 'codend'])
+eq('the shipped vocabulary, footrope included', DEFAULT_PARTS.map((p) => p.key),
+  ['ground_gear', 'footrope', 'headline', 'bridles', 'legs', 'codend'])
 eq('nothing stored is just the shipped list', resolveParts([]).length, DEFAULT_PARTS.length)
 eq('and null is handled', resolveParts(null).length, DEFAULT_PARTS.length)
 {
@@ -54,7 +55,7 @@ eq('and null is handled', resolveParts(null).length, DEFAULT_PARTS.length)
   eq('an untouched part is still the shipped one',
     merged.find((p) => p.key === 'codend')?.label, 'Codend')
   eq('the shipped order is kept', merged.map((p) => p.key),
-    ['ground_gear', 'headline', 'bridles', 'codend', 'discs'])
+    ['ground_gear', 'footrope', 'headline', 'bridles', 'codend', 'discs'])
 }
 
 // ---- lengths ---------------------------------------------------------------
@@ -581,6 +582,118 @@ eq('and the EEZ still separates',
 }
 
 
+
+// ---- HALVES: two halves and an overall -------------------------------------
+/* David, Aug 2026: "when measuring a headline/footrope/ground gear we do in 2x
+ * halves & total overall." He was already doing it — the 19-08-2026 record
+ * carries `Stb 60'3"/Port 60'5"` typed into the NOTES of a separate `inspected`
+ * row, because the form had nowhere to put it. Those are the figures below. */
+{
+  const parts = resolveParts([])
+  eq('a headline is measured in halves', partHasHalves(parts, 'headline'), true)
+  eq('so is a footrope', partHasHalves(parts, 'footrope'), true)
+  eq('so is the ground gear', partHasHalves(parts, 'ground_gear'), true)
+  /* NOT the bridles or legs: there is one of each per side already, so they are
+   * two components, not one rope with two halves. Halving them would quarter
+   * the gear. */
+  eq('bridles are NOT halved — they are already per side', partHasHalves(parts, 'bridles'), false)
+  eq('nor legs', partHasHalves(parts, 'legs'), false)
+  eq('a codend has no halves', partHasHalves(parts, 'codend'), false)
+
+  // And the boat may say otherwise, like every other rule in this app.
+  const own = resolveParts([{ part_key: 'codend', halves: true }, { part_key: 'headline', halves: false }])
+  eq('a fleet may halve something I did not', partHasHalves(own, 'codend'), true)
+  eq('and un-halve something I did', partHasHalves(own, 'headline'), false)
+  eq('a row that says nothing about halves keeps the shipped answer',
+    partHasHalves(resolveParts([{ part_key: 'headline', label: 'Head rope' }]), 'headline'), true)
+}
+
+{
+  // THE REAL READING off Audacious's ground gear, 19-08-2026.
+  const port = ftInToValue(60, 5)
+  const stbd = ftInToValue(60, 3)
+  const overall = ftInToValue(120, 8)
+  const h = halvesCheck({ port, stbd, overall, unit: 'ft_in' })
+
+  eq('the halves sum to the overall he measured', Math.round(h.diffMm * 100) / 100, 0)
+  eq('so the three readings agree', h.agrees, true)
+  eq('the overall is the one he measured, not a sum', h.basis, 'measured')
+  eq("port is the longer side", h.longer, 'port')
+  eq('by two inches', fmtMm(h.imbalanceMm, 'ft_in'), '0′ 2″')
+  eq('and the total reads as he wrote it', fmtMm(h.totalMm, 'ft_in'), '120′ 8″')
+}
+
+{
+  /* THE OVERALL IS NOT DERIVED. It is a third act of measuring, so it can
+   * disagree — and when it does, one of the three is wrong. That is a check
+   * the paper method could never make, and it is reported, never corrected. */
+  const h = halvesCheck({ port: 60, stbd: 60, overall: 121, unit: 'ft_in' })
+  eq('a foot out is a real disagreement', h.agrees, false)
+  eq('and the size of it is reported', fmtMm(h.diffMm, 'ft_in'), '1′')
+  eq('the overall is still what he measured, not the sum', fmtMm(h.totalMm, 'ft_in'), '121′')
+
+  // Within an inch is the same measurement written twice, not a discrepancy.
+  const close = halvesCheck({ port: 60, stbd: 60, overall: ftInToValue(120, 1), unit: 'ft_in' })
+  eq('an inch is inside the tolerance', close.agrees, true)
+  eq('the tolerance is one inch, the resolution ft_in rounds to',
+    Math.round(HALVES_TOLERANCE_MM * 10) / 10, 25.4)
+}
+
+{
+  /* NO OVERALL TAKEN — sum the halves, and SAY it is a sum. A summed total and
+   * a measured total are different facts; the basis is what keeps them apart,
+   * same as "since measured / since fitted / since aboard" on the matrix. */
+  const h = halvesCheck({ port: 60, stbd: 60, overall: '', unit: 'ft_in' })
+  eq('the total falls back to the sum', fmtMm(h.totalMm, 'ft_in'), '120′')
+  eq('and says so', h.basis, 'summed')
+  eq('there is nothing to reconcile against', h.agrees, null)
+  eq('agreement unknown is null, never false', h.diffMm, null)
+}
+
+{
+  /* ONE HALF ONLY. Partial is kept rather than refused — a man who measured one
+   * side before the weather came in has a real reading — but nothing may be
+   * inferred from it. */
+  const h = halvesCheck({ port: 60, stbd: '', overall: '', unit: 'ft_in' })
+  eq('one half is not a pair', h.haveBoth, false)
+  eq('no sum from one side', h.sumMm, null)
+  eq('no imbalance from one side', h.imbalanceMm, null)
+  eq('and no longer side', h.longer, null)
+  eq('nothing to total', h.totalMm, null)
+  eq('and no basis to claim', h.basis, null)
+}
+
+{
+  // The plain old case: an overall and no halves at all. Every measurement
+  // before Aug 2026 is this shape and must still read correctly.
+  const h = halvesCheck({ port: '', stbd: '', overall: 120, unit: 'ft_in' })
+  eq('an overall on its own still totals', fmtMm(h.totalMm, 'ft_in'), '120′')
+  eq('measured, because it was', h.basis, 'measured')
+  eq('with no imbalance to report', h.imbalanceMm, null)
+  eq('and nothing to check it against', h.agrees, null)
+}
+
+{
+  // Equal halves have no longer side — `null`, not an arbitrary pick.
+  const h = halvesCheck({ port: 60, stbd: 60, overall: 120, unit: 'ft_in' })
+  eq('dead level has no longer side', h.longer, null)
+  eq('and no imbalance', h.imbalanceMm, 0)
+
+  // BLANK IS NOT ZERO, the trap toMm already guards, checked through this door.
+  const blank = halvesCheck({ port: '', stbd: '', overall: '', unit: 'ft_in' })
+  eq('all blank gives nothing, not a rope of zero length', blank.totalMm, null)
+  eq('and no false agreement', blank.agrees, null)
+}
+
+{
+  // The unit travels with the reading: fathoms and metres work the same.
+  const fm = halvesCheck({ port: 30, stbd: 31, overall: 61, unit: 'fathom' })
+  eq('fathoms agree', fm.agrees, true)
+  eq('and the imbalance is a fathom', fmtMm(fm.imbalanceMm, 'fathom'), '1 fm')
+  const m = halvesCheck({ port: 18.3, stbd: 18.3, overall: 36.6, unit: 'm' })
+  eq('metres agree', m.agrees, true)
+  eq('and read back in metres', fmtMm(m.totalMm, 'm'), '36.6 m')
+}
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
 process.exit(fail === 0 ? 0 : 1)

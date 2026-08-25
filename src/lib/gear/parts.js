@@ -12,9 +12,22 @@
  * authority.
  */
 
+/* `halves` — the rope is measured in TWO HALVES AND AN OVERALL.
+ *
+ * David, Aug 2026: "when measuring a headline/footrope/ground gear we do in 2x
+ * halves & total overall." He was already doing it: the measurement of
+ * 19-08-2026 carries `Stb 60'3"/Port 60'5"` typed into the NOTES of a separate
+ * `inspected` row, because the form had nowhere else to put it — and 60'3" plus
+ * 60'5" is the 120'8" of that day's `measured` row. The feature is his method,
+ * written down as data instead of prose.
+ *
+ * Bridles and legs are NOT halved. There is one of each per side already, so
+ * they are two components, not one rope with two halves — halving them would
+ * quarter the gear. A codend has no halves at all. */
 export const DEFAULT_PARTS = [
-  { key: 'ground_gear', label: 'Ground gear' },
-  { key: 'headline', label: 'Headline' },
+  { key: 'ground_gear', label: 'Ground gear', halves: true },
+  { key: 'footrope', label: 'Footrope', halves: true },
+  { key: 'headline', label: 'Headline', halves: true },
   { key: 'bridles', label: 'Bridles' },
   { key: 'legs', label: 'Legs' },
   { key: 'codend', label: 'Codend' },
@@ -32,6 +45,10 @@ export function resolveParts(rows) {
       label: r.label || base.label,
       sort: r.sort ?? base.sort,
       hidden: !!r.hidden,
+      // Whether a part is measured in halves is the BOAT'S to say, like every
+      // other rule in this app. A rig I have not seen may halve something I
+      // did not, so null on the row means "keep the shipped answer".
+      halves: r.halves == null ? !!base.halves : !!r.halves,
       custom: base.custom || !DEFAULT_PARTS.some((d) => d.key === r.part_key),
     })
   }
@@ -41,6 +58,7 @@ export function resolveParts(rows) {
 }
 
 export const partLabel = (parts, key) => parts.find((p) => p.key === key)?.label || key
+export const partHasHalves = (parts, key) => !!parts.find((p) => p.key === key)?.halves
 
 /* ---------------------------------------------------------------- lengths
  *
@@ -107,3 +125,70 @@ export function fmtLength(value, unit) {
   const n = Math.round(v * 100) / 100
   return `${n} ${u.short}`
 }
+
+/* ------------------------------------------------- halves and the overall
+ *
+ * A headline, footrope or ground gear is measured as PORT half, STARBOARD
+ * half, and an overall along the whole rope. Three readings of one rope, and
+ * the point is that they are three separate acts of measuring, not one figure
+ * and two derived from it.
+ *
+ * THE OVERALL IS NOT DERIVED FROM THE HALVES. It is measured, so it can
+ * disagree with them, and when it does one of the three is wrong — which is a
+ * check the paper method could never make. `agrees` reports that; it never
+ * silently corrects it, the same rule the settlement reconciliation follows.
+ *
+ * WHEN THE OVERALL WAS NOT TAKEN, the halves are summed and `basis` says
+ * `summed` rather than `measured`. A summed total and a measured total are
+ * different facts and must not read alike — the same discipline as the "since
+ * measured / since fitted / since aboard" basis on the matrix.
+ *
+ * THE IMBALANCE IS REPORTED AND NEVER JUDGED. Port 60'5" against starboard
+ * 60'3" is a real two inches on David's own net, and whether that matters is
+ * his call, not a threshold I invented. The engine-limits work settled this:
+ * a limit derived from history alone would have flagged the CORRECT readings.
+ */
+
+// One inch. That is the resolution `ft_in` rounds to, so it is the finest
+// disagreement that can mean anything; below it the two figures are the same
+// measurement written twice.
+export const HALVES_TOLERANCE_MM = 25.4
+
+export function halvesCheck({ port, stbd, overall, unit }) {
+  const portMm = toMm(port, unit)
+  const stbdMm = toMm(stbd, unit)
+  const overallMm = toMm(overall, unit)
+
+  const haveBoth = portMm != null && stbdMm != null
+  const sumMm = haveBoth ? portMm + stbdMm : null
+
+  const imbalanceMm = haveBoth ? Math.abs(portMm - stbdMm) : null
+  const longer = !haveBoth || portMm === stbdMm ? null : (portMm > stbdMm ? 'port' : 'stbd')
+
+  // Only comparable when BOTH sides of the comparison exist. Missing is null,
+  // never false — "we did not check" and "it does not agree" are not the same.
+  const diffMm = sumMm != null && overallMm != null ? overallMm - sumMm : null
+  /* The epsilon is not fussiness: 120'1" minus 120' comes out as
+   * 25.400000000001455 mm through decimal feet, so a bare `<= 25.4` calls an
+   * exact one-inch difference a disagreement. The tolerance is one inch
+   * INCLUSIVE and the float must not decide otherwise. */
+  const agrees = diffMm == null ? null : Math.abs(diffMm) <= HALVES_TOLERANCE_MM + 1e-6
+
+  const totalMm = overallMm ?? sumMm ?? null
+  const basis = overallMm != null ? 'measured' : (sumMm != null ? 'summed' : null)
+
+  return { portMm, stbdMm, overallMm, sumMm, haveBoth,
+           imbalanceMm, longer, diffMm, agrees, totalMm, basis }
+}
+
+/** A millimetre figure back in the unit it was written in, for display. */
+export function fmtMm(mm, unit) {
+  if (mm == null || !Number.isFinite(Number(mm))) return ''
+  const per = unitMm(unit)
+  if (!per) return ''
+  return fmtLength(Number(mm) / per, unit)
+}
+
+/** Which side is longer, in the boat's own words. */
+export const sideLabel = (side) =>
+  side === 'port' ? 'port' : side === 'stbd' ? 'starboard' : ''
