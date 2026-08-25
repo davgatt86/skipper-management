@@ -11,6 +11,8 @@ import {
   unitShort, itemKey, supplierName, LANGS, SECTIONS, sectionLabel,
 } from '../lib/stores/catalogue'
 import { exportStoresPdf, exportStoresCsv } from '../lib/stores/exportStores'
+import { orderHistory } from '../lib/stores/history'
+import OrderedBefore from '../components/OrderedBefore'
 import { missingTranslations } from '../lib/stores/i18n'
 
 /* Stores and provisions — one list per trip, built up as the trip goes on.
@@ -68,6 +70,35 @@ export default function Stores() {
   const [listId, setListId] = useState('')
   const [msg, setMsg] = useState('')
 
+  /* WHO STARTED A LIST. The cook and the skipper both work this page, so "did
+     Jackson start this one?" is a real question and the answer was nowhere on
+     it — `created_by` has been stored since the table was built and never
+     shown.
+
+     IT DEGRADES RATHER THAN LEAKING. A cook can read only his OWN app_users
+     row (probed: 1 row, his), so on his login another man's name does not
+     resolve at all. An unresolvable id reads "another login", never a uuid —
+     a raw id in front of a reader is worse than the honest gap. */
+  const [people, setPeople] = useState({})
+  const [me, setMe] = useState(null)
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const { data: u } = await supabase.auth.getUser()
+      if (live) setMe(u?.user?.id ?? null)
+      const { data } = await supabase.from('app_users').select('id, display_name, role')
+      if (live && data) setPeople(Object.fromEntries(data.map((r) => [r.id, r])))
+    })().catch(() => { /* no signal: names simply do not resolve */ })
+    return () => { live = false }
+  }, [])
+
+  const startedBy = (l) => {
+    if (!l?.created_by) return null
+    if (l.created_by === me) return 'you'
+    const p = people[l.created_by]
+    return p?.display_name || 'another login'
+  }
+
   const lists = listsT.rows
   const overrides = itemsT.rows
   const lines = useMemo(
@@ -80,6 +111,7 @@ export default function Stores() {
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('')
   const [showAdd, setShowAdd] = useState(false)
+  const [showHist, setShowHist] = useState(true)
   const [showTrans, setShowTrans] = useState(false)
   const [newName, setNewName] = useState('')
   const [newCat, setNewCat] = useState('MISC')
@@ -89,6 +121,16 @@ export default function Stores() {
   const catalogue = useMemo(() => resolveCatalogue(overrides), [overrides])
   const byKey = useMemo(() => new Map(catalogue.map((i) => [i.key, i])), [catalogue])
   const list = useMemo(() => lists.find((l) => l.id === listId) || null, [lists, listId])
+
+  /* WHAT SHE USUALLY ORDERS, off every other list this boat has kept. Ranked
+     by how many of them carried it before recency, so the bread bought every
+     trip outranks the one-off bought last week. */
+  const hist = useMemo(
+    () => orderHistory(lists, linesT.rows, {
+      excludeListId: listId,
+      excludeKeys: lines.map((l) => l.item_key),
+    }),
+    [lists, linesT.rows, listId, lines])
 
   // The first list is selected once there is one, and the choice then sticks.
   useEffect(() => {
@@ -314,11 +356,23 @@ export default function Stores() {
               <label style={LBL}>
                 <span className="muted" style={CAP}>Trip</span>
                 <select value={listId} onChange={(e) => setListId(e.target.value)}>
-                  {lists.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {fmtDate(l.starts_on)}{l.title ? ` · ${l.title}` : ''}{l.status !== 'building' ? ` (${l.status})` : ''}
-                    </option>
-                  ))}
+                  {lists.map((l) => {
+                    /* An untitled, empty list started on another login used to
+                       read as a bare date among other bare dates — which is
+                       how a cook's new trip goes unnoticed. Say whose it is
+                       and whether anything is on it yet. */
+                    const nLines = linesT.rows.filter((x) => x.list_id === l.id).length
+                    const who = startedBy(l)
+                    return (
+                      <option key={l.id} value={l.id}>
+                        {fmtDate(l.starts_on)}
+                        {l.title ? ` · ${l.title}` : ''}
+                        {who && who !== 'you' ? ` · ${who}` : ''}
+                        {` · ${nLines || 'nothing yet'}${nLines ? ' items' : ''}`}
+                        {l.status !== 'building' ? ` (${l.status})` : ''}
+                      </option>
+                    )
+                  })}
                 </select>
               </label>
               <label style={LBL}>
@@ -355,6 +409,16 @@ export default function Stores() {
                 </div>
               </div>
             </div>
+            {(startedBy(list) || !lines.length) && (
+              <p className="muted" style={{ margin: '0.6rem 0 0', fontSize: '0.8rem' }}>
+                {startedBy(list) && <>Started by <b>{startedBy(list)}</b>{' '}</>}
+                {list.created_at && `on ${fmtDate(String(list.created_at).slice(0, 10))}`}
+                {/* An empty list and a missing one look the same from the
+                    outside, and the difference matters when two logins share
+                    the page: nothing has been added is a fact, not an absence. */}
+                {!lines.length && ' · nothing added to it yet'}
+              </p>
+            )}
           </div>
 
           {/* ---- who the sheet is for, and in what words -------------------
@@ -424,6 +488,13 @@ export default function Stores() {
               </div>
             )}
           </div>
+
+          {/* What she usually orders, off every list this boat has kept. */}
+          {canEdit && (
+            <OrderedBefore hist={hist} byKey={byKey} open={showHist}
+                           onToggle={() => setShowHist((v) => !v)} onAdd={addItem} />
+          )}
+
 
           {/* ---- search and category, driving both the list and the add ---- */}
           <div className="card">

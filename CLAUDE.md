@@ -2120,6 +2120,68 @@ Also agreed, not yet scheduled:
   checks — the second reads the
   PDF back and asserts every translated word has its English beside it.
 
+  ### "Ordered before" — the quick add (Aug 2026)
+
+  `src/lib/stores/history.js`, `src/components/OrderedBefore.jsx`.
+  The catalogue is 334 items and a trip uses about sixty, largely the same
+  sixty. The lines already kept ARE the record of what gets bought, so the next
+  list starts from them rather than from a scroll through the whole form.
+
+  **RANKED BY REGULARITY BEFORE RECENCY.** Ranked on recency alone, the scampi
+  bought once last trip outranks the softies bought every trip — which is the
+  exact distinction between "regularly" and "recently" that the panel exists to
+  draw. Sort is: how many past lists carried it, then how recent, then name.
+
+  **THE HEADING CHANGES WITH HOW MUCH IS BEHIND IT**, same discipline as
+  `confidence(n)` in gearStats and `groundConfidence()`. One previous list is
+  not a habit:
+
+      1 list    Ordered last trip    "from the one list kept so far —
+                                      not a pattern yet"
+      2 lists   Ordered recently     "from the last 2 lists"
+      3+        Regularly ordered    "from the last 3 lists"
+
+  Per item too — never *"1 of the last 1"*, which is the shape a naive counter
+  produces and reads as a statistic when it is a single observation. **This is
+  the live case**: Audacious has exactly one kept list with lines on it.
+
+  **The quantity is the MEDIAN**, so one heavy trip does not set the usual
+  amount, and one tap puts on what is normally bought rather than a bare 1 that
+  then has to be typed over. **The name, unit and pack size come from the most
+  RECENT list** that carried it — a unit corrected last trip is what the boat
+  means now.
+
+  **Truncation is stated.** The real list carries 64 items against a limit of
+  60, and "here is what you usually order" quietly missing four of them is the
+  kind of gap nobody notices until the shop delivers.
+
+  `test-stores-history.mjs` — 40 checks. `scripts/ordered-before-preview.mjs`
+  server-renders the REAL component against the boat's REAL kept lines and
+  reads the markup back, because the page is behind a login and a fleet and
+  could otherwise only be checked by eye on somebody else's device. It renders
+  all three states — one list, several, none — since a preview showing only the
+  happy case is how the other two ship broken.
+
+  ### A list started on another login was invisible in practice
+
+  David, Aug 2026: *"jackson started a trip on his login. why can't i see it on
+  my login?"* **He could** — probed as his own account, both rows come back, and
+  there is no vessel filter, no `created_by` restriction and no stale cache.
+
+  The list was **empty and untitled**, so in the Trip picker it read as a bare
+  `25 Aug 2026` among other bare dates, and the picker sticks to whatever is
+  already selected. Nothing on the page said whose it was or that nothing had
+  been added to it. `created_by` had been stored since the table was built and
+  shown nowhere.
+
+  The picker now names the man and the item count, and the open list says who
+  started it and when. **An empty list and a missing one must not look alike.**
+
+  **Attribution degrades rather than leaking.** A cook can read only his OWN
+  `app_users` row — probed: 1 row, his — so on his login another man's name does
+  not resolve. An unresolvable id reads *"another login"*, never a uuid.
+
+
   **All four stages are built.** What is left against stores is whatever
   the boat asks for after using it.
 
