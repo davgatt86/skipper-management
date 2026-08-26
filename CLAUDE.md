@@ -392,11 +392,11 @@ tally and get back how many tiers to ask Peterhead for and what goes where.
 
 `src/lib/market/markets.js`, `geometry.js`. Read off **`PD Market Layout.xlsx`**,
 the sheet the market itself works from, and verified cell by cell rather than
-transcribed: all 176 tiers agree and the floor totals exactly **5,000
-footprints**.
+transcribed: all 176 tiers agree with the drawing, and the floor comes to
+**4,972 footprints**.
 
     NEW MARKET    tiers   1-77   3,537 fp   the ONLY area with a top and bottom
-    CAFE CORNER   tiers  78-112    488 fp   no top, tiers of 14/12/8/15
+    CAFE CORNER   tiers  78-112    460 fp   no top, tiers of 14/12/8/14
     OLD MARKET   tiers 113-177    975 fp   no top, uniform 15
 
 **The 21/26/47 model is true of 61 tiers out of 176** — the middle of the new
@@ -408,9 +408,18 @@ the model, because the number on the floor is what is called over the phone.
 at exactly twice its drawn squares — a standard tier draws 47 and prints 94 —
 because the market counts a footprint as two boxes high. That is also why the
 phone rule is `boxes ÷ 94`: it is one tier's worth. Confirmed with David.
-The 29 cafe tiers drawn 15 deep print 28 rather than 30; the drawn squares are
-the authority and `PRINTED_DISAGREES` carries the discrepancy rather than
-resolving it silently.
+**One run disagreed with itself, and the DRAWING was the one that was wrong.**
+Tiers 84-112 are drawn 15 deep but printed 28, where 15 would print 30. I took
+the drawing as the authority; David then gave the cafe corner as *"78/79 = 14
+flat, 80/81 = 12 flat, 82/83 = 8 flat, 84-112 = 14 flat"*, so the printed 28
+was right all along.
+
+That matters beyond the 28 footprints. With 14 there, the printed number is
+twice the real depth in **every run without exception** — a single exception
+would have made the boxes-versus-footprints reading a coincidence rather than a
+rule. `CAFE_DEPTH_UNCONFIRMED` records that it is his figure and that he is
+checking it on the floor; the run is 28 tiers, so being one out is 28
+footprints, most of two cafe tiers.
 
 **IT IS OPT-IN.** No start tier means the uniform 21/26 the page always
 assumed. Defaulting everyone onto the real floor would change every answer the

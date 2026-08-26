@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import {
   PETERHEAD, AREAS, areaOf, areaLabel, marketTotals, tierAt,
-  tiersFrom, fitShot, areaWarnings, PRINTED_DISAGREES,
+  tiersFrom, fitShot, areaWarnings, CAFE_DEPTH_UNCONFIRMED,
 } from './src/lib/market/markets.js'
 import { marketGeometry as marketGeo } from './src/lib/market/geometry.js'
 
@@ -22,10 +22,10 @@ const ok = (c, m) => { n++; assert.ok(c, m) }
 // ---- the shape of the building -------------------------------------------
 const T = marketTotals()
 eq(T.tiers, 176, '176 tiers on the floor')
-eq(T.footprints, 5000, 'five thousand footprints, exactly')
+eq(T.footprints, 4972, 'the whole floor')
 eq(T.byArea.map((a) => [a.area, a.tiers, a.footprints]),
-   [['new', 77, 3537], ['cafe', 34, 488], ['old', 65, 975]],
-   'the three areas, as drawn')
+   [['new', 77, 3537], ['cafe', 34, 460], ['old', 65, 975]],
+   'the three areas')
 
 /* TIER 100 DOES NOT EXIST. The sheet skips it, so the model skips it — the
  * number on the floor is what gets called over the phone, and tidying the gap
@@ -57,16 +57,25 @@ eq([tierAt(PETERHEAD, 70).top, tierAt(PETERHEAD, 70).total], [19, 45], 'so is ti
 eq([tierAt(PETERHEAD, 75).top, tierAt(PETERHEAD, 75).bottom], [20, 14], 'the short bay at the far end')
 
 // THE CAFE CORNER IS DIFFERENT SIZES — David's own words, and the data agrees.
-eq([78, 80, 82, 90].map((x) => tierAt(PETERHEAD, x).total), [14, 12, 8, 15],
-   'four different sized tiers in the cafe corner')
+/* DAVID'S OWN FIGURES, Aug 2026: "78/79 = 14 flat, 80/81 = 12 flat,
+   * 82/83 = 8 flat, 84-112 = 14 flat". */
+  eq([78, 80, 82, 90].map((x) => tierAt(PETERHEAD, x).total), [14, 12, 8, 14],
+   'four different sized tiers in the cafe corner, as he gave them')
 eq(new Set(PETERHEAD.tiers.filter((t) => t.area === 'old').map((t) => t.total)).size, 1,
    'the old market is uniform')
 
-/* The sheet prints 28 where 15 squares should print 30. Carried, not resolved:
- * the drawn squares are the authority, and a figure that disagrees with its own
- * drawing is worth saying out loud. */
-eq(PRINTED_DISAGREES.drawn, 15, 'drawn 15')
-eq(PRINTED_DISAGREES.printed, 28, 'printed 28 — which is 30 at two high, so one of them is out')
+/* WHERE THE DRAWING AND THE PRINTED FIGURE DISAGREED. I trusted the drawing
+ * and was wrong — David gave 14, so the printed 28 was right all along.
+ *
+ * THE POINT IS WHAT IT RESTORES: with 14 there, the printed number is twice the
+ * real depth in EVERY run without exception, which is what the whole
+ * boxes-versus-footprints reading rests on. A single exception would have meant
+ * the reading was a coincidence rather than a rule. */
+eq(CAFE_DEPTH_UNCONFIRMED.using, 14, 'using his 14')
+eq(CAFE_DEPTH_UNCONFIRMED.drawnAs, 15, 'against a drawing that says 15')
+ok(CAFE_DEPTH_UNCONFIRMED.note.includes('confirming'), 'and it is his to confirm on the floor')
+ok(PETERHEAD.tiers.every((x) => x.area === 'new' || [28, 24, 16, 30].includes(x.total * 2)),
+   'every tier outside the new market doubles to a figure printed on the sheet')
 
 // ---- running from a start tier -------------------------------------------
 eq(tiersFrom(PETERHEAD, 1).length, 176, 'from the top, the whole market')

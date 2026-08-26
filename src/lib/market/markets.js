@@ -14,7 +14,10 @@
  * printed at exactly twice its drawn squares — a standard tier draws 47 and is
  * printed 94 — because the market counts a footprint as two boxes high. That is
  * also why David's phone-call rule is `boxes ÷ 94`: it is one tier's worth.
- * Confirmed with him Aug 2026. The squares are what this file holds.
+ * Confirmed with him Aug 2026. This file holds FOOTPRINTS — the drawn squares
+ * everywhere except tiers 84-112, where the drawing is one out and the printed
+ * 28 is right (see CAFE_DEPTH_UNCONFIRMED). So the printed figure is twice the
+ * real depth with no exception, which is what that reading rests on.
  *
  * TIER 100 DOES NOT EXIST. The sheet skips it. 176 tiers numbered to 177, and
  * the gap is honoured rather than tidied away — the number on the floor is what
@@ -46,15 +49,28 @@ const RUNS = [
   [78, 79, 'cafe', 0, 14],
   [80, 81, 'cafe', 0, 12],
   [82, 83, 'cafe', 0, 8],
-  [84, 112, 'cafe', 0, 15],   // tier 100 is skipped below
+  [84, 112, 'cafe', 0, 14],   // 14, not the drawn 15 — see below. tier 100 is skipped
   [113, 177, 'old', 0, 15],
 ]
 
-/* The sheet prints 28 against these, where 15 footprints should print 30. The
- * drawn squares are the authority — squares are footprints, and that is settled
- * — but a figure that disagrees with its own drawing is worth carrying rather
- * than silently resolving, so the page can say so. */
-export const PRINTED_DISAGREES = { from: 84, to: 112, drawn: 15, printed: 28 }
+/* WHERE THE DRAWING AND THE PRINTED FIGURE DISAGREED, AND WHO WON.
+ *
+ * Tiers 84-112 are drawn 15 squares deep but printed 28, where 15 footprints
+ * would print 30. I took the drawing as the authority and was wrong: David,
+ * Aug 2026, gave the cafe corner as 14 / 12 / 8 / 14 flat — so the printed 28
+ * was right and the fifteenth square is the drawing being out.
+ *
+ * That matters beyond the 28 footprints it costs, because it means the printed
+ * number is twice the REAL depth everywhere without exception, which is what
+ * the whole boxes-versus-footprints reading rests on.
+ *
+ * HE IS CHECKING IT ON THE FLOOR NEXT TIME HE IS AT THE MARKET. Recorded as
+ * his figure pending that, rather than as settled — the run is 28 tiers, so
+ * being one out is 28 footprints, most of two cafe tiers. */
+export const CAFE_DEPTH_UNCONFIRMED = {
+  from: 84, to: 112, using: 14, drawnAs: 15, printed: 28,
+  note: "David's figure, Aug 2026. He is confirming it on the market floor.",
+}
 
 const MISSING = new Set([100])
 
