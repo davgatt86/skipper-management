@@ -388,6 +388,82 @@ Rules learned the hard way:
 tally and get back how many tiers to ask Peterhead for and what goes where.
 `src/lib/market/` — `parseDayTally.js`, `layoutRules.js`, `planLayout.js`.
 
+### THE MARKET IS NOT ONE SHAPE — Peterhead is three (Aug 2026)
+
+`src/lib/market/markets.js`, `geometry.js`. Read off **`PD Market Layout.xlsx`**,
+the sheet the market itself works from, and verified cell by cell rather than
+transcribed: all 176 tiers agree and the floor totals exactly **5,000
+footprints**.
+
+    NEW MARKET    tiers   1-77   3,537 fp   the ONLY area with a top and bottom
+    CAFE CORNER   tiers  78-112    488 fp   no top, tiers of 14/12/8/15
+    OLD MARKET   tiers 113-177    975 fp   no top, uniform 15
+
+**The 21/26/47 model is true of 61 tiers out of 176** — the middle of the new
+market and nowhere else. Tiers 1-6 are 18+26, 68-73 are 19+26, 74-77 are a
+short bay of 20+14. **There is no tier 100**; the sheet skips it and so does
+the model, because the number on the floor is what is called over the phone.
+
+**THE NUMBER PRINTED ON THE SHEET IS BOXES, NOT FOOTPRINTS.** Every tier prints
+at exactly twice its drawn squares — a standard tier draws 47 and prints 94 —
+because the market counts a footprint as two boxes high. That is also why the
+phone rule is `boxes ÷ 94`: it is one tier's worth. Confirmed with David.
+The 29 cafe tiers drawn 15 deep print 28 rather than 30; the drawn squares are
+the authority and `PRINTED_DISAGREES` carries the discrepancy rather than
+resolving it silently.
+
+**IT IS OPT-IN.** No start tier means the uniform 21/26 the page always
+assumed. Defaulting everyone onto the real floor would change every answer the
+page has ever given. **All 15 real tallies come out byte-identical** on the
+uniform path — tier count, mode, footprints, spare top AND bottom, lowered
+grades, warnings and a full per-tier fingerprint of what sits where. That
+regression is what makes the rest safe to change.
+
+**IF THE SHOT LEAVES THE NEW MARKET IT IS LAID IN WALK ORDER**, and David's
+four rules turn out to be that one rule. Past the new market there is no top
+row, so "keep a clock top or bottom" has nothing to choose between — there is
+one lane. Walk order is also exactly what he asked for: the clocks already run
+cod, haddock, rough, flats, so laying them in sequence puts cod and haddock in
+the new market using both its rows, then rough, then flats — and the flats are
+what reaches the cafe. *"Entirely in the cafe, order has to be cod, hadd/whit,
+rough then flats"* is the same rule with no top at all.
+
+Without it the search kept assigning fish to a top row that stops existing:
+**Trip 63 from tier 70 came out 43 tiers with 53 top places standing empty.**
+It is 39 and none wasted.
+
+**AND THE BOTTOM LANE CARRIES ON THROUGH THE JOIN.** David: *"unbroken run
+across the join, but on the bottom. cafe is a continuation of the bottom of new
+market."* A tier is walked top then bottom, so the bottom of the last
+new-market tier is already the very next thing before tier 78 — the join needs
+no machinery, only that the crossing run is on the bottom.
+
+**NO FISH IS DROPPED QUIETLY.** Past the end of the market `walkRows` was
+laying what fitted and discarding the rest: Trip 63 from tier 170 had 758
+footprints of fish, 120 on the floor and **638 nowhere at all**, the only sign
+a "spare" of −638 — which reads as arithmetic rather than as most of a trip
+gone missing. It is counted on what actually LANDED rather than on any one code
+path's own report, so it catches every way of losing a stack.
+
+**A guard worth remembering:** on the uniform geometry `topEndsAfter()` and
+`count` are both `Infinity`, so asking for the capacity of the top-bearing
+region walks for ever. It hung the first run.
+
+**The sheet shows the market's own tier numbers**, with a CAFE or OLD chip, and
+draws **no top band and no walkway** where there is no top row — an empty
+21-slot band over a cafe tier is a picture of a market that is not there.
+Verified by rendering: Trip 63 from 74 gives 47 tier heads numbered 74-121,
+4 top bands and 4 walkways for the 4 new-market tiers, 47 bottom bands, and the
+uniform sheet renders byte-identical to before.
+
+`test-markets.mjs` 66 checks · `test-geometry.mjs` 45 ·
+`node scripts/sheet-preview.mjs "tally.xlsx" out.html 84` renders a real one.
+
+**Doors are context only.** The sheet numbers them (green 3-22 over the new
+market, yellow 1-9 over the cafe) but the allocator ignores them — David's
+call, rather than my inventing a rule about which end fish comes in.
+
+
 A **tier** is two rows back to back with a walkway between: **21 footprints on
 the top row, 26 on the bottom, 47 flat.** Tiers are back to back with a walkway
 every second tier. David's rule of thumb for the phone call is `total ÷ 94`
