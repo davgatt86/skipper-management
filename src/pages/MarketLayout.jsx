@@ -7,6 +7,8 @@ import { useAuth } from '../AuthContext'
 import { parseDayTally } from '../lib/market/parseDayTally'
 import { buildCatalogue, freshestNote } from '../lib/market/catalogue'
 import { exportCataloguePdf } from '../lib/market/exportCatalogue'
+import { exportGradingCards } from '../lib/market/exportGradingCards'
+import { ticketSummary } from '../lib/market/gradingCards'
 import { planLayout } from '../lib/market/planLayout'
 import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, gradeKey } from '../lib/market/layoutRules'
 import { PETERHEAD, tierAt, areaLabel, marketTotals } from '../lib/market/markets'
@@ -165,6 +167,8 @@ export default function MarketLayout() {
    * fish on every sheet the market hands out, and that is not worth risking on
    * an inference. */
   const [freshest, setFreshest] = useState('high')
+  const cards = useMemo(() => (plan ? ticketSummary(plan) : { tickets: 0, pages: 0, kinds: 0, regraded: 0 }), [plan])
+
   const catalogue = useMemo(
     () => (parsed?.lines && !rulesLoading
       ? buildCatalogue({ lines: parsed.lines, rules, freshest })
@@ -421,7 +425,25 @@ export default function MarketLayout() {
                   port: parsed.meta?.port || null,
                   saleDate: parsed.meta?.saleDate || null,
                 })}>📄 Catalogue for buyers</button>
+
+                {/* THE BOX-TOP TICKETS, for this trip only. The folder runs to
+                    twenty-odd pages of every grade Peterhead recognises and
+                    most of it is fish that is not aboard — David: "theres lot's
+                    i don't need. large witch, XL hadd, etc, etc."
+
+                    Two per run, one where a grade starts and one where it
+                    finishes, which is his own count for cod on trip 63. */}
+                <button className="secondary" onClick={() => exportGradingCards(plan, {
+                  trip: parsed.meta?.trip || '',
+                  date: parsed.meta?.saleDate || '',
+                })}>🏷 Grading cards ({cards.tickets})</button>
               </div>
+
+              <p className="muted" style={{ margin: '0.5rem 0 0', fontSize: '0.8rem' }}>
+                {cards.tickets} tickets over {cards.pages} pages, {cards.kinds} different grades — one where each
+                grade starts and one where it finishes, so a buyer walking past can read it from either end.
+                {cards.regraded > 0 && ` Turbot and halibut print as weight bands (${cards.regraded} of them), because the market regrades them.`}
+              </p>
 
               {/* An unfiled species is NAMED rather than quietly dropped — the
                   buyers are working from this. */}
