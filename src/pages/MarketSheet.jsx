@@ -92,10 +92,24 @@ export function SheetBody({ plan, meta, onClose, embedded, onPrint }) {
             <div className="msheet-cols">
               {page.columns.map((col) => (
                 <div className="msheet-col" key={col.tier}>
-                  <div className="msheet-tier">{col.tier}</div>
-                  <Band runs={col.top} slots={TOP_ROW} mm={TOP_MM} colours={colours} label="TOP" />
-                  <div className="msheet-walk"><span>walkway</span></div>
-                  <Band runs={col.bottom} slots={BOTTOM_ROW} mm={BOTTOM_MM} colours={colours} label="BOT" />
+                  {/* The tier's own number and, past the new market, its area —
+                      the man chalking is standing in the building and the sheet
+                      has to agree with the floor he is on. */}
+                  <div className="msheet-tier">
+                    {col.tier}{col.area && col.area !== 'new' ? <span className="msheet-area">{col.area === 'cafe' ? 'CAFE' : 'OLD'}</span> : null}
+                  </div>
+                  {/* NO TOP BAND WHERE THERE IS NO TOP ROW. Drawing an empty
+                      21-slot band over a cafe tier would be a picture of a
+                      market that is not there. */}
+                  {(col.cap ? col.cap.top : TOP_ROW) > 0 && (
+                    <>
+                      <Band runs={col.top} slots={col.cap ? col.cap.top : TOP_ROW}
+                            mm={(col.cap ? col.cap.top : TOP_ROW) * UNIT} colours={colours} label="TOP" />
+                      <div className="msheet-walk"><span>walkway</span></div>
+                    </>
+                  )}
+                  <Band runs={col.bottom} slots={col.cap ? col.cap.bottom : BOTTOM_ROW}
+                        mm={(col.cap ? col.cap.bottom : BOTTOM_ROW) * UNIT} colours={colours} label="BOT" />
                 </div>
               ))}
               {/* Keep the last page's columns the same width as a full one, so
@@ -247,6 +261,12 @@ const CSS = `
 .msheet-cols { display: flex; gap: 1.4mm; align-items: flex-start; }
 .msheet-col { flex: 1 1 0; min-width: 0; }
 .msheet-col-empty { visibility: hidden; }
+.msheet-area {
+  display: block;
+  font-size: 1.6mm;
+  letter-spacing: 0.2mm;
+  opacity: 0.85;
+}
 .msheet-tier {
   text-align: center; font-weight: 700; font-size: 5.5mm; line-height: 8mm;
   border: .4mm solid #111; border-bottom: none; background: #111; color: #fff;

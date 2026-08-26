@@ -635,6 +635,20 @@ export function planLayout(lines, opts = {}) {
    * market and ask for room that does not exist. */
   const placed = plan.rows.top.length + plan.rows.bottom.length
   const homeless = plan.footprints - placed
+
+  /* The same notices, carried with their TONE as well as their words, so the
+     page can paint amber and red rather than guessing from the text. They stay
+     in `warnings` too — the scripts and the tests read those, and a CLI has no
+     colour to lose. The page filters the duplicates out by text. */
+  const notices = []
+  if (homeless > 0) {
+    notices.push({ tone: 'red', kind: 'nofit', text:
+      `THIS SHOT DOES NOT FIT. ${homeless} of ${plan.footprints} footprints have nowhere to go `
+      + `before the end of the market — start further back than tier ${plan.byTier[0]?.number ?? '?'}, `
+      + `or land less.` })
+  }
+  for (const w of areaWarnings(geo.areasUsed(plan.tiers))) notices.push({ ...w, kind: 'area' })
+
   if (homeless > 0) {
     plan.warnings.unshift(
       `THIS SHOT DOES NOT FIT. ${homeless} of ${plan.footprints} footprints have nowhere to go `
@@ -693,6 +707,16 @@ export function planLayout(lines, opts = {}) {
     tiers: plan.tiers, mode: plan.mode, ruleOfThumb, totalBoxes, footprints: plan.footprints,
     spare, spareTop, spareBottom, lowered, held, unfiled,
     rows: plan.rows, byTier: plan.byTier, auctionSpans: plan.auctionSpans,
-    warnings, species: plan.species, clocks: rules.clocks,
+    warnings, notices, species: plan.species, clocks: rules.clocks,
+    /* What the plan is standing on, so the page can say "of 806" rather than
+       multiplying a tier count by a 47 that is only true in the middle of the
+       new market. */
+    capacity: cap.total,
+    fits: homeless <= 0,
+    homeless,
+    onMarket: geo.bounded ? (geo.label || 'the market') : null,
+    firstTier: plan.byTier[0]?.number ?? null,
+    lastTier: plan.byTier[plan.byTier.length - 1]?.number ?? null,
+    areas: geo.areasUsed(plan.tiers),
   }
 }

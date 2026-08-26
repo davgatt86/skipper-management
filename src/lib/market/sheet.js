@@ -63,10 +63,16 @@ export function sheetPages(plan, perPage = 5) {
   const tiers = plan?.byTier || []
   for (let i = 0; i < tiers.length; i += perPage) {
     pages.push({
-      from: tiers[i].tier,
-      to: tiers[Math.min(i + perPage, tiers.length) - 1].tier,
+      /* THE MARKET'S OWN NUMBER, not a count from one. The man chalking this
+         is standing at tier 84 and the sheet has to agree with the floor. */
+      from: tiers[i].number ?? tiers[i].tier,
+      to: tiers[Math.min(i + perPage, tiers.length) - 1].number
+          ?? tiers[Math.min(i + perPage, tiers.length) - 1].tier,
       columns: tiers.slice(i, i + perPage).map((t) => ({
-        tier: t.tier,
+        tier: t.number ?? t.tier,
+        area: t.area ?? null,
+        // How deep THIS tier is. Outside the new market the top is nought.
+        cap: t.cap ?? null,
         top: runsOf(t.top),
         bottom: runsOf(t.bottom),
       })),

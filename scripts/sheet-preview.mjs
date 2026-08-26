@@ -23,7 +23,13 @@ if (!file) { console.error('usage: node scripts/sheet-preview.mjs <tally.xlsx> [
 
 const parsed = parseDayTally(readFileSync(file))
 if (parsed.error) { console.error(parsed.error); process.exit(1) }
-const plan = planLayout(parsed.lines)
+/* An optional start tier, so the REAL market can be rendered and looked at:
+ *   node scripts/sheet-preview.mjs "tally.xlsx" out.html 84
+ * Omit it and this is the uniform sheet exactly as before. */
+const startTier = process.argv[4] ? Number(process.argv[4]) : null
+const { PETERHEAD } = await import('../src/lib/market/markets.js')
+const plan = planLayout(parsed.lines,
+  startTier ? { market: PETERHEAD, startTier } : {})
 
 // Bundle the component itself rather than reimplementing it here. It has to
 // land inside the project or node cannot resolve react from it.
@@ -57,4 +63,10 @@ ${embedded ? `<div id="root">${embedded}</div>` : html}`)
 console.log(`${out}`)
 console.log(`  tiers        ${plan.tiers}  (${(html.match(/class="msheet-page"/g) || []).length} page(s))`)
 console.log(`  boxes        ${plan.totalBoxes}`)
-console.log(`  footprints   ${plan.footprints} of ${plan.tiers * 47}, ${plan.spare} spare`)
+// The real room in THESE tiers — multiplying by 47 is only right in the
+// middle of the new market, which is the whole point of this change.
+console.log(`  footprints   ${plan.footprints} of ${plan.capacity ?? plan.tiers * 47}, ${plan.spare} spare`)
+if (plan.onMarket) {
+  console.log(`  tiers        ${plan.firstTier}-${plan.lastTier}   areas: ${plan.areas.join(' + ')}`)
+}
+for (const nte of plan.notices || []) console.log(`  ${nte.tone.toUpperCase()}: ${nte.text}`)

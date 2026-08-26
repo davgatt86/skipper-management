@@ -9,6 +9,7 @@ import { buildCatalogue, freshestNote } from '../lib/market/catalogue'
 import { exportCataloguePdf } from '../lib/market/exportCatalogue'
 import { planLayout } from '../lib/market/planLayout'
 import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, gradeKey } from '../lib/market/layoutRules'
+import { PETERHEAD, tierAt, areaLabel, marketTotals } from '../lib/market/markets'
 import { useMarketRules, saveMarketRules } from '../lib/market/useMarketRules'
 import { gradeName, gradeCode } from '../lib/market/sheet'
 import MarketSheet, { SheetBody } from './MarketSheet'
@@ -44,6 +45,21 @@ export default function MarketLayout() {
   const [ruleBusy, setRuleBusy] = useState(false)
   const [ruleMsg, setRuleMsg] = useState('')
   const [pendingRule, setPendingRule] = useState(null)
+
+  /* WHERE ON THE FLOOR THIS SHOT STARTS.
+   *
+   * Blank is the honest default and means "anywhere in the middle of the new
+   * market" — the uniform 21/26 the page has always assumed, which is right
+   * wherever the market puts you among tiers 7 to 67. Name a tier and the real
+   * building applies: shallower tiers at each end, no top row past the new
+   * market, an end to run out of, and the amber and red that go with it.
+   *
+   * Opt-in on purpose. Defaulting everyone onto the real floor would change
+   * every answer the page has ever given, including for the tallies it was
+   * tuned against. */
+  const [startTier, setStartTier] = useState('')
+  const startAt = startTier === '' ? null : Number(startTier)
+  const startInfo = startAt == null ? null : tierAt(PETERHEAD, startAt)
   const inputRef = useRef(null)
 
   const canEdit = appUser?.role === 'skipper'
@@ -85,8 +101,10 @@ export default function MarketLayout() {
   }
 
   const plan = useMemo(
-    () => (parsed?.lines && !rulesLoading ? planLayout(parsed.lines, { rules }) : null),
-    [parsed, rules, rulesLoading],
+    () => (parsed?.lines && !rulesLoading
+      ? planLayout(parsed.lines, startInfo ? { rules, market: PETERHEAD, startTier: startAt } : { rules })
+      : null),
+    [parsed, rules, rulesLoading, startAt, startInfo],
   )
 
   /* DID THE RULE ACTUALLY CHANGE ANYTHING?
@@ -210,6 +228,47 @@ export default function MarketLayout() {
 
       {parsed && plan && (
         <>
+          {/* ---- WHERE ON THE FLOOR, which changes what the answer is -------
+              The market is three areas of three different depths and the app
+              assumed one for years. Naming the tier you start from is what
+              turns the generic answer into this building's answer. */}
+          <div className="card">
+            <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label style={{ display: 'grid', gap: 3 }}>
+                <span className="muted" style={{ fontSize: '0.75rem', letterSpacing: 0.4, textTransform: 'uppercase' }}>
+                  Start at tier
+                </span>
+                <select value={startTier} onChange={(e) => setStartTier(e.target.value)}>
+                  <option value="">Anywhere in the new market</option>
+                  {PETERHEAD.tiers.map((x) => (
+                    <option key={x.n} value={x.n}>
+                      {x.n} — {areaLabel(x.area)} ({x.top ? `${x.top}+${x.bottom}` : x.bottom} deep)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="muted" style={{ margin: 0, fontSize: '0.8rem', flex: '1 1 22rem' }}>
+                {startInfo
+                  ? `Tier ${startInfo.n} is in the ${areaLabel(startInfo.area)}, ${startInfo.top ? `${startInfo.top} across the top and ${startInfo.bottom} across the bottom` : `${startInfo.bottom} across, with no top row`}. The plan runs up the market from there and stops at tier 177.`
+                  : `Assuming a standard tier — 21 across the top, 26 across the bottom. True of tiers 7 to 67 and nowhere else, so name the tier you are given if you want this building's real answer.`}
+              </p>
+            </div>
+          </div>
+
+          {/* AMBER INTO THE CAFE, RED INTO THE OLD MARKET, and red again if it
+              runs off the end. These carry their own tone rather than the page
+              guessing one from the words. */}
+          {(plan.notices || []).map((nte, i) => (
+            <div key={i} className="card"
+                 style={{ borderColor: nte.tone === 'red' ? 'var(--rust)' : 'var(--brass)', borderWidth: 2 }}>
+              <p style={{ margin: 0, fontSize: '0.9rem',
+                          color: nte.tone === 'red' ? 'var(--rust)' : undefined,
+                          fontWeight: nte.kind === 'nofit' ? 700 : 400 }}>
+                {nte.text}
+              </p>
+            </div>
+          ))}
+
           {/* ---- what to ask the market for ---- */}
           <div className="card">
             <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
@@ -217,7 +276,14 @@ export default function MarketLayout() {
               <Fig label="÷94 rule says" value={plan.ruleOfThumb}
                    accent={plan.ruleOfThumb === plan.tiers ? undefined : 'var(--brass)'} />
               <Fig label="Boxes" value={plan.totalBoxes.toLocaleString('en-GB')} />
-              <Fig label="Footprints used" value={`${plan.footprints} of ${plan.tiers * PER_TIER_FLAT}`} />
+              {/* The real room in THESE tiers. Multiplying by 47 is only right in
+                  the middle of the new market. */}
+              <Fig label="Footprints used"
+                   value={`${plan.footprints} of ${plan.capacity ?? plan.tiers * PER_TIER_FLAT}`} />
+              {plan.firstTier != null && (
+                <Fig label="Tiers" value={`${plan.firstTier}–${plan.lastTier}`}
+                     accent={plan.areas?.length > 1 ? 'var(--brass)' : undefined} />
+              )}
               <Fig label="Spare" value={plan.spare} accent={plan.spare > 20 ? 'var(--brass)' : undefined} />
               <Fig label="Day tags" value={parsed.days.join(', ')} />
             </div>
@@ -232,7 +298,7 @@ export default function MarketLayout() {
             </p>
           </div>
 
-          {plan.warnings.map((w, i) => (
+          {plan.warnings.filter((w) => !(plan.notices || []).some((nte) => nte.text === w)).map((w, i) => (
             <div key={i} className="card" style={{ borderColor: 'var(--brass)' }}>
               <p style={{ margin: 0, fontSize: '0.9rem' }}>
                 {w}
