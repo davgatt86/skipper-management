@@ -13,6 +13,7 @@ import {
   PETERHEAD, AREAS, areaOf, areaLabel, marketTotals, tierAt,
   tiersFrom, fitShot, areaWarnings, PRINTED_DISAGREES,
 } from './src/lib/market/markets.js'
+import { marketGeometry as marketGeo } from './src/lib/market/geometry.js'
 
 let n = 0
 const eq = (a, b, m) => { n++; assert.deepEqual(a, b, m) }
@@ -128,5 +129,82 @@ eq(areaWarnings(['new', 'cafe']).map((w) => w.tone), ['amber'], 'amber for the c
 eq(areaWarnings(['old']).map((w) => w.tone), ['red'], 'red for the old market')
 eq(areaLabel('cafe'), 'Cafe Corner', 'named as the market names it')
 eq(AREAS.map((a) => a.key), ['new', 'cafe', 'old'], 'and they run in floor order')
+
+
+// ---- THE ALLOCATOR ON THE REAL FLOOR --------------------------------------
+/* These are the behaviours the geometry exists to produce, asserted on a
+ * synthetic tally so they cannot drift. The real tallies are checked
+ * separately, before and after, and come out byte-identical on the uniform
+ * market — that regression is what makes this safe to change at all. */
+const { planLayout } = await import('./src/lib/market/planLayout.js')
+
+// four clocks' worth of fish, enough to need real room
+const tally = []
+const add = (species, auction, boxes) => tally.push({ species, grade: 'A', code: '2a', day: 1, boxes, seq: tally.length })
+add('COD', 'cod', 300); add('HADDOCK', 'hadwhit', 900)
+add('MONKS', 'rough', 200); add('HAKE', 'flats', 200)
+
+{
+  // Inside the standard part of the new market, it behaves as it always has.
+  const uni = planLayout(tally)
+  const pd = planLayout(tally, { market: PETERHEAD, startTier: 7 })
+  eq(pd.tiers, uni.tiers, 'from tier 7 the real market gives the same answer as the old uniform model')
+  eq(pd.byTier[0].number, 7, 'but the tiers are NUMBERED as the market numbers them')
+  eq(pd.byTier[0].area, 'new', 'and carry their area')
+}
+
+{
+  /* STARTING AT TIER 1 IS GENUINELY DIFFERENT — those tiers are 18 on top, not
+   * 21. This is the old model being wrong, not the new one. */
+  const G = marketGeometryFor(1)
+  eq(G.capUpTo(6).top, 108, 'six tiers of 18 on top')
+  ok(planLayout(tally, { market: PETERHEAD, startTier: 1 }).byTier[0].cap.top === 18,
+     'and the plan lays fish into an 18-wide top row')
+}
+
+{
+  /* CROSSING OUT OF THE NEW MARKET IS LAID IN WALK ORDER, because past it there
+   * is only one lane. Without this the clock search kept assigning fish to a
+   * top row that stops existing — Trip 63 from tier 70 came out 43 tiers with
+   * 53 top places standing empty. */
+  const p = planLayout(tally, { market: PETERHEAD, startTier: 74 })
+  eq(p.mode, 'walk', 'it is laid in walk order')
+  ok(p.byTier.some((t) => t.area === 'cafe'), 'and it does reach the cafe')
+  ok(p.warnings.some((w) => w.includes('Cafe Corner')), 'which is an amber warning')
+  ok(p.spareTop >= 0 && p.spareBottom >= 0, 'with no row over-filled')
+}
+
+{
+  // Entirely in the cafe: no top row anywhere, so everything is one lane.
+  const p = planLayout(tally, { market: PETERHEAD, startTier: 84 })
+  ok(p.byTier.every((t) => t.top.length === 0), 'nothing is laid on a top row that does not exist')
+  ok(p.byTier.every((t) => t.cap.top === 0), 'because there is none')
+  ok(p.rows.bottom.length > 0, 'it all goes down the single lane')
+}
+
+{
+  /* NO FISH IS EVER DROPPED QUIETLY. Past the end of the market the walk was
+   * laying what fitted and discarding the rest — 638 footprints of a real trip
+   * with nowhere at all, and the only sign a "spare" of −638. */
+  const p = planLayout(tally, { market: PETERHEAD, startTier: 174 })
+  const placed = p.rows.top.length + p.rows.bottom.length
+  ok(placed < p.footprints, 'it genuinely cannot all fit in four tiers')
+  ok(p.warnings.some((w) => w.startsWith('THIS SHOT DOES NOT FIT')),
+     'and the plan says so, loudly, rather than reporting a negative spare')
+  ok(p.warnings.some((w) => w.includes(String(p.footprints - placed))),
+     'naming how many footprints have nowhere to go')
+}
+
+{
+  // Nothing outside the new market ever claims an amber it did not earn.
+  const small = [{ species: 'COD', grade: 'A', code: '2a', day: 1, boxes: 20, seq: 0 }]
+  const p = planLayout(small, { market: PETERHEAD, startTier: 7 })
+  ok(!p.warnings.some((w) => w.includes('Cafe Corner') || w.includes('Old Market')),
+     'a small shot well inside the new market warns about neither')
+}
+
+function marketGeometryFor(start) {
+  return marketGeo(PETERHEAD, start)
+}
 
 console.log('markets: ' + n + ' checks passed')

@@ -1,4 +1,6 @@
 import { TOP_ROW, BOTTOM_ROW, PER_TIER_FLAT, tiersByRuleOfThumb, RULES, isPrime } from './layoutRules.js'
+import { uniformGeometry, marketGeometry } from './geometry.js'
+import { areaWarnings, areaLabel, tierAt } from './markets.js'
 import { bySaleOrder } from './auctionOrder.js'
 
 /* Turn a day tally into a market layout.
@@ -144,7 +146,7 @@ export function solveDrops(gradeList, budget) {
  * black, ling, lythe, hake and lemons were ALL split across the two rows, for
  * no tier at all. That is the "why is the flats doubled" complaint applied to
  * every fish on the market. */
-function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
+function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode, geo = uniformGeometry()) {
   const warnings = []
   const gradeList = bucketGrades(clean, rules)
 
@@ -191,8 +193,8 @@ function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
 
   const footprints = species.reduce((s, sp) => s + sp.stacks.length, 0)
 
-  const rowSize = (r) => (r === 'top' ? TOP_ROW : BOTTOM_ROW)
-  const tiersFor = (t, b) => Math.max(Math.ceil(t / TOP_ROW), Math.ceil(b / BOTTOM_ROW), 1)
+  const rowSize = (r) => geo.rowSize(r)
+  const tiersFor = (t, b) => geo.tiersFor(t, b)
 
   /* THE SPILL, as a function of a pair of rows — because the assignment
    * above has to be scored on what the sheet ACTUALLY comes to, and that is
@@ -221,7 +223,7 @@ function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
      * 17 tiers rather than 18; on Trip 63 the split earned nothing and now does
      * not happen. */
     const start = tiersFor(r.top.length, r.bottom.length)
-    const from = Math.ceil(r.top.length / TOP_ROW) >= Math.ceil(r.bottom.length / BOTTOM_ROW) ? 'top' : 'bottom'
+    const from = geo.rowTiers(r.top.length, 'top') >= geo.rowTiers(r.bottom.length, 'bottom') ? 'top' : 'bottom'
     const to = from === 'top' ? 'bottom' : 'top'
     // Only the trailing stacks whose clock allows a split may move.
     let movable = 0
@@ -380,14 +382,10 @@ function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
     // Tiers are set by whichever row runs out first.
     const tiers = tiersFor(rows.top.length, rows.bottom.length)
 
-    const byTier = []
-    for (let t = 0; t < tiers; t++) {
-      byTier.push({
-        tier: t + 1,
-        top: rows.top.slice(t * TOP_ROW, (t + 1) * TOP_ROW),
-        bottom: rows.bottom.slice(t * BOTTOM_ROW, (t + 1) * BOTTOM_ROW),
-      })
-    }
+    /* Each tier takes what THAT tier can hold. Past the new market the top is
+       nought, so everything lands on the single lane, and the tier carries its
+       real number and area for the sheet and the warnings. */
+    const byTier = geo.sliceTiers(rows, tiers)
 
     // Which tiers each clock lands on — what you actually tell the market.
     const auctionSpans = rules.clocks.map((a) => {
@@ -441,7 +439,12 @@ function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
     if (looseTiers === null || lt < looseTiers) looseTiers = lt
     // Fewest tiers wins; on a tie the more level pair of rows, which wastes
     // less of the last tier and leaves the fish easier to walk.
-    const level = Math.abs(lay.top.length / TOP_ROW - lay.bottom.length / BOTTOM_ROW)
+    /* FRACTIONS OF A TIER, not whole ones. This is a tie-break on how level
+       the two rows are, so it has to stay fine-grained — rounding it to whole
+       tiers made it nearly always 0 and the tie fell through to the first
+       assignment tried, which split a tally that had room to spare. */
+    const level = Math.abs(lay.top.length / Math.max(geo.rowSize('top'), 1)
+                         - lay.bottom.length / Math.max(geo.rowSize('bottom'), 1))
     if (!best || t < best.t || (t === best.t && level < best.level)) best = { t, level, lay }
   }
 
@@ -476,16 +479,38 @@ function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
    * be held in one row at that count. Every tally that already sat on its
    * floor is untouched — checked against all twelve, not assumed.
    */
-  const floorTiers = Math.max(1, Math.ceil(footprints / (TOP_ROW + BOTTOM_ROW)))
+  const floorTiers = geo.floorTiers(footprints)
+
+  /* IF THE SHOT LEAVES THE NEW MARKET, IT IS LAID IN WALK ORDER.
+   *
+   * Past the new market there is no top row, so "keep a clock on the top or the
+   * bottom" has nothing to choose between — there is one lane. Walk order is
+   * the only arrangement that reads as one continuous run across the join: into
+   * a tier's top, then its bottom, then on, and when the top runs out at the end
+   * of the new market the lane simply carries into the cafe corner.
+   *
+   * It is also exactly the order David asked for. The clocks already run cod,
+   * haddock, rough, flats, so laying them in sequence puts cod and haddock in
+   * the new market using both its rows, then the rough, then the flats — and the
+   * flats are what ends up in the cafe. "If the shot is entirely in the cafe
+   * corner and no top/bottom is available, order has to be cod, hadd/whit,
+   * rough then flats" is the same rule with no top at all.
+   *
+   * Without this the search kept assigning fish to a top row that stops
+   * existing: Trip 63 from tier 70 came out 43 tiers with 53 top places unused. */
+  /* Guarded, and the guard is load-bearing: on the UNIFORM geometry both
+     `topEndsAfter()` and `count` are Infinity, so asking for the capacity of the
+     top-bearing region walks for ever. An unbounded market never leaves itself. */
+  const leavesTopRegion = geo.bounded && footprints > geo.capUpTo(geo.topEndsAfter()).total
+  if (leavesTopRegion && forceMode !== 'rows') {
+    return finish(geo.walkRows(byClock.flatMap((c) => c.stacks)), 'walk')
+  }
+
   if (forceMode !== 'rows' && best.t > floorTiers) {
     const all = byClock.flatMap((c) => c.stacks)
-    const walk = { top: [], bottom: [] }
-    for (let i = 0; i < all.length;) {
-      walk.top.push(...all.slice(i, i + TOP_ROW)); i += TOP_ROW
-      walk.bottom.push(...all.slice(i, i + BOTTOM_ROW)); i += BOTTOM_ROW
-    }
+    const walk = geo.walkRows(all)
     const walkTiers = tiersFor(walk.top.length, walk.bottom.length)
-    const forced = byClock.some((c) => c.stacks.length > BOTTOM_ROW * walkTiers)
+    const forced = byClock.some((c) => c.stacks.length > geo.capUpTo(walkTiers).bottom)
     if (walkTiers < best.t && forced) {
       warnings.push(
         `One fish fills the market here, so it is laid down BOTH rows in the order a tier is `
@@ -506,6 +531,14 @@ function layoutOnce(clean, totalBoxes, heightOf, rules, forceMode) {
  * built-in defaults are used, which is what the tests and the scripts do. */
 export function planLayout(lines, opts = {}) {
   const rules = opts.rules || RULES
+
+  /* THE FLOOR THIS IS BEING LAID ON. Omit `market` and it is the uniform
+     21/26 the app has always assumed, which is what the tests, the scripts and
+     every existing caller get — so nothing moves that was not asked to. Pass a
+     market and a start tier and the real building applies: shallower tiers at
+     each end of the new market, no top row past it, and an end to run out of. */
+  const geo = opts.market ? marketGeometry(opts.market, opts.startTier ?? opts.market.tiers[0].n)
+                          : uniformGeometry()
   const clean = (lines || []).filter((l) => Number(l.boxes) > 0)
   const totalBoxes = clean.reduce((s, l) => s + Number(l.boxes), 0)
   if (!totalBoxes) {
@@ -519,7 +552,7 @@ export function planLayout(lines, opts = {}) {
 
   // Pass one: everything at its ceiling. This is what sets the tier count, and
   // nothing below is allowed to raise it.
-  let plan = layoutOnce(clean, totalBoxes, fixed || ((g) => g.max), rules)
+  let plan = layoutOnce(clean, totalBoxes, fixed || ((g) => g.max), rules, undefined, geo)
 
   /* WHAT KEEPING EVERY FISH IN ONE RUN COST, IF IT COST ANYTHING.
    *
@@ -547,14 +580,14 @@ export function planLayout(lines, opts = {}) {
   if (!fixed && opts.drop !== false) {
     const ceiling = plan.tiers
     // Footprints going spare inside the tiers already being paid for.
-    let budget = ceiling * PER_TIER_FLAT - plan.footprints
+    let budget = geo.capUpTo(ceiling).total - plan.footprints
 
     // The budget is a total, but the two rows fill independently, so a drop
     // that fits on paper can still push one row over. Back off until it holds
     // rather than trusting the arithmetic.
     while (budget > 0) {
       const tryHeights = solveDrops(plan.gradeList, budget)
-      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max, rules, plan.mode)
+      const candidate = layoutOnce(clean, totalBoxes, (g) => tryHeights.get(g.key) ?? g.max, rules, plan.mode, geo)
       if (candidate.tiers <= ceiling) { plan = candidate; heights = tryHeights; break }
       budget -= 1
     }
@@ -567,7 +600,8 @@ export function planLayout(lines, opts = {}) {
   }
 
   const ruleOfThumb = tiersByRuleOfThumb(totalBoxes)
-  const spare = plan.tiers * PER_TIER_FLAT - plan.footprints
+  const cap = geo.capUpTo(plan.tiers)
+  const spare = cap.total - plan.footprints
 
   /* WHERE THE SPARE ROOM IS, not just how much of it there is.
    *
@@ -584,8 +618,31 @@ export function planLayout(lines, opts = {}) {
    * another grade a full level", which is true and reads as an arithmetic
    * shortfall when it is nothing of the kind. Reporting the two rows lets it
    * say the real reason. */
-  const spareTop = plan.tiers * TOP_ROW - plan.rows.top.length
-  const spareBottom = plan.tiers * BOTTOM_ROW - plan.rows.bottom.length
+  const spareTop = cap.top - plan.rows.top.length
+  const spareBottom = cap.bottom - plan.rows.bottom.length
+
+  /* IT RAN OUT OF MARKET — AND NO FISH IS EVER DROPPED QUIETLY.
+   *
+   * Counted on what actually LANDED rather than on any one code path's own
+   * report, because that catches every way of losing a stack rather than the
+   * one I happened to think of. It found a real one: past the end of the market
+   * `walkRows` was placing what fitted and discarding the rest, so Trip 63 from
+   * tier 170 had 758 footprints of fish, 120 of them on the floor, 638 nowhere
+   * at all — and the only sign was a "spare" of −638, which reads as arithmetic
+   * rather than as most of a trip gone missing.
+   *
+   * A negative spare is not an answer. The man reading it is about to ring the
+   * market and ask for room that does not exist. */
+  const placed = plan.rows.top.length + plan.rows.bottom.length
+  const homeless = plan.footprints - placed
+  if (homeless > 0) {
+    plan.warnings.unshift(
+      `THIS SHOT DOES NOT FIT. ${homeless} of ${plan.footprints} footprints have nowhere to go `
+      + `before the end of the market — start further back than tier ${plan.byTier[0]?.number ?? '?'}, `
+      + `or land less.`)
+  }
+  // Amber into the cafe corner, red into the old market. David's call.
+  for (const w of areaWarnings(geo.areasUsed(plan.tiers)).reverse()) plan.warnings.unshift(w.text)
 
   // What ended up laid lower than its ceiling, for the page to show — this is
   // a decision the skipper should be able to see and overrule, not a silent one.

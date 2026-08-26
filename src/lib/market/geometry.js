@@ -82,6 +82,22 @@ function make(g) {
     }
   }
 
+  /* How many tiers ONE row alone would need. Nought for an empty row, which
+   * matters: the spill picks the fuller row by comparing these two, and the old
+   * `Math.ceil(0 / 21)` is 0, not 1. */
+  const rowTiers = (len, which) => {
+    let left = Math.max(0, len), i = 0
+    while (left > 0 && i < g.count) {
+      const c = g.capAt(i)
+      const take = which === 'top' ? c.top : c.bottom
+      i++
+      if (take <= 0 && (c.top <= 0 && c.bottom <= 0)) break
+      left -= take
+      if (take <= 0 && i > g.count) break
+    }
+    return i
+  }
+
   /** Room in the first `n` tiers. */
   const capUpTo = (n) => {
     let top = 0, bottom = 0
@@ -154,7 +170,7 @@ function make(g) {
   }
 
   return {
-    ...g, tiersFor, fill, capUpTo, floorTiers, sliceTiers, walkRows, areasUsed, topEndsAfter,
+    ...g, tiersFor, fill, rowTiers, capUpTo, floorTiers, sliceTiers, walkRows, areasUsed, topEndsAfter,
     rowSize: (r, i = 0) => (r === 'top' ? g.capAt(i).top : g.capAt(i).bottom),
   }
 }
