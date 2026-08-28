@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.4";
+  const VERSION = "1.3.5";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
@@ -260,6 +260,54 @@
     };
   }
 
+  /* THE CONTINUATION CAN BE ON THE NEXT PAGE — 1.3.5, Aug 2026.
+   *
+   * 1.3.3 rejoined a species cell that wrapped onto the next LINE. When the row
+   * is the last one on a page, its tail wraps onto the next PAGE instead, and
+   * lands seventeen lines away behind the page total, the carried-forward line,
+   * the page number and the whole header block of the following page:
+   *
+   *     G&J Jack Seafoods Ltd Pollock 1.00 12 54.24 12 54.24   <- foot of p11
+   *     PAGE TOTAL 166.00 5,944 9,479.95
+   *     CARRIED FORWARD 1269.25 45,787 150,756.02
+   *     PAGE 11 OF 13
+   *     ... eleven lines of page-12 header ...
+   *     Lyth/GUT/A+2                                           <- head of p12
+   *
+   * Looking only at i+1 finds "PAGE TOTAL" and gives up, so the row is dropped
+   * exactly as before the 1.3.3 fix. Found on the Audacious note of 28-08-2026:
+   * one box, 12 kg, £54.24, on a note otherwise out by nothing at all.
+   *
+   * THE SCAN STOPS AT ANYTHING THAT IS NOT PAGE FURNITURE, which is what makes
+   * it safe. It cannot reach past another data row and steal that row's
+   * continuation: the moment a line is not recognisably a header, a page total
+   * or blank, the search is over. Reusing FRAG_STOP means the furniture list is
+   * the one already proven against these notes rather than a second one that
+   * can drift from it. */
+  /* HOW FAR AHEAD THE TAIL MAY BE, and what stops the search.
+   *
+   * NOT a list of header words. My first attempt whitelisted page furniture and
+   * it failed on "NAME OF FISH SALES COMPANY" and on the date "28-Aug-2026" —
+   * FISH and AUG were not in the list. That kind of vocabulary rots: the next
+   * vessel name or month breaks it silently, which is the very failure mode
+   * this whole area keeps producing.
+   *
+   * The stop condition is structural instead. A continuation always follows its
+   * own row, so anything between an unparsed row and the next PARSEABLE row
+   * belongs to that unparsed row. Scan forward until either the tail turns up
+   * or a real data row does — page totals, carried-forward lines and header
+   * blocks all parse as nothing, so they are skipped without being enumerated.
+   *
+   * Bounded at 20 lines so a malformed note cannot walk the document. */
+  function findSpeciesWrap(allLines, i) {
+    for (let j = i + 1; j < allLines.length && j <= i + 20; j++) {
+      const w = speciesWrap(allLines[j]);
+      if (w) return { w, at: j };
+      if (parseDonLine(allLines[j])) return null;   // the next real row: too far
+    }
+    return null;
+  }
+
   // Put the wrapped token back on the end of the head, in front of the
   // figures, so parseDonLine sees the row exactly as it would unwrapped.
   function joinSpeciesWrap(line, w) {
@@ -340,11 +388,20 @@
       // The species cell wrapped: rebuild the row from this line and the next,
       // and consume the continuation so it is not read again below.
       if (!r) {
-        const w = speciesWrap(allLines[i + 1]);
-        if (w) {
-          const joined = joinSpeciesWrap(allLines[i], w);
+        const found = findSpeciesWrap(allLines, i);
+        if (found) {
+          const joined = joinSpeciesWrap(allLines[i], found.w);
           const r2 = joined && parseDonLine(joined);
-          if (r2) { r = r2; wrapFrag = w.frag; if (w.msc) r.msc = true; i++; }
+          /* Blank the continuation where it lies rather than stepping the
+             cursor over it — across a page break the lines between are real
+             header lines that must still be read for what they are, and i++
+             would swallow them. */
+          if (r2) {
+            r = r2; wrapFrag = found.w.frag;
+            if (found.w.msc) r.msc = true;
+            allLines = allLines.slice();
+            allLines[found.at] = "";
+          }
         }
       }
       if (r) {

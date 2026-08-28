@@ -286,6 +286,46 @@ missing, every one an A+ row, on a note that reconciled to the penny on 13 of
 its 15 species. After the fix it reconciles exactly — 1,192 boxes, 44,805 kg,
 £136,656.50, `ok: true`, 175 rows → 182.
 
+### The wrap ACROSS A PAGE BREAK — 1.3.5, Aug 2026
+
+**A row that is the last on its page had its species tail wrapped onto the next
+page, seventeen lines away.** 1.3.3 rejoins a species cell that wraps onto the
+next LINE; when the row is the last on a page the tail lands after the page
+total, the carried-forward line, the page number and the whole header block of
+the page that follows:
+
+    G&J Jack Seafoods Ltd Pollock 1.00 12 54.24 12 54.24   <- foot of page 11
+    PAGE TOTAL 166.00 5,944 9,479.95
+    CARRIED FORWARD 1269.25 45,787 150,756.02
+    PAGE 11 OF 13
+    ... eleven lines of page-12 header ...
+    Lyth/GUT/A+2                                           <- head of page 12
+
+Looking only at `i + 1` finds "PAGE TOTAL", gives up, and the row is dropped
+exactly as before 1.3.3. **Found on the Audacious note of 28-08-2026** — one
+box, 12 kg, £54.24, on a note otherwise out by nothing at all. After the fix it
+reconciles to 0/0/0, 226 rows → 227.
+
+**THE STOP CONDITION IS STRUCTURAL, NOT A LIST OF HEADER WORDS.** The first cut
+whitelisted page furniture and failed on `NAME OF FISH SALES COMPANY` and on
+the date `28-Aug-2026` — FISH and AUG were not in the list. That kind of
+vocabulary rots: the next vessel name or month breaks it silently, which is the
+exact failure this area keeps producing. A continuation always follows its own
+row, so the search runs forward until either the tail turns up or **the next
+line that parses as a real row** does. Page totals and headers parse as nothing
+and are skipped without ever being enumerated. Bounded at 20 lines.
+
+The continuation is **blanked where it lies** rather than stepping the cursor
+over it: across a page break the lines between are real header lines that must
+still be read for what they are, and `i++` would swallow them.
+
+**Third silent-drop fault in this parser** after the wrapped row and the starred
+price — same shape every time, a small negative diff on boxes, weight and value
+at once, and invisible until someone reconciles a note against its own printed
+total. `test-parser.mjs` carries the real page-break lines, including that the
+search does not reach past a real row and steal its tail.
+
+
 ### The starred-price bug — 1.3.4, Aug 2026
 
 **A row whose price carried a leading `*` was dropped silently.** The office

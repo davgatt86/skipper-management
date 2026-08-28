@@ -132,7 +132,69 @@ eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1
   eq('and keeps the price the note printed', plain.map(r => r.price_per_box), [155, 475, 362.5])
 }
 
-eq('the version was bumped', PC.VERSION, '1.3.4')
+/* ---- A WRAP ACROSS A PAGE BREAK (1.3.5) ------------------------------
+ *
+ * 1.3.3 rejoined a species cell that wrapped onto the next LINE. When the row
+ * is the LAST on a page its tail wraps onto the next PAGE, and lands seventeen
+ * lines away behind the page total, the carried-forward line, the page number
+ * and the whole header block of the page that follows.
+ *
+ * These are the real lines off the Audacious note of 28-08-2026, which was out
+ * by exactly this one row: 1 box, 12 kg, £54.24, on a note otherwise perfect.
+ * Third silent-drop fault in this parser, same shape, same money. */
+{
+  const lines = [
+    'GT Seafoods Saithe Coley/GUT/A4 1.00 27 39.96 27 39.96',
+    'G&J Jack Seafoods Ltd Pollock 1.00 12 54.24 12 54.24',
+    'PAGE TOTAL 166.00 5,944 9,479.95',
+    'CARRIED FORWARD 1269.25 45,787 150,756.02',
+    'PAGE 11 OF 13',
+    'The Don Fishing Company Ltd.',
+    'DATE SOLD 28/08/26',
+    'SALES NOTE NUMBER 3356145',
+    'VESSEL NAME AND REGISTRATION NUMBER',
+    'NAME OF FISH SALES COMPANY',
+    'The Don Fishing Co Ltd - Pd AUDACIOUS BF83',
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    'Landed Peterhead 28-Aug-2026',
+    'UNITS TOTAL',
+    'SPECIES / PRESENTATION /',
+    'BUYER',
+    'GRADE',
+    'NUMBER WT COST WT VALUE',
+    'Lyth/GUT/A+2',
+    'G&J Jack Seafoods Ltd Pollock Lyth/GUT/A2 9.00 40 170.40 360 1,533.60',
+  ]
+  const rows = PC.parseDon(lines).rows
+  const lost = rows.find((r) => Number(r.total_value) === 54.24)
+  eq('the row at the foot of the page is NOT dropped', !!lost, true)
+  eq('its species is rebuilt from the tail on the next page', lost && lost.species_canon, 'Lythe')
+  eq('its grade comes off that tail too', lost && lost.grade, 'A+2')
+  eq('the buyer is not corrupted', lost && lost.buyer, 'G&J Jack Seafoods Ltd')
+  eq('boxes', lost && Number(lost.boxes), 1)
+  eq('weight', lost && Number(lost.total_weight), 12)
+
+  /* AND IT DOES NOT STEAL FROM THE ROW AFTER IT. The row that follows the
+     header block keeps its own species and grade. */
+  const after = rows.find((r) => Number(r.total_value) === 1533.60)
+  eq('the next row is untouched', after && after.grade, 'A2')
+  eq('and keeps its own species', after && after.species_canon, 'Lythe')
+  eq('every row on the fragment is read', rows.length, 3)
+}
+
+/* The search must give up rather than reach across a real row. A tail that
+ * belongs to nothing is left alone, not attached to whatever came before. */
+{
+  const rows = PC.parseDon([
+    'GT Seafoods Saithe 1.00 40 56.40 40 56.40',
+    'Whitelink Seafoods Monkfish/GUT/A1 9.00 40 172.80 360 1,555.20',
+    'Coley/GUT/A+4',
+  ]).rows
+  eq('a tail beyond the next real row is not claimed', rows.length, 1)
+  eq('and the real row in between is the one kept', Number(rows[0].total_value), 1555.20)
+}
+
+eq('the version was bumped', PC.VERSION, '1.3.5')
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
