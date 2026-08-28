@@ -1653,6 +1653,18 @@ In the order agreed:
 
 Also agreed, not yet scheduled:
 
+- **SQUARE UP SHOULD LINK TO THE REST OF THE PAGE** (David, Aug 2026). It sits
+  on its own today: the crew come from a roster kept inside the worksheet rather
+  than from Crew Status, the fuel goes in by hand though `vessel_fuel_log`
+  already has the bunkerings, the boxes are typed though the landing knows them,
+  and the trip is a date typed in when `quota_trips` carries the real one.
+  Every one of those is a figure this app already holds being re-entered, which
+  is how two records of the same thing start to disagree. Not started.
+
+- ~~**A GRADING CARD SHEET for what the trip actually landed**~~ — **BUILT
+  Aug 2026**, see the market layout section. Banked.
+
+
 - ~~**GEAR LOG — what was done to the nets, and when**~~ — **STAGE 1 BUILT
   Aug 2026.** `/gear` (`GearLog.jsx`), `src/lib/gear/`,
   `supabase/gear_log.sql` (applied). The third book the boat keeps.
