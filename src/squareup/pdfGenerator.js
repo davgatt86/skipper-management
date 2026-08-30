@@ -8,6 +8,7 @@ import { fmtDate, shareTextOf, fmtShares, fmtMoney, sumBondFor, todayISO } from 
 export function generateSquareUpPDF({
   vessel, tripDate, crew, totalShares, quota,
   fuel, labour, haulage = [], haulageNote = '', foreignCrew, bondItems,
+  landings = 1, bonusPlan = null,
 }) {
   const doc = new jsPDF({ unit: 'pt', format: 'a4' });
   const PAGE_W = doc.internal.pageSize.getWidth();
@@ -100,6 +101,20 @@ export function generateSquareUpPDF({
       doc.text(shareTextOf(c), MARGIN + 320, y, { align: 'right' });
 
       if (c.bonus) {
+        /* SAY WHY. "+ 0.0625%" on its own reads as a typo — it is a mate's
+           quarter share of a two-landing trip, and the office has no way to
+           check that unless the sheet says so. Same discipline as the bond: a
+           figure without the thing that produced it is not a record. */
+        if (c.role) {
+          const on = (c.roleLandings && c.roleLandings.length && landings > 1)
+            ? ' · landing ' + c.roleLandings.join(' & ')
+            : '';
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          setInk(DIM);
+          doc.text(c.role + on, MARGIN + 340, y);
+          doc.setFontSize(10.5);
+        }
         doc.setFont('helvetica', 'bold');
         setInk(BRASS);
         doc.text(`+ ${c.bonus}%`, PAGE_W - MARGIN, y, { align: 'right' });
@@ -124,6 +139,32 @@ export function generateSquareUpPDF({
     doc.text('Total shares', MARGIN, y);
     doc.text(fmtShares(totalShares), PAGE_W - MARGIN, y, { align: 'right' });
     y += 18;
+
+    /* HOW MANY LANDINGS, because the role bonuses are divided by it. Without
+       this the sheet shows a mate on 0.0625% and nothing explains the figure. */
+    if (landings > 1) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      setInk(DIM);
+      doc.text(`Role bonuses split across ${landings} landings.`, MARGIN, y);
+      y += 14;
+    }
+
+    /* A ROLE NOBODY HELD ON A LANDING IS MONEY NOT PAID OUT, and the sheet is
+       where the office would otherwise never see it. Reported, never quietly
+       handed to the man who did the other landing. */
+    const gaps = (bonusPlan && bonusPlan.unallocated) || [];
+    if (gaps.length) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      setInk(BRASS);
+      for (const g of gaps) {
+        ensureSpace(12);
+        doc.text(`No ${g.role} on landing ${g.landing} — ${g.pct}% not allocated.`, MARGIN, y);
+        y += 12;
+      }
+      y += 4;
+    }
   }
   y += 8;
 

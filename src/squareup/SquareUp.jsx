@@ -664,6 +664,7 @@ export default function SquareUp() {
       vessel={vessel} tripDate={tripDate} crew={crew} totalShares={totalShares}
       quota={quota} fuel={fuel} labour={labour} haulage={haulage} haulageNote={haulageNote}
       foreignCrew={foreignCrew} bondItems={bondItems}
+      landings={nLandings} bonusPlan={bonusPlan}
       onBack={() => setView('edit')}
     />;
   }
