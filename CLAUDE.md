@@ -82,6 +82,53 @@ Scoping it would hang every read until the six-minute deadline; it needs the
 edge function changed to set `fleet_id` from the caller's JWT first. See the
 notes in `supabase/su_fleet_isolation.sql` and `src/lib/su/parse.js`.
 
+### Settling sheets arrive by email (Aug 2026)
+
+David: *"settling sheets. they get emailed to me now. setup auto sending to page
+like the fish sales sheets."* Don Fishing send them — usually Morna, *"but it
+might not always be from morna"*.
+
+**IT IS THE SAME ADDRESS AS THE SALES NOTES.** No new CloudMailin route, no new
+Gmail rule beyond forwarding. `emailsFrom()` pulls every address out of the
+envelope AND the headers and tries exact matches across all of them before any
+domain rule, so David's own address resolves the fleet whether Gmail rewrites
+the `From` or preserves Morna's. Who actually sent it is recorded on the row and
+is never a gate.
+
+**A SETTLING SHEET IS TOLD APART BY HAVING NO TEXT AT ALL.** Every one checked
+carries **zero fonts** — they are photographs of a printed sheet, which is
+exactly why the app reads them with a model instead of a parser. Measured: three
+real settlements extract **0 characters**, against 3,005 for the sample note and
+16,561 for a real Don note. So the rule is a text-length floor, not a word
+match — there are no words to match, and matching the sender would break the
+first time it is not Morna.
+
+**THE SHEET IS FILED, NEVER SAVED, AND THAT IS THE WHOLE DESIGN.** A sales note
+is parsed and reconciled against its own printed total, so the webhook can file
+it and be sure. A settling sheet is read by a model, and the review screen
+therefore shows each total TWICE — as printed and as the lines add up — with a
+difference having to be acknowledged before saving. Auto-saving from an email
+would walk straight round that check. So the arrival lands in `su_inbox` and
+stops; the skipper opens it and it runs through **the same `read()` path** as a
+hand-uploaded file, review screen and all. What is removed is hunting for the
+attachment, not the checking.
+
+`supabase/settlement_inbox.sql` (applied). `parseDocuments` gained
+`existingPaths` so a sheet already in the bucket is not uploaded a second time —
+a duplicate object per arrival, against a 1 GB allowance that also holds every
+settlement document.
+
+**One row per ARRIVAL, not per settlement.** The same sheet emailed twice lands
+twice and both show; deciding they are the same document is the skipper's,
+because `su_settlements` is unique on (boat_id, reference) and the reference
+only exists once the sheet has been read.
+
+Probed: skipper sees his own fleet's arrival and not Beryl's, **officer 0, cook
+0**, officer update affects **0 rows**. A settling sheet is money, and the
+officer and cook are denied every money table — that denial is the reason those
+roles exist.
+
+
 ### Settlements (stage 2, in progress)
 
 `Settlements.jsx` reads the `su_*` tables; `SettlementImport.jsx` adds one from

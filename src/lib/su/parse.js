@@ -84,15 +84,21 @@ const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')
  * rather than uploading the same document twice on save.
  * `onStage` is called with 'uploading' | 'reading' so the UI can say which.
  */
-export async function parseDocuments(files, docType, boatId, { onStage } = {}) {
-  if (!files || !files.length) throw new Error('No file chosen.')
+/* `existingPaths` is for a sheet that is ALREADY in the bucket — one that
+ * arrived by email and was filed by the ingest webhook. Uploading it a second
+ * time would leave a duplicate object behind for every arrival, and the bucket
+ * already carries every settlement document against a 1 GB allowance. */
+export async function parseDocuments(files, docType, boatId, { onStage, existingPaths } = {}) {
   if (!boatId) throw new Error('No boat selected.')
+  if (!existingPaths?.length && !files?.length) throw new Error('No file chosen.')
 
-  onStage?.('uploading')
-  const paths = []
-  for (const f of files) {
-    const toUpload = isPdf(f) ? f : await downscaleToJpeg(f)
-    paths.push(await uploadDocument(boatId, toUpload))
+  let paths = existingPaths || []
+  if (!paths.length) {
+    onStage?.('uploading')
+    for (const f of files) {
+      const toUpload = isPdf(f) ? f : await downscaleToJpeg(f)
+      paths.push(await uploadDocument(boatId, toUpload))
+    }
   }
 
   onStage?.('reading')

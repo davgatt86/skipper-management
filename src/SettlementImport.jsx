@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from './supabaseClient'
 import SectionRule from './SectionRule'
 import { parseDocuments, uploadDocument, DOC_TYPES, mapAudacious, mapBeryl } from './lib/su/parse'
@@ -15,7 +15,7 @@ const num = v => (v === '' || v == null ? 0 : Number(String(v).replace(/[^0-9.-]
 const gbp2 = n => '£' + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const TOL = 0.01
 
-export default function SettlementImport({ boat, onSaved, onCancel }) {
+export default function SettlementImport({ boat, onSaved, onCancel, inboxItem }) {
   const isBeryl = (boat?.format || 'audacious') === 'beryl'
   const [stage, setStage] = useState('pick')      // pick | working | review
   const [busyNote, setBusyNote] = useState('')
@@ -28,13 +28,22 @@ export default function SettlementImport({ boat, onSaved, onCancel }) {
   const [acknowledged, setAcknowledged] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  async function read(chosen) {
+  /* A SHEET THAT ARRIVED BY EMAIL is already in the bucket, so it skips the
+     picker and the upload and goes straight to the reader — but through the
+     SAME read path, so the review screen and its two totals are identical.
+     Nothing about the checking changes; only the hunting for the attachment. */
+  useEffect(() => {
+    if (inboxItem?.file_path) read(null, [inboxItem.file_path])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inboxItem?.id])
+
+  async function read(chosen, existingPaths) {
     setError('')
-    setFiles(chosen)
+    setFiles(chosen || [])
     // The Beryl spreadsheet template was only ever used to load their old
     // settlements in one go. Ongoing sheets come as a PDF from the office or a
     // photo of one, so the xlsx reader is deliberately not carried over.
-    if (chosen.some(f => /\.(xlsx|xls)$/i.test(f.name))) {
+    if ((chosen || []).some(f => /\.(xlsx|xls)$/i.test(f.name))) {
       setError('Settlements come in as the PDF from the office, or a photo of it — not a spreadsheet.')
       return
     }
@@ -42,6 +51,7 @@ export default function SettlementImport({ boat, onSaved, onCancel }) {
     try {
       const docType = isBeryl ? DOC_TYPES.beryl : DOC_TYPES.audacious
       const { data, paths } = await parseDocuments(chosen, docType, boat.id, {
+        existingPaths,
         onStage: s => setBusyNote(s === 'uploading' ? 'Uploading…' : 'Reading the sheet — this can take a minute or two…'),
       })
       const mapped = isBeryl ? mapBeryl(data) : mapAudacious(data)

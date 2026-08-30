@@ -45,6 +45,14 @@ export default function Settlements() {
 
   const [openId, setOpenId] = useState(null)
   const [importing, setImporting] = useState(false)
+
+  /* SETTLING SHEETS THAT ARRIVED BY EMAIL. Don Fishing send them now, so the
+     ingest webhook files them here instead of the skipper hunting the
+     attachment out of Gmail. They are FILED, never saved — a settling sheet is
+     a photograph read by a model, so it still goes through the review screen
+     and its two totals like any other. */
+  const [inbox, setInbox] = useState([])
+  const [fromInbox, setFromInbox] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
@@ -64,6 +72,20 @@ export default function Settlements() {
     })()
     return () => { cancel = true }
   }, [])
+
+  // What has arrived by email and not been dealt with yet.
+  useEffect(() => {
+    if (!boatId) return
+    let cancel = false
+    ;(async () => {
+      const { data } = await supabase.from('su_inbox')
+        .select('id, filename, from_email, subject, received_at, file_path, bytes')
+        .eq('boat_id', boatId).eq('status', 'new')
+        .order('received_at', { ascending: false })
+      if (!cancel) setInbox(data || [])
+    })()
+    return () => { cancel = true }
+  }, [boatId, reload])
 
   // 2. Which years does this boat have?
   useEffect(() => {
@@ -209,9 +231,53 @@ export default function Settlements() {
         </div>
       )}
 
+      {/* WHAT HAS COME IN. Shown above everything else when there is any,
+          because a sheet sitting unread is the one thing on this page that
+          wants doing. */}
+      {!importing && inbox.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
+          <h3 style={{ margin: '0 0 0.3rem' }}>
+            {inbox.length} settling sheet{inbox.length === 1 ? '' : 's'} arrived by email
+          </h3>
+          <p className="muted" style={{ margin: '0 0 0.7rem', fontSize: '0.82rem' }}>
+            Filed as they came in. Opening one reads it and shows the totals for checking, exactly as
+            uploading it by hand does — nothing is saved until you say so.
+          </p>
+          {inbox.map(it => (
+            <div key={it.id} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center',
+                                      flexWrap: 'wrap', padding: '0.4rem 0', borderTop: '1px solid var(--line)' }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '7rem' }}>
+                {String(it.received_at).slice(0, 10)}
+              </span>
+              <span style={{ flex: '1 1 12rem', fontSize: '0.88rem' }}>
+                {it.filename}
+                {it.from_email && <span className="muted" style={{ fontSize: '0.78rem' }}> · from {it.from_email}</span>}
+              </span>
+              <button onClick={() => { setFromInbox(it); setImporting(true) }}>Read it</button>
+              <button className="secondary" style={{ color: 'var(--mute)' }}
+                      onClick={async () => {
+                        await supabase.from('su_inbox').update({ status: 'ignored' }).eq('id', it.id)
+                        setInbox(x => x.filter(y => y.id !== it.id))
+                      }}>Not one of ours</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {importing && boat && (
-        <SettlementImport boat={boat} onCancel={() => setImporting(false)}
-          onSaved={id => { setImporting(false); setReload(n => n + 1); setTab('settlements'); setOpenId(id) }} />
+        <SettlementImport boat={boat} inboxItem={fromInbox}
+          onCancel={() => { setImporting(false); setFromInbox(null) }}
+          onSaved={async id => {
+            /* Tie the arrival to what it became, so the same sheet emailed
+               twice does not read as two outstanding jobs. */
+            if (fromInbox) {
+              await supabase.from('su_inbox')
+                .update({ status: 'imported', settlement_id: id }).eq('id', fromInbox.id)
+              setInbox(x => x.filter(y => y.id !== fromInbox.id))
+            }
+            setImporting(false); setFromInbox(null)
+            setReload(n => n + 1); setTab('settlements'); setOpenId(id)
+          }} />
       )}
 
       {!importing && boats.length > 0 && (

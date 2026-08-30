@@ -144,8 +144,21 @@ async function feedCrewLanding(supabase, fleetId, createdBy, date, boxes, key) {
 // the fiskeauktion.dk price catch, because the Hanstholm "My sales" note also
 // carries the fiskeauktion.dk domain — order is what stops a per-vessel note
 // being mistaken for the Danish price board.
+/* A SETTLING SHEET HAS NO TEXT AT ALL, and that absence is the signal.
+ *
+ * Every settling sheet checked carries ZERO fonts — they are photographs of a
+ * printed sheet, which is exactly why the app reads them with a model instead
+ * of a parser. A sales note or a price board always extracts hundreds of
+ * characters, so a PDF that yields none is not one of those.
+ *
+ * Deliberately not matched on words like "SETTLING": there are none to match.
+ * And not on the sender either — David: Don Fishing send these and it is
+ * usually Morna but "it might not always be from morna". */
+const SCAN_TEXT_LIMIT = 40
+
 function classifyKind(t) {
   t = t || ''
+  if (t.replace(/s+/g, '').length < SCAN_TEXT_LIMIT) return 'scan'
   // ---- Sales notes (per-vessel, private -> fleet tables) ----
   if (/My sales/i.test(t) || /MyTransactions/i.test(t)) return 'sales'              // Hanstholm "My sales"
   if (/Registered Seller Sales Note/i.test(t) || /PETER\s*&\s*J\.?\s*JOHNSTONE/i.test(t) || /pjj-peterhead/i.test(t)) return 'sales'
@@ -245,6 +258,42 @@ export const handler = async (event) => {
       // for classification and the line bundle the sales parsers consume).
       const extracted = await ParseCore.extractPages(pdf)
       const kind = classifyKind(extracted.fullText)
+
+      /* ---- A SETTLING SHEET -------------------------------------------------
+       * FILED, NOT SAVED, and that is the whole point.
+       *
+       * A sales note is parsed and reconciled against its own printed total, so
+       * the webhook can file it and be sure of it. A settling sheet is a
+       * photograph read by a model, and the review screen therefore shows each
+       * total TWICE — as printed and as the lines add up — with a difference
+       * having to be acknowledged before saving. Saving one straight off an
+       * email would walk round that check.
+       *
+       * So the sheet is put on the page and nothing more: the skipper opens it,
+       * reads the two totals and saves as he does today. What this removes is
+       * hunting for the attachment, not the checking. */
+      if (kind === 'scan') {
+        const { data: boat } = await supabase.from('su_boats')
+          .select('id').eq('fleet_id', sender.fleet_id).eq('active', true).limit(1).maybeSingle()
+        if (!boat) { results.push(`skip ${name}: a scan arrived but this fleet has no Square Up boat to file it against`); continue }
+
+        const buf2 = Buffer.from(b64, 'base64')
+        const path = `${boat.id}/${Date.now()}_${name.replace(/[^w.-]/g, '_')}`
+        const { error: ue } = await supabase.storage.from('su-documents')
+          .upload(path, buf2, { contentType: 'application/pdf', upsert: false })
+        if (ue) { results.push(`fail ${name}: could not store the sheet — ${ue.message}`); continue }
+
+        const hdrs = body.headers || {}
+        const { error: ie2 } = await supabase.from('su_inbox').insert({
+          fleet_id: sender.fleet_id, boat_id: boat.id,
+          file_path: path, filename: name, bytes: buf2.length,
+          from_email: String(hdrs.from || body.envelope?.from || '').slice(0, 300),
+          subject: String(hdrs.subject || '').slice(0, 300),
+        })
+        if (ie2) { results.push(`fail ${name}: stored but not recorded — ${ie2.message}`); continue }
+        results.push(`settling sheet ${name}: filed for review (${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'})`)
+        continue
+      }
 
       if (kind === 'sales') {
         const res = ParseCore.parseExtracted(extracted, name)
