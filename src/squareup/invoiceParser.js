@@ -42,38 +42,7 @@ export async function parseBondInvoice(file) {
   }
   rows.forEach((r) => r.items.sort((a, b) => a.x - b.x));
 
-  // Detect line items: a row where the last 6 cells are decimal numbers
-  // and the first cell is non-numeric description text.
-  const lineItems = [];
-  for (const r of rows) {
-    const cells = r.items;
-    if (cells.length < 7) continue;
-
-    // Count the trailing run of decimal-number cells. 60N Bond rows have 7
-    // numeric columns (Qty, Price/Rate, Discount, Net, %VAT, VAT, Total);
-    // older layouts without a Discount column have 6. Read whichever is
-    // present so Qty (first col) is never confused with Price/Rate.
-    let n = 0;
-    while (n < cells.length && NUM_RE.test(cells[cells.length - 1 - n].str)) n++;
-    if (n < 6) continue;
-
-    const take = n >= 7 ? 7 : 6;
-    const nums = cells.slice(-take).map((c) => parseNum(c.str));
-    const descCells = cells.slice(0, -take);
-    const description = descCells.map((c) => c.str).join(' ').trim();
-    // Skip rows whose description starts with header/footer words
-    if (/^(total|vat|net)\b/i.test(description)) continue;
-    if (!description) continue;
-
-    let qty, unitPrice, discount, net, vatPct, vat, total;
-    if (take === 7) {
-      [qty, unitPrice, discount, net, vatPct, vat, total] = nums;
-    } else {
-      [qty, unitPrice, net, vatPct, vat, total] = nums;
-      discount = 0;
-    }
-    lineItems.push({ description, qty, unitPrice, discount, net, vatPct, vat, total });
-  }
+  const lineItems = itemsFromRows(rows)
 
   // Extract metadata
   const flatText = allItems.map((i) => i.str).join(' ');
@@ -89,3 +58,82 @@ export async function parseBondInvoice(file) {
 
   return { lineItems, meta };
 }
+
+/* THE DESCRIPTION AND THE FIGURES ARE NOT ALWAYS ON THE SAME LINE.
+ *
+ * David, Aug 2026: "bond parse isn't picking up pinot grigo lines". On invoice
+ * SI-390 that item is too long for its column and the print breaks it in three:
+ *
+ *     Barefoot Pinot Grigio 11.5% 75cl        <- description, no figures
+ *     2.00 33.00 66.00 0.00 0.00 66.00        <- figures, no description
+ *     (WINBFPG)                               <- the product code, alone
+ *
+ * Every other item on the invoice is one line. The figures row was being
+ * dropped by `if (!description) continue` — so the line vanished, £66 of it,
+ * with nothing to show it had ever been there.
+ *
+ * SAME CLASS OF FAULT AS THE SALES NOTE. A fixed-width print, a cell too wide
+ * for its column, the tail pushed onto another line, and a parser anchoring on
+ * the part that moved. That one cost £54.24 in one row and was the third of its
+ * kind; this is the same shape in a different document.
+ *
+ * SPLIT OUT AND PURE so it can be tested against the real rows off the real
+ * invoice without a browser or a PDF — the reason `worksheetShape` exists.
+ */
+export function itemsFromRows(rows) {
+  const out = []
+  // Reading order, explicitly. Rows arrive in pdf.js text order, which is
+  // usually reading order and is not promised to be.
+  const ordered = [...rows].sort((r1, r2) => r1.page - r2.page || r2.y - r1.y)
+
+  // A description line held back in case the figures are on the next row.
+  let carried = null
+
+  ordered.forEach((r, i) => {
+    const cells = r.items
+    let n = 0
+    while (n < cells.length && NUM_RE.test(cells[cells.length - 1 - n].str)) n++
+
+    if (n < 6) {
+      /* No figures. Either an ordinary heading, or the description half of a
+         wrapped item — keep it and let the next row decide which. A row that is
+         only a product code belongs to the item ABOVE and is handled there. */
+      const txt = cells.map((c) => c.str).join(' ').trim()
+      if (txt && !isCodeOnly(txt) && !isFurniture(txt)) carried = txt
+      return
+    }
+
+    const take = n >= 7 ? 7 : 6
+    const nums = cells.slice(-take).map((c) => parseNum(c.str))
+    let description = cells.slice(0, -take).map((c) => c.str).join(' ').trim()
+
+    // The figures came on their own: the description is the line above.
+    if (!description && carried) description = carried
+    carried = null
+
+    if (!description) return
+    if (/^(total|vat|net)\b/i.test(description)) return
+
+    /* A lone product code on the next line belongs to this item. Worth keeping:
+       it is what tells two similar wines apart on the bond. */
+    const next = ordered[i + 1]
+    if (next) {
+      const nextTxt = next.items.map((c) => c.str).join(' ').trim()
+      if (isCodeOnly(nextTxt) && !description.includes(nextTxt)) description += ' ' + nextTxt
+    }
+
+    let qty, unitPrice, discount, net, vatPct, vat, total
+    if (take === 7) [qty, unitPrice, discount, net, vatPct, vat, total] = nums
+    else { [qty, unitPrice, net, vatPct, vat, total] = nums; discount = 0 }
+
+    out.push({ description, qty, unitPrice, discount, net, vatPct, vat, total })
+  })
+
+  return out
+}
+
+// "(WINBFPG)" — a product code on a line of its own.
+const isCodeOnly = (s) => /^\([A-Z0-9]{2,12}\)$/.test(String(s).trim())
+
+// Page furniture that must never be carried onto the next item's description.
+const isFurniture = (s) => /^(description|invoice|customer|delivery|notes|page \d|registered|bank details|account:|sort code|total|vat rate|exempt|due date)/i.test(String(s).trim())
