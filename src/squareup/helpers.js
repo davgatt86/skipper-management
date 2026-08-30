@@ -43,9 +43,24 @@ export const shareTextOf = (c) => {
 export const fmtShares = (n) =>
   n === Math.floor(n) ? String(n) : n.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 
+/* Money, with a thousands separator. David, Aug 2026 — a crewman's monthly
+ * bonus is four figures and £1153.40 is harder to read at a glance than
+ * £1,153.40, which matters most on the printed sheet where the columns are
+ * right-aligned and scanned down.
+ *
+ * A WHOLE NUMBER KEEPS ITS SHORT FORM: £50, not £50.00. That was here before
+ * and is deliberate — the share figures on this page are usually round, and
+ * pence nobody entered are noise.
+ *
+ * The minus goes OUTSIDE the pound sign. "£-1,153.40" reads as a strange
+ * currency; "-£1,153.40" reads as money owed the other way. */
 export const fmtMoney = (n) => {
   const v = Number(n) || 0;
-  return v === Math.floor(v) ? `£${v}` : `£${v.toFixed(2)}`;
+  const a = Math.abs(v);
+  const body = a === Math.floor(a)
+    ? a.toLocaleString('en-GB')
+    : a.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (v < 0 ? '-£' : '£') + body;
 };
 
 export const sumBondFor = (bondItems, target) =>
