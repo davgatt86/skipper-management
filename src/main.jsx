@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
 import { requestPersistentStorage } from './lib/offline/db.js'
+import { buildLoadedCleanly, recoverStaleBuild } from './lib/liveBuild.js'
 import App from './App.jsx'
 
 // Fonts are bundled, not fetched. A boat on patchy signal still gets the
@@ -50,6 +51,22 @@ if (Capacitor.isNativePlatform()) {
     else CapApp.exitApp()
   })
 }
+
+/* THE LAZY ROUTES CAN GO STALE TOO. Every page in App.jsx is a lazy import, so
+   a deploy landing while a tab is open breaks the NEXT page he opens, not just
+   the parser. Vite raises `vite:preloadError` for exactly this; catching it
+   here covers every route in one place rather than at forty call sites.
+
+   preventDefault stops the unhandled rejection reaching the console as a raw
+   "Failed to fetch dynamically imported module" — recoverStaleBuild decides
+   whether a reload is safe, and refuses when offline or already tried. */
+window.addEventListener('vite:preloadError', (e) => {
+  if (recoverStaleBuild()) e.preventDefault()
+})
+
+// This build loaded and ran, so clear the one-shot guard: a LATER update in the
+// same session should still be able to heal itself once.
+buildLoadedCleanly()
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

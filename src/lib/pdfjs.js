@@ -21,15 +21,19 @@
  * PDF, and once fetched the service worker keeps it like any other asset.
  */
 
+import { freshImport } from './liveBuild.js'
+
 let cached = null
 
 export async function ensurePdfjs() {
   if (cached) return cached
+  // Same stale-chunk guard as the parser: pdf.js is the other big on-demand
+  // load, so it is the other one a deploy can pull out from under an open page.
   const [lib, worker] = await Promise.all([
-    import('pdfjs-dist'),
+    freshImport(() => import('pdfjs-dist')),
     // ?url yields the built worker's filename rather than inlining it — pdf.js
     // spawns the worker itself, and same-origin means it is cacheable.
-    import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+    freshImport(() => import('pdfjs-dist/build/pdf.worker.min.mjs?url')),
   ])
   lib.GlobalWorkerOptions.workerSrc = worker.default
   cached = lib

@@ -25,12 +25,20 @@
 // caches the chunks like any other asset — so the second upload works offline.
 
 import { ensurePdfjs } from './pdfjs.js'
+import { freshImport } from './liveBuild.js'
 
 let cached = null
 
 export async function ensureParsing() {
   if (cached) return cached
-  const [pdfjsLib, core] = await Promise.all([ensurePdfjs(), import('./parse-core.cjs')])
+  /* The chunk name is baked into the JS already running, so a deploy that
+     changes the parser leaves an open page asking for a file that is gone.
+     freshImport reloads once, online only, rather than handing the man at the
+     upload button "Failed to fetch dynamically imported module". */
+  const [pdfjsLib, core] = await Promise.all([
+    ensurePdfjs(),
+    freshImport(() => import('./parse-core.cjs')),
+  ])
   cached = { pdfjsLib, ParseCore: core.default ?? core }
   return cached
 }

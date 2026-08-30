@@ -3058,6 +3058,49 @@ reading policy text and one remembered incident; the dashboard call was found
 by asking the database what was actually slow. Read `pg_stat_statements`
 before optimising anything here.
 
+### A deploy that lands while a page is open — `src/lib/liveBuild.js`
+
+David, Aug 2026, uploading a note: *"Failed to fetch dynamically imported
+module: https://skippermanagement.co.uk/assets/parse-core-CDChEAJ_.js"*.
+
+**Nothing was broken.** The parser and pdf.js are loaded ON DEMAND — they are
+large and most sessions never upload a note — so Vite splits them into
+content-hashed chunks whose NAMES are baked into the JS already running in the
+browser. Bumping the parser to 1.3.5 changed the hash, the deploy replaced the
+file, and his open page went on asking for one that no longer existed.
+
+Not a service-worker fault and not an offline fault: navigations are
+network-first, so a plain reload fixes it. But the man is standing at the upload
+button and should not have to know that.
+
+**THE RELOAD IS THE DANGEROUS PART, NOT THE DETECTION**, and it is guarded three
+ways, because a reload loop on a boat with no signal is far worse than the error
+it replaces:
+
+- **Online only.** Offline the chunk is missing because it was never cached, and
+  reloading cannot conjure it — it says so instead, and does not burn its one
+  attempt.
+- **Once per session**, so a half-finished deploy cannot loop. `buildLoadedCleanly()`
+  clears the flag on a build that actually ran, so a LATER update in the same
+  session can still heal itself.
+- **Only for this failure.** A parser that throws on a bad note must still say
+  the note is bad. Anything not a stale-chunk error is rethrown untouched, and a
+  plain `NetworkError` is deliberately NOT matched — that is being at sea.
+
+Three browsers word it three ways and none of it is structured, so the match is
+on the shapes actually seen (Chrome *"Failed to fetch dynamically imported
+module"*, Safari *"Importing a module script failed."*, Firefox *"error loading
+dynamically imported module"*). **The raw wording is never shown to the user** —
+it names a file he can do nothing about.
+
+`vite:preloadError` is handled once in `main.jsx` rather than at every call
+site: every page in `App.jsx` is a lazy import, so a deploy breaks the next page
+opened, not only the parser.
+
+`test-livebuild.mjs` — 25 checks, including that it refuses offline, refuses
+twice, and passes a real parse failure through unchanged.
+
+
 ## Working offline
 
 Built Aug 2026, because an engineer logs in the engine room and that is where
