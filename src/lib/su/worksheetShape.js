@@ -36,6 +36,7 @@ export function stateToRows(state, boatId) {
   const {
     tripDate, quota, crew = [], fuel = [], haulage = [], haulageNote = '',
     labour = [], foreignCrew = [], bondItems = [], boxesLanded, daysAtSea, market, tripNo,
+    landings,
   } = state
 
   const head = {
@@ -46,6 +47,7 @@ export function stateToRows(state, boatId) {
     days_at_sea: num(daysAtSea),
     boxes_landed: num(boxesLanded),
     quota_recovery_pct: num(quota),
+    landings: num(landings),
     notes: haulageNote?.trim() || null,
     status: 'draft',
   }
@@ -100,6 +102,12 @@ export function stateToRows(state, boatId) {
     crew_name: c.name.trim(),
     share_key: c.shareKey || null,
     share_value: num(c.shareCustom) ?? null,
+    /* THE ROLE AND ITS LANDINGS, not just the percentage they produced. A
+       figure stored without the thing that produced it is exactly how the bond
+       went wrong — reopening the sheet would recompute every man as if he had
+       done every landing. Empty means all of them. */
+    role: c.role || null,
+    role_landings: (c.roleLandings && c.roleLandings.length) ? c.roleLandings : null,
     bond: bondFor(c.id) || 0,
     bonus: num(c.bonus) || 0,
     sort: i,
@@ -120,6 +128,8 @@ export function rowsToState(head, lines = [], crewRows = []) {
     shareKey: c.share_key || 'full',
     shareCustom: s(c.share_value),
     bonus: s(c.bonus || ''),
+    role: c.role || null,
+    roleLandings: Array.isArray(c.role_landings) ? c.role_landings : [],
   }))
 
   const bondItems = crewRows
@@ -144,6 +154,7 @@ export function rowsToState(head, lines = [], crewRows = []) {
     market: s(head.market),
     daysAtSea: s(head.days_at_sea),
     boxesLanded: s(head.boxes_landed),
+    landings: s(head.landings),
     quota: s(head.quota_recovery_pct ?? ''),
     haulageNote: head.notes || carried?.note || '',
     crew,

@@ -14,10 +14,21 @@ import { getWorksheetBoat, saveWorksheet, listWorksheets, loadWorksheet, deleteW
 import { Section, IconBtn, MoneyInput, PercentInput, Label, selectStyle, inputStyle } from './ui.jsx';
 import BondSection from './BondSection.jsx';
 import { ForeignCrewRow, AddForeignMenu } from './ForeignCrewSection.jsx';
+import { BONUS_ROLES, roleForRank, computeBonuses, resolveRates, fmtPct } from '../lib/su/bonuses.js';
 import Preview from './Preview.jsx';
 
 // ── Crew row ───────────────────────────────────────────────────────────
-function CrewRow({ c, onUpdate, onRemove, onToggleSave }) {
+function CrewRow({ c, onUpdate, onRemove, onToggleSave, landings, autoPct }) {
+  /* A man can hold a role on only SOME landings — "landing 1 & 2, 2 different
+     engineers". Only worth asking once there is more than one landing, so the
+     ordinary trip stays two taps. */
+  const on = c.roleLandings && c.roleLandings.length ? c.roleLandings : null;
+  const toggleLanding = (n) => {
+    const all = Array.from({ length: landings }, (_, i) => i + 1);
+    const cur = on || all;
+    const next = cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n].sort();
+    onUpdate({ roleLandings: next.length === landings ? [] : next });
+  };
   const saved = !!c.rosterId;
   return (
     <div style={{ background: 'var(--surface-2)', border: '1px solid var(--line-2)', borderRadius: 4, padding: 11, marginBottom: 9 }}>
@@ -44,6 +55,47 @@ function CrewRow({ c, onUpdate, onRemove, onToggleSave }) {
           <Label>Bonus %</Label>
           <PercentInput value={c.bonus} onChange={(v) => onUpdate({ bonus: v })} />
         </div>
+      </div>
+
+      {/* ROLE, AND THE BONUS FALLS OUT OF IT. David: "it would be good if can
+          just select role(s) and bonuses auto select". The rate is a setting;
+          picking the role fills the box, and the box is still editable because
+          a trip can always be the exception. */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 8, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 130 }}>
+          <Label>Role bonus</Label>
+          <select value={c.role || ''} style={selectStyle}
+                  onChange={(e) => onUpdate({ role: e.target.value || null, roleLandings: [] })}>
+            <option value="">— none —</option>
+            {BONUS_ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+          </select>
+        </div>
+
+        {c.role && landings > 1 && (
+          <div>
+            <Label>Landings</Label>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Array.from({ length: landings }, (_, i) => i + 1).map((n) => {
+                const active = !on || on.includes(n);
+                return (
+                  <button key={n} onClick={() => toggleLanding(n)} style={{
+                    minWidth: 30, padding: '7px 0', borderRadius: 3, cursor: 'pointer',
+                    border: '1px solid ' + (active ? 'var(--hull)' : 'var(--line)'),
+                    background: active ? 'var(--hull)' : 'transparent',
+                    color: active ? 'var(--on-navy)' : 'var(--mute)', fontWeight: 700, fontSize: 12,
+                  }}>{n}</button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {c.role && (
+          <div style={{ color: 'var(--mute)', fontSize: 12, paddingBottom: 8 }}>
+            earns <b style={{ color: 'var(--text)' }}>{fmtPct(autoPct)}</b>
+            {autoPct === 0 && ' — not on any landing'}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -138,6 +190,16 @@ export default function SquareUp() {
   const [market, setMarket] = useState('');
   const [daysAtSea, setDaysAtSea] = useState('');
   const [boxesLanded, setBoxesLanded] = useState('');
+  /* HOW MANY TIMES SHE LANDED THIS TRIP. The role bonuses are split across the
+     landings, so this is what makes "2 different engineers, 0.25% each" work.
+     It cannot come from the rota — Audacious has no rota trips at all. */
+  const [landings, setLandings] = useState('1');
+
+  // Contracted crew, and what the month closeout says each is owed. The
+  // monthly bonus is a CONTRACTED thing: Andrejs is self-employed and does not
+  // get one, which is why crew_type is the test and not nationality.
+  const [contracted, setContracted] = useState([]);
+  const [monthBonus, setMonthBonus] = useState({ month: null, rows: [] });
 
   // Keeping the worksheet: localStorage stays the working copy, this is the
   // deliberate save so it survives and can be reconciled later.
@@ -153,10 +215,25 @@ export default function SquareUp() {
   useEffect(() => {
     setRosterState(loadRoster());
     supabase.from('crew')
-      .select('id, full_name, status, archived_at, crew_type')
+      .select('id, full_name, status, archived_at, crew_type, rank_code')
       .then(({ data }) => {
-        const rows = (data || []).filter(c => !c.archived_at && c.status !== 'former' && c.crew_type === 'self_employed');
-        setAppCrew(rows.map(c => ({ id: 'app-' + c.id, name: c.full_name, fromApp: true })));
+        const live = (data || []).filter(c => !c.archived_at && c.status !== 'former');
+        setAppCrew(live.filter(c => c.crew_type === 'self_employed')
+          .map(c => ({ id: 'app-' + c.id, name: c.full_name, fromApp: true, rank: c.rank_code })));
+        setContracted(live.filter(c => c.crew_type === 'contracted')
+          .map(c => ({ id: c.id, name: c.full_name })));
+      });
+
+    /* THE MONTHLY BONUS FIGURE ALREADY EXISTS. Month Closeout works it out from
+       the boxes each man was aboard for; typing it again on this page is how
+       two records of the same payment start to disagree. Latest month first. */
+    supabase.from('month_closeouts')
+      .select('month, total_paid, crew_id, closed_at')
+      .order('month', { ascending: false }).limit(40)
+      .then(({ data }) => {
+        const rows = data || [];
+        const latest = rows[0]?.month || null;
+        setMonthBonus({ month: latest, rows: rows.filter(r => r.month === latest) });
       });
     setForeignRosterState(loadForeignRoster());
     // A fleet with no su_boats row cannot keep worksheets — the page stays
@@ -178,6 +255,7 @@ export default function SquareUp() {
       if (t.market !== undefined) setMarket(t.market);
       if (t.daysAtSea !== undefined) setDaysAtSea(t.daysAtSea);
       if (t.boxesLanded !== undefined) setBoxesLanded(t.boxesLanded);
+      if (t.landings !== undefined) setLandings(t.landings);
       /* WHICH KEPT SHEET THIS IS. Without it every save from a fresh page load
          minted a NEW worksheet, so the same trip went in again and again — the
          two rows on the fleet record are one sheet kept twice. It is validated
@@ -193,11 +271,11 @@ export default function SquareUp() {
     if (!loaded) return;
     const t = setTimeout(() => {
       saveTrip({ vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote,
-                 foreignCrew, bondItems, tripNo, market, daysAtSea, boxesLanded, worksheetId });
+                 foreignCrew, bondItems, tripNo, market, daysAtSea, boxesLanded, landings, worksheetId });
     }, 400);
     return () => clearTimeout(t);
   }, [vessel, tripDate, crew, quota, fuel, labour, haulage, haulageNote, foreignCrew,
-      bondItems, tripNo, market, daysAtSea, boxesLanded, worksheetId, loaded]);
+      bondItems, tripNo, market, daysAtSea, boxesLanded, landings, worksheetId, loaded]);
 
 
   // The kept sheets for this boat. Refreshed after every save and every delete
@@ -237,7 +315,7 @@ export default function SquareUp() {
       if (!t) { setSaveState('error'); setSaveMsg('That worksheet has gone — it may have been deleted on another device.'); return; }
       setTripDate(t.tripDate || todayISO());
       setTripNo(t.tripNo); setMarket(t.market);
-      setDaysAtSea(t.daysAtSea); setBoxesLanded(t.boxesLanded);
+      setDaysAtSea(t.daysAtSea); setBoxesLanded(t.boxesLanded); setLandings(t.landings || '1');
       setQuota(t.quota || '10');
       setCrew(t.crew); setFuel(t.fuel); setLabour(t.labour);
       setHaulage(t.haulage); setHaulageNote(t.haulageNote);
@@ -270,7 +348,7 @@ export default function SquareUp() {
     try {
       const id = await saveWorksheet(
         { tripDate, quota, crew, fuel, haulage, haulageNote, labour, foreignCrew, bondItems,
-          tripNo, market, daysAtSea, boxesLanded },
+          tripNo, market, daysAtSea, boxesLanded, landings },
         suBoat.id,
         target
       );
@@ -424,11 +502,58 @@ export default function SquareUp() {
     setForeignCrew((prev) => prev.map((c) => (c.rosterId === rosterId ? { ...c, rosterId: null } : c)));
   };
 
+  /* THE ROLE BONUSES. A role's rate is split across the landings, and each
+     landing's share among the men who held it — which is what makes "2 mates
+     landing 1 and 1 mate landing 2" come out 0.0625/0.0625/0.125. The maths is
+     in src/lib/su/bonuses.js and tested against David's own worked examples. */
+  const nLandings = Math.max(1, Number(landings) || 1);
+  const bonusPlan = useMemo(() => computeBonuses(
+    crew.filter((c) => c.role).map((c) => ({
+      id: c.id, name: c.name, role: c.role, landings: c.roleLandings,
+    })),
+    nLandings,
+    resolveRates(null),
+  ), [crew, nLandings]);
+  const pctFor = (id) => bonusPlan.rows.find((r) => r.id === id)?.pct || 0;
+
+  /* Picking a role fills the bonus box. Done here rather than in the row so it
+     sees the WHOLE crew — a second engineer joining halves the first one's
+     share, and his box has to change with it. */
+  useEffect(() => {
+    setCrew((prev) => {
+      let touched = false;
+      const next = prev.map((c) => {
+        if (!c.role) return c;
+        const want = String(pctFor(c.id));
+        if (c.bonus === want) return c;
+        touched = true;
+        return { ...c, bonus: want };
+      });
+      return touched ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bonusPlan]);
+
   // ── Trip reset ───────────────────────────────────────────────────────
+  /* THE CREW STAY. David, Aug 2026: "99% of all trips are same crew with
+   * slight changes to bonus %'s". Clearing them meant rebuilding the same
+   * fourteen men every trip to change one figure, which is how a form stops
+   * getting filled in properly.
+   *
+   * So a new trip keeps WHO WAS ABOARD and what they are on — names, share
+   * keys, roles — and clears everything that belongs to the trip itself: the
+   * fuel, the boxes, the dates, the bond, the haulage. The bonuses carry over
+   * too, because a slight change is easier to make than a figure to re-enter.
+   *
+   * The bond is deliberately NOT kept. It is bought for a trip and carrying it
+   * would charge a man twice for the same baccy. */
   const startNewTrip = () => {
-    if (!window.confirm('Start a new trip? This clears the current form. Your saved crew rosters stay.')) return;
-    setTripDate(todayISO()); setCrew([]); setQuota('10');
-    setFuel([]); setLabour([]); setHaulage([]); setHaulageNote(''); setForeignCrew([]); setBondItems([]);
+    if (!window.confirm(
+      'Start a new trip?\n\n'
+      + 'The crew stay as they are — names, shares, roles and bonuses. '
+      + 'The fuel, boxes, dates, bond and haulage are cleared.')) return;
+    setTripDate(todayISO()); setQuota('10');
+    setFuel([]); setLabour([]); setHaulage([]); setHaulageNote(''); setBondItems([]);
     setTripNo(''); setMarket(''); setDaysAtSea(''); setBoxesLanded('');
     /* AND IT LETS GO OF THE KEPT SHEET. `worksheetId` is what `keepWorksheet`
      * updates in place, so a new trip that held on to it would write this
@@ -507,6 +632,8 @@ export default function SquareUp() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
             <div><Label>Days at sea</Label><input value={daysAtSea} onChange={(e) => setDaysAtSea(e.target.value)} inputMode="decimal" placeholder="e.g. 6.75" style={inputStyle} /></div>
             <div><Label>Boxes landed</Label><input value={boxesLanded} onChange={(e) => setBoxesLanded(e.target.value)} inputMode="numeric" placeholder="e.g. 1192" style={inputStyle} /></div>
+            {/* The role bonuses divide by this. Usually two. */}
+            <div><Label>Landings</Label><input value={landings} onChange={(e) => setLandings(e.target.value)} inputMode="numeric" placeholder="2" style={inputStyle} /></div>
           </div>
         </Section>
 
@@ -517,7 +644,7 @@ export default function SquareUp() {
             <div style={{ color: 'var(--mute)', fontSize: 13.5, padding: '4px 0 10px', fontStyle: 'italic' }}>No crew added yet.</div>
           )}
           {crew.map((c) => (
-            <CrewRow key={c.id} c={c}
+            <CrewRow key={c.id} c={c} landings={nLandings} autoPct={pctFor(c.id)}
               onUpdate={(p) => updateCrew(c.id, p)}
               onRemove={() => removeCrew(c.id)}
               onToggleSave={() => toggleSaveRoster(c)} />

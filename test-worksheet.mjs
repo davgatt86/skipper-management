@@ -178,4 +178,46 @@ eq(empties.lines.length, 0, 'blank rows are not written')
 eq(stateToRows({ fuel: [{ location: 'Peterhead', litres: '38,000 lt' }] }, BOAT).lines[0].qty,
    38000, 'a quantity typed with commas and a unit still stores as a number')
 
+// --- THE ROLE AND ITS LANDINGS SURVIVE ------------------------------------
+/* The bonus percentage is DERIVED from the role and the landings held. Storing
+ * only the percentage is how the bond went wrong: reopening the sheet would
+ * recompute every man as if he had done every landing, and quietly change what
+ * two of them were owed. */
+{
+  const withRoles = {
+    ...state,
+    landings: '2',
+    crew: [
+      { id: 'c1', name: 'David Gatt', shareKey: 'full', shareCustom: '', bonus: '3', role: 'skipper' },
+      { id: 'c2', name: 'Norman Wood', shareKey: 'full', shareCustom: '', bonus: '0.25', role: 'engineer', roleLandings: [1] },
+      { id: 'c3', name: 'Animal', shareKey: 'full', shareCustom: '', bonus: '0.25', role: 'engineer', roleLandings: [2] },
+    ],
+    bondItems: [],
+  }
+  const st = asStored(stateToRows(withRoles, BOAT))
+  const back2 = rowsToState(st.head, st.lines, st.crewRows)
+
+  eq(back2.landings, '2', 'the landing count comes back')
+  eq(back2.crew.map(c => c.role), ['skipper', 'engineer', 'engineer'], 'and every role')
+  eq(back2.crew.map(c => c.roleLandings), [[], [1], [2]],
+     'with the landings each man held it on — empty meaning all of them')
+  eq(back2.crew.map(c => c.bonus), ['3', '0.25', '0.25'], 'and the figures they produced')
+
+  /* The two engineers must not come back looking like they both did both
+     landings — that would double the engineer bonus on the next save. */
+  ok(back2.crew[1].roleLandings.length === 1 && back2.crew[2].roleLandings.length === 1,
+     'one landing each, not both')
+
+  const twice2 = (() => { const s = asStored(stateToRows(back2, BOAT)); return rowsToState(s.head, s.lines, s.crewRows) })()
+  eq(twice2.crew.map(c => c.roleLandings), [[], [1], [2]], 'stable on a second trip through')
+  eq(twice2.landings, '2', 'and so is the landing count')
+}
+
+// A man with no role stores nothing rather than an empty string.
+{
+  const st = asStored(stateToRows({ crew: [{ id: 'x', name: 'Deckhand', shareKey: 'full' }] }, BOAT))
+  eq(st.crewRows[0].role, null, 'no role is null, not blank')
+  eq(st.crewRows[0].role_landings, null, 'and no landings either')
+}
+
 console.log('worksheet round trip: ' + n + ' checks passed')
