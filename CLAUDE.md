@@ -1700,13 +1700,55 @@ In the order agreed:
 
 Also agreed, not yet scheduled:
 
-- **SQUARE UP SHOULD LINK TO THE REST OF THE PAGE** (David, Aug 2026). It sits
-  on its own today: the crew come from a roster kept inside the worksheet rather
-  than from Crew Status, the fuel goes in by hand though `vessel_fuel_log`
-  already has the bunkerings, the boxes are typed though the landing knows them,
-  and the trip is a date typed in when `quota_trips` carries the real one.
-  Every one of those is a figure this app already holds being re-entered, which
-  is how two records of the same thing start to disagree. Not started.
+- ~~**SQUARE UP SHOULD LINK TO THE REST OF THE PAGE**~~ — **BUILT Aug 2026.**
+  It re-entered figures the app already held. Now:
+
+  **ROLE PICKS THE BONUS** — `src/lib/su/bonuses.js`. Skipper 3%, engineer
+  0.5%, mate 0.25%, and David's sharing rule is ONE rule: *a role's rate is
+  split across the trip's LANDINGS, and each landing's share among the men who
+  held that role on it.* Two engineers a landing each is 0.25% apiece; two
+  mates on landing one and one on landing two is 0.0625/0.0625/0.125 — his own
+  worked figures, asserted verbatim. Recomputed across the WHOLE crew, because
+  a second engineer joining halves the first one's share.
+
+  **A landing with nobody in a role is REPORTED, never redistributed.** Handing
+  that share to the other man would invent a payment nobody agreed; dropping it
+  would lose it. Percentages carry four decimals — 0.0625 is real, and rounding
+  to 0.06 loses money every trip.
+
+  **THE ROLE IS STORED, not just the percentage.** `su_worksheets.landings` and
+  `su_worksheet_crew.role/role_landings`. A figure kept without the thing that
+  produced it is how the bond went wrong: reopening a sheet would have
+  recomputed every man as if he did every landing.
+
+  **THE MONTHLY BONUS COMES FROM MONTH CLOSEOUT.** Per man, not one figure —
+  Christopher Catam is £543.67 against the others' £1,153.40 for August because
+  he was aboard part of the month. Only CONTRACTED crew get it: Andrejs was
+  moved to self-employed, so `crew_type` is the test and **no nationality test
+  exists anywhere**, which would have been wrong the first time a Filipino
+  engineer joined on his terms.
+
+  **LUMPER BOXES COME OFF THE SALES NOTE, PETERHEAD ONLY.** Offered as a button
+  rather than filled in — a lumper is not always paid on every box landed.
+  **The first filter was too loose:** `/peterhead|don fishing/` also matched
+  Ullapool, Scrabster and Kinlochbervie, where the agent also sells and the
+  lumpers are not on the Peterhead rate. Denmark was the case David named;
+  those three were the ones the loose match would have got wrong. A bare
+  "Don Fishing" with no port is not offered either — better no figure than a
+  wrong one.
+
+  **THE CREW STAY ON A NEW TRIP.** *"99% of all trips are same crew with slight
+  changes to bonus %'s"*. Names, shares, roles and bonuses carry; fuel, boxes,
+  dates, bond and haulage clear. **The bond deliberately does not carry** — it
+  is bought for a trip, and keeping it would charge a man twice for the same
+  baccy.
+
+  **AND A KEPT SHEET CAN BE TIED TO ITS SETTLING.** `settlement_id` existed
+  since the table was built and nothing ever set it. Chosen, never matched on
+  the date: a settlement covers a RUN of trips and the office does not say
+  which, which is exactly why `solveSettlementRuns` is the hardest code here.
+  The skipper knows, so he says.
+
 
 - ~~**A GRADING CARD SHEET for what the trip actually landed**~~ — **BUILT
   Aug 2026**, see the market layout section. Banked.

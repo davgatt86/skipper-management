@@ -111,6 +111,37 @@ export async function listWorksheets(boatId) {
   }))
 }
 
+/* WHICH SETTLING SHEET THIS WORKSHEET BECAME.
+ *
+ * The column has existed since the table was built and nothing ever set it, so
+ * there was no way to tell which worksheet produced which settlement — the two
+ * records of one trip sat side by side with nothing joining them.
+ *
+ * Set by hand rather than matched on the date. A settlement covers a RUN of
+ * trips, not one, and the office does not say which — inferring it is the
+ * hardest code in this repo (solveSettlementRuns) and it exists precisely
+ * because a date window is not good enough. Here the skipper knows, so he says.
+ */
+export async function linkWorksheet(id, settlementId) {
+  const { error } = await supabase
+    .from('su_worksheets')
+    .update({ settlement_id: settlementId || null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) throw error
+}
+
+/** The boat's settlements, newest first, to choose from. */
+export async function listSettlements(boatId) {
+  if (!boatId) return []
+  const { data, error } = await supabase
+    .from('su_settlements')
+    .select('id, reference, settling_date')
+    .eq('boat_id', boatId)
+    .order('settling_date', { ascending: false })
+    .limit(40)
+  return error ? [] : (data || [])
+}
+
 export async function deleteWorksheet(id) {
   // The children go with it: both carry `worksheet_id` on delete cascade.
   const { error } = await supabase.from('su_worksheets').delete().eq('id', id)

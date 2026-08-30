@@ -10,7 +10,7 @@ import {
 import { SHARE_OPTIONS, QUOTA_OPTS } from './constants.js';
 import { uid, todayISO, shareValOf, fmtShares, fmtMoney } from './helpers.js';
 import { loadRoster, saveRoster, loadForeignRoster, saveForeignRoster, loadTrip, saveTrip } from './storage.js';
-import { getWorksheetBoat, saveWorksheet, listWorksheets, loadWorksheet, deleteWorksheet } from '../lib/su/worksheet.js';
+import { getWorksheetBoat, saveWorksheet, listWorksheets, loadWorksheet, deleteWorksheet, linkWorksheet, listSettlements } from '../lib/su/worksheet.js';
 import { Section, IconBtn, MoneyInput, PercentInput, Label, selectStyle, inputStyle } from './ui.jsx';
 import BondSection from './BondSection.jsx';
 import { ForeignCrewRow, AddForeignMenu } from './ForeignCrewSection.jsx';
@@ -201,6 +201,12 @@ export default function SquareUp() {
   const [contracted, setContracted] = useState([]);
   const [monthBonus, setMonthBonus] = useState({ month: null, rows: [] });
 
+  /* WHAT THE SALES NOTE SAYS SHE LANDED. David: "boxes for lumpers could use
+     fish sales box totals, only for PD sales as denmark charge differently."
+     Looked up on the trip date; Danish landings are deliberately not offered,
+     because the lumpers there are not paid by the box. */
+  const [landingBoxes, setLandingBoxes] = useState(null);
+
   // Keeping the worksheet: localStorage stays the working copy, this is the
   // deliberate save so it survives and can be reconciled later.
   const [suBoat, setSuBoat] = useState(null);
@@ -210,6 +216,8 @@ export default function SquareUp() {
   const [kept, setKept] = useState([]);
   const [keptOpen, setKeptOpen] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
+  // Settlements to tie a kept sheet to. Chosen, never guessed from the date.
+  const [settlements, setSettlements] = useState([]);
 
   // Load on mount
   useEffect(() => {
@@ -294,6 +302,7 @@ export default function SquareUp() {
   }, []);
 
   useEffect(() => { if (suBoat?.id) refreshKept(suBoat.id); }, [suBoat?.id, refreshKept]);
+  useEffect(() => { if (suBoat?.id) listSettlements(suBoat.id).then(setSettlements); }, [suBoat?.id]);
 
   /* OPENING ONE REPLACES WHAT IS ON THE FORM, so it asks first — the working
    * copy is whatever you have typed since, and it only lives in localStorage.
@@ -534,6 +543,71 @@ export default function SquareUp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bonusPlan]);
 
+  /* The landing for this trip date, if there is one. Peterhead only: the market
+     is on the landing itself, so this cannot be fooled by a trip typed as
+     "Peterhead" that actually sold in Denmark. */
+  useEffect(() => {
+    if (!tripDate) { setLandingBoxes(null); return; }
+    let cancel = false;
+    supabase.from('sales_landings')
+      .select('boxes, market, vessel, landing_date')
+      .eq('landing_date', tripDate)
+      .then(({ data }) => {
+        if (cancel) return;
+        /* PETERHEAD ONLY, and the market string is the test. Matching
+           "Don Fishing" would have swept in Ullapool, Scrabster and
+           Kinlochbervie — the boat's agent sells at all of them and the lumpers
+           there are not on the Peterhead rate. Denmark was the case David
+           named; those three were the ones the loose match would have got
+           wrong. A bare "Don Fishing" with no port is not offered either:
+           better no figure than a wrong one. */
+        const pd = (data || []).filter((l) => /peterhead/i.test(l.market || ''));
+        if (!pd.length) { setLandingBoxes(null); return; }
+        // More than one note the same day is one trip landing twice — sum them.
+        setLandingBoxes({
+          boxes: pd.reduce((s, l) => s + Number(l.boxes || 0), 0),
+          notes: pd.length,
+          market: pd[0].market,
+        });
+      });
+    return () => { cancel = true; };
+  }, [tripDate]);
+
+  /* THE MONTHLY BONUS IS ALREADY WORKED OUT. Month Closeout computes it from
+     the boxes each man was aboard for; typing it again here is how two records
+     of the same payment start to disagree — the reason this link was asked for.
+     Per man, not one figure: Christopher Catam came out £543.67 against the
+     others' £1,153.40 because he was on part of the month. */
+  const monthPull = useMemo(() => {
+    const byId = new Map(contracted.map((c) => [c.id, c.name]));
+    return monthBonus.rows
+      .filter((r) => byId.has(r.crew_id) && Number(r.total_paid) > 0)
+      .map((r) => ({
+        crewId: r.crew_id,
+        name: byId.get(r.crew_id),
+        amount: Number(r.total_paid),
+        closed: !!r.closed_at,
+      }));
+  }, [contracted, monthBonus]);
+
+  const takeMonthBonuses = () => {
+    if (!monthPull.length) return;
+    setForeignCrew((prev) => {
+      const next = [...prev];
+      for (const m of monthPull) {
+        const at = next.findIndex((c) => (c.name || '').toLowerCase() === m.name.toLowerCase());
+        // Update in place rather than adding a second row for the same man.
+        if (at >= 0) next[at] = { ...next[at], name: m.name, bonus: String(m.amount) };
+        else next.push({ id: uid(), rosterId: null, name: m.name, bonus: String(m.amount) });
+      }
+      return next;
+    });
+  };
+
+  const monthLabel = monthBonus.month
+    ? new Date(monthBonus.month + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
+    : null;
+
   // ── Trip reset ───────────────────────────────────────────────────────
   /* THE CREW STAY. David, Aug 2026: "99% of all trips are same crew with
    * slight changes to bonus %'s". Clearing them meant rebuilding the same
@@ -754,6 +828,19 @@ export default function SquareUp() {
                 <input value={l.name} onChange={(e) => updateLabour(l.id, { name: e.target.value })} placeholder="Name (e.g. Alec Buchan, lumpers)" style={{ ...inputStyle, flex: 1 }} />
                 <IconBtn onClick={() => removeLabour(l.id)} title="Remove" />
               </div>
+              {/* THE NOTE ALREADY KNOWS THE BOXES. Offered rather than filled
+                  in: a lumper is not always paid on every box landed, and
+                  overwriting what he typed would be worse than a button. */}
+              {(l.basis || 'box') === 'box' && landingBoxes && String(l.boxes) !== String(landingBoxes.boxes) && (
+                <button onClick={() => updateLabour(l.id, { boxes: String(landingBoxes.boxes) })}
+                        style={{
+                          background: 'transparent', border: '1px solid var(--hull)', color: 'var(--hull)',
+                          borderRadius: 3, padding: '5px 9px', cursor: 'pointer', fontSize: 12, marginBottom: 8,
+                        }}>
+                  Use {Number(landingBoxes.boxes).toLocaleString('en-GB')} boxes from the sales note
+                  {landingBoxes.notes > 1 ? ` (${landingBoxes.notes} notes)` : ''}
+                </button>
+              )}
               <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <select value={l.basis || 'box'} onChange={(e) => updateLabour(l.id, { basis: e.target.value })} style={{ ...inputStyle, flex: 1, minWidth: 0 }}>
                   <option value="box">£ per box</option>
@@ -789,7 +876,28 @@ export default function SquareUp() {
 
         {/* Foreign crew */}
         <Section icon={Globe} title="Foreign Crew Bonus" count={foreignCrew.length === 0 ? null : `${foreignCrew.length} crew`}>
-          {foreignCrew.length === 0 && !showAddForeign && (
+          {/* TAKE IT FROM MONTH CLOSEOUT rather than typing it. Only the
+              CONTRACTED crew get a monthly bonus — Andrejs is self-employed and
+              does not, which is why crew_type is the test and not nationality.
+              A closed month is the one to trust: it is the figure that was
+              actually settled. */}
+          {monthPull.length > 0 && (
+            <div style={{ marginBottom: 10 }}>
+              <button onClick={takeMonthBonuses} style={{
+                background: 'var(--hull)', color: 'var(--on-navy)', border: 'none',
+                borderRadius: 9, padding: '10px 14px', cursor: 'pointer', fontWeight: 700, fontSize: 14,
+              }}>
+                Take {monthLabel}'s bonuses ({monthPull.length} crew)
+              </button>
+              <div style={{ color: 'var(--mute)', fontSize: 11.5, marginTop: 6, lineHeight: 1.5 }}>
+                {monthPull.map((m) => `${m.name} ${fmtMoney(m.amount)}`).join(' · ')}
+                {monthPull.every((m) => m.closed)
+                  ? ' — from the closed month, so these are the settled figures.'
+                  : ' — that month is not closed yet, so these can still move.'}
+              </div>
+            </div>
+          )}
+          {foreignCrew.length === 0 && !showAddForeign && monthPull.length === 0 && (
             <div style={{ color: 'var(--mute)', fontSize: 13.5, padding: '4px 0 10px', fontStyle: 'italic' }}>No foreign crew added yet.</div>
           )}
           {foreignCrew.map((c) => (
@@ -904,6 +1012,23 @@ export default function SquareUp() {
                     </button>
                     <button className="secondary" onClick={() => keepOver(w)}
                             title="Write what is on the form now over this kept sheet">Keep over</button>
+                    {/* WHICH SETTLING THIS SHEET BECAME. Chosen, not matched on
+                         the date: a settlement covers a RUN of trips and the
+                         office does not say which, which is why inferring it is
+                         the hardest code in this repo. Here he knows. */}
+                    {settlements.length > 0 && (
+                      <select value={w.settlement_id || ''} title="Which settling sheet this trip ended up on"
+                              onChange={async (e) => {
+                                await linkWorksheet(w.id, e.target.value || null)
+                                await refreshKept(suBoat?.id)
+                              }}
+                              style={{ fontSize: '0.78rem', maxWidth: '11rem' }}>
+                        <option value="">not on a settling yet</option>
+                        {settlements.map((s) => (
+                          <option key={s.id} value={s.id}>{s.settling_date} · {s.reference}</option>
+                        ))}
+                      </select>
+                    )}
                     <button className="secondary" onClick={() => removeKept(w)}
                             style={{ color: 'var(--rust)' }}>Delete</button>
                   </li>
