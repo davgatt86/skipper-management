@@ -2110,6 +2110,46 @@ Also agreed, not yet scheduled:
   repeating anything in this file — the days-at-sea note made the same mistake
   twice.
 
+  ### The old pair is retired — and four known oddities are LEFT ALONE
+
+  `Port net` and `Starboard net` were retired on **10-05-2026**, the day the new
+  `Port Twin` / `Starboard Twin` came aboard (David, Aug 2026). Nine of their ten
+  fitted sets were closed on that date, which is what gave the Life tab
+  something to average: **codend 8 lives · bridles 7 · ground gear 6 · headline
+  6 · legs 5**, where before every set still read as fitted and so counted as no
+  life at all.
+
+  The old starboard net was called **`Starboard twin`** and is now
+  **`Starboard net`**, to match its partner. It was one capital letter away from
+  `Starboard Twin`, which is still aboard — two nets you would have to tell
+  apart by capitalisation, under pressure, to retire the right one.
+
+  **`Single Net` is deliberately NOT retired.** It is retired in fact; David:
+  *"i will retire the single net when it's offically retired. barry will do it
+  when ready."* So its 13 sets still read as fitted and are excluded from every
+  average above. That is a known understatement, not a bug, and it is Barry's to
+  close.
+
+  **FOUR ANOMALIES, RAISED AND DELIBERATELY LEFT** — David, Aug 2026: *"leave it
+  as is. we will tidy it when add new info."* Do not silently correct them:
+
+  - **Starboard net's `legs` are fitted 26-05-2026**, sixteen days after the net
+    came off, so they could not be closed on the 10th — `removed_on >=
+    fitted_on`, and a negative life would drag the legs average. Moving them to
+    `Starboard Twin` is refused by `gear_components_one_fitted`: she was rigged
+    with legs on 10-05 already. Three readings fit (a mis-keyed date, real work
+    ashore, or an unlogged renewal of the new net's legs) and the data cannot
+    choose between them.
+  - **`Starboard Twin` carries three codends, two identical** — both fitted
+    31-07-2025 and removed 21-08-2026. Reads like a double entry.
+  - **Her codend and bridles predate her.** Fitted 31-07-2025, 31-10-2025 and
+    01-07-2026 on a net aboard 10-05-2026. Note 31-07-2025 is the Single Net's
+    own `came_aboard`, so those may be filed against the wrong net.
+  - **All ten retired sets carry one measurement dated 18-07-2026, every one
+    12.5 fathom** — two months after the nets came ashore, and identical. That
+    reads as bulk placeholder entry rather than gear work, which is worth
+    knowing before trusting the 4-day bridles life or the 386-day codend.
+
 
   `test-gear.mjs` — **227 checks**.
 
