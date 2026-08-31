@@ -1625,12 +1625,15 @@ In the order agreed:
      covers David is always Barry.
      Seeded: Skipper `David Gatt ⇄ Barry Reid` and Cook
      `Jackson Gatt ⇄ Alfie Reid` are David's own pairings. Chief Engineer
-     `David Henderson ⇄ Norman Wood` is **inferred** — the only two chief
-     engineers, on opposite watches — and is worth confirming.
-     **The six deckhands are deliberately unpaired**: Andrew Smith, Duncan
-     Cruikshank, Paul Craib and Ronald Beagrie are aboard against Gregor
-     Smith and James Napier ashore, which is four to two and does not pair
-     one-to-one. The page lists them as "not yet paired".
+     `David Henderson ⇄ Norman Wood` was seeded as **inferred** — the only two
+     chief engineers, on opposite watches — and **David confirmed it Aug 2026**.
+     The inference was right, but it was carried as an inference until he said
+     so, which is the order these go in.
+     **The six deckhands have since been paired** — Gregor Smith ⇄ Ronald
+     Beagrie, Andrew Smith ⇄ Paul Craib, James Napier ⇄ Duncan Cruikshank.
+     The earlier note here that they were "deliberately unpaired" because four
+     aboard against two ashore does not pair one-to-one is **stale**: nine pairs
+     are on record for Audacious. Read the table, not this paragraph.
    - **Section 5, Certificates** — kept, as agreed; it was already the
      strongest page. Two things changed.
      **The SQL nag is gone.** It told the skipper to "run the
@@ -2094,10 +2097,18 @@ Also agreed, not yet scheduled:
   allowed, a negative half is refused by CHECK, and he still reads sales **0**
   and payments **0**.
 
-  **The 19-08 halves are still in that note, not in the columns.** They are
-  David's own record and reconcile to the inch, so folding them onto the
-  measured row is a one-liner — but it is a write to real gear records and his
-  to ask for.
+  **The 19-08 halves ARE in the columns** — folded onto the measured row, port
+  60'5" (18,415 mm) and starboard 60'3" (18,364.2 mm) against a measured overall
+  of 120'8" (36,779.2 mm). They agree to nothing at all: the disagreement is
+  4×10⁻¹² mm, which is floating-point dust and well inside the one-inch
+  tolerance. The `inspected` row that originally carried them in prose is left
+  where it is — it was a real inspection, and the note is the source the columns
+  were read from.
+
+  **This paragraph said the opposite for a while after it was done**, and it was
+  quoted back at David as outstanding work. Measure the database before
+  repeating anything in this file — the days-at-sea note made the same mistake
+  twice.
 
 
   `test-gear.mjs` — **227 checks**.
