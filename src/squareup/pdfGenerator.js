@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { fmtDate, shareTextOf, fmtShares, fmtMoney, sumBondFor, todayISO } from './helpers.js';
+import { fmtDate, shareTextOf, fmtShares, fmtMoney, sumBondFor, bondBreakdown, todayISO } from './helpers.js';
 
 /**
  * Generate the square-up sheet as a jsPDF document.
@@ -170,15 +170,19 @@ export function generateSquareUpPDF({
 
   // BOND
   sectionTitle('BOND');
-  const crewBondTotals = crew
-    .map((c) => ({ c, total: sumBondFor(bondItems, c.id) }))
-    .filter((x) => x.total > 0);
-  const storesTotal = sumBondFor(bondItems, 'stores');
-  const unassignedTotal = bondItems
-    .filter((b) => !b.assignedTo)
-    .reduce((s, b) => s + (Number(b.amount) || 0), 0);
+  /* TOTALS ONLY — what each man actually had never goes on this sheet. David,
+     Aug 2026: "the exportable sheet doesn't need this info though, just myself
+     as skipper. office only needs to see total £ per crewman + any carried over
+     balance." The itemisation lives on the kept worksheet, which is where an
+     argument about a bottle of whisky gets settled. */
+  const bond = bondBreakdown(bondItems, crew);
+  const crewBondTotals = bond.perCrew.filter((x) => x.total > 0);
+  const storesTotal = bond.stores.total;
+  const carriedTotal = bond.carried.total;
+  const unassignedTotal = bond.unassigned.total;
 
-  if (crewBondTotals.length === 0 && storesTotal === 0 && unassignedTotal === 0) {
+  if (crewBondTotals.length === 0 && storesTotal === 0
+      && carriedTotal === 0 && unassignedTotal === 0) {
     emptyLine('TBC');
   } else {
     for (const { c, total } of crewBondTotals) {
@@ -204,6 +208,28 @@ export function generateSquareUpPDF({
       doc.setFontSize(10.5);
       setInk(INK);
       doc.text(fmtMoney(storesTotal), PAGE_W - MARGIN, y, { align: 'right' });
+      y += 6;
+      hairLine();
+      y += 10;
+    }
+    /* A BALANCE BROUGHT FORWARD, not a question. It came off an earlier trip
+       and nobody has been charged for it — the office should read it as a
+       figure like any other, in the same ink as the rest. Printing it in the
+       red "review" line would make every carried balance look like a mistake,
+       and a warning that fires on the ordinary case stops being read. */
+    if (carriedTotal > 0) {
+      ensureSpace(18);
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(10.5);
+      setInk(INK);
+      doc.text('Carried over', MARGIN, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      setInk(DIM);
+      doc.text('(not yet charged)', MARGIN + 62, y);
+      doc.setFontSize(10.5);
+      setInk(INK);
+      doc.text(fmtMoney(carriedTotal), PAGE_W - MARGIN, y, { align: 'right' });
       y += 6;
       hairLine();
       y += 10;

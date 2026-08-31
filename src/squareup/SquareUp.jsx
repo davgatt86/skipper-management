@@ -16,6 +16,7 @@ import BondSection from './BondSection.jsx';
 import { ForeignCrewRow, AddForeignMenu } from './ForeignCrewSection.jsx';
 import { BONUS_ROLES, roleForRank, computeBonuses, resolveRates, fmtPct } from '../lib/su/bonuses.js';
 import Preview from './Preview.jsx';
+import KeptSheetView from './KeptSheetView.jsx';
 
 // ── Crew row ───────────────────────────────────────────────────────────
 function CrewRow({ c, onUpdate, onRemove, onToggleSave, landings, autoPct }) {
@@ -216,6 +217,10 @@ export default function SquareUp() {
   const [kept, setKept] = useState([]);
   const [keptOpen, setKeptOpen] = useState(false);
   const [loadingId, setLoadingId] = useState(null);
+  /* The sheet being LOOKED at, which is not the sheet being worked on. Held
+     separately from the form for exactly that reason. */
+  const [viewing, setViewing] = useState(null);
+  const [viewingId, setViewingId] = useState(null);
   // Settlements to tie a kept sheet to. Chosen, never guessed from the date.
   const [settlements, setSettlements] = useState([]);
 
@@ -313,10 +318,17 @@ export default function SquareUp() {
   async function openKept(w) {
     const dirty = crew.length || fuel.length || labour.length || haulage.length
       || foreignCrew.length || bondItems.length;
+    /* A sheet kept before bond became lines has only the per-man totals, and
+       `unassignedBond` is null on exactly those — not zero, because how much
+       went unassigned there is unknown. So the warning is only shown to sheets
+       it is actually true of. */
+    const itemised = w.unassignedBond != null;
     if (dirty && !window.confirm(
       'Open this kept worksheet? It replaces what is on the form now.\n\n'
-      + 'The bond breakdown does not come back — each man returns with his bond '
-      + 'total on one line, because only the total was ever kept.')) return;
+      + (itemised
+        ? 'To LOOK at it without touching the form, use View instead.'
+        : 'The bond breakdown does not come back — this sheet was kept before the '
+          + 'items were stored, so each man returns with his total on one line.'))) return;
 
     setLoadingId(w.id); setSaveMsg('');
     try {
@@ -336,6 +348,26 @@ export default function SquareUp() {
     } catch (e) {
       setSaveState('error'); setSaveMsg(e.message || String(e));
     } finally { setLoadingId(null); }
+  }
+
+  /* LOOKING IS NOT OPENING, and until now there was only opening.
+   *
+   * David, Aug 2026: "if there's any disputes i can reopen a saved sheet and see
+   * exactly what each crewman had ... how can i reopen a saved sheet to check?"
+   *
+   * Open replaces the form with the sheet — which is the wrong tool entirely for
+   * settling an argument about a bottle of whisky three trips ago, because it
+   * destroys whatever is being worked on to answer a question. This reads the
+   * sheet and shows it, and touches nothing. */
+  async function viewKept(w) {
+    setViewingId(w.id); setSaveMsg('');
+    try {
+      const t = await loadWorksheet(w.id);
+      if (!t) { setSaveState('error'); setSaveMsg('That worksheet has gone — it may have been deleted on another device.'); return; }
+      setViewing({ w, t });
+    } catch (e) {
+      setSaveState('error'); setSaveMsg(e.message || String(e));
+    } finally { setViewingId(null); }
   }
 
   async function removeKept(w) {
@@ -989,10 +1021,11 @@ export default function SquareUp() {
             <div className="card" style={{ marginTop: 12 }}>
               <p className="muted" style={{ margin: '0 0 0.6rem', fontSize: '0.82rem' }}>
                 Kept on the fleet record, so they are here on any device you sign in from.
-                <b>Open</b> replaces the form with the kept sheet; <b>Keep over</b> replaces the
-                kept sheet with the form. A sheet marked <i>no bond recorded</i> was saved before
-                the bond was keyed correctly — if that trip is still on the form, Keep over it and
-                the figures go in right.
+                <b>View</b> reads a sheet and changes nothing — it shows what each man had, item
+                by item, which is what settles an argument. <b>Open</b> replaces the form with the
+                kept sheet; <b>Keep over</b> replaces the kept sheet with the form. A sheet marked
+                <i>no bond recorded</i> was saved before the bond was keyed correctly — if that
+                trip is still on the form, Keep over it and the figures go in right.
               </p>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {kept.map(w => (
@@ -1040,6 +1073,12 @@ export default function SquareUp() {
                         background: 'var(--kelp)', color: '#fff',
                       }}>on screen</span>
                     )}
+                    {/* VIEW COMES FIRST because it is the safe one and, for a
+                        dispute, the one actually wanted. Open replaces the form
+                        and Keep over replaces the sheet; this does neither. */}
+                    <button className="secondary" onClick={() => viewKept(w)} disabled={viewingId === w.id}>
+                      {viewingId === w.id ? 'Reading…' : 'View'}
+                    </button>
                     <button className="secondary" onClick={() => openKept(w)} disabled={loadingId === w.id}>
                       {loadingId === w.id ? 'Opening…' : 'Open'}
                     </button>
@@ -1069,6 +1108,11 @@ export default function SquareUp() {
               </ul>
             </div>
           )}
+
+          {/* Outside the list on purpose: hiding the kept sheets must not take
+              the one being read away with them. */}
+          {viewing && <KeptSheetView {...viewing} onClose={() => setViewing(null)} />}
+
           <p style={{ textAlign: 'center', color: 'var(--mute)', fontSize: 11.5, marginTop: 10, letterSpacing: 0.3 }}>
             Form auto-saves on this device · Rosters persist across trips
           </p>

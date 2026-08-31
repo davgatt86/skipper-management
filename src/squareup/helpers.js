@@ -65,3 +65,50 @@ export const fmtMoney = (n) => {
 
 export const sumBondFor = (bondItems, target) =>
   bondItems.filter((b) => b.assignedTo === target).reduce((s, b) => s + (Number(b.amount) || 0), 0);
+
+/* THE BOND, BROKEN OUT — one function, so the preview, the PDF and the skipper's
+ * own view of a kept sheet cannot disagree about who owes what. The catalogue
+ * and the chalk sheet taught that: two documents rendered perfectly and
+ * contradicted each other because the sale order was worked out twice.
+ *
+ * It returns the ITEMS as well as the totals. The office is only ever shown the
+ * totals — David, Aug 2026: "the exportable sheet doesn't need this info though,
+ * just myself as skipper. office only needs to see total £ per crewman + any
+ * carried over balance." The itemisation is what settles a dispute, and settling
+ * a dispute is the skipper's job, not the office's.
+ *
+ * CARRIED IS NOT UNASSIGNED, though both are charged to nobody. Carried is a
+ * balance brought forward off an earlier trip and is a perfectly ordinary thing
+ * for the office to see; unassigned is this trip's bond that nobody has got
+ * round to charging, and is a question. Printing them as one figure would turn
+ * every carried balance into a red flag, and every real flag into a shrug. */
+export function bondBreakdown(bondItems = [], crew = []) {
+  const sum = (rows) => rows.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+  const of = (fn) => bondItems.filter(fn);
+
+  const perCrew = crew
+    .map((c) => {
+      const items = of((b) => b.assignedTo === c.id);
+      return { c, items, total: sum(items) };
+    })
+    .filter((x) => x.items.length > 0);
+
+  const stores = of((b) => b.assignedTo === 'stores');
+  const carried = of((b) => !b.assignedTo && b.carried);
+  const loose = of((b) => !b.assignedTo && !b.carried);
+
+  /* Bond charged to a man who is no longer on the sheet — he was taken off
+     after the bond was assigned. It belongs to nobody the page can name, so it
+     is counted rather than quietly dropped out of the total. */
+  const named = new Set(crew.map((c) => c.id));
+  const orphan = of((b) => b.assignedTo && b.assignedTo !== 'stores' && !named.has(b.assignedTo));
+
+  return {
+    perCrew,
+    stores: { items: stores, total: sum(stores) },
+    carried: { items: carried, total: sum(carried) },
+    unassigned: { items: [...loose, ...orphan], total: sum(loose) + sum(orphan) },
+    total: sum(bondItems),
+    isEmpty: bondItems.length === 0,
+  };
+}

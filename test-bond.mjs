@@ -115,3 +115,54 @@ eq(yt.qty, 6, 'six of them')
 eq(itemsFromRows([]), [], 'no rows, no items')
 
 console.log('bond invoice: ' + n + ' checks passed')
+
+/* ── WHO OWES WHAT ─────────────────────────────────────────────────────────
+ *
+ * `bondBreakdown` is what the skipper's view of a kept sheet and the office's
+ * PDF both rest on. One function on purpose: the chalk sheet and the buyers'
+ * catalogue rendered perfectly and disagreed with each other because the sale
+ * order was worked out twice, and this is money.
+ */
+const { bondBreakdown } = await import('./src/squareup/helpers.js')
+
+const bcrew = [{ id: 'c1', name: 'David' }, { id: 'c2', name: 'Norman' }]
+const bitems = [
+  { id: '1', description: 'Baccy', amount: 148, assignedTo: 'c1' },
+  { id: '2', description: 'Whisky', amount: 30, assignedTo: 'c1' },
+  { id: '3', description: 'Wine', amount: 66, assignedTo: 'c2' },
+  { id: '4', description: 'Galley', amount: 60, assignedTo: 'stores' },
+  { id: '5', description: 'Last trip', amount: 22, assignedTo: null, carried: true },
+  { id: '6', description: 'Nobody', amount: 17.5, assignedTo: null },
+]
+const b = bondBreakdown(bitems, bcrew)
+
+eq(b.perCrew.map(x => [x.c.name, x.total]), [['David', 178], ['Norman', 66]],
+   'each man carries his own total')
+eq(b.perCrew[0].items.map(i => i.description), ['Baccy', 'Whisky'],
+   'AND HIS ITEMS — the total is what is disputed, the items are what settles it')
+eq(b.stores.total, 60, 'the boat pays its own')
+
+/* CARRIED IS NOT UNASSIGNED, though both are charged to nobody. Carried is a
+ * balance brought forward and is an ordinary thing for the office to read;
+ * unassigned is a question. Printing them as one figure would turn every
+ * carried balance into a red flag and every real flag into a shrug. */
+eq(b.carried.total, 22, 'a carried balance stands on its own')
+eq(b.unassigned.total, 17.5, 'and does not swell the unassigned figure')
+eq(b.total, 343.5, 'and everything still adds up to the whole bond')
+
+/* Bond charged to a man who has since been taken off the sheet. It belongs to
+ * nobody the page can name, so it is counted as unassigned rather than dropped
+ * out of the total — which would leave the sheet quietly short. */
+{
+  const gone = bondBreakdown(
+    [{ id: 'x', description: 'His', amount: 40, assignedTo: 'departed' }], bcrew)
+  eq(gone.unassigned.total, 40, 'bond charged to a man no longer aboard is not lost')
+  eq(gone.total, 40, 'and the sheet still totals to it')
+}
+
+eq(bondBreakdown([], bcrew).isEmpty, true, 'no bond at all is its own state')
+eq(bondBreakdown([], bcrew).total, 0, 'and totals nothing')
+eq(bondBreakdown(bitems, []).unassigned.total, 261.5,
+   'with nobody on the sheet, every crew bond is unattributable — never silently dropped')
+
+console.log('bond breakdown: ' + n + ' checks passed in total')

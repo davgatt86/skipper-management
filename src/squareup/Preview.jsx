@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, Share2, Printer, Loader2 } from 'lucide-react';
 import { C } from './constants.js';
-import { fmtDate, fmtShares, fmtMoney, shareTextOf, sumBondFor, todayISO } from './helpers.js';
+import { fmtDate, fmtShares, fmtMoney, shareTextOf, sumBondFor, bondBreakdown, todayISO } from './helpers.js';
 import { generateSquareUpPDF, shareOrDownloadPDF, makeFilename } from './pdfGenerator.js';
 import { IconBtn } from './ui.jsx';
 
@@ -13,13 +13,17 @@ export default function Preview(props) {
 
   const [busy, setBusy] = useState(false);
 
-  const crewBondTotals = crew
-    .map((c) => ({ c, total: sumBondFor(bondItems, c.id) }))
-    .filter((x) => x.total > 0);
-  const storesTotal = sumBondFor(bondItems, 'stores');
-  const unassignedTotal = bondItems
-    .filter((b) => !b.assignedTo)
-    .reduce((s, b) => s + (Number(b.amount) || 0), 0);
+  /* TOTALS ONLY, never the items. David, Aug 2026: "office only needs to see
+     total £ per crewman + any carried over balance." What each man actually
+     had is the skipper's record, for settling an argument — it is on the kept
+     sheet and stays there. */
+  const bond = bondBreakdown(bondItems, crew);
+  const crewBondTotals = bond.perCrew.filter((x) => x.total > 0);
+  const storesTotal = bond.stores.total;
+  const carriedTotal = bond.carried.total;
+  const unassignedTotal = bond.unassigned.total;
+  const anyBond = crewBondTotals.length > 0 || storesTotal > 0
+    || carriedTotal > 0 || unassignedTotal > 0;
 
   const handleShare = async () => {
     setBusy(true);
@@ -96,7 +100,7 @@ export default function Preview(props) {
 
         {/* Bond */}
         <DocSection title="Bond">
-          {crewBondTotals.length === 0 && storesTotal === 0 && unassignedTotal === 0 ? (
+          {!anyBond ? (
             <DocEmpty>TBC</DocEmpty>
           ) : (
             <>
@@ -105,6 +109,12 @@ export default function Preview(props) {
               ))}
               {storesTotal > 0 && (
                 <DocLine left={<span style={{ fontStyle: 'italic' }}>Stores <span style={{ color: '#7a8a99', fontStyle: 'normal', fontSize: 12 }}>(boat pays)</span></span>} right={fmtMoney(storesTotal)} />
+              )}
+              {/* A BALANCE, NOT A QUESTION. It came off an earlier trip and
+                  nobody has been charged for it yet — the office should see it
+                  as a figure, the same as any other. */}
+              {carriedTotal > 0 && (
+                <DocLine left={<span style={{ fontStyle: 'italic' }}>Carried over <span style={{ color: '#7a8a99', fontStyle: 'normal', fontSize: 12 }}>(not yet charged)</span></span>} right={fmtMoney(carriedTotal)} />
               )}
               {unassignedTotal > 0 && (
                 <DocLine left={<span style={{ color: '#b45a46', fontWeight: 600 }}>Unassigned (review)</span>} right={<span style={{ color: '#b45a46' }}>{fmtMoney(unassignedTotal)}</span>} />

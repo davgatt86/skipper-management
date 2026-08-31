@@ -266,9 +266,49 @@ for a worksheet whose id was the event: *invalid input syntax for type uuid:
 => keepWorksheet()}`, and it is worth remembering that adding a parameter to a
 handler can break a call site that passes none.
 
+### TWO DOCUMENTS OFF ONE WORKSHEET, and they differ in exactly one way
+
+David, Aug 2026: *"it would be good if bond lines saved per crewman, so if
+there's any disputes i can reopen a saved sheet and see exactly what each
+crewman had ... the exportable sheet doesn't need this info though, just myself
+as skipper. office only needs to see total £ per crewman + any carried over
+balance."*
+
+**The skipper's view carries the ITEMS. The office's sheet carries the TOTALS
+and must not carry the items.** `bondBreakdown()` in `helpers.js` is the single
+function both rest on — the chalk sheet and the buyers' catalogue rendered
+perfectly and disagreed with each other because the sale order was worked out
+twice, and this is money. `scripts/kept-sheet-preview.mjs` renders **both** off
+one state, reads the PDF back with pdf.js, and asserts that not one item
+description reaches the office.
+
+**LOOKING IS NOT OPENING, and until now there was only opening.** Open replaces
+the form with the sheet — the wrong tool entirely for settling an argument about
+a bottle of whisky three trips ago, because it destroys the trip being worked on
+to answer a question about an old one. **View** (`KeptSheetView.jsx`) reads the
+sheet and shows it, man by man with his items, the invoice each came off, and
+the quantity. It touches nothing, and it says so.
+
+It is a file of its own rather than a function in `SquareUp.jsx` for the same
+reason `SheetBody` is exported from `MarketSheet.jsx`: the page is behind a
+login, so the only way to check the real component is to server-render it, and
+it cannot be bundled while it drags `supabaseClient` in behind it.
+
+**CARRIED IS NOT UNASSIGNED**, though both are charged to nobody. A carried
+balance came off an earlier trip and is an ordinary figure for the office to
+read; an unassigned item is this trip's bond nobody has got round to charging,
+and is a question. The PDF prints the first in ordinary ink as *"Carried over
+(not yet charged)"* and the second in red as *"Unassigned (review)"*. Printing
+them as one figure would turn every carried balance into a red flag, and a
+warning that fires on the ordinary case stops being read.
+
+**Bond charged to a man since taken off the sheet is counted as unassigned, not
+dropped** — dropping it would leave the sheet quietly short of its own total.
+
 `test-worksheet.mjs` — 62 checks, including that a second trip through changes
 no figure, which is what makes the id keying safe: the ids `rowsToState` mints
-have to be the ones `stateToRows` then totals on.
+have to be the ones `stateToRows` then totals on. `test-bond.mjs` 32 ·
+`scripts/kept-sheet-preview.mjs` 40 rendered.
 
 
 **One vessel per fleet is baked into `vessel_details`**, whose primary key is
