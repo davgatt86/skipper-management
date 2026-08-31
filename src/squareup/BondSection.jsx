@@ -86,14 +86,21 @@ export default function BondSection({ crew, bondItems, setBondItems }) {
     if (window.confirm(`Remove all ${bondItems.length} bond items?`)) setBondItems([]);
   };
 
-  // Group items by source for display
+  /* Group items by source for display — and bond CARRIED OVER from the last
+     trip gets its own group at the top, whatever invoice it came off. It is
+     still that invoice's stock, but on a fresh sheet it would otherwise read as
+     this trip's baccy, which is the one thing a man must not think. It keeps
+     the group after it is assigned: where it came from does not change when
+     somebody is finally charged for it. */
   const groups = {};
   for (const item of bondItems) {
-    const key = item.source || '__manual__';
+    const key = item.carried ? '__carried__' : (item.source || '__manual__');
     if (!groups[key]) groups[key] = [];
     groups[key].push(item);
   }
   const groupKeys = Object.keys(groups).sort((a, b) => {
+    if (a === '__carried__') return -1;
+    if (b === '__carried__') return 1;
     if (a === '__manual__') return 1;
     if (b === '__manual__') return -1;
     return a.localeCompare(b);
@@ -142,7 +149,9 @@ export default function BondSection({ crew, bondItems, setBondItems }) {
       )}
 
       {groupKeys.map((key) => (
-        <BondGroup key={key} sourceLabel={key === '__manual__' ? 'Manual entries' : key}
+        <BondGroup key={key} carried={key === '__carried__'}
+          sourceLabel={key === '__carried__' ? 'Carried over — not charged to anyone yet'
+            : key === '__manual__' ? 'Manual entries' : key}
           items={groups[key]} crew={crew}
           onUpdate={update} onRemove={remove} onSplit={split} />
       ))}
@@ -184,10 +193,10 @@ function Row({ label, value, italic, color }) {
   );
 }
 
-function BondGroup({ sourceLabel, items, crew, onUpdate, onRemove, onSplit }) {
+function BondGroup({ sourceLabel, items, crew, carried, onUpdate, onRemove, onSplit }) {
   return (
-    <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 11, marginBottom: 10, overflow: 'hidden' }}>
-      <div style={{ padding: '9px 12px', background: `${C.panel}cc`, borderBottom: `1px solid ${C.line}`, color: C.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.4, display: 'flex', justifyContent: 'space-between' }}>
+    <div style={{ background: C.panel2, border: `1px solid ${carried ? `${C.brass}66` : C.line}`, borderRadius: 11, marginBottom: 10, overflow: 'hidden' }}>
+      <div style={{ padding: '9px 12px', background: carried ? `${C.brass}1a` : `${C.panel}cc`, borderBottom: `1px solid ${carried ? `${C.brass}44` : C.line}`, color: carried ? C.brass : C.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.4, display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{sourceLabel}</span>
         <span style={{ color: C.sea, marginLeft: 8, flexShrink: 0 }}>{items.length} item{items.length === 1 ? '' : 's'}</span>
       </div>

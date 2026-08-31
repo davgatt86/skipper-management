@@ -100,15 +100,28 @@ export async function listWorksheets(boatId) {
   if (!boatId) return []
   const { data, error } = await supabase
     .from('su_worksheets')
-    .select(HEAD + ', su_worksheet_crew(bond)')
+    .select(HEAD + ', su_worksheet_crew(bond), su_worksheet_lines(section, detail, amount)')
     .eq('boat_id', boatId)
     .order('updated_at', { ascending: false })
   if (error) return []
-  return (data || []).map(({ su_worksheet_crew: c, ...w }) => ({
-    ...w,
-    crewCount: (c || []).length,
-    bondTotal: (c || []).reduce((s, r) => s + (Number(r.bond) || 0), 0),
-  }))
+  return (data || []).map(({ su_worksheet_crew: c, su_worksheet_lines: l, ...w }) => {
+    const crewBond = (c || []).reduce((s, r) => s + (Number(r.bond) || 0), 0)
+    const bond = (l || []).filter((x) => x.section === 'bond')
+    const sum = (rows) => rows.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+    /* A sheet with bond LINES knows its own items, so its total is the lines —
+       summing the crew rows as well would count the assigned ones twice. One
+       kept before bond lines existed has only the crew totals, and how much of
+       its bond went unassigned is not merely nought but UNKNOWN: the items were
+       never written down. Null, so the panel can decline to say. */
+    return {
+      ...w,
+      crewCount: (c || []).length,
+      bondTotal: bond.length ? sum(bond) : crewBond,
+      unassignedBond: bond.length
+        ? sum(bond.filter((x) => !x.detail || x.detail === 'carried'))
+        : null,
+    }
+  })
 }
 
 /* WHICH SETTLING SHEET THIS WORKSHEET BECAME.

@@ -213,12 +213,60 @@ them out of its state — but the form had no such fields, so every sheet went i
 with four nulls. They are on the Trip section now.
 
 **What cannot come back, and the page says so before you load over live work:**
-the vessel name (no column for it) and the bond ITEMISATION — only each man's
-total is stored, so his items return as one line for that total. The arithmetic
-is right; the breakdown has gone. A stores or unassigned bond hangs off no crew
-row and is not kept at all.
+the vessel name. There is no column for it.
 
-`test-worksheet.mjs` — 40 checks, including that a second trip through changes
+### The bond is kept ITEM BY ITEM now — `worksheet_bond_lines.sql` (Aug 2026)
+
+It used to be each man's TOTAL, folded onto his `su_worksheet_crew` row, and
+that lost two things. The breakdown, which was known and accepted — and an item
+assigned to NOBODY, which was not: it hangs off no crew row, so it was written
+nowhere at all and simply left the record on the first save. Same for a stores
+bond.
+
+David: *"some of the bond isn't allocated, if that is the problem, i want that
+to roll over onto next worksheet + any new bond that's uploaded."*
+
+**IT CANNOT ROLL OVER IF IT DOES NOT SURVIVE BEING KEPT**, so persisting it came
+first. A bond item is a `su_worksheet_lines` row in section `bond`, with the
+assignment in `detail`:
+
+    crew:<sort>   the crewman at that position on this worksheet
+    stores        the boat pays
+    carried       unassigned, and it came off an earlier trip
+    null          unassigned
+
+**Assignment is by the man's POSITION, never his form id.** Those ids are minted
+fresh on every load and mean nothing across one. A man with no name is not
+written as a crew row at all, so bond charged to him has no seat to point at and
+comes back **unassigned** — which puts it in front of somebody rather than
+quietly charging whoever now sits at that index.
+
+`su_worksheet_crew.bond` still carries each man's total as well, so a sheet kept
+before this reads back exactly as it did: one line per man for his total. Bond
+lines present means the sheet knows its own items; absent means it never did.
+
+**ALLOCATED BOND CLEARS ON A NEW TRIP; UNALLOCATED BOND CROSSES.** It is bought
+for a trip, so carrying a charged item would charge a man twice for the same
+baccy — but nobody has been charged for an unallocated one, so clearing it does
+not settle it, it loses it, and the boat is short by exactly the amount nobody
+got round to assigning. It crosses marked `carried`, into its own group at the
+top of the Bond section, because on a fresh sheet last trip's bottles must never
+read as this trip's.
+
+The kept-sheets panel names the figure too — *"£9.00 unassigned"* — since it is
+the one thing on a kept sheet still owed a decision. It is **null, not zero**,
+on a sheet kept before bond lines existed: how much went unassigned there is
+unknown, not nought.
+
+**AND THE KEEP BUTTON WAS BROKEN THE WHOLE TIME.** `onClick={keepWorksheet}`
+hands React's click event in as the function's first parameter — which became
+`existingId` the moment **Keep over** gave it one — so every save went looking
+for a worksheet whose id was the event: *invalid input syntax for type uuid:
+"[object Object]"*. The unallocated bond had nothing to do with it. `onClick={()
+=> keepWorksheet()}`, and it is worth remembering that adding a parameter to a
+handler can break a call site that passes none.
+
+`test-worksheet.mjs` — 62 checks, including that a second trip through changes
 no figure, which is what makes the id keying safe: the ids `rowsToState` mints
 have to be the ones `stateToRows` then totals on.
 

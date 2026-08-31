@@ -10,9 +10,12 @@
  * Two things genuinely cannot, and they are stated rather than papered over:
  *
  * - **The vessel name is not stored.** There is no column for it.
- * - **Bond ITEMS are not stored**, only each man's bond TOTAL on his crew row.
- *   A loaded sheet therefore carries one bond line per man for his total. The
- *   arithmetic is right; the itemisation has gone.
+ *
+ * Bond ITEMS used to be the second of those — only each man's TOTAL was kept,
+ * so the breakdown was lost and an item assigned to NOBODY was written nowhere
+ * at all. They are lines of their own now (Aug 2026), which is what makes
+ * rolling the unallocated part onto the next trip possible. A sheet kept before
+ * that still reads back the old way, one line per man for his total.
  *
  * Everything else must survive, and the test asserts it does.
  */
@@ -98,7 +101,37 @@ export function stateToRows(state, boatId) {
     .filter((b) => b.assignedTo === id)
     .reduce((t, b) => t + (Number(b.amount) || 0), 0)
 
-  const crewRows = crew.filter((c) => (c.name || '').trim()).map((c, i) => ({
+  const aboard = crew.filter((c) => (c.name || '').trim())
+
+  /* AND THE ITEMS THEMSELVES ARE KEPT, not just the per-man totals.
+   *
+   * Storing only the total lost two things. The breakdown, which was known and
+   * accepted — and an item assigned to NOBODY, which was not: it hangs off no
+   * crew row, so it was written nowhere at all and simply left the record on
+   * the first save. David, Aug 2026: "some of the bond isn't allocated ... i
+   * want that to roll over onto next worksheet".
+   *
+   * It cannot roll over if it does not survive being kept, so this comes first.
+   * `detail` carries the assignment, by the man's POSITION on this sheet rather
+   * than his form id — the ids are minted fresh on every load and mean nothing
+   * across one. A man with no name is not written as a crew row, so bond
+   * assigned to him has no position to point at and comes back UNASSIGNED,
+   * which is the honest answer and puts it in front of somebody. */
+  const seatOf = new Map(aboard.map((c, i) => [c.id, i]))
+  const assignKey = (b) => {
+    if (b.assignedTo === 'stores') return 'stores'
+    if (b.assignedTo && seatOf.has(b.assignedTo)) return 'crew:' + seatOf.get(b.assignedTo)
+    return b.carried ? 'carried' : null
+  }
+  for (const b of bondItems) {
+    lines.push({
+      section: 'bond', label: b.description || '', detail: assignKey(b),
+      qty: num(b.qty), rate: num(b.unitPrice), amount: num(b.amount) || 0,
+      note: b.source || null, sort: sort++,
+    })
+  }
+
+  const crewRows = aboard.map((c, i) => ({
     crew_name: c.name.trim(),
     share_key: c.shareKey || null,
     share_value: num(c.shareCustom) ?? null,
@@ -132,20 +165,46 @@ export function rowsToState(head, lines = [], crewRows = []) {
     roleLandings: Array.isArray(c.role_landings) ? c.role_landings : [],
   }))
 
-  const bondItems = crewRows
-    .map((c, i) => ({ c, i }))
-    .filter(({ c }) => Number(c.bond) > 0)
-    .map(({ c, i }) => ({
-      id: uid(),
-      description: 'Bond (total from the kept worksheet)',
-      qty: 1,
-      unitPrice: Number(c.bond),
-      amount: Number(c.bond),
-      /* Assigned by the crewman's ID, which is what every reader of a bond
-       * item uses — `sumBondFor(bondItems, c.id)`. The ids here are the fresh
-       * ones minted for this load a few lines above, so the pairing holds. */
-      assignedTo: crew[i]?.id ?? null,
-    }))
+  /* THE ITEMS COME BACK WHOLE where the sheet has them. A sheet kept before
+   * bond lines existed has none, and the per-man totals are all there is — so
+   * that path stays, and a man's bond returns as one line for his total. The
+   * two must not be told apart by guesswork: bond lines present means the sheet
+   * knows its own items, absent means it never did. */
+  const bondLines = of('bond')
+  const seat = (detail) => {
+    const m = /^crew:(\d+)$/.exec(String(detail || ''))
+    return m ? (crew[Number(m[1])]?.id ?? null) : null
+  }
+
+  const bondItems = bondLines.length
+    ? bondLines.map((l) => ({
+        id: uid(),
+        description: l.label || '',
+        qty: Number(l.qty) || 0,
+        unitPrice: Number(l.rate) || 0,
+        amount: Number(l.amount) || 0,
+        assignedTo: l.detail === 'stores' ? 'stores' : seat(l.detail),
+        /* `carried` is unassigned AND off an earlier trip. Both read as
+           unassigned to every total on the page; the flag only says where it
+           came from, which is what stops last trip's baccy looking like this
+           trip's. */
+        carried: l.detail === 'carried',
+        source: l.note || null,
+      }))
+    : crewRows
+      .map((c, i) => ({ c, i }))
+      .filter(({ c }) => Number(c.bond) > 0)
+      .map(({ c, i }) => ({
+        id: uid(),
+        description: 'Bond (total from the kept worksheet)',
+        qty: 1,
+        unitPrice: Number(c.bond),
+        amount: Number(c.bond),
+        /* Assigned by the crewman's ID, which is what every reader of a bond
+         * item uses — `sumBondFor(bondItems, c.id)`. The ids here are the fresh
+         * ones minted for this load a few lines above, so the pairing holds. */
+        assignedTo: crew[i]?.id ?? null,
+      }))
 
   return {
     worksheetId: head.id ?? null,

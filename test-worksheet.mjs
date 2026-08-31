@@ -110,15 +110,65 @@ eq(sumBondFor(back.bondItems, back.crew[0].id), 65, "David's bond comes back who
 eq(sumBondFor(back.bondItems, back.crew[2].id), 18, "Kitty's bond comes back")
 eq(sumBondFor(back.bondItems, back.crew[1].id), 0, 'a man with no bond has none')
 
-/* WHAT DOES NOT SURVIVE, stated rather than papered over: the itemisation.
- * Only each man's total is stored, so David's two items return as one line. */
-eq(back.bondItems.filter(b => b.assignedTo === back.crew[0].id).length, 1,
-   'two bond items return as one line — only the total was ever kept')
+/* THE ITEMISATION SURVIVES NOW. It used to be the documented loss — only each
+ * man's total was kept, so David's two items came back as one line. They are
+ * lines of their own since Aug 2026. */
+eq(back.bondItems.filter(b => b.assignedTo === back.crew[0].id).map(b => b.description),
+   ['Baccy', 'Phone'], "David's two items come back as two, by name")
+eq(back.bondItems.find(b => b.description === 'Baccy').qty, 2, 'with the quantity')
+eq(back.bondItems.find(b => b.description === 'Baccy').unitPrice, 12.5, 'and the unit price')
 
-/* The stores and unassigned bonds are not kept at all: they hang off no crew
- * row, so there is nowhere for them to live. */
-eq(sumBondFor(back.bondItems, 'stores'), 0, 'the stores bond is not stored')
-ok(!back.bondItems.some(b => b.assignedTo == null), 'an unassigned bond is not stored')
+/* THE STORES BOND HANGS OFF NO CREW ROW and used to be written nowhere at all —
+ * the boat's own share of the bond, gone on the first save. */
+eq(sumBondFor(back.bondItems, 'stores'), 60, 'the stores bond is kept')
+
+/* AND THE UNASSIGNED BOND, which is the one that costs money to lose. Nobody
+ * has been charged for it, so dropping it does not settle it — it leaves the
+ * boat short by exactly the amount nobody got round to assigning. */
+eq(sumBondFor(back.bondItems, null), 9, 'bond assigned to nobody is kept')
+eq(back.bondItems.length, 5, 'all five items, none of them folded away')
+
+/* CARRIED means unassigned AND off an earlier trip. It reads as unassigned to
+ * every total on the page; the flag is only provenance, and it has to round-
+ * trip or last trip's bottles look like this trip's on the next sheet. */
+{
+  const rolled = { ...state, bondItems: [{ ...state.bondItems[4], carried: true }] }
+  const st = asStored(stateToRows(rolled, BOAT))
+  const b = rowsToState(st.head, st.lines, st.crewRows).bondItems
+  eq(b.length, 1, 'the carried item is kept')
+  eq(b[0].assignedTo, null, 'still charged to nobody')
+  eq(b[0].carried, true, 'and still marked as carried over')
+  ok(!back.bondItems.some(x => x.carried), 'while an ordinary unassigned item is not')
+}
+
+/* A SHEET KEPT BEFORE BOND LINES EXISTED still reads the old way. Bond lines
+ * present means the sheet knows its own items; absent means it never did, and
+ * the per-man totals are all there is. Not a fallback to guess at. */
+{
+  const old = rowsToState({ id: 'w' }, [], [
+    { crew_name: 'David Gatt', bond: 65, share_key: 'full' },
+    { crew_name: 'Barry Reid', bond: 0, share_key: 'full' },
+  ])
+  eq(old.bondItems.length, 1, 'one line for the one man who had bond')
+  eq(old.bondItems[0].amount, 65, 'for his total')
+  eq(old.bondItems[0].assignedTo, old.crew[0].id, 'against the right man')
+}
+
+/* A MAN WITH NO NAME IS NOT SAVED, so bond charged to him has no seat to point
+ * at. It comes back UNASSIGNED rather than lost or landed on whoever happens to
+ * sit at that position — which puts it in front of somebody instead of quietly
+ * charging the wrong man. */
+{
+  const st = asStored(stateToRows({
+    crew: [{ id: 'ghost', name: '', shareKey: 'full' },
+           { id: 'real', name: 'Real Man', shareKey: 'full' }],
+    bondItems: [{ id: 'z', description: 'Orphan', amount: 30, assignedTo: 'ghost' }],
+  }, BOAT))
+  const b = rowsToState(st.head, st.lines, st.crewRows)
+  eq(b.bondItems.length, 1, 'the item is still kept')
+  eq(b.bondItems[0].amount, 30, 'for its full amount')
+  eq(b.bondItems[0].assignedTo, null, 'and charged to nobody, not to the wrong man')
+}
 
 // --- a second trip through is stable --------------------------------------
 /* Opening a kept sheet and keeping it again must not quietly change a figure.

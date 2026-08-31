@@ -619,15 +619,31 @@ export default function SquareUp() {
    * fuel, the boxes, the dates, the bond, the haulage. The bonuses carry over
    * too, because a slight change is easier to make than a figure to re-enter.
    *
-   * The bond is deliberately NOT kept. It is bought for a trip and carrying it
-   * would charge a man twice for the same baccy. */
+   * BOND THAT WAS CHARGED TO SOMEBODY IS NOT KEPT. It is bought for a trip and
+   * carrying it would charge a man twice for the same baccy.
+   *
+   * BOND THAT WAS CHARGED TO NOBODY IS. David, Aug 2026: "some of the bond
+   * isn't allocated ... i want that to roll over onto next worksheet + any new
+   * bond that's uploaded." It has not been paid for by anyone, so clearing it
+   * would not settle it — it would lose it, and the boat would be short by
+   * exactly the amount nobody had got round to assigning. It comes across
+   * marked as carried, so last trip's bottles are never mistaken for this
+   * trip's, and whatever is uploaded next simply lands beside it. */
   const startNewTrip = () => {
+    const rollover = bondItems.filter((b) => !b.assignedTo);
+    const rolloverTotal = rollover.reduce((s, b) => s + (Number(b.amount) || 0), 0);
     if (!window.confirm(
       'Start a new trip?\n\n'
       + 'The crew stay as they are — names, shares, roles and bonuses. '
-      + 'The fuel, boxes, dates, bond and haulage are cleared.')) return;
+      + 'The fuel, boxes, dates, bond and haulage are cleared.'
+      + (rollover.length
+        ? `\n\nBond assigned to nobody comes with you: ${rollover.length} item`
+          + `${rollover.length === 1 ? '' : 's'}, ${fmtMoney(rolloverTotal)}. `
+          + 'Nobody has been charged for it yet.'
+        : ''))) return;
     setTripDate(todayISO()); setQuota('10');
-    setFuel([]); setLabour([]); setHaulage([]); setHaulageNote(''); setBondItems([]);
+    setFuel([]); setLabour([]); setHaulage([]); setHaulageNote('');
+    setBondItems(rollover.map((b) => ({ ...b, carried: true })));
     setTripNo(''); setMarket(''); setDaysAtSea(''); setBoxesLanded('');
     /* AND IT LETS GO OF THE KEPT SHEET. `worksheetId` is what `keepWorksheet`
      * updates in place, so a new trip that held on to it would write this
@@ -938,7 +954,13 @@ export default function SquareUp() {
           </button>
           {suBoat ? (
             <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <button className="secondary" onClick={keepWorksheet} disabled={saveState === 'saving'}>
+              {/* CALLED WITH NO ARGUMENTS, DELIBERATELY. `onClick={keepWorksheet}`
+                  hands React's click event straight in as `target`, so the
+                  `= worksheetId` default never applies and the save goes looking
+                  for a worksheet whose id is the event — "invalid input syntax
+                  for type uuid: [object Object]". It broke the moment Keep over
+                  gave this function a first parameter. */}
+              <button className="secondary" onClick={() => keepWorksheet()} disabled={saveState === 'saving'}>
                 {saveState === 'saving' ? 'Keeping…' : worksheetId ? 'Update kept worksheet' : 'Keep this worksheet'}
               </button>
               {kept.length > 0 && (
@@ -1001,6 +1023,16 @@ export default function SquareUp() {
                               fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: 3,
                               background: 'var(--brass)', color: '#fff', whiteSpace: 'nowrap',
                             }}>no bond recorded</span>
+                    )}
+                    {/* Bond nobody has been charged for. It is the one figure on
+                        a kept sheet that is still owed a decision, so it is on
+                        the row rather than only inside the sheet. */}
+                    {Number(w.unassignedBond) > 0 && (
+                      <span title="Nobody has been charged for this. Starting a new trip carries it over."
+                            style={{
+                              fontSize: '0.7rem', padding: '0.1rem 0.4rem', borderRadius: 3,
+                              background: 'var(--rust)', color: '#fff', whiteSpace: 'nowrap',
+                            }}>{fmtMoney(Number(w.unassignedBond))} unassigned</span>
                     )}
                     {w.id === worksheetId && (
                       <span style={{
