@@ -11,10 +11,33 @@ import { stateToRows, rowsToState } from './worksheetShape'
 // A fleet with no su_boats row cannot save (nothing to hang it off). That is
 // not an error — the page just stays local-only and says so.
 
-export async function getWorksheetBoat() {
+/* WHICH BOAT A WORKSHEET IS KEPT AGAINST — and it must be your OWN.
+ *
+ * This took the first boat RLS returned, with no fleet filter, on the
+ * assumption that a login sees only its own. That is not true here and the
+ * exception is deliberate: `su_visible_boat()` is "my fleet's boat OR a boat I
+ * hold an agent grant over", and Audacious holds one over Beryl so that the
+ * settlements integration could be proven. So TWO boats came back and
+ * `limit(1)` took whichever the planner offered — which was Beryl's.
+ *
+ * IT WROTE ACROSS THE TENANT BOUNDARY. David's worksheet was filed against
+ * Colin's boat row, and `su_worksheets_visible` is `su_visible_boat(boat_id)`,
+ * so a Beryl login read it: probed, and a Beryl skipper saw the sheet and all
+ * fourteen crew names, with their shares, bonuses and bond.
+ *
+ * THE GRANT IS A READ, NEVER A PLACE TO WRITE. It exists so David can see
+ * Beryl's settlements come back; it must never decide where his own work goes.
+ * So the fleet is passed in and filtered on explicitly rather than left to RLS
+ * — the same rule this codebase already applies in the ingest webhook, which
+ * holds the service-role key and scopes `su_boats` by `fleet_id` by hand.
+ */
+export async function getWorksheetBoat(fleetId) {
+  if (!fleetId) return null
   const { data, error } = await supabase
     .from('su_boats')
     .select('id, name, registration, format')
+    .eq('fleet_id', fleetId)
+    .eq('active', true)
     .limit(1)
     .maybeSingle()
   if (error) return null

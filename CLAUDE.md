@@ -208,6 +208,41 @@ not been run against a real bundle — the edge function's invoice prompt exists
 and produced those four rows once, but nobody has watched it read a five-page
 Monday scan.
 
+### THE AGENT GRANT IS A READ, AND A WORKSHEET WAS WRITTEN THROUGH IT
+
+Found Sep 2026 while checking the fleet was ready for invoice forwarding.
+
+`getWorksheetBoat()` read `su_boats` with **no fleet filter**, on the reasonable-
+looking assumption that a login only ever sees its own. **That is false here, and
+deliberately so**: `su_visible_boat()` is *my fleet's boat OR a boat I hold an
+agent grant over*, and Audacious holds one over Beryl so the settlements
+integration could be proven. So RLS returned **two** boats and `.limit(1)` took
+whichever the planner offered — **Beryl's**.
+
+**The worksheet was therefore filed against another business's boat**, and
+`su_worksheets_visible` is `su_visible_boat(boat_id)`, so it was readable from
+the other side. Probed as a real Beryl skipper login **before** the fix:
+
+    BERYL sees worksheets 1, crew rows 14
+    names: Alfie Reid, Andrew Smith, Barry Reid, David Gatt, David Henderson, …
+
+Colin's login could read David's crew list, their shares, bonuses and bond.
+Probed **after**, as both logins:
+
+    AUDACIOUS: worksheets 1, crew 14, boats 2   <- 2 is the grant, working
+    BERYL:     worksheets 0, crew 0,  boats 1
+
+**THE LESSON IS THE DIRECTION.** The grant exists so David can SEE Beryl's
+settlements come back. It must never decide where his own work is WRITTEN. Every
+`su_boats` read that picks *the* boat now filters on `fleet_id` explicitly, the
+way the ingest webhook already does with the service-role key. `Settlements.jsx`
+is untouched: it lists every visible boat behind a picker, which is the grant
+being used for exactly what it is for.
+
+**Anywhere `.limit(1)` picks a row that will be WRITTEN to, the scope has to be
+explicit** — RLS answers "may I see this", never "is this mine". The one existing
+worksheet was moved to the right boat in the same breath.
+
 Probed: skipper sees his own fleet's arrival and not Beryl's, **officer 0, cook
 0**, officer update affects **0 rows**. A settling sheet is money, and the
 officer and cook are denied every money table — that denial is the reason those

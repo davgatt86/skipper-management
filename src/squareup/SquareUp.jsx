@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AppShell from '../AppShell';
 import PageHeader from '../PageHeader';
 import { supabase } from '../supabaseClient';
+import { useAuth } from '../AuthContext';
 import './squareup.css';
 import {
   Ship, Plus, Trash2, Users, Fuel, Truck, FileText,
@@ -164,6 +165,11 @@ function AddCrewMenu({ roster, existingRosterIds, onPick, onNew, onRemoveFromRos
 
 // ── Main app ───────────────────────────────────────────────────────────
 export default function SquareUp() {
+  /* The login's OWN fleet. Not for display — it decides which su_boats row a
+     worksheet is kept against, and taking that from RLS filed one against
+     another business's boat. */
+  const { appUser } = useAuth();
+  const fleetId = appUser?.fleet_id;
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState('edit');
   const [roster, setRosterState] = useState([]);
@@ -249,9 +255,6 @@ export default function SquareUp() {
         setMonthBonus({ month: latest, rows: rows.filter(r => r.month === latest) });
       });
     setForeignRosterState(loadForeignRoster());
-    // A fleet with no su_boats row cannot keep worksheets — the page stays
-    // local-only and says so rather than offering a button that fails.
-    getWorksheetBoat().then(setSuBoat);
     const t = loadTrip();
     if (t) {
       if (t.vessel !== undefined) setVessel(t.vessel);
@@ -278,6 +281,26 @@ export default function SquareUp() {
     }
     setLoaded(true);
   }, []);
+
+  /* THE BOAT IS LOOKED UP ON THE FLEET, in its own effect.
+   *
+   * A fleet with no su_boats row cannot keep worksheets — the page stays
+   * local-only and says so rather than offering a button that fails.
+   *
+   * THE FLEET IS FILTERED ON EXPLICITLY, never left to RLS. `su_visible_boat`
+   * is "my fleet's boat OR one I hold an agent grant over", and Audacious holds
+   * a grant over Beryl so the settlements integration could be proven — so RLS
+   * returns TWO boats, and taking the first filed David's worksheet against
+   * Colin's boat row, where a Beryl login could read it. The grant is a READ,
+   * never a place to write.
+   *
+   * Keyed on fleetId rather than folded into the mount effect: appUser can
+   * still be resolving on a device with no cached record, and [] deps would
+   * leave the page permanently local-only. */
+  useEffect(() => {
+    if (!fleetId) return;
+    getWorksheetBoat(fleetId).then(setSuBoat);
+  }, [fleetId]);
 
   // Debounced autosave
   useEffect(() => {
