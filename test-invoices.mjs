@@ -235,4 +235,36 @@ eq(periodOf('not a date', 'year'), null, 'nor is a date the reader could not rea
   eq(readManagerBalance(''), null, 'and so does nothing at all')
 }
 
+/* ---- THE NAME AS READ IS IN `supplier` -----------------------------------
+ *
+ * su_invoices came from outside this repo and calls that column `supplier`.
+ * The report looked for `supplier_raw` — a name from the shape designed before
+ * that table was found — so every unfiled invoice reported "no supplier read"
+ * about a row whose firm was written on it. That is worse than a blank: it is
+ * a claim that the reader failed where nothing failed. Found on the four real
+ * July invoices, which name their suppliers perfectly clearly.
+ */
+{
+  const rows = [
+    { supplier: 'John A Smith & Sons', invoice_date: '2026-07-10', total: 218.40 },
+    { supplier: 'Jackson Trawls Ltd', invoice_date: '2026-07-15', total: 5200 },
+  ]
+  const t = totalsByPeriod(rows, [])
+  eq(t.periods[0].suppliers.map((s) => s.name),
+     ['Jackson Trawls Ltd', 'John A Smith & Sons'],
+     'an unfiled invoice is named by the supplier as READ, off the real column')
+  ok(!t.periods[0].suppliers.some((s) => s.name === 'no supplier read'),
+     'and never claims the reader failed when the name is right there')
+
+  /* Both spellings of the column work, so a row from either shape reads. */
+  eq(totalsByPeriod([{ supplier_raw: 'Woodsons', invoice_date: '2026-01-01', total: 10 }], [])
+       .periods[0].suppliers[0].name, 'Woodsons', 'supplier_raw still works where it is used')
+
+  /* AND A GENUINELY BLANK ONE STILL SAYS SO. The message is right, it was
+     just being said about the wrong rows. */
+  eq(totalsByPeriod([{ supplier: '   ', invoice_date: '2026-01-01', total: 10 }], [])
+       .periods[0].suppliers[0].name, 'no supplier read',
+     'a row the reader really could not name still says so')
+}
+
 console.log('boat invoices: ' + n + ' checks passed')

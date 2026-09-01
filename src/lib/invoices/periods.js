@@ -112,9 +112,22 @@ export function totalsByPeriod(invoices = [], suppliers = [], opts = {}) {
     /* An invoice matched to no supplier is grouped under its RAW name rather
        than lumped into one "unknown" bucket — the raw names are the thing the
        skipper is about to file, and three of them are three decisions. */
+    /* THE NAME AS READ LIVES IN `supplier`, and this looked for `supplier_raw`.
+     *
+     * `su_invoices` came from outside this repo and calls that column
+     * `supplier`; `supplier_raw` is a name from the shape I designed before
+     * finding the table already existed. So every unfiled invoice fell through
+     * to the empty case and the report said **"no supplier read"** about rows
+     * whose supplier was written on them — David: "not sure what supplier it
+     * relates to", against four invoices that plainly name their firm.
+     *
+     * WORSE THAN A BLANK, because it is a claim: it says the reader failed
+     * where nothing had failed at all. `matchAll` was given the fallback when
+     * the table was found; this was missed. */
     const sid = inv.supplier_id || null
     const label = sid ? (nameOf.get(sid) || 'supplier no longer on file')
-                      : (String(inv.supplier_raw || '').trim() || 'no supplier read')
+                      : (String(inv.supplier_raw ?? inv.supplier ?? '').trim()
+                         || 'no supplier read')
     const key = sid || 'raw:' + label
 
     let sup = period.suppliers.get(key)
