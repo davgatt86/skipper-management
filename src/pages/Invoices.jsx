@@ -76,6 +76,68 @@ export default function Invoices() {
       .limit(1).maybeSingle().then(({ data }) => setBoatId(data?.id || null))
   }, [fleetId])
 
+  /* ---- PUTTING A BUNDLE IN BY HAND ----------------------------------------
+   *
+   * THE EMAIL ROUTE CANNOT CARRY THESE. CloudMailin refuses a message over
+   * 512 KB — "552 Message size exceeds the allowed size for this account" — and
+   * a weekly bundle is 0.7 to 2.3 MB before the base64 encoding an email adds.
+   * Every one of them bounces.
+   *
+   * It is not only the invoices: `su_inbox` has never received a settling sheet
+   * either, and Morna's run from 466 KB to 1.26 MB. That path was built in Aug
+   * 2026 and has been quietly bouncing the big ones ever since. A sales note is
+   * small, which is why the sales ingest has worked all along and nobody found
+   * this.
+   *
+   * So the bundle is dropped in here instead. It is the same storage, the same
+   * reader and the same review screen — only the delivery differs, and this one
+   * has no size limit worth worrying about. Raising the CloudMailin plan would
+   * restore the email route, but that costs money and this costs nothing.
+   */
+  const fileInput = useRef(null)
+
+  async function uploadBundle(files) {
+    const list = Array.from(files || [])
+    if (!list.length || !boatId) return
+    setErr(''); setMsg(''); setStage('uploading')
+    try {
+      const { ensurePdfjs } = await import('../lib/pdfjs.js')
+      for (const f of list) {
+        const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const path = `${boatId}/${Date.now()}_${safe}`
+        const { error: ue } = await supabase.storage.from('su-documents').upload(path, f)
+        if (ue) throw ue
+
+        /* The page count is read here rather than left blank: it is the first
+           thing that says whether the whole bundle came over, and the reader
+           has not run yet. */
+        let pages = null
+        try {
+          const pdfjs = await ensurePdfjs()
+          const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()) }).promise
+          pages = doc.numPages
+        } catch { /* a photo rather than a PDF — no page count, and that is fine */ }
+
+        const { error: ie } = await supabase.from('su_invoice_batches').insert({
+          fleet_id: fleetId, boat_id: boatId,
+          file_path: path, filename: f.name, bytes: f.size, page_count: pages,
+          /* NO manager's balance. It lives in the sentence Denise writes in the
+             email body, and a file dropped in has no body. Blank is honest;
+             carrying the last one forward would be a figure nobody stated. */
+          subject: 'Added by hand', from_email: null,
+        })
+        if (ie) throw ie
+      }
+      setMsg(`${list.length} bundle${list.length === 1 ? '' : 's'} added. Read ${list.length === 1 ? 'it' : 'them'} below.`)
+      await refresh()
+    } catch (e) {
+      setErr(e.message || String(e))
+    } finally {
+      setStage('')
+      if (fileInput.current) fileInput.current.value = ''
+    }
+  }
+
   // ---- reading a bundle ---------------------------------------------------
   async function readBatch(batch) {
     setErr(''); setMsg(''); setStage('reading')
@@ -169,7 +231,8 @@ export default function Invoices() {
 
       {tab === 'arrivals' && (
         <Arrivals batches={batches} loading={loading} onRead={readBatch}
-                  busy={!!stage}
+                  busy={!!stage} canUpload={!!boatId}
+                  fileInput={fileInput} onUpload={uploadBundle}
                   onIgnore={async (b) => { await setBatchStatus(b.id, 'ignored'); refresh() }}
                   onDelete={async (b) => {
                     if (!window.confirm(
@@ -194,6 +257,55 @@ export default function Invoices() {
   )
 }
 
+/* THE WAY IN, and it has to be the way in rather than a fallback.
+ *
+ * CloudMailin refuses anything over 512 KB and these bundles are 0.7-2.3 MB, so
+ * the email route bounces every one — "552 Message size exceeds the allowed
+ * size for this account". The same cap has been silently bouncing the bigger
+ * settling sheets since that path was built: su_inbox has never taken a single
+ * one. A sales note is small, which is why nobody found this until now.
+ *
+ * So the page SAYS why it is asking for the file rather than presenting an
+ * upload box with no explanation, which reads as the email route having been
+ * forgotten about. */
+function Dropzone({ canUpload, fileInput, onUpload, busy }) {
+  const [over, setOver] = useState(false)
+  if (!canUpload) {
+    return (
+      <p className="muted" style={{ margin: 0 }}>
+        This fleet has no Square Up boat, so there is nowhere to file a bundle against.
+      </p>
+    )
+  }
+  return (
+    <>
+      <input ref={fileInput} type="file" accept="application/pdf,image/*" multiple
+             style={{ display: 'none' }}
+             onChange={(e) => onUpload(e.target.files)} />
+      <div onClick={() => !busy && fileInput.current?.click()}
+           onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+           onDragLeave={() => setOver(false)}
+           onDrop={(e) => { e.preventDefault(); setOver(false); if (!busy) onUpload(e.dataTransfer.files) }}
+           style={{
+             border: '1px dashed ' + (over ? 'var(--hull)' : 'var(--line)'),
+             background: over ? 'color-mix(in srgb, var(--hull) 8%, transparent)' : 'transparent',
+             borderRadius: 6, padding: '1rem', textAlign: 'center',
+             cursor: busy ? 'wait' : 'pointer', marginBottom: '0.8rem',
+           }}>
+        <b>{busy ? 'Adding…' : 'Drop the Monday bundle here'}</b>
+        <div className="muted" style={{ fontSize: '0.82rem', marginTop: '0.25rem' }}>
+          Save the PDF out of the email and drop it in, or click to choose. Several at once is fine.
+        </div>
+      </div>
+      <p className="muted" style={{ fontSize: '0.78rem', marginTop: 0 }}>
+        <b>Why not by email?</b> The forwarding address takes messages up to 512 KB and these
+        bundles are 0.7–2.3 MB, so they bounce — <i>552 message size exceeds the allowed size
+        for this account</i>. Sales notes are small, which is why they have always worked.
+      </p>
+    </>
+  )
+}
+
 function Tab({ id, tab, set, children, disabled }) {
   return (
     <button className={'flow' + (tab === id ? ' is-now' : '')}
@@ -209,22 +321,17 @@ function Tab({ id, tab, set, children, disabled }) {
  * What the email put here. A bundle is FILED, never read automatically — the
  * same rule as a settling sheet, and for the same reason: reading is a model
  * looking at a photograph, and it has to be checked before it becomes a cost. */
-function Arrivals({ batches, loading, onRead, onIgnore, onDelete, busy }) {
+function Arrivals({ batches, loading, onRead, onIgnore, onDelete, busy,
+                   canUpload, fileInput, onUpload }) {
   if (loading) return <p className="muted">Loading…</p>
-  if (!batches.length) {
-    return (
-      <div className="card">
-        <p style={{ margin: 0 }}>No bundles have arrived yet.</p>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          Forward the Monday email from the office to the same address the sales notes
-          go to. A bundle is told from a settling sheet by the word <b>invoice</b> in
-          the subject, which every one of them carries and no settling sheet does.
-        </p>
-      </div>
-    )
-  }
   return (
     <div className="card">
+      <Dropzone canUpload={canUpload} fileInput={fileInput} onUpload={onUpload} busy={busy} />
+      {!batches.length && (
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Nothing here yet. Save the Monday PDF out of your email and drop it above.
+        </p>
+      )}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {batches.map((b) => (
           <li key={b.id} style={{

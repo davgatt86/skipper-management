@@ -243,6 +243,29 @@ being used for exactly what it is for.
 explicit** — RLS answers "may I see this", never "is this mine". The one existing
 worksheet was moved to the right boat in the same breath.
 
+**AND NOT ONE HAS EVER ARRIVED — `su_inbox` is EMPTY (checked Sep 2026).**
+
+**CLOUDMAILIN REFUSES A MESSAGE OVER 512 KB.** *"552 Message size exceeds the
+allowed size for this account (524288)"*. Morna's settling emails run **466 KB
+to 1.26 MB** and the weekly invoice bundles **0.7 to 2.3 MB**, so both bounce —
+and email base64 adds about a third on top of the attachment, which puts the cap
+nearer 370 KB of actual PDF.
+
+**A sales note is small, which is why the sales ingest has worked all along and
+nobody found this.** The settling-sheet path was built in Aug 2026, verified by
+probe at the database, and never once carried a document. The probe proved the
+row would be filed correctly; it could not prove a message would arrive.
+
+**The lesson: a webhook probed from the database end is only half tested.** Send
+one real message through the actual vendor before believing a delivery path
+works — the same class of hole as CloudMailin's outbound TEST MODE, which
+accepts a digest and delivers nothing while the function log says "sent".
+
+Two ways out, and the cheap one is built: **drop the file on the page**. Same
+bucket, same reader, same review screen — only the delivery differs, and
+`su-documents` has no size limit. Raising the CloudMailin plan would restore the
+email route and costs money; the upload costs nothing and works today.
+
 Probed: skipper sees his own fleet's arrival and not Beryl's, **officer 0, cook
 0**, officer update affects **0 rows**. A settling sheet is money, and the
 officer and cook are denied every money table — that denial is the reason those
