@@ -123,6 +123,91 @@ twice and both show; deciding they are the same document is the skipper's,
 because `su_settlements` is unique on (boat_id, reference) and the reference
 only exists once the sheet has been read.
 
+### The weekly INVOICE bundle — `/invoices` (Sep 2026)
+
+David: *"i get them scanned and emailed to me every monday by denise nicolson
+don company ... catagorise them by type, supplier, monthly, quarterly,
+annually"*, then *"splitting is what we want, do whatever it needs to have it
+split by supplier"* and *"just reporting periods. annual is most important."*
+
+**Measured off twelve real emails and one opened bundle, not assumed.** Every
+Monday from `denise.nicolson@donfishing.com`, subject *"Audacious invoices for
+approval"*, **ONE pdf holding the whole week**, 0.7–2.3 MB, named by the scanner
+clock (`20260831082919614.pdf`). The 20-07 bundle probed: **0 fonts, 4
+DCTDecode images, 5 pages, ZERO characters of text.** A photograph, exactly like
+a settling sheet.
+
+**WHICH IS THE THING THAT WOULD HAVE BITTEN.** `classifyKind` treats *no text at
+all* as meaning settling sheet, deliberately — a settling sheet has no words to
+match and the sender is never a gate. An invoice bundle is also zero characters,
+so forwarding these to the same address would have filed every one as a settling
+sheet.
+
+**The separator is the SUBJECT**, and it is clean across every real email of
+both kinds: Morna writes *"Audacious Settling"*, Denise writes *"invoices for
+approval"*, never once the other's word. **The test is one-directional on
+purpose** — only a subject saying INVOICE is diverted, everything else falls
+through as before. So a strange subject does what today already does and a
+settling sheet cannot be lost by the change, which is the direction to fail in.
+
+**`su_invoices` ALREADY EXISTED**, found by the first migration failing on a
+missing `fleet_id` — `create table if not exists` had silently skipped a table
+already there with a different shape. It carries **four real Audacious invoices
+from July 2026** with their files, and comes from outside this repo, almost
+certainly `square-up-fleet-settlements`. So `supabase/boat_invoices.sql` is
+**additive only**: nullable columns, nothing renamed or dropped, because that
+app may still be writing to it. There is no second invoices table, which is the
+outcome worth having — two tables for one idea is the parser-copy failure again.
+
+Added: `su_invoice_batches` (one row per email) and `su_invoice_suppliers`.
+`batch_id` is **ON DELETE SET NULL**: deleting a bundle must not take the
+invoices read out of it, because the cost stood whether or not the scan does.
+
+**THE SUPPLIER LOOKUP EXISTS BEFORE ANYTHING READS A BUNDLE.** Splitting by
+supplier is worthless if one firm arrives under four names, and these names come
+off a MODEL READING A PHOTOGRAPH, so they drift harder than anything typed.
+Ninth instance of the pattern. The fuel log already holds seven spellings of one
+firm across 559,938 litres — and one of those four existing invoices is
+`John A Smith & Sons`, an eighth. Filing it once catches every one of them,
+asserted by test.
+
+`normaliseSupplier` collapses case, the ampersand, the apostrophe and a
+**trailing** company suffix (Ltd/LLP/A/S — a leading "Ltd" is part of the name).
+It deliberately stops short of welding singular onto plural, and **never guesses
+a near miss** — "J Smithson" stays "J Smithson", the same rule `buyerAliases`
+follows, because welding two firms together is unrecoverable once the invoice
+that would tell them apart is filed under the wrong name.
+
+**THE MANAGER'S BALANCE is captured off the prose**, and exists nowhere else in
+this app. Denise states it every week — twelve readings from mid-June, one of
+them **£113k THE WRONG WAY** after a £336,668 scientific quota adjustment. The
+sentence is stored beside the number because the reading is a regex over words a
+person typed; the direction is read separately and an unstated one says
+*unstated* rather than assuming "to the good".
+
+**The page is three tabs in the order things happen** — Arrivals, Check the
+read, What it cost — because the middle one is a step, not a place. Nothing
+saves without being looked at, and net + VAT disagreeing with the total is
+**reported**, never resolved, the same rule as the settlement review. A firm
+nobody has filed is grouped and counted, not asked about once per invoice.
+Reading a bundle again **replaces** what came off it, scoped by `batch_id` so
+the four rows that predate this survive.
+
+Periods are a way of LOOKING at costs, never a tag on a firm — a supplier that
+is annual this year and a one-off next would make the tag a lie. The year start
+is a **setting** (the office closes this boat's quarters on 30 June) and a
+non-January year labels itself `2026/27` rather than a bare 2026.
+
+`test-invoices.mjs` 67 checks · `scripts/invoices-preview.mjs` runs the real
+report over the boat's real four invoices — 2026 totals **£7,128.05**, Jackson
+Trawls 73% of the year.
+
+**Still to do:** the reader returns no page numbers, so `page_from`/`page_to`
+are unfilled and an invoice cannot yet be opened at its own pages. And this has
+not been run against a real bundle — the edge function's invoice prompt exists
+and produced those four rows once, but nobody has watched it read a five-page
+Monday scan.
+
 Probed: skipper sees his own fleet's arrival and not Beryl's, **officer 0, cook
 0**, officer update affects **0 rows**. A settling sheet is money, and the
 officer and cook are denied every money table — that denial is the reason those

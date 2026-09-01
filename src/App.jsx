@@ -50,6 +50,7 @@ const Alerts = lazy(() => import('./pages/Alerts'))
 const EngineLogs = lazy(() => import('./pages/EngineLogs'))
 const CrewCertsRegister = lazy(() => import('./pages/CrewCertsRegister'))
 const Settlements = lazy(() => import('./pages/Settlements'))
+const Invoices = lazy(() => import('./pages/Invoices'))
 
 function ProtectedRoute({ children }) {
   // `signedIn`, not `session`: an expired token that cannot be refreshed at sea
@@ -425,6 +426,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <Settlements />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/invoices" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <Invoices />
             </Suspense>
           </ProtectedRoute>
         } />

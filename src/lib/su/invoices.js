@@ -1,0 +1,178 @@
+import { supabase } from '../../supabaseClient'
+import { matchAll, withAlias } from '../invoices/suppliers'
+
+/* READING AND WRITING THE INVOICE RECORD.
+ *
+ * The shaping — who a supplier is, what a period totals — lives in
+ * `src/lib/invoices/`, tested without a database. This half is only the IO, the
+ * same split as `worksheet.js` against `worksheetShape.js`, and for the same
+ * reason: the arithmetic is the part worth testing.
+ *
+ * `su_invoices` was NOT created by this repo. It came with four real July
+ * invoices already in it, so every write here is additive to a shape that was
+ * already there and may still be written to by the Square Up fleet settlements
+ * app. Nothing renames or deletes its columns.
+ */
+
+const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
+  + 'from_email, subject, received_at, manager_balance, manager_balance_text, status, note'
+
+const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
+  + 'description, net, vat, total, currency, account_code, status, paid_date, '
+  + 'page_from, page_to, file_path, confidence'
+
+/** The bundles that have arrived, newest first. */
+export async function listBatches(fleetId) {
+  if (!fleetId) return []
+  const { data, error } = await supabase
+    .from('su_invoice_batches')
+    .select(BATCH + ', su_invoices(id)')
+    .eq('fleet_id', fleetId)
+    .order('received_at', { ascending: false })
+  if (error) return []
+  return (data || []).map(({ su_invoices: inv, ...b }) => ({
+    ...b,
+    invoiceCount: (inv || []).length,
+  }))
+}
+
+/** Every invoice for the fleet — the report reads them all and totals locally. */
+export async function listInvoices(fleetId) {
+  if (!fleetId) return []
+  /* Read WHOLE, in pages. Supabase caps a REST response at 1,000 rows and does
+     not say so — the Buyer League and Reconcile pages both showed a silently
+     truncated answer before `fetchAll` existed. A year's costs quietly missing
+     its tail is the same failure wearing a different hat. */
+  const out = []
+  const size = 1000
+  for (let from = 0; ; from += size) {
+    const { data, error } = await supabase
+      .from('su_invoices').select(INVOICE)
+      .eq('fleet_id', fleetId)
+      .order('invoice_date', { ascending: false })
+      .range(from, from + size - 1)
+    if (error) return out
+    out.push(...(data || []))
+    if (!data || data.length < size) return out
+  }
+}
+
+export async function listSuppliers(fleetId) {
+  if (!fleetId) return []
+  const { data, error } = await supabase
+    .from('su_invoice_suppliers')
+    .select('id, name, aliases, category, note')
+    .eq('fleet_id', fleetId)
+    .order('name')
+  return error ? [] : (data || [])
+}
+
+/** Create a supplier, taking the name the reader produced as its first alias. */
+export async function createSupplier(fleetId, name, { alias, category } = {}) {
+  const clean = String(name || '').trim()
+  if (!clean) throw new Error('A supplier needs a name.')
+  const aliases = alias && alias.trim() && alias.trim() !== clean ? [alias.trim()] : []
+  const { data, error } = await supabase
+    .from('su_invoice_suppliers')
+    .insert({ fleet_id: fleetId, name: clean, aliases, category: category || null })
+    .select('id, name, aliases, category, note')
+    .single()
+  if (error) throw error
+  return data
+}
+
+/** File a name the reader produced against a supplier already on the list. */
+export async function addAlias(supplier, raw) {
+  const next = withAlias(supplier, raw)
+  /* Null means the spelling is already covered. Writing anyway would stamp
+     updated_at for a change that is not one. */
+  if (!next) return supplier
+  const { data, error } = await supabase
+    .from('su_invoice_suppliers')
+    .update({ aliases: next })
+    .eq('id', supplier.id)
+    .select('id, name, aliases, category, note')
+    .single()
+  if (error) throw error
+  return data
+}
+
+/**
+ * Save what the reader found for one bundle.
+ *
+ * REPLACED WHOLESALE, not merged. Reading the same bundle twice must not double
+ * the year's costs, and a bundle is small — the same rule as re-ingesting a
+ * sales note, which deletes its rows and re-inserts them.
+ *
+ * ONLY the invoices belonging to THIS batch are cleared. The four July rows
+ * that came from outside this repo carry no batch_id and must survive
+ * untouched; a delete scoped by fleet rather than by batch would take them.
+ */
+export async function saveBatchInvoices(batch, rows, fleetId) {
+  const { error: de } = await supabase
+    .from('su_invoices').delete().eq('batch_id', batch.id)
+  if (de) throw de
+
+  const clean = rows
+    .filter((r) => (r.supplier || '').trim() || r.total !== '' )
+    .map((r) => ({
+      fleet_id: fleetId,
+      boat_id: batch.boat_id,
+      batch_id: batch.id,
+      supplier_id: r.supplier_id || null,
+      supplier: (r.supplier || '').trim(),
+      invoice_no: (r.invoice_no || '').trim() || null,
+      invoice_date: r.invoice_date || null,
+      description: (r.description || '').trim() || null,
+      net: num(r.net), vat: num(r.vat), total: num(r.total),
+      currency: r.currency || 'GBP',
+      account_code: (r.account_code || '').trim() || null,
+      status: r.status || 'unpaid',
+      page_from: intOrNull(r.page_from), page_to: intOrNull(r.page_to),
+      /* The document itself, so an invoice can always be opened at its own
+         pages rather than the reader's word being the only record. */
+      file_path: batch.file_path,
+      confidence: r.confidence || null,
+    }))
+
+  if (clean.length) {
+    const { error } = await supabase.from('su_invoices').insert(clean)
+    if (error) throw error
+  }
+
+  const { error: ue } = await supabase
+    .from('su_invoice_batches').update({ status: 'filed' }).eq('id', batch.id)
+  if (ue) throw ue
+
+  return clean.length
+}
+
+export async function setBatchStatus(id, status, note) {
+  const patch = { status }
+  if (note !== undefined) patch.note = note
+  const { error } = await supabase.from('su_invoice_batches').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteBatch(id) {
+  /* The invoices are ON DELETE SET NULL, so they SURVIVE this and keep their
+     figures. The cost was incurred whether or not the scan is kept, and losing
+     the rows would quietly reduce the year's total. */
+  const { error } = await supabase.from('su_invoice_batches').delete().eq('id', id)
+  if (error) throw error
+}
+
+/** The reader's rows, with each name matched against the fleet's suppliers. */
+export function applySuppliers(rows, suppliers) {
+  return matchAll(rows, suppliers)
+}
+
+const num = (v) => {
+  if (v === '' || v == null) return null
+  const n = Number(String(v).replace(/[^0-9.-]/g, ''))
+  return Number.isFinite(n) ? n : null
+}
+const intOrNull = (v) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.trunc(n) : null
+}

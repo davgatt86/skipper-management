@@ -96,6 +96,10 @@ export const NAV = [
     items: [
       { to: '/squareup', label: 'Square Up', access: 'fleetTools' },
       { to: '/settlements', label: 'Settlements', access: 'skipper' },
+      // The costs the office sends back every Monday, split by supplier.
+      // Skipper only: an invoice is money, which is what the officer and
+      // cook roles are denied at the database.
+      { to: '/invoices', label: 'Invoices', access: 'skipper' },
       // The two ends of the loop compared: sales notes against what came back.
       { to: '/reconcile', label: 'Landings vs Settlements', access: 'fleetTools' },
     ],
