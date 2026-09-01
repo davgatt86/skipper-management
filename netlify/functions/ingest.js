@@ -53,6 +53,7 @@ import { createClient } from '@supabase/supabase-js'
 import { parseMarketFromDoc } from '../../src/lib/market/parseMarket.js'
 // Shared with the browser upload in Sales.jsx. esbuild bundles it in.
 import { canonBuyerFrom } from '../../src/lib/buyerAliases.js'
+import { readManagerBalance } from '../../src/lib/invoices/periods.js'
 
 // src/lib/parse-core.cjs is THE sales-note parser — one copy, in this repo,
 // used by this webhook and by the browser upload alike. Imported statically so
@@ -171,6 +172,26 @@ function classifyKind(t) {
   return 'unknown'
 }
 
+/* THE MANAGER'S BALANCE IS IN THE PROSE, and nowhere else in this app.
+ *
+ * Denise states it in the body of every weekly invoice email — "your manager's
+ * balance is sitting at just over £413k to the good after settling on Friday"
+ * — and it moves week to week against the settling dates. It is a real running
+ * position with the office that has only ever lived in an inbox.
+ *
+ * The sentence is kept beside the figure, because the reading is a regex over
+ * words a person typed and the words are the evidence. `readManagerBalance`
+ * itself is a pure function in src/lib/invoices/periods.js and is tested
+ * against the real sentences, including the one that reads £113k THE WRONG WAY
+ * — a quarter of a million pounds different from £113k the right way. */
+function balanceFields(body) {
+  const text = String(body.plain || body.html || '')
+  const b = readManagerBalance(text)
+  return b
+    ? { manager_balance: b.value, manager_balance_text: b.text }
+    : {}
+}
+
 // Pull every email address out of the envelope + headers, lower-cased.
 function emailsFrom(body) {
   const hay = JSON.stringify(body.envelope || {}) + ' ' + JSON.stringify(body.headers || {})
@@ -277,18 +298,58 @@ export const handler = async (event) => {
           .select('id').eq('fleet_id', sender.fleet_id).eq('active', true).limit(1).maybeSingle()
         if (!boat) { results.push(`skip ${name}: a scan arrived but this fleet has no Square Up boat to file it against`); continue }
 
+        const hdrs = body.headers || {}
+        const subject = String(hdrs.subject || '').slice(0, 300)
+        const fromEmail = String(hdrs.from || body.envelope?.from || '').slice(0, 300)
+
         const buf2 = Buffer.from(b64, 'base64')
         const path = `${boat.id}/${Date.now()}_${name.replace(/[^w.-]/g, '_')}`
         const { error: ue } = await supabase.storage.from('su-documents')
           .upload(path, buf2, { contentType: 'application/pdf', upsert: false })
         if (ue) { results.push(`fail ${name}: could not store the sheet — ${ue.message}`); continue }
 
-        const hdrs = body.headers || {}
+        /* ---- INVOICE BUNDLE OR SETTLING SHEET? ----------------------------
+         * A ZERO-TEXT PDF IS NO LONGER ONE THING. Both are photographs from the
+         * same office scanner and both extract nothing at all — measured: the
+         * 20-07 invoice bundle gives 0 characters over 5 pages, exactly like a
+         * settling sheet. So "no text" can no longer be the whole answer.
+         *
+         * The separator is the SUBJECT, and it is clean because the two are
+         * sent by different people doing different jobs, checked across every
+         * real email of both kinds:
+         *
+         *   Morna   "Audacious Settling" · "Audacious settling" · "Settling"
+         *   Denise  "Audacious invoices for approval"
+         *
+         * Never once the other's word.
+         *
+         * THE TEST IS ONE-DIRECTIONAL ON PURPOSE. Only a subject that says
+         * INVOICE is diverted; everything else falls through to the settling
+         * sheet exactly as before. So the worst a strange subject can do is
+         * what today already does, and a settling sheet cannot be lost by this
+         * change — which is the direction to fail in when the alternative is
+         * mis-filing money. Matching "settling" instead would have inverted
+         * that, and the note on this branch is explicit that the sender is
+         * never a gate. */
+        if (/invoice/i.test(subject)) {
+          const { error: be } = await supabase.from('su_invoice_batches').insert({
+            fleet_id: sender.fleet_id, boat_id: boat.id,
+            file_path: path, filename: name, bytes: buf2.length,
+            page_count: pdf.numPages,
+            from_email: fromEmail, subject,
+            /* The manager's balance, off the sentence in the body. It exists
+               nowhere else in this app and costs one regex to keep. */
+            ...balanceFields(body),
+          })
+          if (be) { results.push(`fail ${name}: stored but not recorded — ${be.message}`); continue }
+          results.push(`invoice bundle ${name}: filed for splitting (${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'})`)
+          continue
+        }
+
         const { error: ie2 } = await supabase.from('su_inbox').insert({
           fleet_id: sender.fleet_id, boat_id: boat.id,
           file_path: path, filename: name, bytes: buf2.length,
-          from_email: String(hdrs.from || body.envelope?.from || '').slice(0, 300),
-          subject: String(hdrs.subject || '').slice(0, 300),
+          from_email: fromEmail, subject,
         })
         if (ie2) { results.push(`fail ${name}: stored but not recorded — ${ie2.message}`); continue }
         results.push(`settling sheet ${name}: filed for review (${pdf.numPages} page${pdf.numPages === 1 ? '' : 's'})`)
