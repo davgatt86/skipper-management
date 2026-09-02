@@ -11,3 +11,7 @@ export function html(el) {
   const h = renderToStaticMarkup(el)
   return { html: h, text: h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() }
 }
+
+/* The review screen's own triage — which rows it pulls to the top and why.
+ * Exported so `invoices-preview.mjs` can check it without a browser. */
+export { addsWrong } from '../src/lib/invoices/periods.js'

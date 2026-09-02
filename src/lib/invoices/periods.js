@@ -231,3 +231,33 @@ export function readManagerBalance(text) {
     text: t.slice(m.index, m.index + 160).trim(),
   }
 }
+
+/* NET + VAT MUST COME TO THE TOTAL, and when they do not the page SAYS SO and
+ * never picks which of the three is wrong — the same rule the settlement review
+ * follows by showing each total twice.
+ *
+ * It lives here rather than in the page because it is the rule the review screen
+ * triages on, and reading thirty-four bundles at once only stays honest if the
+ * doubtful rows are found FOR the reader: scrolling past two hundred correct
+ * ones to find three wrong ones is not checking, it is hoping.
+ *
+ * A FIGURE THE READER COULD NOT MAKE OUT IS NOT A DISAGREEMENT. Flagging a blank
+ * as "does not add up" would put a red mark on every row the model was honest
+ * about, which is how a warning stops being read.
+ */
+export function addsWrong(r) {
+  /* `Number(null)` is 0 and `Number('')` is 0, and BOTH are finite — so reading
+   * the figures straight would turn a VAT the model could not make out into a
+   * confident nought, and then report a £20 disagreement that exists only
+   * because a box was empty.
+   *
+   * THIRD TIME THIS TRAP HAS BEEN HIT IN THIS CODEBASE. The running-hours figure
+   * reported "0 hours since" for an unknown reading, which an engineer reads as
+   * just done; `toMm('')` canonicalised a blank to 0 mm, which is a headline
+   * that has vanished. Blank has to stay blank the whole way through. */
+  const num = (v) => (v === '' || v == null ? NaN : Number(v))
+  const net = num(r?.net), vat = num(r?.vat), total = num(r?.total)
+  if (![net, vat, total].every(Number.isFinite)) return false
+  // A crumb under a penny is rounding, not a misread, and not worth stopping for.
+  return Math.abs(Math.round((net + vat - total) * 100) / 100) >= 0.01
+}

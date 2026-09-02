@@ -24,7 +24,7 @@ await build({
   jsx: 'automatic', logLevel: 'silent',
   external: ['react', 'react-dom', 'react-dom/server'],
 })
-const { match, totals } = require(OUT)
+const { match, totals, addsWrong } = require(OUT)
 
 let n = 0, bad = 0
 const check = (c, m) => { n++; if (!c) { bad++; console.error('  FAIL  ' + m) } }
@@ -131,6 +131,29 @@ const real = [
   check(fy.periods.find((p) => p.label === '2026/27').count === 4,
         'and the four July invoices fall in the year that starts that month')
 }
+
+/* ---- WHAT THE REVIEW SCREEN PULLS TO THE TOP ----------------------------
+ *
+ * Reading thirty-four bundles at once only stays honest if the doubtful rows
+ * are found FOR the reader. Scrolling past two hundred correct ones to find
+ * three wrong ones is not checking, it is hoping.
+ */
+check(addsWrong({ net: 191.33, vat: 27.07, total: 218.40 }) === false,
+      "the real chandlery invoice adds up and is NOT flagged")
+check(addsWrong({ net: 5200, vat: 0, total: 5200 }) === false,
+      'nor a zero-VAT invoice, which is ordinary on these')
+check(addsWrong({ net: 100, vat: 20, total: 125 }) === true,
+      'a sum that does not come to its total IS flagged — one of the three is misread')
+check(addsWrong({ net: 100, vat: 20, total: 120.004 }) === false,
+      'and a rounding crumb under a penny is not worth stopping a man for')
+
+/* A FIGURE THE READER COULD NOT MAKE OUT IS NOT A DISAGREEMENT. Flagging a
+   blank as "does not add up" would put a red mark on every row the model was
+   honest about, which is how a warning stops being read. */
+check(addsWrong({ net: 100, vat: null, total: 120 }) === false,
+      'a missing VAT is not called a disagreement')
+check(addsWrong({ net: '', vat: '', total: '' }) === false,
+      'nor a row with nothing on it at all')
 
 await rm(OUT, { force: true })
 console.log('\n' + (bad ? bad + ' of ' + n + ' checks FAILED' : n + ' checks passed'))

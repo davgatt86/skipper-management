@@ -8,7 +8,7 @@ import {
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl } from '../lib/su/parse'
-import { totalsByPeriod, supplierHistory, MONTHS } from '../lib/invoices/periods'
+import { totalsByPeriod, supplierHistory, addsWrong, MONTHS } from '../lib/invoices/periods'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
  *
@@ -54,8 +54,10 @@ export default function Invoices() {
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
-  // The bundle being read, and the rows to check before they are saved.
-  const [review, setReview] = useState(null)
+  /* The bundles READ but not yet saved. A queue rather than one at a time, so
+     the run carries on in the background while the earliest are checked. */
+  const [queue, setQueue] = useState([])
+  const [progress, setProgress] = useState(null)
   const [stage, setStage] = useState('')
 
   const refresh = useCallback(async () => {
@@ -138,40 +140,83 @@ export default function Invoices() {
     }
   }
 
-  // ---- reading a bundle ---------------------------------------------------
-  async function readBatch(batch) {
-    setErr(''); setMsg(''); setStage('reading')
-    try {
-      /* THE FILE IS ALREADY IN THE BUCKET — the webhook put it there when the
-         email arrived. `existingPaths` stops it being uploaded a second time,
-         which would leave a duplicate object behind for every arrival against
-         an allowance that also holds every settlement document. */
-      const { data } = await parseDocuments([], DOC_TYPES.invoice, batch.boat_id || boatId, {
-        existingPaths: [batch.file_path],
-        onStage: setStage,
-      })
-      const rows = mapInvoices(data)
-      if (!rows.length) {
-        setErr('The reader found no invoices in that bundle. The file is still here — open it and check, or enter them by hand.')
-        return
-      }
-      const m = applySuppliers(rows, suppliers)
-      setReview({ batch, rows: m.rows, unknown: m.unknown })
-      setTab('review')
-      await setBatchStatus(batch.id, 'read').catch(() => {})
-    } catch (e) {
-      setErr(e.message || String(e))
-    } finally { setStage('') }
+  /* ---- READING, ONE BUNDLE OR ALL OF THEM ---------------------------------
+   *
+   * David, Sep 2026: "it's a bit tedious doing this batches of a year read 1 per
+   * go. can we have a bulk read once a bundle goes in, even if it takes minutes
+   * to do so."
+   *
+   * THE READING IS NOT THE SLOW PART TO A PERSON — THE WAITING IS. Each bundle
+   * is a five-page photograph and takes a minute or two, and doing them one at
+   * a time means sitting through every one of them doing nothing.
+   *
+   * So the run carries on in the BACKGROUND while the queue is reviewed. The
+   * first bundle lands in a few moments and can be checked while the second and
+   * third are still being read, which is why this is worth more than simply
+   * making the button say "all".
+   *
+   * WHAT DOES NOT CHANGE IS THAT NOTHING SAVES UNLOOKED-AT. A misread supplier
+   * is a miscategorised cost for ever and a misread total is money. What the
+   * queue removes is the waiting and thirty-four separate Save clicks — not the
+   * looking. */
+  const cancelRead = useRef(false)
+
+  async function readOne(batch) {
+    const { data } = await parseDocuments([], DOC_TYPES.invoice, batch.boat_id || boatId, {
+      /* THE FILE IS ALREADY IN THE BUCKET. `existingPaths` stops it being
+         uploaded a second time, which would leave a duplicate object per read
+         against an allowance that also holds every settlement document. */
+      existingPaths: [batch.file_path],
+    })
+    return mapInvoices(data)
   }
 
-  // Re-match after a supplier is created or an alias filed, without re-reading.
-  const rematch = useCallback((sups) => {
-    setReview((r) => {
-      if (!r) return r
-      const m = applySuppliers(r.rows, sups)
-      return { ...r, rows: m.rows, unknown: m.unknown }
+  async function readBatches(list) {
+    if (!list.length) return
+    setErr(''); setMsg('')
+    cancelRead.current = false
+    setProgress({ done: 0, total: list.length })
+    setTab('review')
+
+    for (let i = 0; i < list.length; i++) {
+      if (cancelRead.current) break
+      const batch = list[i]
+      setProgress({ done: i, total: list.length, current: batch })
+      try {
+        const rows = await readOne(batch)
+        /* A BUNDLE THE READER FOUND NOTHING IN IS QUEUED AS A PROBLEM, not
+           skipped. Silently passing over it is how a week's costs go missing
+           with nobody the wiser. */
+        setQueue((q) => [...q, rows.length
+          ? { batch, rows }
+          : { batch, rows: [], error: 'The reader found no invoices in this one.' }])
+        await setBatchStatus(batch.id, 'read').catch(() => {})
+      } catch (e) {
+        /* ONE FAILURE MUST NOT STOP THE RUN. Thirty-three good bundles should
+           not be lost to the thirty-fourth timing out. */
+        setQueue((q) => [...q, { batch, rows: [], error: e.message || String(e) }])
+      }
+    }
+    setProgress(null)
+  }
+
+  const readBatch = (batch) => readBatches([batch])
+  const readAllNew = () => readBatches(batches.filter((b) => b.status === 'new'))
+
+  /* Suppliers are matched at RENDER time over the whole queue, not stored on
+     each item — so filing a firm re-matches every bundle already read AND every
+     one still being read, without touching what is in flight. */
+  const matched = useMemo(() => {
+    const all = queue.flatMap((q) => q.rows)
+    const m = applySuppliers(all, suppliers)
+    let at = 0
+    const items = queue.map((q) => {
+      const rows = m.rows.slice(at, at + q.rows.length)
+      at += q.rows.length
+      return { ...q, rows }
     })
-  }, [])
+    return { items, unknown: m.unknown }
+  }, [queue, suppliers])
 
   async function fileSupplier(unknownName, existing) {
     setErr('')
@@ -179,24 +224,35 @@ export default function Invoices() {
       const s = existing
         ? await addAlias(existing, unknownName)
         : await createSupplier(fleetId, unknownName)
-      const next = existing
-        ? suppliers.map((x) => (x.id === s.id ? s : x))
-        : [...suppliers, s].sort((a, b) => a.name.localeCompare(b.name))
-      setSuppliers(next)
-      rematch(next)
+      setSuppliers((prev) => existing
+        ? prev.map((x) => (x.id === s.id ? s : x))
+        : [...prev, s].sort((a, b) => a.name.localeCompare(b.name)))
     } catch (e) { setErr(e.message || String(e)) }
   }
 
-  async function saveReview() {
-    if (!review) return
+  const editRow = (batchId, i, patch) => setQueue((q) => q.map((item) =>
+    item.batch.id !== batchId ? item
+      : { ...item, rows: item.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) }))
+
+  /* Saved bundle by bundle even from a "save all", so a failure part-way leaves
+     the ones before it filed rather than rolling the whole afternoon back. */
+  async function saveItems(items) {
     setErr(''); setMsg('')
-    try {
-      const n = await saveBatchInvoices(review.batch, review.rows, fleetId)
-      setReview(null)
-      setTab('costs')
-      setMsg(`${n} invoice${n === 1 ? '' : 's'} filed off that bundle.`)
-      await refresh()
-    } catch (e) { setErr(e.message || String(e)) }
+    let saved = 0, bundles = 0
+    for (const item of items) {
+      if (!item.rows.length) continue
+      try {
+        const rows = matched.items.find((x) => x.batch.id === item.batch.id)?.rows || item.rows
+        saved += await saveBatchInvoices(item.batch, rows, fleetId)
+        bundles++
+        setQueue((q) => q.filter((x) => x.batch.id !== item.batch.id))
+      } catch (e) {
+        setErr(`Stopped at the bundle of ${fmtDate(String(item.batch.received_at).slice(0, 10))} — ${e.message || e}. The ${bundles} before it are filed.`)
+        break
+      }
+    }
+    setMsg(`${saved} invoice${saved === 1 ? '' : 's'} filed off ${bundles} bundle${bundles === 1 ? '' : 's'}.`)
+    await refresh()
   }
 
   if (!fleetId) return <AppShell maxWidth={1040}><PageHeader title="Invoices" /></AppShell>
@@ -215,23 +271,21 @@ export default function Invoices() {
             ? ` (${batches.filter((b) => b.status === 'new').length})` : ''}
         </Tab>
         <span className="flow-ar">→</span>
-        <Tab id="review" tab={tab} set={setTab} disabled={!review}>2 · Check the read</Tab>
+        <Tab id="review" tab={tab} set={setTab} disabled={!queue.length && !progress}>
+          2 · Check the read{queue.length ? ` (${queue.length})` : ''}
+        </Tab>
         <span className="flow-ar">→</span>
         <Tab id="costs" tab={tab} set={setTab}>3 · What it cost</Tab>
       </div>
 
       {err && <p className="error" style={{ marginTop: 0 }}>{err}</p>}
       {msg && <p className="muted" style={{ marginTop: 0 }}>{msg}</p>}
-      {stage && (
-        <p className="muted" style={{ marginTop: 0 }}>
-          {stage === 'uploading' ? 'Uploading…'
-            : 'Reading the bundle — it is a photograph, so this takes a minute or two.'}
-        </p>
-      )}
+      {stage === 'uploading' && <p className="muted" style={{ marginTop: 0 }}>Uploading…</p>}
 
       {tab === 'arrivals' && (
         <Arrivals batches={batches} loading={loading} onRead={readBatch}
-                  busy={!!stage} canUpload={!!boatId}
+                  onReadAll={readAllNew} reading={!!progress}
+                  busy={!!stage || !!progress} canUpload={!!boatId}
                   fileInput={fileInput} onUpload={uploadBundle}
                   onIgnore={async (b) => { await setBatchStatus(b.id, 'ignored'); refresh() }}
                   onDelete={async (b) => {
@@ -243,11 +297,11 @@ export default function Invoices() {
                   }} />
       )}
 
-      {tab === 'review' && review && (
-        <Review review={review} suppliers={suppliers}
-                onChange={(rows) => setReview((r) => ({ ...r, rows }))}
-                onFile={fileSupplier} onSave={saveReview}
-                onCancel={() => { setReview(null); setTab('arrivals') }} />
+      {tab === 'review' && (
+        <Review items={matched.items} unknown={matched.unknown} suppliers={suppliers}
+                progress={progress} onStop={() => { cancelRead.current = true }}
+                onEdit={editRow} onFile={fileSupplier} onSave={saveItems}
+                onDrop={(id) => setQueue((q) => q.filter((x) => x.batch.id !== id))} />
       )}
 
       {tab === 'costs' && (
@@ -321,9 +375,10 @@ function Tab({ id, tab, set, children, disabled }) {
  * What the email put here. A bundle is FILED, never read automatically — the
  * same rule as a settling sheet, and for the same reason: reading is a model
  * looking at a photograph, and it has to be checked before it becomes a cost. */
-function Arrivals({ batches, loading, onRead, onIgnore, onDelete, busy,
+function Arrivals({ batches, loading, onRead, onReadAll, reading, onIgnore, onDelete, busy,
                    canUpload, fileInput, onUpload }) {
   if (loading) return <p className="muted">Loading…</p>
+  const unread = batches.filter((b) => b.status === 'new')
   return (
     <div className="card">
       <Dropzone canUpload={canUpload} fileInput={fileInput} onUpload={onUpload} busy={busy} />
@@ -331,6 +386,23 @@ function Arrivals({ batches, loading, onRead, onIgnore, onDelete, busy,
         <p className="muted" style={{ marginBottom: 0 }}>
           Nothing here yet. Save the Monday PDF out of your email and drop it above.
         </p>
+      )}
+
+      {/* READ THE LOT. Each bundle is a minute or two, so the run carries on in
+          the background and the earliest can be checked while the rest are still
+          going — which is the difference between waiting an hour and working
+          through them. */}
+      {unread.length > 1 && (
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap',
+                      padding: '0.6rem 0', borderTop: '1px solid var(--line)' }}>
+          <button onClick={onReadAll} disabled={busy}>
+            {reading ? 'Reading…' : `Read all ${unread.length}`}
+          </button>
+          <span className="muted" style={{ fontSize: '0.82rem' }}>
+            About {Math.max(1, Math.round(unread.length * 1.5))} minutes. Check them as they
+            land — nothing saves until you do.
+          </span>
+        </div>
       )}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {batches.map((b) => (
@@ -394,27 +466,92 @@ function Arrivals({ batches, loading, onRead, onIgnore, onDelete, busy,
 
 /* ── 2 · CHECK THE READ ────────────────────────────────────────────────────
  * Every figure editable, and the firms nobody has filed named at the top. */
-function Review({ review, suppliers, onChange, onFile, onSave, onCancel }) {
-  const { rows, unknown, batch } = review
+/* ── 2 · CHECK THE READ ────────────────────────────────────────────────────
+ *
+ * EVERY BUNDLE IN THE RUN, IN ONE LIST. Reading thirty-four bundles one at a
+ * time was the complaint; being asked to Save thirty-four times would only move
+ * the tedium rather than remove it.
+ *
+ * WHAT NEEDS A LOOK IS PULLED TO THE TOP. That is what keeps "nothing saves
+ * unlooked-at" honest at this size: a row whose net and VAT do not come to its
+ * total, one with no date, one whose firm is not on the list. Scrolling past
+ * two hundred correct rows to find the three wrong ones is not checking — it is
+ * hoping. So the doubtful ones are counted and marked, and everything is still
+ * on screen and still editable.
+ */
+function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, onSave, onDrop }) {
+  const rows = items.flatMap((i) => i.rows)
   const total = rows.reduce((s, r) => s + (Number(r.total) || 0), 0)
 
-  const set = (i, patch) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  /* The three things worth stopping for, counted across the whole run. Each is
+     a different KIND of doubt and they are not lumped together: an unfiled firm
+     is a decision, a sum that does not add up is a misread, a missing date puts
+     the cost in no period at all. */
+  const flags = {
+    firm: rows.filter((r) => !r.supplier_id).length,
+    adds: rows.filter((r) => addsWrong(r)).length,
+    date: rows.filter((r) => !r.invoice_date).length,
+  }
+  const failed = items.filter((i) => i.error)
 
   return (
     <>
-      {/* FILING A FIRM COMES FIRST, because it changes every row that names it.
-          Grouped by firm and counted: being asked the same question four times
-          because one bundle carried four of its invoices is how a filing screen
-          stops getting used. */}
+      {progress && (
+        <div className="card" style={{ borderColor: 'var(--hull)' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <b>Reading {progress.done + 1} of {progress.total}</b>
+            <span className="muted" style={{ flex: 1, fontSize: '0.84rem' }}>
+              {progress.current
+                ? fmtDate(String(progress.current.received_at).slice(0, 10))
+                : ''} — a photograph takes a minute or two
+            </span>
+            <button className="secondary" onClick={onStop}>Stop after this one</button>
+          </div>
+          {/* THE POINT OF THE QUEUE: check the ones already read while the rest
+              are still going. */}
+          <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.8rem' }}>
+            Carry on checking below — the rest keep reading while you do.
+            Leaving the page stops the run; anything already saved stays saved.
+          </p>
+        </div>
+      )}
+
+      {failed.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--rust)' }}>
+          <b>{failed.length} bundle{failed.length === 1 ? '' : 's'} could not be read</b>
+          <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem', fontSize: '0.86rem' }}>
+            {failed.map((f) => (
+              <li key={f.batch.id}>
+                {fmtDate(String(f.batch.received_at).slice(0, 10))} — {f.error}{' '}
+                <button className="secondary" style={{ padding: '0 0.4rem', fontSize: '0.74rem' }}
+                        onClick={() => onDrop(f.batch.id)}>dismiss</button>
+              </li>
+            ))}
+          </ul>
+          <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.8rem' }}>
+            The files are still on the Arrivals tab and can be read again.
+          </p>
+        </div>
+      )}
+
+      {!items.length && !progress && (
+        <div className="card"><p style={{ margin: 0 }}>
+          Nothing waiting to be checked. Read a bundle on the Arrivals tab.
+        </p></div>
+      )}
+
+      {/* FILING A FIRM COMES FIRST, because it changes every row that names it —
+          across every bundle in the queue at once, which is most of the value of
+          reading them together. */}
       {unknown.length > 0 && (
         <div className="card" style={{ borderColor: 'var(--brass)' }}>
           <h3 style={{ margin: '0 0 0.3rem', fontSize: '0.95rem' }}>
             {unknown.length} firm{unknown.length === 1 ? '' : 's'} not on your list yet
           </h3>
           <p className="muted" style={{ margin: '0 0 0.7rem', fontSize: '0.82rem' }}>
-            File them and every invoice from them lines up under one name, this bundle and
-            next. Leave them and they still save — under the name as read, which is how one
-            firm ends up looking like four.
+            File one and every invoice naming it lines up, in this run and the next.
+            Leave it and it still saves — under the name as read, which is how one firm
+            ends up looking like four.
           </p>
           {unknown.map((u) => (
             <UnknownFirm key={u.key} u={u} suppliers={suppliers} onFile={onFile} />
@@ -422,96 +559,129 @@ function Review({ review, suppliers, onChange, onFile, onSave, onCancel }) {
         </div>
       )}
 
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                      flexWrap: 'wrap', gap: '0.5rem' }}>
-          <b>{rows.length} invoice{rows.length === 1 ? '' : 's'} read</b>
-          <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}>{money(total)}</span>
-        </div>
-        <p className="muted" style={{ margin: '0.3rem 0 0.9rem', fontSize: '0.82rem' }}>
-          Read off a photograph by a model, so check it against the document before saving —
-          nothing here is a figure anyone typed. Every box is editable.
-        </p>
-
-        {rows.map((r, i) => (
-          <div key={i} style={{
-            border: '1px solid var(--line)', borderRadius: 4, padding: '0.6rem',
-            marginBottom: '0.5rem',
-            borderLeftWidth: 3,
-            borderLeftColor: r.supplier_id ? 'var(--kelp)' : 'var(--brass)',
-          }}>
-            <div style={{ display: 'grid', gap: '0.4rem',
-                          gridTemplateColumns: 'minmax(9rem, 2fr) minmax(6rem, 1fr) minmax(7rem, 1fr)' }}>
-              <label>
-                <span className="muted" style={{ fontSize: '0.72rem' }}>Supplier</span>
-                <input value={r.supplier} onChange={(e) => set(i, { supplier: e.target.value })}
-                       style={{ width: '100%' }} />
-              </label>
-              <label>
-                <span className="muted" style={{ fontSize: '0.72rem' }}>Invoice no.</span>
-                <input value={r.invoice_no} onChange={(e) => set(i, { invoice_no: e.target.value })}
-                       style={{ width: '100%' }} />
-              </label>
-              <label>
-                <span className="muted" style={{ fontSize: '0.72rem' }}>Date</span>
-                <input type="date" value={r.invoice_date || ''}
-                       onChange={(e) => set(i, { invoice_date: e.target.value })}
-                       style={{ width: '100%' }} />
-              </label>
-            </div>
-
-            <label style={{ display: 'block', marginTop: '0.4rem' }}>
-              <span className="muted" style={{ fontSize: '0.72rem' }}>What for</span>
-              <input value={r.description} onChange={(e) => set(i, { description: e.target.value })}
-                     style={{ width: '100%' }} />
-            </label>
-
-            <div style={{ display: 'grid', gap: '0.4rem', marginTop: '0.4rem',
-                          gridTemplateColumns: 'repeat(3, minmax(5rem, 1fr))' }}>
-              {['net', 'vat', 'total'].map((f) => (
-                <label key={f}>
-                  <span className="muted" style={{ fontSize: '0.72rem' }}>
-                    {f === 'total' ? 'Total' : f.toUpperCase()}
-                  </span>
-                  <input value={r[f] ?? ''} inputMode="decimal"
-                         onChange={(e) => set(i, { [f]: e.target.value })}
-                         style={{ width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
-                </label>
-              ))}
-            </div>
-
-            {/* NET + VAT MUST COME TO THE TOTAL, and when they do not the sheet
-                says so rather than picking one. Same rule as the settlement
-                review showing each total twice: a disagreement is reported. */}
-            <Adds r={r} />
+      {items.length > 0 && (
+        <div className="card" style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                        flexWrap: 'wrap', gap: '0.5rem' }}>
+            <b>{rows.length} invoice{rows.length === 1 ? '' : 's'} off {items.length} bundle
+              {items.length === 1 ? '' : 's'}</b>
+            <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700 }}>{money(total)}</span>
           </div>
-        ))}
 
-        <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.8rem', flexWrap: 'wrap' }}>
-          <button onClick={onSave}>Save these {rows.length}</button>
-          <button className="secondary" onClick={onCancel}>Cancel</button>
-          <span className="muted" style={{ fontSize: '0.8rem', alignSelf: 'center' }}>
-            From the bundle of {fmtDate(String(batch.received_at).slice(0, 10))}
-          </span>
+          {/* WHAT WANTS A LOOK, named separately rather than as one count. */}
+          <p style={{ margin: '0.4rem 0 0.6rem', fontSize: '0.84rem' }}>
+            {flags.firm + flags.adds + flags.date === 0
+              ? <span className="muted">Nothing flagged — every row has a filed firm, a date, and figures that add up.</span>
+              : <>
+                  <b>Worth a look:</b>{' '}
+                  {[flags.firm && `${flags.firm} with no firm filed`,
+                    flags.adds && `${flags.adds} where net + VAT ≠ total`,
+                    flags.date && `${flags.date} with no date`]
+                    .filter(Boolean).join(' · ')}
+                </>}
+          </p>
+
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <button onClick={() => onSave(items)}>
+              Save all {rows.length}
+            </button>
+            <span className="muted" style={{ fontSize: '0.8rem', alignSelf: 'center' }}>
+              or save a bundle at a time below
+            </span>
+          </div>
         </div>
-      </div>
+      )}
+
+      {items.filter((i) => i.rows.length).map((item) => (
+        <div key={item.batch.id} className="card">
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', flexWrap: 'wrap',
+                        borderBottom: '1px solid var(--line)', paddingBottom: '0.4rem' }}>
+            <b style={{ fontFamily: 'var(--font-mono, monospace)' }}>
+              {fmtDate(String(item.batch.received_at).slice(0, 10))}
+            </b>
+            <span className="muted" style={{ flex: 1, fontSize: '0.82rem' }}>
+              {item.rows.length} invoice{item.rows.length === 1 ? '' : 's'} ·{' '}
+              {money(item.rows.reduce((s, r) => s + (Number(r.total) || 0), 0))} ·{' '}
+              {item.batch.page_count || '?'} page{item.batch.page_count === 1 ? '' : 's'}
+            </span>
+            <button className="secondary" onClick={async () => {
+              const url = await signedUrl(item.batch.file_path).catch(() => null)
+              if (url) window.open(url, '_blank', 'noopener')
+            }}>Open the scan</button>
+            <button className="secondary" onClick={() => onSave([item])}>Save these</button>
+            <button className="secondary" onClick={() => onDrop(item.batch.id)}>Discard</button>
+          </div>
+
+          {item.rows.map((r, i) => (
+            <InvoiceRow key={i} r={r} onChange={(patch) => onEdit(item.batch.id, i, patch)} />
+          ))}
+        </div>
+      ))}
     </>
   )
 }
 
-function Adds({ r }) {
-  const net = Number(r.net), vat = Number(r.vat), total = Number(r.total)
-  if (![net, vat, total].every(Number.isFinite)) return null
-  const diff = Math.round((net + vat - total) * 100) / 100
-  if (Math.abs(diff) < 0.01) return null
+function InvoiceRow({ r, onChange }) {
+  const bad = addsWrong(r)
+  /* The left edge carries the state at a glance down a long list: green filed,
+     brass a firm to file, rust a sum that does not add up. */
+  const edge = bad ? 'var(--rust)' : r.supplier_id ? 'var(--kelp)' : 'var(--brass)'
   return (
-    <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--rust)' }}>
-      Net and VAT come to {money(net + vat)}, not {money(total)} — out by {money(diff)}.
-      One of the three is misread.
-    </p>
+    <div style={{
+      border: '1px solid var(--line)', borderRadius: 4, padding: '0.6rem',
+      marginTop: '0.5rem', borderLeftWidth: 3, borderLeftColor: edge,
+    }}>
+      <div style={{ display: 'grid', gap: '0.4rem',
+                    gridTemplateColumns: 'minmax(9rem, 2fr) minmax(6rem, 1fr) minmax(7rem, 1fr)' }}>
+        <label>
+          <span className="muted" style={{ fontSize: '0.72rem' }}>Supplier</span>
+          <input value={r.supplier} onChange={(e) => onChange({ supplier: e.target.value })}
+                 style={{ width: '100%' }} />
+        </label>
+        <label>
+          <span className="muted" style={{ fontSize: '0.72rem' }}>Invoice no.</span>
+          <input value={r.invoice_no} onChange={(e) => onChange({ invoice_no: e.target.value })}
+                 style={{ width: '100%' }} />
+        </label>
+        <label>
+          <span className="muted" style={{ fontSize: '0.72rem' }}>
+            Date{!r.invoice_date && <span style={{ color: 'var(--brass)' }}> · missing</span>}
+          </span>
+          <input type="date" value={r.invoice_date || ''}
+                 onChange={(e) => onChange({ invoice_date: e.target.value })}
+                 style={{ width: '100%' }} />
+        </label>
+      </div>
+
+      <label style={{ display: 'block', marginTop: '0.4rem' }}>
+        <span className="muted" style={{ fontSize: '0.72rem' }}>What for</span>
+        <input value={r.description} onChange={(e) => onChange({ description: e.target.value })}
+               style={{ width: '100%' }} />
+      </label>
+
+      <div style={{ display: 'grid', gap: '0.4rem', marginTop: '0.4rem',
+                    gridTemplateColumns: 'repeat(3, minmax(5rem, 1fr))' }}>
+        {['net', 'vat', 'total'].map((f) => (
+          <label key={f}>
+            <span className="muted" style={{ fontSize: '0.72rem' }}>
+              {f === 'total' ? 'Total' : f.toUpperCase()}
+            </span>
+            <input value={r[f] ?? ''} inputMode="decimal"
+                   onChange={(e) => onChange({ [f]: e.target.value })}
+                   style={{ width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
+          </label>
+        ))}
+      </div>
+
+      {bad && (
+        <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--rust)' }}>
+          Net and VAT come to {money(Number(r.net) + Number(r.vat))}, not {money(r.total)} —
+          out by {money(Number(r.net) + Number(r.vat) - Number(r.total))}. One of the three is misread.
+        </p>
+      )}
+    </div>
   )
 }
-
 function UnknownFirm({ u, suppliers, onFile }) {
   const [pick, setPick] = useState('')
   return (
