@@ -15,7 +15,8 @@ import { matchAll, withAlias } from '../invoices/suppliers'
  */
 
 const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
-  + 'from_email, subject, received_at, manager_balance, manager_balance_text, status, note'
+  + 'from_email, subject, received_at, manager_balance, manager_balance_text, status, note, '
+  + 'read_result, read_at'
 
 const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
   + 'description, net, vat, total, currency, account_code, status, paid_date, '
@@ -140,11 +141,31 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
     if (error) throw error
   }
 
+  /* The stored read is cleared on filing: it exists to survive a reload before
+     saving, and keeping it afterwards would leave a second, staler copy of
+     figures that now live in su_invoices. */
   const { error: ue } = await supabase
-    .from('su_invoice_batches').update({ status: 'filed' }).eq('id', batch.id)
+    .from('su_invoice_batches')
+    .update({ status: 'filed', read_result: null })
+    .eq('id', batch.id)
   if (ue) throw ue
 
   return clean.length
+}
+
+/* WHAT THE READER PRODUCED, KEPT ON THE BATCH.
+ *
+ * A read is a paid API call on a five-page photograph. It used to live only in
+ * the page's memory, so a reload threw away something that had cost money and
+ * a minute of waiting. Stored here, the queue survives closing the laptop.
+ *
+ * These rows are still NOT invoices until the skipper has looked at them —
+ * this is the queue made durable, not a way round the review. */
+export async function storeRead(id, rows) {
+  const { error } = await supabase.from('su_invoice_batches')
+    .update({ read_result: rows, read_at: new Date().toISOString(), status: 'read' })
+    .eq('id', id)
+  if (error) throw error
 }
 
 export async function setBatchStatus(id, status, note) {

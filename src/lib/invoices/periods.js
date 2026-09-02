@@ -261,3 +261,45 @@ export function addsWrong(r) {
   // A crumb under a penny is rounding, not a misread, and not worth stopping for.
   return Math.abs(Math.round((net + vat - total) * 100) / 100) >= 0.01
 }
+
+/* WHAT THE READER'S FAILURE ACTUALLY MEANS.
+ *
+ * The edge function passes the API's own error text straight through, so a run
+ * that stops for a perfectly ordinary reason arrives looking like this:
+ *
+ *   AI request failed: {"type":"error","error":{"type":"invalid_request_error",
+ *   "message":"Your credit balance is too low to access the Anthropic API..."}}
+ *
+ * A skipper reading that has no idea whether the boat's books are broken or a
+ * card needs topping up. The raw text is still worth keeping — it is the
+ * evidence, and a message nobody recognises must never be swallowed — but the
+ * page leads with what it means and what to do.
+ *
+ * Only failures whose SHAPE is unambiguous are translated. Guessing at an
+ * unfamiliar error would be worse than showing it, so anything unrecognised is
+ * passed through exactly as it came.
+ */
+export function explainReadError(raw) {
+  const t = String(raw || '')
+  const known = [
+    [/credit balance is too low|insufficient.{0,20}credit|billing/i,
+     'The reader has run out of credit.',
+     'Top the API account up at console.anthropic.com under Plans & Billing, then read these again. Nothing is lost — the bundles are still on the Arrivals tab.'],
+    [/rate.?limit|429|overloaded/i,
+     'The reader is being asked for too much at once.',
+     'Wait a few minutes and read the rest. The ones already checked are unaffected.'],
+    [/took too long|timeout|timed out/i,
+     'That bundle took too long to read.',
+     'Usually a big or blurred scan. Try it on its own, or enter its invoices by hand.'],
+    [/ANTHROPIC_API_KEY|isn.t switched on/i,
+     'The reader is not switched on for this project.',
+     'The ANTHROPIC_API_KEY secret is missing in Supabase, under Edge Functions → Secrets.'],
+    [/Couldn.t read the document clearly/i,
+     'The scan could not be made out.',
+     'A sharper scan usually fixes it, or enter that one by hand.'],
+  ]
+  for (const [re, what, next] of known) {
+    if (re.test(t)) return { what, next, raw: t }
+  }
+  return { what: t, next: null, raw: t }
+}

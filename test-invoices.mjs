@@ -16,6 +16,7 @@ import {
 } from './src/lib/invoices/suppliers.js'
 import {
   periodOf, totalsByPeriod, supplierHistory, readManagerBalance,
+  addsWrong, explainReadError,
 } from './src/lib/invoices/periods.js'
 
 let n = 0
@@ -265,6 +266,35 @@ eq(periodOf('not a date', 'year'), null, 'nor is a date the reader could not rea
   eq(totalsByPeriod([{ supplier: '   ', invoice_date: '2026-01-01', total: 10 }], [])
        .periods[0].suppliers[0].name, 'no supplier read',
      'a row the reader really could not name still says so')
+}
+
+/* ---- WHAT A FAILED READ MEANS ------------------------------------------
+ *
+ * The edge function passes the API's own error straight through, so an ordinary
+ * billing stop arrives as a JSON blob. A skipper reading that cannot tell a
+ * card needing topped up from the boat's books being broken.
+ */
+{
+  const real = 'AI request failed: {"type":"error","error":{"type":"invalid_request_error",'
+    + '"message":"Your credit balance is too low to access the Anthropic API. '
+    + 'Please go to Plans & Billing to upgrade or purchase credits."},"request_id":"req_011Ced"}'
+  const e = explainReadError(real)
+  eq(e.what, 'The reader has run out of credit.', 'the real billing failure reads in plain English')
+  ok(/console.anthropic.com/.test(e.next), 'and says where to fix it')
+  ok(/Nothing is lost/.test(e.next), 'and that the bundles are still there, because that is the worry')
+  eq(e.raw, real, 'THE RAW TEXT IS KEPT — it is the evidence, and is shown under "what it said"')
+
+  eq(explainReadError('Reading took too long - try fewer pages').what,
+     'That bundle took too long to read.', 'a timeout is its own thing')
+  ok(/rate/i.test(explainReadError('429 rate_limit_error').what)
+     || /too much at once/.test(explainReadError('429 rate_limit_error').what),
+     'so is being throttled')
+
+  /* AN UNFAMILIAR ERROR IS PASSED THROUGH UNTOUCHED. Guessing at what an
+     unrecognised failure means would be worse than showing it. */
+  const odd = 'something nobody has seen before'
+  eq(explainReadError(odd).what, odd, 'an unrecognised failure is shown exactly as it came')
+  eq(explainReadError(odd).next, null, 'with no invented advice attached')
 }
 
 console.log('boat invoices: ' + n + ' checks passed')

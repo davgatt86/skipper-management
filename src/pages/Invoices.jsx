@@ -5,10 +5,10 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import {
   listBatches, listInvoices, listSuppliers, createSupplier, addAlias,
-  saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers,
+  saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl } from '../lib/su/parse'
-import { totalsByPeriod, supplierHistory, addsWrong, MONTHS } from '../lib/invoices/periods'
+import { totalsByPeriod, supplierHistory, addsWrong, explainReadError, MONTHS } from '../lib/invoices/periods'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
  *
@@ -71,6 +71,19 @@ export default function Invoices() {
   }, [fleetId])
 
   useEffect(() => { refresh() }, [refresh])
+
+  /* PICK THE QUEUE BACK UP. Bundles read but not yet filed are restored from
+     the batch, so closing the laptop mid-run costs nothing — the reading is
+     already paid for and the checking carries on where it stopped. */
+  useEffect(() => {
+    setQueue((q) => {
+      const have = new Set(q.map((x) => x.batch.id))
+      const stored = batches
+        .filter((b) => !have.has(b.id) && Array.isArray(b.read_result) && b.read_result.length)
+        .map((b) => ({ batch: b, rows: b.read_result }))
+      return stored.length ? [...q, ...stored] : q
+    })
+  }, [batches])
 
   useEffect(() => {
     if (!fleetId) return
@@ -190,7 +203,10 @@ export default function Invoices() {
         setQueue((q) => [...q, rows.length
           ? { batch, rows }
           : { batch, rows: [], error: 'The reader found no invoices in this one.' }])
-        await setBatchStatus(batch.id, 'read').catch(() => {})
+        /* STORED IMMEDIATELY. A read is a paid call on a photograph, so it must
+           survive a reload — losing it means paying and waiting twice. */
+        if (rows.length) await storeRead(batch.id, rows).catch(() => {})
+        else await setBatchStatus(batch.id, 'read').catch(() => {})
       } catch (e) {
         /* ONE FAILURE MUST NOT STOP THE RUN. Thirty-three good bundles should
            not be lost to the thirty-fourth timing out. */
@@ -520,13 +536,26 @@ function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, o
         <div className="card" style={{ borderColor: 'var(--rust)' }}>
           <b>{failed.length} bundle{failed.length === 1 ? '' : 's'} could not be read</b>
           <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem', fontSize: '0.86rem' }}>
-            {failed.map((f) => (
-              <li key={f.batch.id}>
-                {fmtDate(String(f.batch.received_at).slice(0, 10))} — {f.error}{' '}
-                <button className="secondary" style={{ padding: '0 0.4rem', fontSize: '0.74rem' }}
-                        onClick={() => onDrop(f.batch.id)}>dismiss</button>
-              </li>
-            ))}
+            {failed.map((f) => {
+              /* WHAT IT MEANS FIRST, the raw text underneath. "Your credit
+                 balance is too low" arrives wrapped in JSON, and a skipper
+                 reading that cannot tell a billing card from a broken book. */
+              const e = explainReadError(f.error)
+              return (
+                <li key={f.batch.id} style={{ marginBottom: '0.35rem' }}>
+                  {fmtDate(String(f.batch.received_at).slice(0, 10))} — <b>{e.what}</b>{' '}
+                  <button className="secondary" style={{ padding: '0 0.4rem', fontSize: '0.74rem' }}
+                          onClick={() => onDrop(f.batch.id)}>dismiss</button>
+                  {e.next && <div className="muted" style={{ fontSize: '0.82rem' }}>{e.next}</div>}
+                  {e.next && (
+                    <details style={{ fontSize: '0.76rem' }}>
+                      <summary className="muted" style={{ cursor: 'pointer' }}>what it said</summary>
+                      <code style={{ wordBreak: 'break-all' }}>{e.raw}</code>
+                    </details>
+                  )}
+                </li>
+              )
+            })}
           </ul>
           <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.8rem' }}>
             The files are still on the Arrivals tab and can be read again.
