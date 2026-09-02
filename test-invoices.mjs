@@ -16,7 +16,7 @@ import {
 } from './src/lib/invoices/suppliers.js'
 import {
   periodOf, totalsByPeriod, supplierHistory, readManagerBalance,
-  addsWrong, explainReadError,
+  addsWrong, figuresMissing, explainReadError,
 } from './src/lib/invoices/periods.js'
 
 let n = 0
@@ -295,6 +295,34 @@ eq(periodOf('not a date', 'year'), null, 'nor is a date the reader could not rea
   const odd = 'something nobody has seen before'
   eq(explainReadError(odd).what, odd, 'an unrecognised failure is shown exactly as it came')
   eq(explainReadError(odd).next, null, 'with no invented advice attached')
+}
+
+/* ---- A FIGURE THE READER DID NOT GET ------------------------------------
+ *
+ * THE HOLE THIS CLOSES. `addsWrong` says nothing when a figure is blank — net
+ * and VAT cannot disagree with a total that is not there — so a bundle with a
+ * blank net was reported as "nothing flagged, every row ... adds up" and then
+ * refused on save by a NOT NULL constraint. The page told the skipper all was
+ * well and then would not file it.
+ */
+eq(figuresMissing({ net: 191.33, vat: 27.07, total: 218.40 }), [],
+   'a complete invoice is missing nothing')
+eq(figuresMissing({ net: 5200, vat: 0, total: 5200 }), [],
+   'and a genuine zero VAT is a figure, not a blank')
+eq(figuresMissing({ net: null, vat: 0, total: 218.40 }), ['net'],
+   'the blank net that stopped the run is named')
+eq(figuresMissing({ net: '', vat: '', total: '' }), ['net', 'vat', 'total'],
+   'an empty box counts as missing, not as nought')
+eq(figuresMissing({}), ['net', 'vat', 'total'], 'and so does a row with nothing on it')
+eq(figuresMissing({ net: 'abc', vat: 0, total: 10 }), ['net'],
+   'as does something that is not a number at all')
+
+/* THE TWO CHECKS DIVIDE THE WORK CLEANLY: one says the figures disagree, the
+   other says a figure is absent. Neither should answer for the other. */
+{
+  const r = { net: null, vat: 0, total: 218.40 }
+  eq(addsWrong(r), false, 'a blank is not called a disagreement')
+  ok(figuresMissing(r).length > 0, 'but it IS reported as missing')
 }
 
 console.log('boat invoices: ' + n + ' checks passed')

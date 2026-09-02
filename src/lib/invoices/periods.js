@@ -303,3 +303,24 @@ export function explainReadError(raw) {
   }
   return { what: t, next: null, raw: t }
 }
+
+/* WHICH FIGURES THE READER DID NOT GET — its own kind of doubt.
+ *
+ * `addsWrong` deliberately says nothing when a figure is blank: net + VAT
+ * cannot disagree with a total that is not there. But that left a hole. The
+ * review screen reported "nothing flagged — every row has a filed firm, a date,
+ * and figures that add up" over a bundle carrying a blank net, and the save
+ * then failed on a NOT NULL constraint. The page had told the skipper
+ * everything was in order and then refused to file it.
+ *
+ * A MISSING FIGURE IS NOT A DISAGREEMENT AND NOT A ZERO. `su_invoices` defaults
+ * these columns to 0, so a blank CAN be written — but 0 is a claim the document
+ * never made, and this codebase has been bitten three times by `Number(null)`
+ * quietly becoming a confident nought. So it is flagged, shown on the row, and
+ * if it is still blank at save time it goes in as 0 with `confidence` recording
+ * that nobody read it.
+ */
+export function figuresMissing(r) {
+  const blank = (v) => v === '' || v == null || !Number.isFinite(Number(v))
+  return ['net', 'vat', 'total'].filter((f) => blank(r?.[f]))
+}

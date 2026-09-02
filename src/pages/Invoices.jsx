@@ -8,7 +8,7 @@ import {
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl } from '../lib/su/parse'
-import { totalsByPeriod, supplierHistory, addsWrong, explainReadError, MONTHS } from '../lib/invoices/periods'
+import { totalsByPeriod, supplierHistory, addsWrong, figuresMissing, explainReadError, MONTHS } from '../lib/invoices/periods'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
  *
@@ -263,11 +263,13 @@ export default function Invoices() {
         bundles++
         setQueue((q) => q.filter((x) => x.batch.id !== item.batch.id))
       } catch (e) {
-        setErr(`Stopped at the bundle of ${fmtDate(String(item.batch.received_at).slice(0, 10))} — ${e.message || e}. The ${bundles} before it are filed.`)
+        setErr(`Stopped at the bundle of ${fmtDate(String(item.batch.received_at).slice(0, 10))} — ${e.message || e}. `
+          + (bundles ? `The ${bundles} before it ${bundles === 1 ? 'is' : 'are'} filed; the rest are still here.`
+                     : 'Nothing was filed — everything is still here.'))
         break
       }
     }
-    setMsg(`${saved} invoice${saved === 1 ? '' : 's'} filed off ${bundles} bundle${bundles === 1 ? '' : 's'}.`)
+    if (bundles) setMsg(`${saved} invoice${saved === 1 ? '' : 's'} filed off ${bundles} bundle${bundles === 1 ? '' : 's'}.`)
     await refresh()
   }
 
@@ -507,6 +509,10 @@ function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, o
     firm: rows.filter((r) => !r.supplier_id).length,
     adds: rows.filter((r) => addsWrong(r)).length,
     date: rows.filter((r) => !r.invoice_date).length,
+    /* A FIGURE THE READER DID NOT GET is its own doubt, and was the hole: net +
+       VAT cannot disagree with a total that is not there, so a blank sailed
+       past "figures that add up" and then failed on save. */
+    figs: rows.filter((r) => figuresMissing(r).length).length,
   }
   const failed = items.filter((i) => i.error)
 
@@ -599,12 +605,13 @@ function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, o
 
           {/* WHAT WANTS A LOOK, named separately rather than as one count. */}
           <p style={{ margin: '0.4rem 0 0.6rem', fontSize: '0.84rem' }}>
-            {flags.firm + flags.adds + flags.date === 0
+            {flags.firm + flags.adds + flags.date + flags.figs === 0
               ? <span className="muted">Nothing flagged — every row has a filed firm, a date, and figures that add up.</span>
               : <>
                   <b>Worth a look:</b>{' '}
                   {[flags.firm && `${flags.firm} with no firm filed`,
                     flags.adds && `${flags.adds} where net + VAT ≠ total`,
+                    flags.figs && `${flags.figs} with a figure the reader missed`,
                     flags.date && `${flags.date} with no date`]
                     .filter(Boolean).join(' · ')}
                 </>}
@@ -652,9 +659,11 @@ function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, o
 
 function InvoiceRow({ r, onChange }) {
   const bad = addsWrong(r)
+  const missing = figuresMissing(r)
   /* The left edge carries the state at a glance down a long list: green filed,
      brass a firm to file, rust a sum that does not add up. */
-  const edge = bad ? 'var(--rust)' : r.supplier_id ? 'var(--kelp)' : 'var(--brass)'
+  const edge = bad || missing.length ? 'var(--rust)'
+    : r.supplier_id ? 'var(--kelp)' : 'var(--brass)'
   return (
     <div style={{
       border: '1px solid var(--line)', borderRadius: 4, padding: '0.6rem',
@@ -694,6 +703,7 @@ function InvoiceRow({ r, onChange }) {
           <label key={f}>
             <span className="muted" style={{ fontSize: '0.72rem' }}>
               {f === 'total' ? 'Total' : f.toUpperCase()}
+              {missing.includes(f) && <span style={{ color: 'var(--rust)' }}> · not read</span>}
             </span>
             <input value={r[f] ?? ''} inputMode="decimal"
                    onChange={(e) => onChange({ [f]: e.target.value })}
@@ -702,6 +712,16 @@ function InvoiceRow({ r, onChange }) {
         ))}
       </div>
 
+      {/* SAY WHAT A BLANK WILL BECOME. The column will not take a null, so it
+          goes in as 0 — and a 0 the document never showed must not read like
+          one it did. Saved either way; the record keeps that nobody read it. */}
+      {missing.length > 0 && (
+        <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--rust)' }}>
+          The reader did not get {missing.join(', ').toUpperCase()} off this one.
+          Fill {missing.length === 1 ? 'it' : 'them'} in, or it saves as nought and
+          is marked as never read.
+        </p>
+      )}
       {bad && (
         <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--rust)' }}>
           Net and VAT come to {money(Number(r.net) + Number(r.vat))}, not {money(r.total)} —

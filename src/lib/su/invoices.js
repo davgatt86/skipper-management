@@ -1,5 +1,6 @@
 import { supabase } from '../../supabaseClient'
 import { matchAll, withAlias } from '../invoices/suppliers'
+import { figuresMissing } from '../invoices/periods'
 
 /* READING AND WRITING THE INVOICE RECORD.
  *
@@ -125,7 +126,11 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
       invoice_no: (r.invoice_no || '').trim() || null,
       invoice_date: r.invoice_date || null,
       description: (r.description || '').trim() || null,
-      net: num(r.net), vat: num(r.vat), total: num(r.total),
+      /* NOT NULL with a default of 0 — sending null explicitly OVERRIDES the
+         default and is refused, which is what stopped a run of ten bundles
+         dead. A blank goes in as 0 because the column demands a number; that it
+         was never read is recorded below rather than lost. */
+      net: num(r.net) ?? 0, vat: num(r.vat) ?? 0, total: num(r.total) ?? 0,
       currency: r.currency || 'GBP',
       account_code: (r.account_code || '').trim() || null,
       status: r.status || 'unpaid',
@@ -133,7 +138,9 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
       /* The document itself, so an invoice can always be opened at its own
          pages rather than the reader's word being the only record. */
       file_path: batch.file_path,
-      confidence: r.confidence || null,
+      /* WHAT THE READER DID NOT GET. A 0 that the document never showed must
+         not read like a 0 that it did — the column exists for exactly this. */
+      confidence: mergeConfidence(r),
     }))
 
   if (clean.length) {
@@ -186,6 +193,13 @@ export async function deleteBatch(id) {
 /** The reader's rows, with each name matched against the fleet's suppliers. */
 export function applySuppliers(rows, suppliers) {
   return matchAll(rows, suppliers)
+}
+
+/* Keep the reader's own doubts, and add any figure it could not make out. */
+function mergeConfidence(r) {
+  const missing = figuresMissing(r)
+  if (!missing.length) return r.confidence || null
+  return { ...(r.confidence || {}), blank_as_read: missing }
 }
 
 const num = (v) => {
