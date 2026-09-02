@@ -87,7 +87,17 @@ export function CrewCerts({ crew, canEdit }) {
     if (up.error) { setError('Upload failed: ' + up.error.message); setBusy(''); return }
     let fields = {}
     try { fields = await parseCertFile(file) }
-    catch (err) { setError('Saved the file, but couldn’t auto-read it (' + err.message + '). Fill the details in by hand.') }
+    catch (err) {
+      /* WHAT IT MEANS, not the API's own words — and deliberately WITHOUT the
+         "go and top up the account" advice the invoices page gives. An officer
+         files crew tickets and has no access to the billing console; sending
+         him there is advice he cannot act on. Here the answer is always the
+         same: the file is saved, type the details in, mention it to the
+         skipper. The reader is a convenience on this page, never a gate. */
+      setError('Saved the file, but couldn’t auto-read it — '
+        + explainReadError(err.message).what
+        + ' Fill the details in by hand.')
+    }
     setDraft({ ...blankDraft(), ...fields, file_path: path, file_name: file.name })
     setBusy('')
   }
