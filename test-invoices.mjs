@@ -18,6 +18,9 @@ import {
   periodOf, totalsByPeriod, supplierHistory, readManagerBalance,
   addsWrong, figuresMissing, explainReadError,
 } from './src/lib/invoices/periods.js'
+import { pageOrNull, pageRange, pageLabel } from './src/lib/invoices/pages.js'
+import { invoiceKey, carryDecisions } from './src/lib/invoices/identity.js'
+import { readFileSync } from 'node:fs'
 
 let n = 0
 const eq = (a, b, m) => { n++; assert.deepEqual(a, b, m) }
@@ -323,6 +326,123 @@ eq(figuresMissing({ net: 'abc', vat: 0, total: 10 }), ['net'],
   const r = { net: null, vat: 0, total: 218.40 }
   eq(addsWrong(r), false, 'a blank is not called a disagreement')
   ok(figuresMissing(r).length > 0, 'but it IS reported as missing')
+}
+
+/* ---- WHICH PAGES OF THE BUNDLE ------------------------------------------
+ *
+ * A weekly bundle is the whole week photographed into one PDF, so the pages are
+ * what turns "open the scan" from five pages to hunt through into the invoice
+ * itself. They are also the ONE field the reader returns that nothing
+ * downstream can check against the invoice - so what IS checkable is checked.
+ */
+
+/* PAGE 0 IS THE WHOLE REASON THIS IS ITS OWN MODULE. Number('') is 0 and
+ * Number.isFinite(0) is true, so the obvious implementation files an empty box
+ * as page 0 - a page that does not exist, saved as though somebody had read it
+ * off the scan. Fourth instance in this codebase after the engine running
+ * hours, the gear measurement in mm and the invoice VAT figure. */
+eq(pageOrNull(''), null, 'a blank page box stays blank')
+eq(pageOrNull(null), null, 'so does a null')
+eq(pageOrNull(0), null, 'page 0 does not exist')
+eq(pageOrNull('0'), null, 'nor as a string')
+eq(pageOrNull(-2), null, 'nor backwards')
+eq(pageOrNull(2.5), null, 'half a page is not a page')
+eq(pageOrNull('3'), 3, 'a number the reader sent as text still reads')
+eq(pageOrNull(3), 3, 'and as a number')
+
+/* MOST INVOICES ARE ONE PAGE, and that is a reading rather than an assumption:
+ * the reader is told to set page_to equal to page_from for a single-pager. */
+eq(pageRange(3, 4, 5), { page_from: 3, page_to: 4 }, 'an ordinary two-page invoice')
+eq(pageRange(3, null, 5), { page_from: 3, page_to: 3 }, 'no end given means it is one page')
+eq(pageRange(null, 4, 5), { page_from: null, page_to: null },
+   'an end with no start is not half an answer')
+
+/* NOTHING IS CLAMPED OR SWAPPED. Which of the two numbers is wrong is not
+ * knowable, so a range that cannot be true is dropped whole - a page number
+ * bent until it fits is a guess wearing the clothes of a reading. */
+eq(pageRange(4, 2, 5), { page_from: null, page_to: null },
+   'ends before it starts - dropped, never reversed')
+eq(pageRange(9, 9, 5), { page_from: null, page_to: null },
+   'past the end of a five-page bundle')
+eq(pageRange(9, 9, null), { page_from: 9, page_to: 9 },
+   'with no page count known there is nothing to check it against')
+
+eq(pageLabel(3, 3), 'p. 3', 'one page reads as one page')
+eq(pageLabel(3, 4), 'pp. 3–4', 'two pages get the range')
+eq(pageLabel('', ''), '', 'an unread page says nothing rather than "p. 0"')
+
+/* AND THE READER HAS TO ASK FOR THEM. The prompt lives in the edge function,
+ * which is in this repo now precisely so a change to it can be seen - without
+ * this, everything above still passes while no page number is ever produced. */
+{
+  const fn = readFileSync('supabase/functions/su-parse-document/index.ts', 'utf8')
+  ok(fn.includes('"page_from": number|null, "page_to": number|null'),
+     'the invoice prompt still asks the reader for the pages')
+  ok(fn.includes('return null for both rather than guessing'),
+     'and still tells it not to guess one')
+}
+
+/* ---- WHAT A PERSON DECIDED SURVIVES A RE-READ ---------------------------
+ *
+ * Reading a bundle again replaces every invoice off it, which is right. But
+ * `vessel_era` and `category` are the skipper's answers to questions the
+ * invoice cannot answer, and they are expensive: 102 invoices carry a vessel
+ * decision and six of those moved £751,000 onto the right hull.
+ *
+ * The ordinary reason to re-read a bundle is now to pick up its PAGE NUMBERS —
+ * so without this, the first use of the new feature would quietly undo weeks of
+ * work, with nothing on screen to say so.
+ */
+{
+  const kept = [
+    { invoice_no: 'FA000741', supplier: 'BOPP', total: 479750, invoice_date: '2018-05-28',
+      vessel_era: 'pair_single', category: 'newbuild' },
+    { invoice_no: '', supplier: 'Ironside & Son', total: 120, invoice_date: '2019-02-01',
+      vessel_era: 'pair_single', category: null },
+    { invoice_no: 'GONE-1', supplier: 'Vanished Ltd', total: 50, invoice_date: '2019-02-01',
+      vessel_era: 'twin', category: null },
+    { invoice_no: 'X1', supplier: 'No decision', total: 9, invoice_date: '2019-01-01',
+      vessel_era: null, category: null },
+  ]
+  const rows = [
+    { invoice_no: 'fa/000741', supplier: 'Etablissements BOPP', total: 479750, invoice_date: '2018-05-28' },
+    { invoice_no: '', supplier: 'IRONSIDE AND SON', total: 120, invoice_date: '2019-02-01' },
+    { invoice_no: 'NEW-9', supplier: 'Something else', total: 7, invoice_date: '2019-02-01' },
+  ]
+  const r = carryDecisions(kept, rows)
+
+  eq(r.rows[0].vessel_era, 'pair_single', 'the boat decision survives a re-read')
+  eq(r.rows[0].category, 'newbuild', 'and so does the category')
+  ok(true, 'matched on the invoice NUMBER, though the reader wrote the firm differently')
+
+  /* THE FIRM IN THE FALLBACK KEY GOES THROUGH normaliseSupplier, and that is
+   * not tidiness. The name is the one part of the key that comes off a model
+   * reading a photograph, so it drifts between two reads of the SAME document —
+   * this case is why: "Ironside & Son" came back as "IRONSIDE AND SON" and a
+   * raw comparison lost the decision. It would have failed silently, and only
+   * on the invoices with no number, which are the hand-written ones. */
+  eq(r.rows[1].vessel_era, 'pair_single', 'no invoice number - matched on firm, total and date')
+  eq(invoiceKey({ invoice_no: '', supplier: 'IRONSIDE AND SON', total: 120, invoice_date: '2019-02-01' }),
+     invoiceKey({ invoice_no: null, supplier: 'Ironside & Son', total: '120.00', invoice_date: '2019-02-01' }),
+     'the ampersand and the decimals do not break the fallback key')
+  ok(invoiceKey({ supplier: 'Ironside & Son', total: 120, invoice_date: '2019-02-01' }) !==
+     invoiceKey({ supplier: 'Ironside & Son', total: 121, invoice_date: '2019-02-01' }),
+     'but a different total is a different invoice')
+
+  eq(r.rows[2].vessel_era ?? null, null, 'a genuinely new invoice gets nobody else’s decision')
+  eq(r.carried, 2, 'two carried over')
+
+  /* NAMED, NEVER NUDGED ONTO THE NEAREST ROW. Putting one invoice's answer on
+   * another is the unrecoverable mistake, the same one the supplier lookup
+   * refuses to make with a near-miss name. */
+  eq(r.lost.length, 1, 'one decision had no invoice left to sit on')
+  eq(r.lost[0].invoice_no, 'GONE-1', 'and it is handed back by name')
+  ok(!r.lost.some((l) => l.invoice_no === 'X1'),
+     'a row that never carried a decision is not reported as lost')
+
+  /* A decision made on the screen just now beats one made last time. */
+  const fresh = carryDecisions(kept, [{ ...rows[0], vessel_era: 'twin' }])
+  eq(fresh.rows[0].vessel_era, 'twin', 'an answer given now wins over the one carried')
 }
 
 console.log('boat invoices: ' + n + ' checks passed')

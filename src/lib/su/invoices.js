@@ -1,4 +1,6 @@
 import { supabase } from '../../supabaseClient'
+import { pageRange } from '../invoices/pages'
+import { carryDecisions } from '../invoices/identity'
 import { matchAll, withAlias } from '../invoices/suppliers'
 import { figuresMissing } from '../invoices/periods'
 
@@ -111,11 +113,39 @@ export async function addAlias(supplier, raw) {
  * untouched; a delete scoped by fleet rather than by batch would take them.
  */
 export async function saveBatchInvoices(batch, rows, fleetId) {
+  /* WHAT A PERSON DECIDED SURVIVES A RE-READ. WHAT A MODEL READ DOES NOT.
+   *
+   * Saving replaces every invoice off this bundle, which is right — reading it
+   * again should produce this bundle afresh, not a second copy of it. But two
+   * columns are not the reader's at all: `vessel_era` and `category` are the
+   * skipper's answers to questions the invoice cannot answer, and they are
+   * expensive. 102 invoices carry a vessel decision, and six of those decisions
+   * moved £751,000 onto the right hull.
+   *
+   * So re-reading one bundle to pick up its page numbers would have quietly
+   * undone them, weeks later, with nothing on screen to say so. They are lifted
+   * off the old rows and put back on the new ones.
+   *
+   * THE MATCH IS ON THE INVOICE NUMBER, and where there is none, on the firm,
+   * the total and the date together. A decision that cannot be matched is
+   * REPORTED, never guessed onto the nearest row — putting one invoice's answer
+   * on another is exactly the unrecoverable mistake the supplier lookup refuses
+   * to make with a near-miss name. */
+  const { data: kept } = await supabase
+    .from('su_invoices')
+    .select('invoice_no, supplier, total, invoice_date, category, vessel_era')
+    .eq('batch_id', batch.id)
+
+
   const { error: de } = await supabase
     .from('su_invoices').delete().eq('batch_id', batch.id)
   if (de) throw de
 
-  const clean = rows
+  /* The skipper's answers lifted off what is about to be replaced. Anything
+     that cannot be matched to an invoice in the new read is returned and
+     reported — never spread onto the nearest row. */
+  const carried = carryDecisions(kept || [], rows)
+  const clean = carried.rows
     .filter((r) => (r.supplier || '').trim() || r.total !== '' )
     .map((r) => ({
       fleet_id: fleetId,
@@ -134,13 +164,17 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
       currency: r.currency || 'GBP',
       account_code: (r.account_code || '').trim() || null,
       status: r.status || 'unpaid',
-      page_from: intOrNull(r.page_from), page_to: intOrNull(r.page_to),
+      ...pageRange(r.page_from, r.page_to, batch.page_count),
       /* The document itself, so an invoice can always be opened at its own
          pages rather than the reader's word being the only record. */
       file_path: batch.file_path,
       /* WHAT THE READER DID NOT GET. A 0 that the document never showed must
          not read like a 0 that it did — the column exists for exactly this. */
       confidence: mergeConfidence(r),
+      /* The skipper's own answers, carried over. `r` wins where the form has one —
+         a decision made just now beats one made last time. */
+      category: r.category ?? null,
+      vessel_era: r.vessel_era ?? null,
     }))
 
   if (clean.length) {
@@ -157,7 +191,11 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
     .eq('id', batch.id)
   if (ue) throw ue
 
-  return clean.length
+  /* WHAT WAS CARRIED AND WHAT COULD NOT BE. A decision that found no invoice
+     in the new read is handed back by name, because the alternative is that
+     it disappears — and the whole point of carrying them is that they cost
+     real work to make. */
+  return { saved: clean.length, carried: carried.carried, lost: carried.lost }
 }
 
 /* WHAT THE READER PRODUCED, KEPT ON THE BATCH.
@@ -257,7 +295,5 @@ const num = (v) => {
   const n = Number(String(v).replace(/[^0-9.-]/g, ''))
   return Number.isFinite(n) ? n : null
 }
-const intOrNull = (v) => {
-  const n = Number(v)
-  return Number.isFinite(n) ? Math.trunc(n) : null
-}
+/* The rule lives in src/lib/invoices/pages.js so it can be tested without a
+   database — see the note there about page 0. */

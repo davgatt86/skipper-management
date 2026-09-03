@@ -9,7 +9,7 @@ import {
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
   setInvoiceVessels,
 } from '../lib/su/invoices'
-import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl } from '../lib/su/parse'
+import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
 import { addsWrong, figuresMissing, explainReadError } from '../lib/invoices/periods'
 import { categoryMatrix, categoryLabel, suggestCategory, resolveCategories } from '../lib/invoices/categories'
 import { resolveEras, eraLabel, vesselOf, vesselSplit } from '../lib/invoices/vessels'
@@ -186,6 +186,10 @@ export default function Invoices() {
          uploaded a second time, which would leave a duplicate object per read
          against an allowance that also holds every settlement document. */
       existingPaths: [batch.file_path],
+      /* THE ONE FACT ABOUT THIS DOCUMENT THAT IS NOT THE MODEL'S OPINION —
+         read off the PDF with pdf.js when the bundle went in. The reader uses
+         it to throw away a page number that could not be true. */
+      pageCount: batch.page_count,
     })
     return mapInvoices(data)
   }
@@ -260,12 +264,19 @@ export default function Invoices() {
      the ones before it filed rather than rolling the whole afternoon back. */
   async function saveItems(items) {
     setErr(''); setMsg('')
-    let saved = 0, bundles = 0
+    let saved = 0
+    /* Vessel and category answers lifted off the rows being replaced — see
+       carryDecisions(). Counted so a re-read can say it kept them. */
+    let carried = 0
+    const lost = [], bundles = 0
     for (const item of items) {
       if (!item.rows.length) continue
       try {
         const rows = matched.items.find((x) => x.batch.id === item.batch.id)?.rows || item.rows
-        saved += await saveBatchInvoices(item.batch, rows, fleetId)
+        const out = await saveBatchInvoices(item.batch, rows, fleetId)
+        saved += out.saved
+        carried += out.carried
+        lost.push(...out.lost)
         bundles++
         setQueue((q) => q.filter((x) => x.batch.id !== item.batch.id))
       } catch (e) {
@@ -275,7 +286,16 @@ export default function Invoices() {
         break
       }
     }
-    if (bundles) setMsg(`${saved} invoice${saved === 1 ? '' : 's'} filed off ${bundles} bundle${bundles === 1 ? '' : 's'}.`)
+    if (bundles) setMsg(
+      `${saved} invoice${saved === 1 ? '' : 's'} filed off ${bundles} bundle${bundles === 1 ? '' : 's'}.`
+      + (carried ? ` ${carried} boat or category decision${carried === 1 ? '' : 's'} carried over.` : '')
+      /* NAMED, NOT COUNTED. A decision with no invoice left to sit on is one
+         somebody has to make again, so it says which. */
+      + (lost.length
+          ? ` ${lost.length} could not be matched to anything in the new read and ${lost.length === 1 ? 'was' : 'were'} lost: `
+            + lost.map((l) => `${l.supplier || 'unnamed'}${l.invoice_no ? ' ' + l.invoice_no : ''}`).join(', ') + '.'
+          : '')
+    )
     await refresh()
   }
 
@@ -707,7 +727,9 @@ function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, o
           </div>
 
           {item.rows.map((r, i) => (
-            <InvoiceRow key={i} r={r} onChange={(patch) => onEdit(item.batch.id, i, patch)} />
+            <InvoiceRow key={i} r={r} filePath={item.batch.file_path}
+                       pageCount={item.batch.page_count}
+                       onChange={(patch) => onEdit(item.batch.id, i, patch)} />
           ))}
         </div>
       ))}
@@ -715,11 +737,16 @@ function Review({ items, unknown, suppliers, progress, onStop, onEdit, onFile, o
   )
 }
 
-function InvoiceRow({ r, onChange }) {
+function InvoiceRow({ r, filePath, pageCount, onChange }) {
   const bad = addsWrong(r)
   const missing = figuresMissing(r)
   /* The left edge carries the state at a glance down a long list: green filed,
      brass a firm to file, rust a sum that does not add up. */
+  /* A page number is only worth offering if it could be true: a whole number,
+     at least 1, and inside a document that has that many pages. */
+  const asPage = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 ? Number(v) : null)
+  const pageAt = asPage(r.page_from)
+  const overrun = !!pageCount && [r.page_from, r.page_to].some((v) => asPage(v) > pageCount)
   const edge = bad || missing.length ? 'var(--rust)'
     : r.supplier_id ? 'var(--kelp)' : 'var(--brass)'
   return (
@@ -768,6 +795,41 @@ function InvoiceRow({ r, onChange }) {
                    style={{ width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
           </label>
         ))}
+      </div>
+
+      {/* WHICH PAGES OF THE BUNDLE THIS ONE IS.
+        *
+        * A bundle is a whole week in one file, so checking a read against the
+        * scan meant opening five pages and hunting. This is the only field the
+        * reader returns that nothing downstream can check against the invoice
+        * itself, so a page it was unsure of comes back blank and says so —
+        * a wrong page opens at the wrong invoice and looks certain doing it. */}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.4rem',
+                    marginTop: '0.4rem', flexWrap: 'wrap' }}>
+        {['page_from', 'page_to'].map((f) => (
+          <label key={f} style={{ width: '4.2rem' }}>
+            <span className="muted" style={{ fontSize: '0.72rem' }}>
+              {f === 'page_from' ? 'Page' : 'to'}
+            </span>
+            <input value={r[f] ?? ''} inputMode="numeric"
+                   onChange={(e) => onChange({ [f]: e.target.value })}
+                   style={{ width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
+          </label>
+        ))}
+        <button className="secondary" type="button"
+                onClick={() => openDocument(filePath, r.page_from).catch(() => {})}>
+          {pageAt ? 'Open at page ' + pageAt : 'Open the scan'}
+        </button>
+        {!pageAt && (
+          <span className="muted" style={{ fontSize: '0.78rem' }}>
+            the reader could not say which page this is
+          </span>
+        )}
+        {overrun && (
+          <span style={{ fontSize: '0.78rem', color: 'var(--rust)' }}>
+            this bundle is only {pageCount} pages
+          </span>
+        )}
       </div>
 
       {/* SAY WHAT A BLANK WILL BECOME. The column will not take a null, so it

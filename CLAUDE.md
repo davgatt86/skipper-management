@@ -290,11 +290,62 @@ ever errored — every invoice simply took its firm's, and the override the page
 offers and these notes describe silently did nothing. Found only by trying to
 use it. **A fallback that works is a good way to hide a missing column.**
 
-**Still to do:** the reader returns no page numbers, so `page_from`/`page_to`
-are unfilled and an invoice cannot yet be opened at its own pages. And this has
-not been run against a real bundle — the edge function's invoice prompt exists
-and produced those four rows once, but nobody has watched it read a five-page
-Monday scan.
+**PAGE NUMBERS — DONE Sep 2026, AND THE EDGE FUNCTION IS IN THE REPO NOW.**
+
+`supabase/functions/su-parse-document/index.ts`. **It had never been in version
+control**: the prompts deciding how every settling sheet and every invoice is
+read lived only in the Supabase console, so they could not be diffed, reviewed
+or rolled back — the same shape as the second parse-core copy that ran 1.2.1
+against this repo's 1.3.2 for months. Change it HERE, then deploy.
+
+A bundle averages **8 pages and 7.2 invoices**, so "open the scan" meant eight
+pages to hunt through. The reader now returns `page_from`/`page_to` and the
+review row opens the document at them (`openDocument`, a `#page=` fragment —
+where a viewer ignores it the document still opens at the top, which is exactly
+what the button did before).
+
+**THE PAGE IS THE ONE FIELD NOTHING DOWNSTREAM CAN CHECK.** The net, the VAT,
+the total and the supplier are all printed on the invoice and can be read back;
+which PAGE it was on is answerable only by whoever read the bundle, and asking
+again costs another read. So a page it is unsure of comes back **null** — a
+wrong page opens at the wrong invoice and looks certain doing it. Checked twice:
+in the function against the `page_count` the client read off the PDF with
+pdf.js, and again in `src/lib/invoices/pages.js` on save. **Nothing is clamped
+or swapped** — which of two numbers is wrong is not knowable, so an impossible
+range is dropped whole.
+
+**`Number('') === 0` again, fourth time**, after the engine running hours, the
+gear measurement in mm and the invoice VAT. `intOrNull('')` returned **0**, so a
+blank page box would have filed as **page 0** — a page that does not exist,
+saved as though someone had read it off the scan.
+
+**AND RE-READING A BUNDLE WOULD HAVE DESTROYED £751,000 OF DECISIONS.** Saving
+deletes and re-inserts every invoice off a bundle, which is right — but
+`vessel_era` and `category` are the skipper's answers to questions the invoice
+cannot answer, and **102 invoices carry a vessel decision**. The ordinary reason
+to re-read a bundle is now to pick up its page numbers, so the first use of this
+feature would have quietly undone weeks of work. `carryDecisions()` lifts them
+off and puts them back, matched on the invoice NUMBER, or on firm + total + date
+where there is none.
+
+**The firm in that fallback key goes through `normaliseSupplier`, and a test
+caught why**: the name is the only part of the key that comes off a model
+reading a photograph, so it drifts between two reads of the SAME document —
+`Ironside & Son` came back `IRONSIDE AND SON` and a raw comparison lost the
+decision. It would have failed silently and only on invoices with no number,
+which are the hand-written ones. **An unmatchable decision is NAMED**, never
+nudged onto the nearest row.
+
+**The 2,625 invoices already filed carry no pages** and there is no way to get
+them but to read the bundle again — 364 bundles, at real cost. Not worth doing
+wholesale; a bundle can be re-read when an invoice actually needs finding, and
+the decisions now survive it. Every invoice already stores `file_path`, so the
+scan opens today, just at page one.
+
+**Not yet proven on a real bundle.** The prompt change is deployed (v9) and the
+two untouched prompts are asserted verbatim by test, but no five-page Monday
+scan has been read through it — the page is behind a login. One bundle re-read
+settles it.
 
 ### THE AGENT GRANT IS A READ, AND A WORKSHEET WAS WRITTEN THROUGH IT
 

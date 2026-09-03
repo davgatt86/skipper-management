@@ -39,6 +39,19 @@ export async function uploadDocument(boatId, file) {
   return path
 }
 
+/* OPEN THE SCAN AT THE INVOICE, NOT AT PAGE ONE.
+ *
+ * A bundle is a whole week in one file, so "open the scan" has always meant
+ * "here are five pages, find it yourself". The `#page=` fragment is honoured by
+ * every built-in PDF viewer — and where it is not, the document still opens at
+ * the top, which is exactly what the button did before. It degrades to the old
+ * behaviour rather than failing, which is why no capability check is wanted. */
+export async function openDocument(path, page) {
+  const url = await signedUrl(path)
+  const at = Number(page)
+  window.open(Number.isInteger(at) && at > 1 ? url + "#page=" + at : url, "_blank", "noopener")
+}
+
 export async function signedUrl(path, seconds = 3600) {
   const { data, error } = await supabase.storage.from('su-documents').createSignedUrl(path, seconds)
   if (error) throw error
@@ -88,7 +101,7 @@ const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')
  * arrived by email and was filed by the ingest webhook. Uploading it a second
  * time would leave a duplicate object behind for every arrival, and the bucket
  * already carries every settlement document against a 1 GB allowance. */
-export async function parseDocuments(files, docType, boatId, { onStage, existingPaths } = {}) {
+export async function parseDocuments(files, docType, boatId, { onStage, existingPaths, pageCount } = {}) {
   if (!boatId) throw new Error('No boat selected.')
   if (!existingPaths?.length && !files?.length) throw new Error('No file chosen.')
 
@@ -113,7 +126,10 @@ export async function parseDocuments(files, docType, boatId, { onStage, existing
       Authorization: `Bearer ${token}`,
       apikey: SUPABASE_KEY,
     },
-    body: JSON.stringify({ paths, doc_type: docType }),
+    /* THE PAGE COUNT IS THE ONE FACT ABOUT THE DOCUMENT THAT IS NOT THE
+       MODEL'S OPINION — it was read off the PDF with pdf.js on upload. The
+       function uses it to throw away a page number that could not be true. */
+    body: JSON.stringify({ paths, doc_type: docType, page_count: Number.isInteger(pageCount) ? pageCount : null }),
   })
   const json = await resp.json().catch(() => ({}))
   if (!resp.ok) throw new Error(json.error || `Could not start the read (${resp.status}).`)
@@ -204,6 +220,10 @@ export function mapInvoices(d) {
     description: i.description || '',
     net: n(i.net), vat: n(i.vat), total: n(i.total),
     account_code: i.account_code || '',
+    /* Which pages of the bundle this invoice is. Blank rather than 0 when the
+       reader was not sure: page 0 does not exist, and a number that looks like
+       an answer is worse than an honest gap. */
+    page_from: n(i.page_from), page_to: n(i.page_to),
     status: 'unpaid',
   }))
 }
