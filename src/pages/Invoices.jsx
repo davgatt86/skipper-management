@@ -7,10 +7,12 @@ import {
   listBatches, listInvoices, listSuppliers, createSupplier, addAlias,
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
+  setInvoiceVessels,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl } from '../lib/su/parse'
 import { addsWrong, figuresMissing, explainReadError } from '../lib/invoices/periods'
 import { categoryMatrix, categoryLabel, suggestCategory, resolveCategories } from '../lib/invoices/categories'
+import { resolveEras, eraLabel, vesselOf, vesselSplit } from '../lib/invoices/vessels'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
  *
@@ -278,7 +280,9 @@ export default function Invoices() {
   }
 
   /* The shipped categories with the boat's own merged over them. */
-  const cats = useMemo(() => resolveCategories(catSettings), [catSettings])
+  const cats = useMemo(() => resolveCategories(catSettings?.categories), [catSettings])
+  /* Three hulls, all called AUDACIOUS BF83. */
+  const eras = useMemo(() => resolveEras(catSettings?.eras), [catSettings])
 
   async function fileSupplierCategory(id, category) {
     setErr('')
@@ -369,8 +373,15 @@ export default function Invoices() {
       )}
 
       {tab === 'costs' && (
-        <Costs invoices={invoices} suppliers={suppliers} cats={cats} loading={loading}
-               onFileSupplier={fileSupplierCategory} onSuggestAll={suggestAll} />
+        <Costs invoices={invoices} suppliers={suppliers} cats={cats} eras={eras} loading={loading}
+               onFileSupplier={fileSupplierCategory} onSuggestAll={suggestAll}
+               onPlaceVessel={async (ids, era) => {
+                 try {
+                   await setInvoiceVessels(ids, era)
+                   setInvoices((prev) => prev.map((i) =>
+                     (ids.includes(i.id) ? { ...i, vessel_era: era } : i)))
+                 } catch (e) { setErr(e.message || String(e)) }
+               }} />
       )}
     </AppShell>
   )
@@ -812,14 +823,23 @@ function UnknownFirm({ u, suppliers, onFile }) {
  * pay, a category is what for, and after ten years the second is the one you
  * cannot get from the invoices themselves.
  */
-function Costs({ invoices, suppliers, cats, loading, onFileSupplier, onSuggestAll }) {
+function Costs({ invoices, suppliers, cats, eras, loading, onFileSupplier, onSuggestAll, onPlaceVessel }) {
   const [basis, setBasis] = useState('total')
   const [open, setOpen] = useState(null)
   const [view, setView] = useState('category')
+  /* Which boat is being looked at. All means all three, which is the honest
+     default for a firm's whole history — but the trend inside a category is
+     only readable one hull at a time. */
+  const [era, setEra] = useState('')
+
+  const split = useMemo(() => vesselSplit(invoices, eras, { basis }), [invoices, eras, basis])
+  const shown = useMemo(
+    () => (era ? invoices.filter((i) => vesselOf(i, eras) === era) : invoices),
+    [invoices, eras, era])
 
   const byId = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
   const matrix = useMemo(
-    () => categoryMatrix(invoices, suppliers, { basis }), [invoices, suppliers, basis])
+    () => categoryMatrix(shown, suppliers, { basis }), [shown, suppliers, basis])
 
   /* Firms with no category yet, what they are worth, and WHAT THEY HAVE SOLD.
      The descriptions matter: 79 of this boat's 153 firms have a name that says
@@ -868,6 +888,73 @@ function Costs({ invoices, suppliers, cats, loading, onFileSupplier, onSuggestAl
           </select>
         </label>
       </div>
+
+      {/* THREE BOATS, ONE NAME. Comparing 2019 gear spend against 2025 is
+          comparing two different hulls fishing two different ways, so the grid
+          says which one it is showing rather than pretending they are one. */}
+      <div className="card">
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <b style={{ marginRight: '0.3rem' }}>Boat</b>
+          <button className="secondary" onClick={() => setEra('')}
+                  style={{ fontWeight: era === '' ? 700 : 400 }}>All three</button>
+          {split.rows.map((r) => (
+            <button key={r.key} className="secondary" onClick={() => setEra(r.key)}
+                    style={{ fontWeight: era === r.key ? 700 : 400 }}>
+              {r.label}
+              <span className="muted" style={{ fontWeight: 400 }}> {money0(r.total)}</span>
+            </button>
+          ))}
+        </div>
+        <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.8rem' }}>
+          {split.rows.map((r) => `${r.label}: ${r.note}`).join(' · ')}
+          {split.undated.count > 0 && ` · ${split.undated.count} invoice${split.undated.count === 1 ? '' : 's'} carrying ${money0(split.undated.total)} has no date, so no boat.`}
+        </p>
+      </div>
+
+      {/* WHERE THE DATE CANNOT SAY. A boat is fitted out before she fishes, so
+          her bills start months ahead of her — and across a changeover both
+          hulls are plausible. These are OFFERED to the boat that was in
+          service, because routine running costs are the common case, and shown
+          biggest first because that is the order they are worth deciding in. */}
+      {split.uncertain.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
+          <b>{split.uncertain.length} invoice{split.uncertain.length === 1 ? '' : 's'} could belong to either boat</b>
+          <span className="muted" style={{ fontSize: '0.84rem' }}> · {money0(split.unsureTotal)}</span>
+          <p className="muted" style={{ margin: '0.35rem 0 0.6rem', fontSize: '0.82rem' }}>
+            Dated inside a changeover, when the old boat was still fishing and the new one
+            was being fitted out. Counted against the boat in service until you say otherwise.
+          </p>
+          {split.uncertain.slice(0, 10).map((u) => (
+            <div key={u.invoice.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center',
+                                             flexWrap: 'wrap', padding: '0.3rem 0',
+                                             borderTop: '1px solid var(--line)' }}>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '5.6rem' }}>
+                {u.invoice.invoice_date}
+              </span>
+              <span style={{ flex: '1 1 12rem' }}>
+                {u.invoice.supplier}
+                <span className="muted" style={{ fontSize: '0.78rem' }}> · {u.invoice.invoice_no || 'no number'}</span>
+              </span>
+              <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '5.5rem',
+                             textAlign: 'right' }}>{money0(u.amount)}</span>
+              <button className="secondary"
+                      onClick={() => onPlaceVessel([u.invoice.id], u.offered)}>
+                {eraLabel(u.offered, eras)}
+              </button>
+              <button onClick={() => onPlaceVessel([u.invoice.id], u.alsoCould)}>
+                {eraLabel(u.alsoCould, eras)}
+              </button>
+            </div>
+          ))}
+          {split.uncertain.length > 10 && (
+            <p className="muted" style={{ fontSize: '0.8rem', margin: '0.4rem 0 0' }}>
+              …and {split.uncertain.length - 10} smaller ones worth{' '}
+              {money0(split.uncertain.slice(10).reduce((t, u) => t + u.amount, 0))} together.
+              Settling the big ones first is what moves the figures.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* THE JOB TO DO, ABOVE THE FIGURES. A grid where a third of the money is
           in "Not filed" is not a report; saying so first is what stops it being

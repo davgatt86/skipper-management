@@ -21,7 +21,7 @@ const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
 
 const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
   + 'description, net, vat, total, currency, account_code, status, paid_date, '
-  + 'page_from, page_to, file_path, confidence, category'
+  + 'page_from, page_to, file_path, confidence, category, vessel_era'
 
 /** The bundles that have arrived, newest first. */
 export async function listBatches(fleetId) {
@@ -202,8 +202,27 @@ export async function setInvoiceCategory(id, category) {
 export async function loadCategorySettings(fleetId) {
   if (!fleetId) return null
   const { data, error } = await supabase.from('su_invoice_categories')
-    .select('data').eq('fleet_id', fleetId).maybeSingle()
-  return error ? null : (data?.data ?? null)
+    .select('data, eras').eq('fleet_id', fleetId).maybeSingle()
+  return error ? null : { categories: data?.data ?? null, eras: data?.eras ?? null }
+}
+
+/* WHICH BOAT AN INVOICE BELONGS TO, where the date cannot say.
+ *
+ * Ten years here are three hulls, all called AUDACIOUS BF83, and a boat's bills
+ * start months before she fishes — so an invoice inside a changeover is
+ * genuinely undecidable from its date. This is the skipper settling one. */
+export async function setInvoiceVessel(id, era) {
+  const { error } = await supabase.from('su_invoices')
+    .update({ vessel_era: era || null }).eq('id', id)
+  if (error) throw error
+}
+
+/** Several at once — a whole window's worth after one decision. */
+export async function setInvoiceVessels(ids, era) {
+  if (!ids.length) return
+  const { error } = await supabase.from('su_invoices')
+    .update({ vessel_era: era || null }).in('id', ids)
+  if (error) throw error
 }
 
 export async function setBatchStatus(id, status, note) {
