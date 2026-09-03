@@ -21,7 +21,7 @@ const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
 
 const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
   + 'description, net, vat, total, currency, account_code, status, paid_date, '
-  + 'page_from, page_to, file_path, confidence'
+  + 'page_from, page_to, file_path, confidence, category'
 
 /** The bundles that have arrived, newest first. */
 export async function listBatches(fleetId) {
@@ -173,6 +173,37 @@ export async function storeRead(id, rows) {
     .update({ read_result: rows, read_at: new Date().toISOString(), status: 'read' })
     .eq('id', id)
   if (error) throw error
+}
+
+/* WHAT A FIRM SELLS. One decision covering every invoice it has ever sent —
+ * 153 firms against 2,625 invoices, which is the only reason categorising ten
+ * years is a job anyone would finish. Overridable on the invoice where a firm
+ * genuinely sells two things. */
+export async function setSupplierCategory(id, category) {
+  const { error } = await supabase.from('su_invoice_suppliers')
+    .update({ category: category || null }).eq('id', id)
+  if (error) throw error
+}
+
+/** Several at once, for confirming a screen of suggestions in one go. */
+export async function setSupplierCategories(pairs) {
+  for (const [id, category] of pairs) await setSupplierCategory(id, category)
+}
+
+/** One invoice out of step with its firm. */
+export async function setInvoiceCategory(id, category) {
+  const { error } = await supabase.from('su_invoices')
+    .update({ category: category || null }).eq('id', id)
+  if (error) throw error
+}
+
+/* The fleet's own category list — only what it CHANGES, merged over the
+   shipped one by resolveCategories(). */
+export async function loadCategorySettings(fleetId) {
+  if (!fleetId) return null
+  const { data, error } = await supabase.from('su_invoice_categories')
+    .select('data').eq('fleet_id', fleetId).maybeSingle()
+  return error ? null : (data?.data ?? null)
 }
 
 export async function setBatchStatus(id, status, note) {

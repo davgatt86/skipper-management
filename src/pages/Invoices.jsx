@@ -6,9 +6,11 @@ import { useAuth } from '../AuthContext'
 import {
   listBatches, listInvoices, listSuppliers, createSupplier, addAlias,
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead,
+  setSupplierCategory, setSupplierCategories, loadCategorySettings,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl } from '../lib/su/parse'
-import { totalsByPeriod, supplierHistory, addsWrong, figuresMissing, explainReadError, MONTHS } from '../lib/invoices/periods'
+import { addsWrong, figuresMissing, explainReadError } from '../lib/invoices/periods'
+import { categoryMatrix, categoryLabel, suggestCategory, resolveCategories } from '../lib/invoices/categories'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
  *
@@ -49,6 +51,7 @@ export default function Invoices() {
   const [batches, setBatches] = useState([])
   const [invoices, setInvoices] = useState([])
   const [suppliers, setSuppliers] = useState([])
+  const [catSettings, setCatSettings] = useState(null)
   const [boatId, setBoatId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState('')
@@ -63,10 +66,11 @@ export default function Invoices() {
   const refresh = useCallback(async () => {
     if (!fleetId) return
     setLoading(true)
-    const [b, i, s] = await Promise.all([
+    const [b, i, s, c] = await Promise.all([
       listBatches(fleetId), listInvoices(fleetId), listSuppliers(fleetId),
+      loadCategorySettings(fleetId),
     ])
-    setBatches(b); setInvoices(i); setSuppliers(s)
+    setBatches(b); setInvoices(i); setSuppliers(s); setCatSettings(c)
     setLoading(false)
   }, [fleetId])
 
@@ -273,6 +277,48 @@ export default function Invoices() {
     await refresh()
   }
 
+  /* The shipped categories with the boat's own merged over them. */
+  const cats = useMemo(() => resolveCategories(catSettings), [catSettings])
+
+  async function fileSupplierCategory(id, category) {
+    setErr('')
+    try {
+      await setSupplierCategory(id, category)
+      setSuppliers((prev) => prev.map((s) => (s.id === id ? { ...s, category } : s)))
+    } catch (e) { setErr(e.message || String(e)) }
+  }
+
+  /* SUGGEST, NEVER APPLY — the suggestions are FILLED IN and the skipper
+     confirms them. £8m across ten years is a lot of money to have bucketed by a
+     regex, and a firm nothing fits is left blank rather than swept into Other. */
+  async function suggestAll() {
+    /* The descriptions are read here as well as in the list. Off the name
+       alone only 74 of this boat's 153 firms can be placed; what they have
+       actually sold places most of the rest. */
+    const sold = new Map()
+    for (const i of invoices) {
+      if (!i.supplier_id || !i.description) continue
+      const arr = sold.get(i.supplier_id) || []
+      if (arr.length < 8) { arr.push(i.description); sold.set(i.supplier_id, arr) }
+    }
+    const guesses = suppliers
+      .filter((s) => !s.category)
+      .map((s) => [s, suggestCategory(s.name, sold.get(s.id) || [])])
+      .filter(([, g]) => g)
+    if (!guesses.length) { setMsg('Nothing to suggest — every firm with a guessable name is filed.'); return }
+    if (!window.confirm(
+      `File ${guesses.length} firm${guesses.length === 1 ? '' : 's'} on the suggested category?\n\n`
+      + 'Suggested from the firm’s own name. Each one is changeable afterwards, and any '
+      + 'firm the guess could not place is left for you.')) return
+    setErr('')
+    try {
+      await setSupplierCategories(guesses.map(([s, g]) => [s.id, g.key]))
+      const map = new Map(guesses.map(([s, g]) => [s.id, g.key]))
+      setSuppliers((prev) => prev.map((s) => (map.has(s.id) ? { ...s, category: map.get(s.id) } : s)))
+      setMsg(`${guesses.length} filed on the suggestion. Check them in the grid below.`)
+    } catch (e) { setErr(e.message || String(e)) }
+  }
+
   if (!fleetId) return <AppShell maxWidth={1040}><PageHeader title="Invoices" /></AppShell>
 
   return (
@@ -323,7 +369,8 @@ export default function Invoices() {
       )}
 
       {tab === 'costs' && (
-        <Costs invoices={invoices} suppliers={suppliers} loading={loading} />
+        <Costs invoices={invoices} suppliers={suppliers} cats={cats} loading={loading}
+               onFileSupplier={fileSupplierCategory} onSuggestAll={suggestAll} />
       )}
     </AppShell>
   )
@@ -755,16 +802,43 @@ function UnknownFirm({ u, suppliers, onFile }) {
 }
 
 /* ── 3 · WHAT IT COST ──────────────────────────────────────────────────────
- * Annual first, because that is the one David said matters. */
-function Costs({ invoices, suppliers, loading }) {
-  const [grain, setGrain] = useState('year')
+ *
+ * TEN YEARS AND £8m, so a list of years is the wrong shape. Eleven cards down a
+ * page answers "what did 2023 cost" and hides the only question worth asking of
+ * a decade, which is what is going UP. Categories down, years across, and the
+ * trend is there to be read.
+ *
+ * By SUPPLIER is still a click away, inside the category — a firm is who you
+ * pay, a category is what for, and after ten years the second is the one you
+ * cannot get from the invoices themselves.
+ */
+function Costs({ invoices, suppliers, cats, loading, onFileSupplier, onSuggestAll }) {
   const [basis, setBasis] = useState('total')
-  const [fyStart, setFyStart] = useState(1)
   const [open, setOpen] = useState(null)
+  const [view, setView] = useState('category')
 
-  const report = useMemo(
-    () => totalsByPeriod(invoices, suppliers, { grain, basis, fyStartMonth: fyStart }),
-    [invoices, suppliers, grain, basis, fyStart])
+  const byId = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
+  const matrix = useMemo(
+    () => categoryMatrix(invoices, suppliers, { basis }), [invoices, suppliers, basis])
+
+  /* Firms with no category yet, what they are worth, and WHAT THEY HAVE SOLD.
+     The descriptions matter: 79 of this boat's 153 firms have a name that says
+     nothing about their trade — "PBP Services", "Melpass Limited", "Cromwell" —
+     and the only thing that places them is the work on their invoices. */
+  const unfiled = useMemo(() => {
+    const spend = new Map()
+    for (const i of invoices) {
+      if (byId.get(i.supplier_id)?.category || i.category) continue
+      const s = byId.get(i.supplier_id)
+      if (!s) continue
+      const cur = spend.get(s.id) || { s, total: 0, count: 0, descriptions: [] }
+      cur.total += Number(i[basis]) || 0; cur.count++
+      // A handful is plenty to place a firm, and keeps the guess quick.
+      if (i.description && cur.descriptions.length < 8) cur.descriptions.push(i.description)
+      spend.set(s.id, cur)
+    }
+    return [...spend.values()].sort((a, b) => b.total - a.total)
+  }, [invoices, byId, basis])
 
   if (loading) return <p className="muted">Loading…</p>
   if (!invoices.length) {
@@ -773,118 +847,196 @@ function Costs({ invoices, suppliers, loading }) {
     </p></div>
   }
 
+  const pct = (v) => (matrix.grand ? Math.round((v / matrix.grand) * 100) : 0)
+
   return (
     <>
-      <div className="card" style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap',
-                                     alignItems: 'flex-end' }}>
+      <div className="card" style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap',
+                                     alignItems: 'baseline' }}>
+        <b style={{ fontSize: '1.15rem' }}>{money0(matrix.grand)}</b>
+        <span className="muted" style={{ flex: 1, fontSize: '0.86rem' }}>
+          {invoices.length.toLocaleString('en-GB')} invoices ·{' '}
+          {suppliers.length} suppliers ·{' '}
+          {matrix.columns.filter((c) => c !== 'undated').length} years
+        </span>
         <label>
-          <span className="muted" style={{ fontSize: '0.72rem', display: 'block' }}>Period</span>
-          <select value={grain} onChange={(e) => setGrain(e.target.value)}>
-            <option value="year">Year</option>
-            <option value="quarter">Quarter</option>
-            <option value="month">Month</option>
-          </select>
-        </label>
-        <label>
-          {/* NET AND GROSS DIFFER BY THE VAT, which is real money. The basis is
+          {/* Net and gross differ by the VAT, which is real money — the basis is
               always shown rather than one being quietly assumed. */}
-          <span className="muted" style={{ fontSize: '0.72rem', display: 'block' }}>Figure</span>
           <select value={basis} onChange={(e) => setBasis(e.target.value)}>
             <option value="total">Total (what left the account)</option>
             <option value="net">Net (before VAT)</option>
           </select>
         </label>
-        <label>
-          {/* The office runs this boat's quarterly accounts to 30 June, so the
-              year these totals are read against may not be the calendar one. */}
-          <span className="muted" style={{ fontSize: '0.72rem', display: 'block' }}>Year starts</span>
-          <select value={fyStart} onChange={(e) => setFyStart(Number(e.target.value))}>
-            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-        </label>
       </div>
 
-      {report.undated.count > 0 && (
-        <p className="muted" style={{ fontSize: '0.84rem' }}>
-          {report.undated.count} invoice{report.undated.count === 1 ? '' : 's'} carrying{' '}
-          {money(report.undated.total)} has no date the reader could make out, so{' '}
-          {report.undated.count === 1 ? 'it is' : 'they are'} in none of the periods below.
-          Give {report.undated.count === 1 ? 'it a date' : 'them dates'} and{' '}
-          {report.undated.count === 1 ? 'it' : 'they'} will fall into place.
-        </p>
+      {/* THE JOB TO DO, ABOVE THE FIGURES. A grid where a third of the money is
+          in "Not filed" is not a report; saying so first is what stops it being
+          read as one. */}
+      {unfiled.length > 0 && (
+        <div className="card" style={{ borderColor: 'var(--brass)' }}>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
+            <b>{unfiled.length} firm{unfiled.length === 1 ? '' : 's'} not filed to a category</b>
+            <span className="muted" style={{ flex: 1, fontSize: '0.84rem' }}>
+              {money0(unfiled.reduce((s, u) => s + u.total, 0))} between them
+            </span>
+            <button onClick={onSuggestAll}>Suggest categories</button>
+          </div>
+          <p className="muted" style={{ margin: '0.4rem 0 0.6rem', fontSize: '0.82rem' }}>
+            One decision files every invoice a firm has ever sent. Biggest first — the
+            top few are most of the money.
+          </p>
+          {unfiled.slice(0, 12).map((u) => (
+            <FileFirm key={u.s.id} s={u.s} total={u.total} count={u.count}
+                      descriptions={u.descriptions} cats={cats} onFile={onFileSupplier} />
+          ))}
+          {unfiled.length > 12 && (
+            <p className="muted" style={{ fontSize: '0.8rem', margin: '0.4rem 0 0' }}>
+              …and {unfiled.length - 12} smaller ones, worth{' '}
+              {money0(unfiled.slice(12).reduce((s, u) => s + u.total, 0))} together.
+            </p>
+          )}
+        </div>
       )}
 
-      {report.periods.map((p) => (
-        <div key={p.key} className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                        gap: '0.5rem', flexWrap: 'wrap' }}>
-            <b style={{ fontSize: '1.05rem' }}>{p.label}</b>
-            <span className="muted" style={{ fontSize: '0.8rem', flex: 1 }}>
-              {p.count} invoice{p.count === 1 ? '' : 's'} · {p.suppliers.length} supplier
-              {p.suppliers.length === 1 ? '' : 's'}
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono, monospace)', fontWeight: 700,
-                           fontSize: '1.05rem' }}>{money(p.total)}</span>
-          </div>
-
-          <ul style={{ listStyle: 'none', margin: '0.5rem 0 0', padding: 0 }}>
-            {p.suppliers.map((s) => (
-              <li key={s.key} style={{ borderTop: '1px solid var(--line)', padding: '0.25rem 0' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline' }}>
-                  <span style={{ flex: 1 }}>
-                    {s.name}
-                    {/* An unfiled firm is marked, because its figure is only as
-                        good as one spelling of its name. */}
-                    {!s.filed && (
-                      <span className="muted" style={{ fontSize: '0.72rem' }}> · not filed</span>
-                    )}
-                  </span>
-                  <span className="muted" style={{ fontSize: '0.78rem' }}>{s.count}</span>
-                  {/* A share of the period, so the big ones stand out without
-                      anyone doing arithmetic in their head. */}
-                  <span className="muted" style={{ fontSize: '0.78rem', minWidth: '3rem',
-                                                   textAlign: 'right' }}>
-                    {p.total ? Math.round((s.total / p.total) * 100) + '%' : ''}
-                  </span>
-                  <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '6.5rem',
-                                 textAlign: 'right' }}>{money(s.total)}</span>
-                  {s.id && (
-                    <button className="secondary" style={{ padding: '0 0.4rem', fontSize: '0.75rem' }}
-                            onClick={() => setOpen(open === s.id ? null : s.id)}>
-                      {open === s.id ? 'hide' : 'history'}
-                    </button>
-                  )}
-                </div>
-                {open === s.id && (
-                  <SupplierHistory invoices={invoices} id={s.id}
-                                   opts={{ grain, basis, fyStartMonth: fyStart }} />
-                )}
-              </li>
-            ))}
-          </ul>
+      <div className="card">
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
+          <button className="secondary" onClick={() => setView('category')}
+                  style={{ fontWeight: view === 'category' ? 700 : 400 }}>By category</button>
+          <button className="secondary" onClick={() => setView('supplier')}
+                  style={{ fontWeight: view === 'supplier' ? 700 : 400 }}>By supplier</button>
         </div>
-      ))}
+
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '0.3rem 0.4rem' }}>
+                  {view === 'category' ? 'What for' : 'Who'}
+                </th>
+                {matrix.columns.map((c) => (
+                  <th key={c} style={{ textAlign: 'right', padding: '0.3rem 0.4rem',
+                                       fontFamily: 'var(--font-mono, monospace)',
+                                       color: c === 'undated' ? 'var(--brass)' : undefined }}>
+                    {c === 'undated' ? 'no date' : c}
+                  </th>
+                ))}
+                <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(view === 'category' ? matrix.rows : bySupplierRows(matrix)).map((r) => (
+                <RowAndDetail key={r.key} r={r} columns={matrix.columns} cats={cats}
+                              view={view} pct={pct}
+                              open={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
+              ))}
+            </tbody>
+            <tfoot>
+              <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}>
+                <td style={{ padding: '0.4rem' }}>All</td>
+                {matrix.columns.map((c) => (
+                  <td key={c} style={{ textAlign: 'right', padding: '0.4rem',
+                                       fontFamily: 'var(--font-mono, monospace)' }}>
+                    {money0(matrix.rows.reduce((s, r) => s + (r.cells[c] || 0), 0))}
+                  </td>
+                ))}
+                <td style={{ textAlign: 'right', padding: '0.4rem',
+                             fontFamily: 'var(--font-mono, monospace)' }}>{money0(matrix.grand)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </>
   )
 }
 
-function SupplierHistory({ invoices, id, opts }) {
-  const h = supplierHistory(invoices, id, opts)
+/* The same grid read the other way. Built off the matrix rather than a second
+   pass, so the two views cannot disagree about a total — the lesson the chalk
+   sheet and the buyers' catalogue taught. */
+function bySupplierRows(matrix) {
+  const by = new Map()
+  for (const row of matrix.rows) {
+    for (const s of row.suppliers) {
+      const cur = by.get(s.id || s.name) || { key: s.id || s.name, name: s.name, total: 0, count: 0, cells: {} }
+      cur.total += s.total; cur.count += s.count
+      by.set(s.id || s.name, cur)
+    }
+  }
+  return [...by.values()].sort((a, b) => b.total - a.total).slice(0, 40)
+}
+
+function RowAndDetail({ r, columns, cats, view, open, onToggle, pct }) {
+  const unfiled = r.key === '__none__'
+  const label = view === 'category' ? categoryLabel(unfiled ? null : r.key, cats) : r.name
   return (
-    <div style={{ padding: '0.4rem 0 0.5rem 1rem', fontSize: '0.84rem' }}>
-      {/* WHAT IT RESTS ON, FIRST. One period is an observation, not a pattern —
-          the same discipline as the gear lives and the stores history. */}
-      <div className="muted" style={{ marginBottom: '0.25rem' }}>
-        {h.confidence}
-        {h.average != null && h.periods.length > 1 && ` · ${money(h.average)} a period on average`}
-      </div>
-      {h.periods.map((p) => (
-        <div key={p.key} style={{ display: 'flex', gap: '0.5rem' }}>
-          <span style={{ minWidth: '6rem' }}>{p.label}</span>
-          <span className="muted" style={{ minWidth: '2rem' }}>{p.count}</span>
-          <span style={{ fontFamily: 'var(--font-mono, monospace)' }}>{money(p.total)}</span>
-        </div>
-      ))}
+    <>
+      <tr style={{ borderTop: '1px solid var(--line)', cursor: view === 'category' ? 'pointer' : 'default' }}
+          onClick={() => view === 'category' && onToggle()}>
+        <td style={{ padding: '0.3rem 0.4rem', color: unfiled ? 'var(--brass)' : undefined }}>
+          {view === 'category' && <span className="muted" style={{ marginRight: 4 }}>{open ? '▾' : '▸'}</span>}
+          {label}
+          <span className="muted" style={{ fontSize: '0.76rem' }}> · {r.count}</span>
+        </td>
+        {columns.map((c) => (
+          <td key={c} style={{ textAlign: 'right', padding: '0.3rem 0.4rem',
+                               fontFamily: 'var(--font-mono, monospace)',
+                               color: r.cells[c] ? undefined : 'var(--mute)' }}>
+            {r.cells[c] ? money0(r.cells[c]) : '·'}
+          </td>
+        ))}
+        <td style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600,
+                     fontFamily: 'var(--font-mono, monospace)' }}>
+          {money0(r.total)}
+          <span className="muted" style={{ fontWeight: 400, fontSize: '0.74rem' }}> {pct(r.total)}%</span>
+        </td>
+      </tr>
+      {open && view === 'category' && (
+        <tr>
+          <td colSpan={columns.length + 2} style={{ padding: '0 0.4rem 0.5rem 1.6rem' }}>
+            {r.suppliers.slice(0, 15).map((s) => (
+              <div key={s.id || s.name} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.82rem',
+                                                 padding: '0.1rem 0' }}>
+                <span style={{ flex: 1 }}>{s.name}</span>
+                <span className="muted">{s.count}</span>
+                <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '6rem',
+                               textAlign: 'right' }}>{money0(s.total)}</span>
+              </div>
+            ))}
+            {r.suppliers.length > 15 && (
+              <div className="muted" style={{ fontSize: '0.78rem' }}>
+                …and {r.suppliers.length - 15} more
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+/* One firm, its suggestion, and the decision. THE SUGGESTION IS SHOWN AND NEVER
+   APPLIED — £8m is a lot of money to have bucketed by a regex, and this
+   codebase has already said so once about crew tickets. */
+function FileFirm({ s, total, count, descriptions, cats, onFile }) {
+  const guess = suggestCategory(s.name, descriptions)
+  const [pick, setPick] = useState(guess?.key || '')
+  return (
+    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap',
+                  padding: '0.3rem 0', borderTop: '1px solid var(--line)' }}>
+      <span style={{ flex: '1 1 13rem' }}>
+        <b>{s.name}</b>
+        <span className="muted" style={{ fontSize: '0.78rem' }}>
+          {' '}· {count} invoice{count === 1 ? '' : 's'} · {money0(total)}
+        </span>
+      </span>
+      <select value={pick} onChange={(e) => setPick(e.target.value)} style={{ maxWidth: '13rem' }}>
+        <option value="">— pick a category —</option>
+        {cats.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+      </select>
+      {guess && pick === guess.key && (
+        <span className="muted" style={{ fontSize: '0.74rem' }}>suggested from {guess.why}</span>
+      )}
+      <button className="secondary" disabled={!pick} onClick={() => onFile(s.id, pick)}>File</button>
     </div>
   )
 }
