@@ -202,6 +202,50 @@ non-January year labels itself `2026/27` rather than a bare 2026.
 report over the boat's real four invoices — 2026 totals **£7,128.05**, Jackson
 Trawls 73% of the year.
 
+### TEN YEARS ARE THREE BOATS, all called AUDACIOUS BF83 (Sep 2026)
+
+The record loaded out to **2,625 invoices, £8,058,324, 153 suppliers, 2016–2026**
+— far more than the weekly bundles, because the Gmail search reached back to an
+older office scanner (`SKM_C3350…`). The dates were checked and are genuine: the
+2017-11-07 bundle holds invoices from Aug–Oct 2017.
+
+David: *"oldest boat was sold aug 2018 / pair/single went into service oct 2018
+but invoices for that boat could be from spring 2018 onwards / pair/single was
+sold july 2022 / twin trawler in service oct 2022 but invoices from summer 2022
+could be for the twin vessel."*
+
+Same name, same registration, three hulls fishing three different ways — so
+comparing 2019 gear spend against 2025 was comparing two boats.
+
+**THE DATE PLACES AN INVOICE EXCEPT ACROSS A CHANGEOVER.** A boat is fitted out
+before she fishes and her bills arrive months ahead of her, so two windows are
+genuinely undecidable: **spring–Aug 2018** and **summer–Oct 2022**.
+`src/lib/invoices/vessels.js`, `su_invoices.vessel_era` for the override.
+
+**THE PROOF IS THE FIFTH BIGGEST SUPPLIER.** Etablissements BOPP Treuils JEB —
+**£616,200 of winches** — is invoiced 28-05-2018, four months before the
+pair/single entered service and while the old boat still fished. Date alone put
+six hundred thousand pounds on the wrong hull.
+
+An invoice in a window is **flagged, never guessed quietly**: offered to the boat
+that was IN SERVICE, because routine running costs are the common case and there
+are far more of them, with the other hull named beside it and one tap to move it.
+Ordered by money — £616k of winches is worth deciding, a £40 box of gloves is not.
+
+**Settling six of them moved £751,000.** The old boat went from £928,493 to
+£178,306; the pair/single from £1,997,364 to £2,740,745. His calls: BOPP and the
+£132,750 Don Fishing quota rent to the pair/single, PBP's gas-freeing to the old
+boat, Kinnaird's Reykjavik flights to the twin, and the Beko white goods to the
+pair/single — *"replacing before selling"*, which no rule would have guessed.
+
+**A DECISION AND A DEFAULT MUST NOT READ ALIKE.** The ones that agreed with the
+default were written explicitly anyway; that is what takes them off the
+undecided list for good.
+
+85 invoices worth **£51,740** remain on the default. They read as ordinary
+running costs of whichever boat was fishing, and each is pennies against £8m —
+chasing them would cost more attention than the answer is worth.
+
 **Still to do:** the reader returns no page numbers, so `page_from`/`page_to`
 are unfilled and an invoice cannot yet be opened at its own pages. And this has
 not been run against a real bundle — the edge function's invoice prompt exists
