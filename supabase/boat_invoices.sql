@@ -126,7 +126,14 @@ alter table public.su_invoices
   add column if not exists currency    text default 'GBP',
   -- What the reader was unsure of, per field, kept beside the figures. A model
   -- reading a photograph is not evidence and must not read like it.
-  add column if not exists confidence  jsonb;
+  add column if not exists confidence  jsonb,
+  -- The per-invoice overrides. `category` was in the FIRST draft of this file
+  -- and lost when it was rewritten to be additive after su_invoices turned out
+  -- to already exist — see supabase/invoice_category_override. The fallback to
+  -- the supplier's category worked, so nothing ever failed and the override
+  -- silently did nothing until somebody tried to use it.
+  add column if not exists category    text,
+  add column if not exists vessel_era  text;
 
 /* ON DELETE SET NULL for the batch, not CASCADE. Deleting a bundle must not
  * take the invoices read out of it — the cost was incurred whether or not the
