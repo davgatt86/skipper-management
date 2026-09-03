@@ -40,6 +40,17 @@ export const DEFAULT_CATEGORIES = [
   { key: 'electronics', label: 'Electronics',         hint: 'sounders, sensors, plotters, scales' },
   { key: 'electrical',  label: 'Electrical',          hint: 'motors, cable, switchgear, lighting' },
   { key: 'shipyard',    label: 'Shipyard & steel',    hint: 'slipping, welding, fabrication, blasting, paint' },
+  /* NEWBUILD FIT-OUT IS NOT A TRADE, IT IS AN EVENT — and that is exactly why
+   * it needs its own bucket. David: "make it's own category. bopp for new
+   * vessel fit out."
+   *
+   * The BOPP order is £616,200 on one day in May 2018, fitting out a boat that
+   * had not yet fished: winches, windlass, cabling, Scantrol, panels. Spread
+   * across hydraulics, electrical and electronics it swamps all three and makes
+   * the routine spend in them unreadable — hydraulics went from a real £410k
+   * over ten years to £1.03m, and nothing on the page said why. Kept together
+   * it is one line that reads as what it was: kitting out a new boat. */
+  { key: 'newbuild',    label: 'Newbuild fit-out',    hint: 'kitting out a new boat, before she fishes' },
   { key: 'refrig',      label: 'Refrigeration & ice', hint: 'ice plant, chillers, gas' },
   { key: 'chandlery',   label: 'Chandlery & stores',  hint: 'oilskins, gloves, cleaning, general ship supplies' },
   { key: 'tools',       label: 'Tools & hardware',    hint: 'power tools, consumables, fixings' },

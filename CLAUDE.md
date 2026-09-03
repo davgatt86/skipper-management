@@ -268,6 +268,28 @@ respectively, with the odd invoice to be moved individually.
 
 Two firms remain unfiled, worth **£980** between them.
 
+**NEWBUILD FIT-OUT IS AN EVENT, NOT A TRADE**, and it is the twentieth category
+because of one order. BOPP is £616,200 on a single day in May 2018 — winches,
+windlass, cabling, Scantrol, panels — for a boat that had not yet fished. Split
+across the trades it swamped three of them: hydraulics read **£1,026,143** when
+this boat's real hydraulic spend over ten years is **£409,943**, and nothing on
+the page said why. David: *"make it's own category. bopp for new vessel fit
+out."*
+
+**Nothing is ever SUGGESTED into it.** A fit-out is known by when it happened
+and what it was for, never by a word on the invoice — a *treuil* is a winch
+whether it goes on a new boat or an old one. The suggester still reads BOPP as a
+winch firm, which is what it is; only the skipper can say that this particular
+order was a new boat.
+
+**AND THE PER-INVOICE OVERRIDE WAS MISSING THE WHOLE TIME.** `su_invoices` had
+no `category` column: it was in the first draft of `boat_invoices.sql` and lost
+when that file was rewritten to be additive after the table turned out to
+already exist. `categoryOf()` falls back to the supplier's category, so nothing
+ever errored — every invoice simply took its firm's, and the override the page
+offers and these notes describe silently did nothing. Found only by trying to
+use it. **A fallback that works is a good way to hide a missing column.**
+
 **Still to do:** the reader returns no page numbers, so `page_from`/`page_to`
 are unfilled and an invoice cannot yet be opened at its own pages. And this has
 not been run against a real bundle — the edge function's invoice prompt exists

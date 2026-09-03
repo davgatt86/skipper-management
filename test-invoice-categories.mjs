@@ -112,4 +112,25 @@ eq(resolveCategories(null).length, DEFAULT_CATEGORIES.length, 'nothing stored is
 }
 eq(categoryLabel(null), 'Not filed', 'no category reads as not filed, not as blank')
 
+/* ---- NEWBUILD FIT-OUT IS AN EVENT, NOT A TRADE --------------------------
+ *
+ * David: "make it's own category. bopp for new vessel fit out." The BOPP order
+ * is £616,200 on one day in May 2018 — winches, windlass, cabling, Scantrol,
+ * panels — for a boat that had not yet fished. Split across the trades it
+ * swamped three of them: hydraulics read £1,026,143 when the boat's real
+ * hydraulic spend over ten years is £409,943, and nothing on the page said why.
+ */
+ok(DEFAULT_CATEGORIES.some((c) => c.key === 'newbuild'),
+   'there is a bucket for kitting out a new boat')
+
+/* IT IS DELIBERATELY NOT GUESSED AT. A fit-out is known by WHEN it happened and
+ * what it was for, not by any word on the invoice — "treuils" is a winch
+ * whether it goes on a new boat or an old one. So nothing suggests it and the
+ * skipper files it, which is the only thing that could be right. */
+eq(key('Etablissements BOPP Treuils JEB', 'composants hydro, treuils, guindeau, cablage, lot composant elec'),
+   'hydraulics', 'the suggester still reads BOPP as a winch firm, which is what it is')
+ok(!DEFAULT_CATEGORIES.filter((c) => c.key === 'newbuild')
+     .some(() => key('anything', 'new vessel fit out') === 'newbuild'),
+   'and nothing is ever suggested INTO newbuild — an event cannot be read off a part number')
+
 console.log('invoice categories: ' + n + ' checks passed')
