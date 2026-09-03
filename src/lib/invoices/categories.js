@@ -43,7 +43,13 @@ export const DEFAULT_CATEGORIES = [
   { key: 'refrig',      label: 'Refrigeration & ice', hint: 'ice plant, chillers, gas' },
   { key: 'chandlery',   label: 'Chandlery & stores',  hint: 'oilskins, gloves, cleaning, general ship supplies' },
   { key: 'tools',       label: 'Tools & hardware',    hint: 'power tools, consumables, fixings' },
-  { key: 'safety',      label: 'Safety & survey',     hint: 'liferafts, LSA, FFA, surveys, certification' },
+  { key: 'safety',      label: 'Safety & survey',     hint: 'liferafts, LSA, FFA, surveys, stability, certification' },
+  /* Both of these came out of reading what the firms actually sold rather than
+     out of a general idea of a boat's costs. The medicine chest is a statutory
+     locker with its own survey, and crew tickets are a real recurring bill —
+     N.E.F.T.A. safety courses, Shetland UHI for an engineer's ticket. */
+  { key: 'medical',     label: 'Medical stores',      hint: 'medicine chest, dressings, ENG1' },
+  { key: 'training',    label: 'Training & tickets',  hint: 'courses, certificates of competency' },
   { key: 'harbour',     label: 'Harbour & landing',   hint: 'dues, towage, shiplift, bins, forklift' },
   { key: 'freight',     label: 'Freight & carriage',  hint: 'couriers, haulage, transport' },
   { key: 'vehicle',     label: 'Vehicles',            hint: 'van, tyres, repairs, fuel for the road' },
@@ -75,8 +81,23 @@ export const categoryLabel = (key, cats = DEFAULT_CATEGORIES) =>
  * certificate hints, where Engineer had to be tested before Deck and Radio
  * before everything. */
 const HINTS = [
-  ['quota',       /\bquota\b|\blease of\b|\bfish lease\b|producers organisation|\bafpo\b|\bpo\b lease/i],
-  ['gear',        /trawl|\bnets?\b|netting|twine|rope|warp|bridle|codend|discer|hopper|bobbin|\bmesh\b|itsaskorda|\bcoil\b/i],
+  /* Medical and training first: both are unmistakable in their own words and
+     both would otherwise be swallowed by broader trades — a medicine chest
+     invoice says "supplies", and a ticket course says "safety". */
+  ['medical',     /medicine chest|medical suppl|\bpharmac|\bchemist\b|dressings|\beng ?1\b|first aid/i],
+  ['training',    /\bcourse\b|\btraining\b|safety awareness|certificate of competen|\bnav ?5\b|\buhi\b/i],
+  /* SAFETY BEFORE GEAR, and this is not a nicety: a "Trawler Helmet" is PPE,
+     and with gear first the word `trawl` claimed Blue Anchor Fire & Safety —
+     a firm that sells liferafts and lifejackets — as a net loft. Safety words
+     are unambiguous where trade words are not, so they go first. Same lesson
+     as the crew certificate hints, where Radio had to be tested before
+     everything or a GMDSS certificate of COMPETENCE became an officer ticket. */
+  ['safety',      /liferaft|\blsa\b|\bffa\b|extinguish|marasafe|lifejacket|helmet|\bmob\b|hydrostatic release|\bepirb\b|stability|incline|\bmca\b|fishsafe|\bsolas\b|\bsurvey/i],
+  /* TOOLS BEFORE THE TRADES for the same reason: an "Engineers Vice" is not an
+     engine job and a "Travel Trolley" is not a flight. */
+  ['tools',       /\btools?\b|power tool|\bvice\b|\bdrill|grinder|\bfixings?\b|ironmonger|\bhardware\b|\bhammer\b|spanner|socket set|chainblock|sharpen/i],
+  ['quota',       /\bquota\b|\blease of\b|\bfish lease\b|producers organisation|\bafpo\b|tonnes? [a-z/]* ?(cod|haddock|saithe|hake|coley|whiting|monk)|(cod|haddock|saithe|hake|coley|whiting) .{0,12}\bton/i],
+  ['gear',        /trawl|\bnets?\b|netting|twine|\brope\b|dyneema|polysteel|warp|bridle|codend|discer|hopper|bobbin|\bmesh\b|itsaskorda|\bcoil\b|trawl doors?|\bcreel/i],
   /* `treuil` is French for winch, and it is not a curiosity: Etablissements
      BOPP Treuils JEB is the FIFTH biggest supplier on this boat at £616k, and
      without it the name matched nothing and the suggestion fell through to
@@ -86,18 +107,18 @@ const HINTS = [
   ['hydraulics',  /hydraulic|\bwinch|\btreuil|\bram\b|\bvalve|\bhose\b|danfoss|\bpump\b.*hydraul/i],
   ['filters',     /\bfilters?\b|\blube\b|lubricat|\bgrease\b|\boil\b(?!skin)/i],
   ['engine',      /engine|\bdiesel|gearbox|injector|turbo|crank|\bcaterpillar\b|finning|\bmarine power\b|propuls/i],
-  ['refrig',      /refrigerat|\bice\b|chiller|\bfreon\b|\bgas\b.*ice/i],
+  ['refrig',      /refrigerat|\bice\b|chiller|\bfreon\b|refrigerant|\br4\d\d[a-c]\b|ice machine/i],
   ['electronics', /electronic|sounder|sonar|plotter|\bradar\b|scanmar|\bsensor|\bscales?\b|navigat|woodsons/i],
   ['electrical',  /electric|\bmotor\b|\bcable\b|switchgear|\blight|\balternator\b|\bbattery\b/i],
-  ['shipyard',    /shipyard|slip|\bweld|fabricat|blast|\bpaint|\banode|\bsteel\b|fieldweld|drydock|\bhull\b/i],
-  ['safety',      /liferaft|\blsa\b|\bffa\b|extinguish|\bsurvey|marasafe|lifejacket|\bmedical\b|\bmob\b/i],
-  ['harbour',     /harbour|\bport\b|\bdues\b|towage|shiplift|\bpilot\b|\bberth|commissioners/i],
-  ['freight',     /freight|courier|\bhaulage\b|\bcarriage\b|transport|fedex|express|northwards/i],
-  ['vehicle',     /\btyres?\b|\bvan\b|motor body|\bcar\b|dingbro|vehicle|bodyshop/i],
+  ['shipyard',    /shipyard|slip|\bweld|fabricat|blast|\bpaint|\banode|\bsteel\b|fieldweld|drydock|\bhull\b|dive team|propeller clearance/i],
+  ['safety',      /liferaft|\blsa\b|\bffa\b|extinguish|\bsurvey|marasafe|lifejacket|\bmob\b|hydrostatic release|\bepirb\b|stability|incline|\bmca\b|fishsafe|\bsolas\b/i],
+  ['harbour',     /harbour|\bport\b|\bdues\b|towage|shiplift|\bpilot\b|\bberth|commissioners|waste oil|bilge.*dispos|dispos.*waste/i],
+  ['freight',     /freight|courier|\bhaulage\b|\bcarriage\b|transport|fedex|logistics|sea cargo|northwards/i],
+  ['vehicle',     /\btyres?\b|\bvan\b|motor body|\bcar\b|dingbro|vehicle|bodyshop|\bmot\b|caddy|transit|garage|auto ?centre|motor engineers/i],
   ['travel',      /travel|\bflight|\bhotel|\btaxi|accommodation|kinnaird/i],
   ['tools',       /\btools?\b|power tool|drill|grinder|\bfixings?\b|ironmonger|\bhardware\b/i],
-  ['chandlery',   /chandler|oilskin|\bglove|welly|wellington|\bsuppl(y|ies)\b|\bstores\b|cleaning|\bbarkie\b/i],
-  ['office',      /accountan|insur|subscription|\bsoftware\b|\blicen[cs]e\b|solicitor|\bfees?\b/i],
+  ['chandlery',   /chandler|oilskin|\bglove|welly|wellington|\bboots\b|\bsuppl(y|ies)\b|\bstores\b|cleaning|\bbarkie\b|fish ?paper|\btall(y|ies)\b|\bppe\b|galley|washing machine|\bfridge|freezer/i],
+  ['office',      /accountan|accounts|tax return|insur|subscription|\bsoftware\b|\blicen[cs]e\b|solicitor|\bfees?\b/i],
 ]
 
 /**
