@@ -246,6 +246,28 @@ undecided list for good.
 running costs of whichever boat was fishing, and each is pennies against £8m —
 chasing them would cost more attention than the answer is worth.
 
+### CATEGORISED — 151 of 153 firms, £8,057,344 of £8,058,324 (Sep 2026)
+
+The suggester placed **136 of 153** off the name and what each firm had sold;
+David settled the rest. The shape of ten years:
+
+    gear 26% · quota 18% · shipyard 16% · hydraulics 13% · engine 10%
+    electronics 9% · electrical 3% · everything else 1% or less
+
+**THREE OF THE TOP TWENTY-FIVE WERE HELD BACK ON PURPOSE**, and one of them was
+plainly wrong: **Lockers Trawlers & Jacinta**, £52,800, suggested as *Fishing
+gear* off the word "Trawlers" in a fishing company's name — on an invoice
+reading *"Lease 20tn N/S Cod and 20tn N/S Saithe"*. Pure quota. The name-beats-
+descriptions rule is right for Jackson Trawls and wrong here, and no ordering
+fixes both. That single row is the argument for suggest-never-apply written out
+in full.
+
+Inverboyndie (£1,019,054) and Don Fishing (£776,586) were held for the opposite
+reason — both genuinely sell several things — and David confirmed gear and quota
+respectively, with the odd invoice to be moved individually.
+
+Two firms remain unfiled, worth **£980** between them.
+
 **Still to do:** the reader returns no page numbers, so `page_from`/`page_to`
 are unfilled and an invoice cannot yet be opened at its own pages. And this has
 not been run against a real bundle — the edge function's invoice prompt exists
