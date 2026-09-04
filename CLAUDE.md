@@ -638,8 +638,57 @@ modelled properly, the old shape is killed on page 1 with no cursor and the new
 one stops cleanly and resumes. **Checking a clock too rarely was the bug and the
 test for it both.**
 
-Still unknown: the total. Gmail's `resultCountEstimate` returns 201 for every
-query, so only finishing the sweep will say.
+**THE SWEEP IS FINISHED, AND IT REACHES BACK BEFORE THE RECORD DOES.** Four runs,
+ending *"Read right back to the beginning"*. At least **152 pdfs the app has
+never seen** — and the earliest is **2015-04-24**, where the record starts in
+2016 and its first bundle is 2017-02-27. A year of invoices exists that has never
+been in the system at all. The true figure is higher: the run that was killed
+saved files before it died and reported nothing, so its haul is in the folder and
+in no log.
+
+**Many of them are not weekly bundles**, which is the point — they are the single
+invoices the office sends as they arise: `Faktura 22711.pdf`,
+`SI201634907.pdf`, `Demande acpte 10463-2 The F.V. audacious.pdf`,
+`Invoice 26919 from FRASERBURGH HARBOUR COMMISSIONERS`. A few are supporting
+papers rather than invoices (`RIB ARKEA.pdf`, `FLTCS Bank Details.pdf`) —
+the filter fails towards including on purpose.
+
+**THREE MORE BUNDLES ARE IN THE APP TWICE**, found by comparing the Drive folder
+against `su_invoice_batches`. Byte-identical files saved under two dates by v1's
+broken dedupe — the same fault as the 13 Dec 2022 bundle, not the office
+re-sending:
+
+    SKM_C3350190117164400.pdf   17 + 25 Jan 2019   10 invoices   £3,414.66
+    20211017095253176.pdf       18 + 21 Oct 2021    8 invoices  £10,466.54
+    20211025054904217.pdf       25 Oct + 1 Nov 21   8 invoices  £13,954.30
+
+Each pair agrees on page count, invoice count and value **to the penny**, and
+carries no vessel or category decision, so one side of each can go cleanly.
+**£27,835.50 counted twice.** Left in place — David: *"don't touch others till i
+see them."* Note the 2019 and Oct 2021 pairs were previously filed under *office
+re-sent* in the duplicate report; they are double LOADS, and the whole bundle is
+the duplicate rather than individual invoices within it.
+
+**AND THE KILLED RUN LEFT A FILE WITH NO DATE ON IT.**
+`SKM_C3350170728085100.pdf` is the only file in the folder whose `createdTime`
+and `modifiedTime` are identical, at exactly the second Google killed run 3.
+`folder.createFile(att.copyBlob()).setName(name)` is **two operations**, and it
+died between them — so the file exists under the scanner's own name and the
+arrival date, the one thing that cannot be read back off the pdf, is gone.
+
+Fixed by naming the BLOB before the file exists:
+`createFile(att.copyBlob().setName(name))`. A kill now leaves no file at all,
+which the next run simply fetches again — the recoverable failure rather than the
+silent one. It is the same shape as the arrival dates defaulting to `now()`:
+**a fact about when something arrived has one carrier, and if that carrier is
+written second it can be lost.**
+
+`collectWhatIsNew()` moves everything written after the backlog load into
+*"New - to upload"*, so only the unseen files are downloaded — told apart by WHEN
+THEY WERE WRITTEN, a fact about the folder, rather than by a list that could
+drift. It names any file carrying no date instead of moving it quietly.
+`have` now reads subfolders too, so sorting them out does not make the next run
+think they were never fetched.
 
 ### AN INVOICE THAT IS ALREADY ON FILE — £240,015.96 counted twice
 

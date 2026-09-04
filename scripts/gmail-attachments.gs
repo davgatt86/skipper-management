@@ -124,11 +124,9 @@ function savePdfAttachments_(query, folderName, keep, skip) {
      and £25,931.95 ended up in the record twice. The scanner's own name plus
      the byte size is the thing that is genuinely the same document. */
   var have = {};
-  var existing = folder.getFiles();
-  while (existing.hasNext()) {
-    var f = existing.next();
-    have[origName_(f.getName()) + '|' + f.getSize()] = true;
-  }
+  noteFilesIn_(folder, have);
+  var subs = folder.getFolders();      // including anything sorted out of it
+  while (subs.hasNext()) noteFilesIn_(subs.next(), have);
 
   var saved = 0, skipped = 0, dropped = 0, scanned = 0;
   var dates = [];
@@ -196,7 +194,13 @@ function savePdfAttachments_(query, folderName, keep, skip) {
                        Session.getScriptTimeZone(), 'yyyy-MM-dd')
                    + ' ' + att.getName();
 
-          folder.createFile(att.copyBlob()).setName(name);
+          /* THE NAME GOES ON THE BLOB, NOT ON THE FILE AFTERWARDS. As
+             createFile(...).setName(...) it is two operations, and the run that
+             was killed at six minutes died between them — leaving
+             SKM_C3350170728085100.pdf in the folder under the scanner's own
+             name with no date on it, which is the one thing the prefix exists to
+             carry. Named first, the file cannot exist without its date. */
+          folder.createFile(att.copyBlob().setName(name));
           have[key] = true;
           dates.push(name.substring(0, 10));
           saved++;
@@ -236,6 +240,65 @@ function savePdfAttachments_(query, folderName, keep, skip) {
 function origName_(name) {
   return /^\d{4}-\d{2}-\d{2} /.test(name) ? name.substring(11) : name;
 }
+
+function noteFilesIn_(folder, have) {
+  var it = folder.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    have[origName_(f.getName()) + '|' + f.getSize()] = true;
+  }
+}
+
+/**
+ * SORT OUT THE ONES THE APP HAS NOT SEEN.
+ *
+ * The folder now holds both the bundles loaded into Skipper Management back in
+ * September and everything this corrected search has since turned up, and there
+ * is no telling them apart by eye. Uploading the lot would put hundreds of
+ * bundles through the reader a second time.
+ *
+ * The two are told apart by WHEN THEY WERE WRITTEN, which is a fact about the
+ * folder rather than a guess about the mail: the backlog went in on the 1st and
+ * 2nd of September, and everything the corrected search found was written after
+ * it. Run this, then download the "New - to upload" folder alone.
+ */
+function collectWhatIsNew() {
+  var folder = getOrCreateFolder_('Audacious Invoice Bundles');
+  var target = folder.getFoldersByName(NEW_FOLDER).hasNext()
+             ? folder.getFoldersByName(NEW_FOLDER).next()
+             : folder.createFolder(NEW_FOLDER);
+
+  var moved = 0, dates = [], undated = [];
+  var it = folder.searchFiles('createdDate > "' + LOADED_BEFORE + '"');
+  while (it.hasNext()) {
+    var f = it.next();
+    var name = f.getName();
+
+    /* A file with no date on the front is one the six-minute kill caught
+       between being created and being named. Say so rather than moving it
+       quietly — its arrival date is the one thing that cannot be read back off
+       the pdf, and the app files a bundle by it. */
+    if (!/^d{4}-d{2}-d{2} /.test(name)) undated.push(name);
+    else dates.push(name.substring(0, 10));
+
+    f.moveTo(target);
+    moved++;
+  }
+
+  dates.sort();
+  Logger.log('%s files the app has not seen, moved into "%s".', moved, NEW_FOLDER);
+  if (dates.length) Logger.log('They are dated %s to %s.', dates[0], dates[dates.length - 1]);
+  if (undated.length) {
+    Logger.log('%s carry no date and need one adding by hand before uploading: %s',
+               undated.length, undated.join(', '));
+  }
+  Logger.log('Right-click "%s" in Drive and choose Download.', NEW_FOLDER);
+}
+
+/* The backlog was loaded into the app on 1-2 September 2026. Anything written
+   into the folder after that is something the first search never found. */
+var LOADED_BEFORE = '2026-09-03T00:00:00';
+var NEW_FOLDER = 'New - to upload';
 
 function getOrCreateFolder_(name) {
   var it = DriveApp.getFoldersByName(name);
