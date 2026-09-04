@@ -606,7 +606,36 @@ document arrives as a prop, since `signedUrl` and `openDocument` drag the
 supabase client in behind them. It is the screen nothing is filed without, and
 it could not be checked by anything but eye until now.
 
-**The 61 rows already in the record are NOT removed** — David: *"don't touch
+**THREE CAUSES, AND THEY ARE NOT ONE DECISION** — separated only by building
+the report (`scripts/invoice-duplicates-report.cjs`):
+
+    uploaded twice    8 invoices   £25,932   the 13 Dec 2022 bundle, MINE
+    read twice        6 invoices   £21,548   one bundle, the reader doubled it
+    office re-sent   47 invoices  £192,536   the approval run
+
+**THE BIGGEST SINGLE CAUSE WAS MINE.** `20221213090636545.pdf` went into the
+bulk load twice — once with the date prefix `gmail-attachments.gs` adds and
+once without — identical file, 8 pages, 1,289,916 bytes, the same 8 invoices,
+**nothing unique to either side**. It is also why exactly one bundle could not
+have its arrival date recovered: the copy had no prefix to read it from. That
+copy and its invoices were **deleted 04-09-2026**, taking the record from
+2,624 to **2,616 invoices** and £7,910,338 to **£7,884,406**.
+
+**THE INVOICES WENT FIRST, DELIBERATELY.** `batch_id` is ON DELETE SET NULL, so
+removing the bundle on its own would have ORPHANED its eight rather than
+removed them — they would have stayed in every total with nothing left to say
+where they came from. The rule that protects an invoice when a scan is deleted
+is the same rule that hides one when the scan is deleted on purpose.
+
+**The office re-sends cluster into bundle PAIRS** rather than scattering: 05
+Sep | 12 Sep 2022 carries nine of them, 17 Jan | 25 Jan 2019 nine, 18 Oct | 21
+Oct 2021 seven. Consecutive Mondays repeat most of their contents.
+
+**2020 and 2025 have none at all**, which is more likely to mean the bundles
+for those years are missing than that the office stopped re-sending for two
+years. Worth checking before reading anything into either.
+
+**The remaining 53 rows and £214,084 are NOT removed** — David: *"don't touch
 others till i see them."*
 
 ### THE AGENT GRANT IS A READ, AND A WORKSHEET WAS WRITTEN THROUGH IT
