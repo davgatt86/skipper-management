@@ -458,6 +458,37 @@ identical invoice numbers, suppliers and totals to the penny on all 13 — which
 is exactly the key `carryDecisions` matches on, so a re-read is safe in practice
 and not only by argument.
 
+**AND 3098 / 3098b ARE ONE INVOICE — £147,985.99 COUNTED TWICE.**
+
+David: *"i don't think 3098/3098b is different invoices. check lines to see if
+they're exactly the same minus something to give difference."* He was right, and
+nothing stored could have shown it: the app keeps a ninety-character description
+and no line detail at all, so two invoices with the same summary are
+indistinguishable however hard you look at the record.
+
+`doc_type: 'invoice_lines'` reads an invoice's LINES (`LINES_PROMPT`, with an
+`only` list so a 22-page bundle can be asked about two invoices rather than
+thirteen). **56 lines each, and 53 identical word for word and penny for penny.**
+The whole £5,190.00 gap is ONE line:
+
+    Feb 2023, MES job No. 23-047 · Labour & Tvl · qty 8 · unit £72
+      3098    £5,766      3098b   £576
+
+**8 × 72 = 576.** 3098b is right and 3098 is a typo — a stray 6 on 576 — and
+every other line's qty × price checks out on both. Both documents self-add to
+their own printed total to the penny, so neither figure is a misread; they are
+two issues of one invoice, the office numbering the correction `b`.
+
+**Filing both overstates the boat by £147,985.99**, all of it landing in 2023 now
+the work dates are in. Not deleted — that is the skipper's call — but the
+evidence is arithmetic rather than opinion.
+
+**THE LESSON IS WHAT THE RECORD COULD NOT ANSWER.** A description good enough to
+file a cost is useless for telling two costs apart, and the only reason this was
+catchable is that the scan is still in the bucket and can be read again. Every
+invoice storing its `file_path` is what made a £148,000 question answerable eight
+months later.
+
 **Filed by UPDATE, not by delete-and-reinsert.** The page does the latter and is
 right to in general, but here both reads agreed on every number, so the only
 real change was the pages and the work dates; updating in place adds those and

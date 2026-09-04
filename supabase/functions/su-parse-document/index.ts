@@ -94,6 +94,31 @@ work_from and work_to are WHEN THE WORK WAS DONE, and they are almost always dif
 THE MOST IMPORTANT RULE HERE IS A NEGATIVE ONE. If the only date on the document is the invoice date, the order date or the due date, return null for BOTH - never copy the invoice date into work_from. A work date that is really just the invoice date repeated is worse than no work date at all, because it looks like something was read off the page when nothing was. The same goes for a date you are inferring rather than reading: if the invoice does not say when the work was done, say so by returning null.
 Respond ONLY with the JSON object, no markdown fences, no commentary.`;
 
+/* WHAT IS ACTUALLY ON AN INVOICE — the lines, not a ninety-character summary.
+ *
+ * The ordinary invoice read stores a description, which is enough to file a
+ * cost and useless the moment two invoices need telling apart. Trevor McDonald
+ * 3098 and 3098b are the case: same date, same four pages each, same work
+ * dates, same account code, byte-identical description, VAT nil on both, and
+ * £147,985.99 against £142,795.99 — exactly £5,190.00 apart. Two engines, or
+ * one invoice and a revision of it? Nothing stored could say.
+ *
+ * `only` keeps the answer small and the read cheap: a 22-page bundle detailed
+ * in full would not fit in one reply, and the question is almost always about
+ * one or two invoices rather than all thirteen.
+ *
+ * NOTHING IS SAVED FROM THIS. It is a reading mode, not an ingest — there is
+ * no line table and none is wanted yet. It answers a question and stops. */
+const LINES_PROMPT = (only: string[]) => `You are reading a document containing one or more supplier invoices. Extract their LINE DETAIL as JSON:
+{ "invoices": [ { "invoice_no": string|null, "supplier": string, "invoice_date": "YYYY-MM-DD"|null, "page_from": number|null, "page_to": number|null, "net": number|null, "vat": number|null, "total": number|null, "lines": [ { "description": string, "qty": number|null, "unit_price": number|null, "amount": number|null } ] } ] }
+Rules:
+- ${only.length ? "Detail ONLY the invoices whose invoice number is one of: " + only.join(", ") + ". Ignore every other invoice in the document completely - do not return an entry for it." : "Detail every invoice in the document."}
+- Give EVERY line exactly as printed, in the order printed, including zero-value and no-charge lines. Do NOT summarise, merge, reword or skip lines - the whole point of this read is to compare two invoices line by line, and a tidied list cannot be compared.
+- description is the line text as printed. amount is the line total in the money column. Where a line shows no figure use null rather than 0 - a line printed with no price is not a line worth nothing.
+- Include any subtotal, discount, carriage or credit line as its own entry, worded as printed.
+- If a page carries a heading such as REVISED, COPY, DUPLICATE, CREDIT NOTE or PROFORMA, put that word in as the FIRST line of that invoice, exactly as printed. It is the one thing on the page that says an invoice is not what it appears to be.
+Respond ONLY with the JSON object, no markdown fences, no commentary.`;
+
 // Canonicalise a crew name to one stable identity, merging company/spelling variants.
 function canonCrew(nm: string): string {
   const s = (nm || "").toUpperCase();
@@ -200,7 +225,7 @@ function fixWorkDates(rows: Record<string, unknown>[]): Record<string, unknown>[
   });
 }
 
-async function runParse(admin: ReturnType<typeof createClient>, jobId: string, paths: string[], docType: string, apiKey: string, pageCount: number | null) {
+async function runParse(admin: ReturnType<typeof createClient>, jobId: string, paths: string[], docType: string, apiKey: string, pageCount: number | null, only: string[] = []) {
   try {
     const content: unknown[] = [];
     for (const path of paths) {
@@ -214,7 +239,9 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
       if (media === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } });
       else content.push({ type: "image", source: { type: "base64", media_type: media, data: b64 } });
     }
-    const prompt = docType === "invoice" ? INVOICE_PROMPT : docType === "settlement_beryl" ? BERYL_PROMPT : SETTLEMENT_PROMPT;
+    const prompt = docType === "invoice_lines" ? LINES_PROMPT(only)
+      : docType === "invoice" ? INVOICE_PROMPT
+      : docType === "settlement_beryl" ? BERYL_PROMPT : SETTLEMENT_PROMPT;
     content.push({ type: "text", text: prompt });
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -265,13 +292,14 @@ Deno.serve(async (req: Request) => {
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "AI reading isn't switched on yet - the ANTHROPIC_API_KEY secret is missing in Supabase (Edge Functions > Secrets). You can still enter figures manually." }, 501);
-    const { paths, doc_type, page_count } = await req.json();
+    const { paths, doc_type, page_count, only } = await req.json();
     if (!Array.isArray(paths) || paths.length === 0) return json({ error: "No files provided" }, 400);
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     await admin.from("su_parse_jobs").delete().lt("created_at", new Date(Date.now() - 86400000).toISOString());
     const { data: job, error } = await admin.from("su_parse_jobs").insert({ doc_type: doc_type || "settlement" }).select().single();
     if (error || !job) return json({ error: `Could not start the read: ${error?.message}` }, 500);
-    EdgeRuntime.waitUntil(runParse(admin, job.id, paths, doc_type || "settlement", apiKey, Number.isInteger(page_count) ? page_count : null));
+    EdgeRuntime.waitUntil(runParse(admin, job.id, paths, doc_type || "settlement", apiKey, Number.isInteger(page_count) ? page_count : null,
+      Array.isArray(only) ? only.map(String).slice(0, 20) : []));
     return json({ job_id: job.id });
   } catch (e) {
     return json({ error: String(e) }, 500);
