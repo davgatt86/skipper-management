@@ -683,6 +683,40 @@ silent one. It is the same shape as the arrival dates defaulting to `now()`:
 **a fact about when something arrived has one carrier, and if that carrier is
 written second it can be lost.**
 
+**THE THREE DOUBLE-LOADED BUNDLES WERE REMOVED 04-09-2026**, on David's word.
+Checked first: within each pair the invoice numbers and totals hash **identical**,
+and neither side held a page number, a work date, a paid date or a supplier link
+the other lacked — so which copy goes is arbitrary and nothing is lost. Kept the
+EARLIER arrival in each case, which is independently the one matching the
+scanner's own date inside the file name.
+
+**The invoices went first, again.** `batch_id` is ON DELETE SET NULL, so
+removing a bundle on its own orphans its rows — they stay in every total with
+nothing left to say where they came from. Same order as the 13 Dec 2022 removal,
+for the same reason.
+
+    26 invoices and 3 bundles removed, GBP 27,835.50 of double counting
+    batches   363 -> 360
+    invoices  2,616 -> 2,590
+    value     GBP 7,884,405.57 -> GBP 7,856,570.07
+
+**102 vessel decisions still stand** and no invoice was orphaned by it — the four
+that carry no batch are the ones predating this feature, as before. Zero
+duplicate bundles remain. The reason is written on each SURVIVING bundle's
+`note`, because `su_*` has no audit trail and a delete here would otherwise
+leave no trace of itself.
+
+**FIGURES ELSEWHERE IN THIS FILE ARE AS AT THEIR OWN DATE.** The 2,624 / £7,910,338
+quoted through the sections above was the record in early September and is now two
+removals out of date. **Measure the database rather than quoting this file** — the
+days-at-sea note made that mistake twice, and a headline figure is the most quoted
+thing in here.
+
+**AND THE DATELESS FILE WAS RENAMED** to `2017-07-28 SKM_C3350170728085100.pdf`.
+The date is legible in the scanner's own name (`...170728...`), so it was
+recoverable — the same trick that rescued 363 of 364 arrival dates. It would not
+have been had the scanner used a serial number.
+
 `collectWhatIsNew()` moves everything written after the backlog load into
 *"New - to upload"*, so only the unseen files are downloaded — told apart by WHEN
 THEY WERE WRITTEN, a fact about the folder, rather than by a list that could
