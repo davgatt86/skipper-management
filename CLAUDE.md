@@ -712,6 +712,24 @@ removals out of date. **Measure the database rather than quoting this file** —
 days-at-sea note made that mistake twice, and a headline figure is the most quoted
 thing in here.
 
+**A LOST BACKSLASH, FOR THE SECOND TIME IN THIS REPO AND THE THIRD IN A DAY.**
+`collectWhatIsNew` shipped with
+
+    if (!/^d{4}-d{2}-d{2} /.test(name))
+
+— the escapes eaten writing the file, so it matched the LETTER d and would have
+reported every single file as carrying no date. Identical to `split(/s+/)`
+splitting on the letter "s" in the invoice search, and the check written to catch
+it lost its own backslash the same way. **A test that can suffer the bug it is
+testing for proves nothing**, so `test-gmail-script.mjs` asserts the regex as a
+LITERAL STRING found in the source, then separately asserts the behaviour.
+
+Also gone: `folder.searchFiles('createdDate > ...')`, which threw
+*"Invalid argument: q"* and named no part of the query it disliked. The folder is
+a few hundred files, so the dates are compared in code — nothing to spell wrong.
+And the files are collected before any are moved, rather than moving them out of
+the folder whose iterator is still being walked.
+
 **AND THE DATELESS FILE WAS RENAMED** to `2017-07-28 SKM_C3350170728085100.pdf`.
 The date is legible in the scanner's own name (`...170728...`), so it was
 recoverable — the same trick that rescued 363 of 364 arrival dates. It would not

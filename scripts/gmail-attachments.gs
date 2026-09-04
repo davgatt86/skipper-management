@@ -268,20 +268,34 @@ function collectWhatIsNew() {
              ? folder.getFoldersByName(NEW_FOLDER).next()
              : folder.createFolder(NEW_FOLDER);
 
-  var moved = 0, dates = [], undated = [];
-  var it = folder.searchFiles('createdDate > "' + LOADED_BEFORE + '"');
+  /* READ THE WHOLE FOLDER AND COMPARE THE DATES HERE, rather than asking Drive
+     to do it with a search query. The query form wants its date written exactly
+     the way Drive expects and says only "Invalid argument: q" when it is not —
+     which tells you nothing about which part it disliked. The folder is a few
+     hundred files; reading them all is instant and there is no syntax to get
+     wrong. */
+  var cutoff = new Date(LOADED_BEFORE);
+  var isNew = [];
+  var it = folder.getFiles();
   while (it.hasNext()) {
     var f = it.next();
-    var name = f.getName();
+    if (f.getDateCreated() >= cutoff) isNew.push(f);
+  }
+
+  /* Collected first, moved second. Moving a file out of the folder while still
+     walking that folder's own iterator is asking it to change under itself. */
+  var moved = 0, dates = [], undated = [];
+  for (var i = 0; i < isNew.length; i++) {
+    var name = isNew[i].getName();
 
     /* A file with no date on the front is one the six-minute kill caught
        between being created and being named. Say so rather than moving it
        quietly — its arrival date is the one thing that cannot be read back off
        the pdf, and the app files a bundle by it. */
-    if (!/^d{4}-d{2}-d{2} /.test(name)) undated.push(name);
+    if (!/^\d{4}-\d{2}-\d{2} /.test(name)) undated.push(name);
     else dates.push(name.substring(0, 10));
 
-    f.moveTo(target);
+    isNew[i].moveTo(target);
     moved++;
   }
 
