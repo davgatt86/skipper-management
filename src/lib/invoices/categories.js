@@ -199,9 +199,27 @@ export function categoryMatrix(invoices = [], suppliers = [], opts = {}) {
     grand += amt
 
     const sid = inv.supplier_id || 'unfiled'
+    /* A SUPPLIER CARRIES THE SAME YEAR CELLS THE CATEGORY DOES.
+     *
+     * It did not, and the supplier table has been rendering a row of dots under
+     * ten year headings ever since — David: "in the table of suppliers, there
+     * isn't a breakdown per year". The columns were there and the row rendered
+     * them; there was simply nothing behind them to render. A missing figure and
+     * a figure of nothing look identical in a table, which is why this survived.
+     *
+     * `first` and `last` come free off the same pass and answer the question a
+     * row of years raises: a firm that stops appearing is one you have stopped
+     * using, and that is worth seeing beside what they were worth. */
     const sup = row.suppliers.get(sid)
-      || { id: inv.supplier_id, name: byId.get(inv.supplier_id)?.name || inv.supplier || 'no supplier', total: 0, count: 0 }
+      || { id: inv.supplier_id, name: byId.get(inv.supplier_id)?.name || inv.supplier || 'no supplier',
+           total: 0, count: 0, cells: new Map(), first: null, last: null }
     sup.total += amt; sup.count++
+    sup.cells.set(col, (sup.cells.get(col) || 0) + amt)
+    if (inv.invoice_date) {
+      const d = String(inv.invoice_date).slice(0, 10)
+      if (!sup.first || d < sup.first) sup.first = d
+      if (!sup.last || d > sup.last) sup.last = d
+    }
     row.suppliers.set(sid, sup)
   }
 
@@ -215,7 +233,9 @@ export function categoryMatrix(invoices = [], suppliers = [], opts = {}) {
       .map((r) => ({
         ...r,
         cells: Object.fromEntries(r.cells),
-        suppliers: [...r.suppliers.values()].sort((a, b) => b.total - a.total),
+        suppliers: [...r.suppliers.values()]
+          .map((sp) => ({ ...sp, cells: Object.fromEntries(sp.cells) }))
+          .sort((a, b) => b.total - a.total),
         share: grand ? r.total / grand : 0,
       }))
       /* Unfiled last whatever it is worth: it is a job to do, not a category,

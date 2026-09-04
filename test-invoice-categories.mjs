@@ -13,6 +13,7 @@ import {
   DEFAULT_CATEGORIES, resolveCategories, suggestCategory,
   categoryOf, categoryMatrix, categoryLabel,
 } from './src/lib/invoices/categories.js'
+import { bySupplierRows } from './src/lib/invoices/bySupplier.js'
 
 let n = 0
 const eq = (a, b, m) => { n++; assert.deepEqual(a, b, m) }
@@ -132,5 +133,58 @@ eq(key('Etablissements BOPP Treuils JEB', 'composants hydro, treuils, guindeau, 
 ok(!DEFAULT_CATEGORIES.filter((c) => c.key === 'newbuild')
      .some(() => key('anything', 'new vessel fit out') === 'newbuild'),
    'and nothing is ever suggested INTO newbuild — an event cannot be read off a part number')
+
+/* ---- THE SUPPLIER TABLE'S YEAR COLUMNS ----------------------------------
+ *
+ * David, Sep 2026: "in the table of suppliers, there isn't a breakdown per
+ * year." He was reading a row of dots under ten year headings — the columns
+ * were rendered and there was nothing behind them, because a supplier carried
+ * only a total. A MISSING FIGURE AND A FIGURE OF NOTHING LOOK IDENTICAL IN A
+ * TABLE, which is exactly why it went unnoticed through the whole load.
+ */
+{
+  const sups = [
+    { id: 's1', name: 'Jackson Trawls Ltd', category: 'gear' },
+    { id: 's2', name: 'Inverboyndie Trawls LLP', category: 'gear' },
+  ]
+  const invs = [
+    { supplier_id: 's1', invoice_date: '2024-03-01', total: 100 },
+    { supplier_id: 's1', invoice_date: '2024-09-01', total: 50 },
+    { supplier_id: 's1', invoice_date: '2025-01-01', total: 25 },
+    /* One invoice of a gear firm's filed as quota — which really happens, and
+       is why a firm can show under two category rows at once. */
+    { supplier_id: 's2', invoice_date: '2024-05-01', total: 400, category: 'quota' },
+    { supplier_id: 's2', invoice_date: '2025-05-01', total: 600 },
+    { supplier_id: 's2', invoice_date: null, total: 7 },
+  ]
+  const m = categoryMatrix(invs, sups)
+  const all = m.rows.flatMap((r) => r.suppliers)
+  const jt = all.find((s) => s.id === 's1')
+
+  ok(jt.cells, 'a supplier carries its own year cells')
+  eq(jt.cells[2024], 150, 'two invoices in a year add up in that year')
+  eq(jt.cells[2025], 25, 'and the next year stands on its own')
+  eq(Object.values(jt.cells).reduce((a, b) => a + b, 0), jt.total,
+     'the years add up to exactly what the firm was paid - no cell lost, none double counted')
+  eq(jt.first, '2024-03-01', 'when the firm was first invoiced')
+  eq(jt.last, '2025-01-01', 'and last - a firm that stops appearing has stopped being used')
+
+  /* MERGED ACROSS CATEGORY ROWS, NOT TAKEN FROM ONE. Reading a firm out of a
+     single row would report part of it as the whole of it. */
+  const rows = bySupplierRows(m)
+  const inv = rows.find((r) => r.name === 'Inverboyndie Trawls LLP')
+  eq(inv.total, 1007, 'a firm split across two categories still totals whole')
+  eq(inv.cells[2024], 400, 'its year cell carries the invoice filed under the other category')
+  eq(inv.cells[2025], 600, 'and the ordinary one')
+  eq(inv.cells.undated, 7, 'an undated invoice sits in its own column, never in a year')
+  eq(Object.values(inv.cells).reduce((a, b) => a + b, 0), inv.total,
+     'and the merged years still add to the merged total')
+
+  /* The table's own footer sums the CATEGORY rows, so the two readings of the
+     same grid have to agree — the chalk sheet and catalogue lesson. */
+  const byCat = m.rows.reduce((t, r) => t + r.total, 0)
+  const bySup = rows.reduce((t, r) => t + r.total, 0)
+  eq(byCat, bySup, 'read by category or by supplier, the money is the same money')
+}
 
 console.log('invoice categories: ' + n + ' checks passed')

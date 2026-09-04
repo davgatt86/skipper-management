@@ -12,6 +12,7 @@ import {
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
 import { addsWrong, figuresMissing, explainReadError } from '../lib/invoices/periods'
 import { categoryMatrix, categoryLabel, suggestCategory, resolveCategories } from '../lib/invoices/categories'
+import { bySupplierRows } from '../lib/invoices/bySupplier'
 import { resolveEras, eraLabel, vesselOf, vesselSplit } from '../lib/invoices/vessels'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
@@ -1099,20 +1100,6 @@ function Costs({ invoices, suppliers, cats, eras, loading, onFileSupplier, onSug
   )
 }
 
-/* The same grid read the other way. Built off the matrix rather than a second
-   pass, so the two views cannot disagree about a total — the lesson the chalk
-   sheet and the buyers' catalogue taught. */
-function bySupplierRows(matrix) {
-  const by = new Map()
-  for (const row of matrix.rows) {
-    for (const s of row.suppliers) {
-      const cur = by.get(s.id || s.name) || { key: s.id || s.name, name: s.name, total: 0, count: 0, cells: {} }
-      cur.total += s.total; cur.count += s.count
-      by.set(s.id || s.name, cur)
-    }
-  }
-  return [...by.values()].sort((a, b) => b.total - a.total).slice(0, 40)
-}
 
 function RowAndDetail({ r, columns, cats, view, open, onToggle, pct }) {
   const unfiled = r.key === '__none__'
