@@ -428,9 +428,42 @@ where it is genuinely true it changes no year and costs nothing.
 
 Same refusals as the pages — a span ending before it starts is dropped whole
 rather than reversed, and a one-day span is stored as one date, because a date
-is read and a span is divided. **Not yet proven on a real bundle**: whether
-these particular invoices print their job dates is unchecked, so the first
-Monday scan through it is the test.
+is read and a span is divided.
+
+**PROVEN ON THE REAL BUNDLE, Sep 2026, AND IT MOVED £300,500.**
+`2025-10-13 20251013091108402.pdf`, 22 pages, 13 invoices. Read a second time
+and filed:
+
+- **pages 13 of 13**, covering 1–22 exactly — no gaps, no overlaps, in order;
+- **work dates 10 of 13**, and **not one equal to its invoice date**;
+- **£290,782 of engine work is 2023**, not 2025 — invoices 3098 and 3098b, four
+  pages each, both worked Feb–Sep 2023 and billed on one October day two years
+  later. £9,718 more is 2024. Trevor McDonald 2025 falls **£397,271 → £96,772**.
+
+**THE WHOLE BOAT CHANGES SHAPE.** Billed, 2025 is the dearest year on record;
+dated by work it is the cheapest of the three:
+
+        billed   2023 £957,889 · 2024 £1,203,839 · 2025 £1,312,459
+        worked   2023 £1,248,671 · 2024 £1,213,557 · 2025 £1,011,959
+
+**IT IS READING, NOT INFERRING**, and two invoices in the same bundle prove it:
+Fraserburgh Harbour states *"22/9/25-30/9/25"* and came back 22–30 September;
+Don Fishing states *"01/10/25-31/12/25"* and came back as that quarter — a period
+running PAST the invoice date, which nothing derived from the invoice date could
+produce. The three blanks are the right three: two are materials (hose and
+fittings, washers and studs), which have no work period.
+
+**AND THE READER IS STABLE ACROSS TWO READS.** The same 22-page photograph gave
+identical invoice numbers, suppliers and totals to the penny on all 13 — which
+is exactly the key `carryDecisions` matches on, so a re-read is safe in practice
+and not only by argument.
+
+**Filed by UPDATE, not by delete-and-reinsert.** The page does the latter and is
+right to in general, but here both reads agreed on every number, so the only
+real change was the pages and the work dates; updating in place adds those and
+cannot disturb an id, a file path, a supplier link, a category or a boat
+decision. The dates are undone with one `update ... set work_from = null,
+work_to = null` on that batch.
 
 #### The rest of the rebuild
 
