@@ -712,6 +712,19 @@ removals out of date. **Measure the database rather than quoting this file** —
 days-at-sea note made that mistake twice, and a headline figure is the most quoted
 thing in here.
 
+**290 BUNDLES, NOT 152 — AND THE GAP IS THE CRASH.** `collectWhatIsNew` moved
+**290 files dated 2015-04-24 to 2026-08-31** into *"New - to upload"*, against
+360 bundles in the record: **81% again on top of the whole ten-year load.** The
+152 was what the runs that FINISHED reported; the run Google killed had saved
+**138 it never logged**, because the count is printed at the end and it never
+reached one. Its rate checks out against the run before it — 23 a minute against
+18, on older mail carrying more single invoices and smaller files.
+
+**The count of a job is not a fact about the job until the job survives to report
+it.** The files were on disk the whole time; only the tally was lost.
+
+Nothing came back undated, which confirms the rename cleared the only one.
+
 **A LOST BACKSLASH, FOR THE SECOND TIME IN THIS REPO AND THE THIRD IN A DAY.**
 `collectWhatIsNew` shipped with
 
