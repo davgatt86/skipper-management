@@ -17,6 +17,7 @@ import {
   yearInsight, slicesForYear, recordReaches, yearsCovered,
 } from './src/lib/invoices/dashboard.js'
 import { findInvoices, matchesQuery } from './src/lib/invoices/find.js'
+import { checkForDuplicates, docKey } from './src/lib/invoices/duplicates.js'
 import { categoryMatrix } from './src/lib/invoices/categories.js'
 
 let n = 0
@@ -240,5 +241,93 @@ eq(yearsCovered([{ invoice_date: '2026-08-26' }, { invoice_date: '2020-01-01' }]
    'and covers those years, newest first')
 eq(slicesForYear([{ invoice_date: '2026-01-01', total: 10 }], 2026)[0].amount, 10,
    'a whole invoice is a whole slice')
+
+
+/* ---- AN INVOICE THAT IS ALREADY ON FILE ---------------------------------
+ *
+ * Swept out of the real record Sep 2026: 60 groups, 61 rows, £240,015.96
+ * counted twice. Not a reader fault and not a double upload — no two bundles
+ * even share a file name. It is the approval run:
+ *
+ *   Inverboyndie INV-0114, £34,971.60 dated 19 May 2023, is in the bundles of
+ *   6 June, 13 June AND 19 June — three consecutive Mondays, because it had
+ *   not been approved yet.
+ *
+ * The office is right to re-send and is not going to stop, so the app catches
+ * it. These are the real rows.
+ */
+{
+  const filed = [
+    { id: 'a', batch_id: 'jun06', supplier: 'Inverboyndie Trawls LLP',
+      invoice_no: 'INV-0114', invoice_date: '2023-05-19', total: 34971.60 },
+    { id: 'b', batch_id: 'jun13', supplier: 'Inverboyndie Trawls LLP',
+      invoice_no: 'INV-0114', invoice_date: '2023-05-19', total: 34971.60 },
+    { id: 'c', batch_id: 'sep02', supplier: 'Jackson Trawls Ltd',
+      invoice_no: 'TPSI004203', invoice_date: '2021-10-04', total: 6534 },
+  ]
+
+  const rows = [
+    /* The same invoice a third time, in the bundle of 19 June. */
+    { supplier: 'Inverboyndie Trawls LLP', invoice_no: 'INV-0114',
+      invoice_date: '2023-05-19', total: 34971.60 },
+    /* Genuinely new. */
+    { supplier: 'Macduff Shipyards Ltd', invoice_no: 'V119300',
+      invoice_date: '2025-10-02', total: 350.26 },
+  ]
+
+  const r = checkForDuplicates(rows, filed)
+  eq(r.found.length, 1, 'the invoice already filed twice is caught the third time')
+  eq(r.found[0].kind, 'certain',
+     'and CERTAIN, because the firm, the number, the date and the amount all agree')
+  eq(r.found[0].hits.length, 2, 'naming both copies already on file')
+  near(r.value, 34971.60, 'and what filing it again would cost')
+  eq(r.found[0].index, 0, 'by position, so the page can flag the right row')
+
+  /* THE FIRM GOES THROUGH normaliseSupplier, and it earns its keep here more
+     than anywhere: the name is the half that comes off a photograph. "Macduff
+     Shipyards Limited" and "Macduff Shipyards Ltd" are both in the real record
+     for the same firm. */
+  const drift = checkForDuplicates(
+    [{ supplier: 'INVERBOYNDIE TRAWLS', invoice_no: 'inv/0114',
+       invoice_date: '2023-05-19', total: 34971.60 }], filed)
+  eq(drift.found.length, 1,
+     'a firm written differently and a number punctuated differently still match')
+
+  /* THE BUNDLE BEING SAVED IS NOT ITS OWN DUPLICATE. Re-reading a bundle
+     replaces its invoices, so without this every row of it would light up. */
+  const reread = checkForDuplicates(
+    [{ supplier: 'Jackson Trawls Ltd', invoice_no: 'TPSI004203',
+       invoice_date: '2021-10-04', total: 6534 }], filed, { ignoreBatch: 'sep02' })
+  eq(reread.found.length, 0, 'a bundle re-read does not flag its own invoices')
+
+  /* 3098 / 3098b: same firm and number, DIFFERENT amount. That is a reissue,
+     not the same paper — a different claim, so it is not made to look alike. */
+  const reissue = checkForDuplicates(
+    [{ supplier: 'Inverboyndie Trawls LLP', invoice_no: 'INV-0114',
+       invoice_date: '2023-05-19', total: 29781.60 }], filed)
+  eq(reissue.found[0].kind, 'similar', 'a different amount under the same number is SIMILAR')
+  ok(reissue.found[0].kind !== 'certain', 'and never claimed as the same paper')
+
+  /* SIX OF THE SIXTY GROUPS WERE ONE BUNDLE READ TWICE, which checking against
+     the database alone would miss — nothing is on file yet. */
+  const twice = checkForDuplicates([
+    { supplier: 'New Firm Ltd', invoice_no: 'X-1', invoice_date: '2026-01-01', total: 100 },
+    { supplier: 'New Firm Ltd', invoice_no: 'X-1', invoice_date: '2026-01-01', total: 100 },
+  ], [])
+  eq(twice.found.length, 1, 'the same invoice twice in one read is caught')
+  eq(twice.found[0].kind, 'within', 'and named as this bundle carrying it twice')
+  eq(twice.found[0].at, 0, 'pointing at the row it repeats')
+
+  /* AN INVOICE WITH NO NUMBER CANNOT BE MATCHED THIS WAY, and must not be
+     guessed at from the amount and date — a firm sending the same £40 box of
+     gloves every month would be flagged every single time, and a guard that
+     fires on the ordinary case stops being read. */
+  const noNumber = checkForDuplicates(
+    [{ supplier: 'Inverboyndie Trawls LLP', invoice_no: '', invoice_date: '2023-05-19', total: 34971.60 }],
+    filed)
+  eq(noNumber.found.length, 0, 'no invoice number means no claim either way')
+  eq(docKey({ supplier: 'A Firm', invoice_no: null }), null, 'and no key at all')
+}
+
 
 console.log('invoice dashboard: ' + n + ' checks passed')

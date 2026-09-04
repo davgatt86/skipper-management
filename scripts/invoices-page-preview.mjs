@@ -119,7 +119,7 @@ await esbuild.build({
   logLevel: 'warning',
 })
 
-const { YearDashboard, AllYears, FindInvoices, Arrivals, resolveCategories, resolveEras } =
+const { YearDashboard, AllYears, FindInvoices, Arrivals, Review, resolveCategories, resolveEras } =
   await import(pathToFileURL(bundle).href)
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { createElement: h } = await import('react')
@@ -148,7 +148,47 @@ batches[0].status = 'new'; batches[0].invoiceCount = 0
 /* An OLD unread one, buried past the recent cut. */
 batches[batches.length - 6].status = 'new'; batches[batches.length - 6].invoiceCount = 0
 
+/* THE REAL DUPLICATE. Inverboyndie INV-0114, £34,971.60 dated 19 May 2023, is
+   in the bundles of 6 June, 13 June AND 19 June — three consecutive Mondays,
+   because the office re-sends an invoice until it has been approved. Ten years
+   of that put £240,015.96 into the record twice. */
+const alreadyFiled = [
+  { id: 'f1', batch_id: 'jun06', supplier: 'Inverboyndie Trawls LLP', invoice_no: 'INV-0114',
+    invoice_date: '2023-05-19', total: 34971.60 },
+  { id: 'f2', batch_id: 'jun13', supplier: 'Inverboyndie Trawls LLP', invoice_no: 'INV-0114',
+    invoice_date: '2023-05-19', total: 34971.60 },
+  { id: 'f3', batch_id: 'jun13', supplier: 'Inverboyndie Trawls LLP', invoice_no: 'INV-0115',
+    invoice_date: '2023-05-19', total: 8100.00 },
+]
+const reviewItems = [{
+  batch: { id: 'jun19', received_at: '2023-06-19T09:00:00Z', page_count: 9,
+           file_path: 'x/y.pdf' },
+  rows: [
+    /* the third copy */
+    { supplier: 'Inverboyndie Trawls LLP', supplier_id: 'inv', invoice_no: 'INV-0114',
+      invoice_date: '2023-05-19', description: 'Twine, nylon, needles',
+      net: 34971.60, vat: 0, total: 34971.60, page_from: 1, page_to: 2 },
+    /* a corrected reissue — same number, different money, the 3098/3098b shape */
+    { supplier: 'INVERBOYNDIE TRAWLS', supplier_id: 'inv', invoice_no: 'inv/0115',
+      invoice_date: '2023-05-19', description: 'Twine, nylon, needles (revised)',
+      net: 29781.60, vat: 0, total: 29781.60, page_from: 3, page_to: 4 },
+    /* genuinely new, and must not be flagged */
+    { supplier: 'Jackson Trawls Ltd', supplier_id: 'jt', invoice_no: 'TPSI099',
+      invoice_date: '2023-06-14', description: 'Trawl repairs',
+      net: 4200, vat: 840, total: 5040, page_from: 5, page_to: 5 },
+    /* the same bundle carrying one twice, which checking the database alone
+       would miss — nothing is on file yet */
+    { supplier: 'Jackson Trawls Ltd', supplier_id: 'jt', invoice_no: 'TPSI099',
+      invoice_date: '2023-06-14', description: 'Trawl repairs',
+      net: 4200, vat: 840, total: 5040, page_from: 6, page_to: 6 },
+  ],
+}]
+
 const panes = [
+  ['Check the read — three of the four already on file',
+   h(Review, { items: reviewItems, unknown: [], suppliers: [], filed: alreadyFiled,
+               progress: null, onStop: noop, onEdit: noop, onDropRow: noop, onFile: noop,
+               onSave: noop, onDrop: noop, onOpenScan: noop, onOpenPage: noop })],
   ['+ Invoice batch — 364 bundles, two unread, one of them old',
    h(Arrivals, { batches, loading: false, canUpload: true, fileInput: { current: null },
                  onRead: noop, onReadAll: noop, onUpload: noop, onIgnore: noop,
@@ -201,47 +241,72 @@ const hasnt = (i, t, why) => {
   if (html[i].m.includes(t)) { console.log('  SHOULD NOT SAY: ' + why); bad++ }
 }
 
+/* THE DUPLICATE GUARD — the only flag on this screen whose answer is 'leave it
+   out' rather than 'correct it', so it is said once at the top before thirteen
+   rows of detail. */
+has(0, 'already on file', 'the bundle says how many of its invoices it has seen before')
+has(0, 'Leave it out', 'and each one can be dropped in a tap')
+has(0, 'This bundle carries it twice', 'a bundle carrying one twice is its own case')
+has(0, 'possibly a corrected reissue',
+    'and a same-number-different-amount is NOT claimed as the same paper')
+has(0, 'until it has been approved', 'the panel says why this keeps happening')
+/* THE SUMMARY AT THE TOP MUST NOT CONTRADICT THE CARDS BELOW IT. It said
+   "Nothing flagged" over a card reporting three duplicates — caught by
+   rendering, and the reason nobody would believe the summary again. */
+has(0, '3 already on file', 'and the run summary counts them too')
+hasnt(0, 'Nothing flagged', 'rather than claiming the run is clean')
+/* THE ONE THAT IS GENUINELY NEW MUST NOT BE FLAGGED, or the guard fires on the
+   ordinary case and stops being read. */
+{
+  /* Counted on the thing that appears exactly once per flagged ROW. The first
+     version counted every phrase containing "already on file" and was fooled by
+     the run summary and the panel heading — a check that cannot tell the page
+     being wrong from the page explaining itself is no check. */
+  const marks = (html[0].m.match(/Leave it out/g) || []).length
+  if (marks !== 3) { console.log('  ' + marks + ' rows flagged, wanted 3'); bad++ }
+}
+
 /* The one thing this page must never do. */
-has(1, 'not finished', 'the dashboard says 2026 is a part year')
-has(1, 'to the same day', 'and that last year is cut at the same point')
-has(1, 'Ten years', 'the year strip')
+has(2, 'not finished', 'the dashboard says 2026 is a part year')
+has(2, 'to the same day', 'and that last year is cut at the same point')
+has(2, 'Ten years', 'the year strip')
 
 /* THE ARRIVALS TAB HOLDS TEN YEARS NOW, and needed a way into them. */
-has(0, 'Find a bundle', 'a ten-year arrivals list can be searched')
-has(0, 'bundles on record, back to', 'and says how far back it goes')
-has(0, 'older bundle', 'and says how many it is not showing, rather than just stopping')
-has(0, 'Read again', 'an already-filed bundle can be read again')
+has(1, 'Find a bundle', 'a ten-year arrivals list can be searched')
+has(1, 'bundles on record, back to', 'and says how far back it goes')
+has(1, 'older bundle', 'and says how many it is not showing, rather than just stopping')
+has(1, 'Read again', 'an already-filed bundle can be read again')
 /* An unread bundle is a job rather than a record: it shows however old it is. */
 {
   const old = batches[batches.length - 6]
-  has(0, old.filename, 'an OLD unread bundle still shows, past the recent cut')
-  has(0, '8 pages · ' + old.filename,
+  has(1, old.filename, 'an OLD unread bundle still shows, past the recent cut')
+  has(1, '8 pages · ' + old.filename,
      'and the row names the file it came from, since that is what you search')
 }
-has(1, 'What 2026 went on', 'the per-category read that was asked for')
+has(2, 'What 2026 went on', 'the per-category read that was asked for')
 
-has(2, 'Which boat', 'the three hulls')
-has(2, '/yr over', 'compared per year of service, not by raw total')
-has(2, 'distrust', 'and the oldest boat says why hers is the shaky one')
-has(2, 'lump billing', 'the lump billings are offered')
-has(2, 'not filed to a category', 'and the unfiled firm is named as work to do')
-has(2, 'no date', 'the undated invoice has its own column')
-has(2, 'Every year, by trade', 'the grid')
+has(3, 'Which boat', 'the three hulls')
+has(3, '/yr over', 'compared per year of service, not by raw total')
+has(3, 'distrust', 'and the oldest boat says why hers is the shaky one')
+has(3, 'lump billing', 'the lump billings are offered')
+has(3, 'not filed to a category', 'and the unfiled firm is named as work to do')
+has(3, 'no date', 'the undated invoice has its own column')
+has(3, 'Every year, by trade', 'the grid')
 
 /* SPREAD IS REPORTED, NEVER SILENT. */
-hasnt(2, 'divided by days rather than read off a date',
+hasnt(3, 'divided by days rather than read off a date',
       'nothing is spread when the grid is dated by the invoice')
-has(3, 'divided by days rather than read off a date',
+has(4, 'divided by days rather than read off a date',
     'and the work-dated grid says which years hold an apportionment')
 
-has(4, 'Trevor McDonald', 'the drill-through finds the engine invoices')
-has(4, 'p. ', 'and offers the scan at its page where one was read')
-has(5, 'Nothing matches', 'a term that matches nothing says so')
+has(5, 'Trevor McDonald', 'the drill-through finds the engine invoices')
+has(5, 'p. ', 'and offers the scan at its page where one was read')
+has(6, 'Nothing matches', 'a term that matches nothing says so')
 /* The firm dropdown legitimately lists every firm, so the check has to be on
    something only a RESULT ROW carries — a description. Asserting on the firm
    name failed here and the page was right; the assertion was wrong. */
-hasnt(5, 'Trawl repairs and netting', 'and no result row is rendered')
-has(5, 'clear the filters', 'with a way back out of an empty answer')
+hasnt(6, 'Trawl repairs and netting', 'and no result row is rendered')
+has(6, 'clear the filters', 'with a way back out of an empty answer')
 
 console.log(out)
 console.log(`  ${inv.length} invoices · ${suppliers.length} firms · ${panes.length} panes rendered`)

@@ -555,6 +555,60 @@ already shipped a commit where two pages called a function they never imported.
 `test-invoice-dashboard.mjs` 59 · `test-invoice-categories.mjs` 50 ·
 `test-invoices.mjs` 118 · `test-invoice-vessels.mjs` 45.
 
+### AN INVOICE THAT IS ALREADY ON FILE — £240,015.96 counted twice
+
+Swept out of the record Sep 2026 after 3098/3098b: **60 groups, 61 rows,
+£240,015.96**. Not a reader fault and not a double upload — no two bundles even
+share a file name. It is how the approval run works:
+
+    Inverboyndie INV-0114, £34,971.60 dated 19 May 2023, is in the bundles of
+    6 June, 13 June AND 19 June — three consecutive Mondays.
+
+Denise re-sends an invoice in the following week's PDF until it has been
+approved, which is correct of her, so the same cost arrives two or three times.
+**38 of the 54 cross-bundle cases are 2-10 days apart.** Six more groups are one
+bundle where the reader returned the same invoice twice. By year: 2022 £96,059 ·
+2023 £79,796 · 2021 £25,284 · 2026 £21,973 · 2019 £8,699 · 2024 £5,747 · 2018
+£2,457. **2020 and 2025 are clean.**
+
+**THE PROCESS IS NOT GOING TO CHANGE, so the app catches it.**
+`src/lib/invoices/duplicates.js`, flagged on the review screen before anything
+is filed — the only item on the outstanding list that got worse while nobody
+looked at it.
+
+- **Matched on FIRM + NUMBER**, the firm through `normaliseSupplier` because it
+  is the half that comes off a photograph: "Macduff Shipyards Limited" and
+  "Macduff Shipyards Ltd" are both in the real record for one firm.
+- **`certain` where the date and amount agree too; `similar` where they do not**
+  — and those are NOT made to look alike. 3098/3098b was a reissue under the
+  same number with one line corrected, and £147,985.99 turned on the difference.
+- **A bundle re-read is not its own duplicate**, or every row of it would light
+  up. `ignoreBatch`.
+- **Checked against the same read too**, since six of the sixty were one bundle
+  carrying an invoice twice — nothing is on file yet, so a database-only check
+  misses them.
+- **An invoice with NO number is never matched.** Guessing from amount and date
+  would flag every routine repeat order, and a guard that fires on the ordinary
+  case stops being read.
+- **Reported, never refused.** The save is not blocked and nothing is dropped
+  automatically; "Leave it out" is one tap and deletes nothing — reading the
+  bundle again brings the row back.
+
+**THE SUMMARY CONTRADICTED THE CARDS, and only rendering it showed that.** The
+run header said *"Nothing flagged"* directly above a card reporting three of four
+already on file. Two parts of one screen disagreeing is worse than either being
+wrong alone: it is why nobody believes the summary again. The count is now made
+across the whole run and duplicates are listed FIRST, because their answer is
+"leave it out" and that makes every other flag on the row moot.
+
+`Review.jsx` moved to `src/pages/invoices/` to be renderable at all — opening a
+document arrives as a prop, since `signedUrl` and `openDocument` drag the
+supabase client in behind them. It is the screen nothing is filed without, and
+it could not be checked by anything but eye until now.
+
+**The 61 rows already in the record are NOT removed** — David: *"don't touch
+others till i see them."*
+
 ### THE AGENT GRANT IS A READ, AND A WORKSHEET WAS WRITTEN THROUGH IT
 
 Found Sep 2026 while checking the fleet was ready for invoice forwarding.
