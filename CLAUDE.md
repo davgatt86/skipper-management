@@ -591,8 +591,29 @@ ATTACHMENT'S OWN NAME AND BYTE SIZE. `origName_()` strips a date prefix left by
 v1, so nothing already saved is fetched again. Both filters are asserted against
 16 real subjects taken out of Gmail.
 
-**Not yet re-run** — the count is unknown, because Gmail's own
-`resultCountEstimate` returns 201 for every query and cannot be used to size it.
+**RUN, AND A THIRD OF THE RECENT INVOICE MAIL WAS MISSING.** The first run
+reached back fourteen months before the six-minute limit stopped it and found
+**32 pdfs never saved, against 66 already there** — in the most recent stretch,
+the part of the record most likely to be right. The `66 already there` is also
+the dedupe fix working: it recognised what v1 had saved and did not fetch it
+twice.
+
+Two faults that run exposed, both fixed:
+
+- **Three quarters of the time went on mail it threw away** — 725 of 966
+  messages read were price sheets discarded on the subject. The subject test is
+  now in the Gmail query as well as in code. The code test stays: it is the one
+  under test, and Gmail's own word matching is not something to bet the record
+  on.
+- **It started at the newest mail every time.** Six minutes is not enough for a
+  decade, so each run re-trod old ground before reaching anything new — the
+  older a gap, the less likely any run would ever reach it, and **2017 might
+  never have been read at all**. It keeps a cursor in `PropertiesService` now,
+  backed off one page because new mail shifts the pages down, and clears it on
+  reaching the end so the next run sweeps from the newest again.
+
+Still unknown: the total. Gmail's `resultCountEstimate` returns 201 for every
+query, so only finishing the run will say.
 
 ### AN INVOICE THAT IS ALREADY ON FILE — £240,015.96 counted twice
 
