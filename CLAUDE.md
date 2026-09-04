@@ -204,7 +204,7 @@ Trawls 73% of the year.
 
 ### TEN YEARS ARE THREE BOATS, all called AUDACIOUS BF83 (Sep 2026)
 
-The record loaded out to **2,625 invoices, £8,058,324, 153 suppliers, 2016–2026**
+The record loaded out to **2,624 invoices, £7,910,338, 153 suppliers, 2016–2026**
 — far more than the weekly bundles, because the Gmail search reached back to an
 older office scanner (`SKM_C3350…`). The dates were checked and are genuine: the
 2017-11-07 bundle holds invoices from Aug–Oct 2017.
@@ -246,7 +246,7 @@ undecided list for good.
 running costs of whichever boat was fishing, and each is pennies against £8m —
 chasing them would cost more attention than the answer is worth.
 
-### CATEGORISED — 151 of 153 firms, £8,057,344 of £8,058,324 (Sep 2026)
+### CATEGORISED — 151 of 153 firms, £8,057,344 of £7,910,338 (Sep 2026)
 
 The suggester placed **136 of 153** off the name and what each firm had sold;
 David settled the rest. The shape of ten years:
@@ -336,7 +336,7 @@ decision. It would have failed silently and only on invoices with no number,
 which are the hand-written ones. **An unmatchable decision is NAMED**, never
 nudged onto the nearest row.
 
-**The 2,625 invoices already filed carry no pages** and there is no way to get
+**The 2,624 invoices already filed carry no pages** and there is no way to get
 them but to read the bundle again — 364 bundles, at real cost. Not worth doing
 wholesale; a bundle can be re-read when an invoice actually needs finding, and
 the decisions now survive it. Every invoice already stores `file_path`, so the
@@ -370,7 +370,7 @@ the review are one flow in one tab, and a bundle is still never filed unlooked-a
 this. `categoryMatrix` gave a CATEGORY its year cells and gave a SUPPLIER only a
 total, so ten year headings sat above ten empty cells. **A missing figure and a
 figure of nothing look identical in a table** — which is why it survived the
-whole 2,625-invoice load. Merged across category rows, too: a firm appears under
+whole 2,624-invoice load. Merged across category rows, too: a firm appears under
 two categories the moment one of its invoices is filed differently, and reading
 it out of the first row would report part of a firm as the whole of it.
 
@@ -396,7 +396,7 @@ understated by the same amount.
 
 **THREE DATES, THREE DIFFERENT FACTS** — received, invoiced, worked.
 `su_invoices.work_from` / `work_to`, both nullable, **null means use the invoice
-date**, so every one of the 2,625 already filed reads exactly as before.
+date**, so every one of the 2,624 already filed reads exactly as before.
 
 **A DATE IS A FACT AND A SPREAD IS AN ASSUMPTION**, so they are kept apart. One
 work date lands the cost WHOLE in its year — which is the common case, because
@@ -414,7 +414,7 @@ because that is how it was billed. There is no point asking for a work date on a
 filled in where it is cheapest — the scan is open and the reader has just been
 through it.
 
-**AND THE READER ASKS FOR THEM (v10).** Typing them onto 2,625 invoices was
+**AND THE READER ASKS FOR THEM (v10).** Typing them onto 2,624 invoices was
 never going to happen, and a service invoice normally prints a job date, a
 service period or dated worksheet lines.
 
@@ -479,9 +479,18 @@ every other line's qty × price checks out on both. Both documents self-add to
 their own printed total to the penny, so neither figure is a misread; they are
 two issues of one invoice, the office numbering the correction `b`.
 
-**Filing both overstates the boat by £147,985.99**, all of it landing in 2023 now
-the work dates are in. Not deleted — that is the skipper's call — but the
-evidence is arithmetic rather than opinion.
+**3098 WAS DELETED 04-09-2026** on David's instruction. The boat's ten-year
+record goes **2,625 → 2,624 invoices and £8,058,324 → £7,910,338** — the figures
+quoted throughout this file were corrected in the same breath, because a stale
+headline gets quoted back as fact.
+
+**The reason is written on the BUNDLE, not on the invoice**, since the invoice is
+what went. `su_*` carries no audit trail by design — it is written by an edge
+function on the service-role key, where `auth.uid()` is null, so the trail would
+record that nobody did it — which means a delete here leaves no trace of itself
+and this one was £147,985.99. `su_invoice_batches.note` on that bundle now
+carries the whole finding, and nothing references `su_invoices`, so the row went
+cleanly.
 
 **THE LESSON IS WHAT THE RECORD COULD NOT ANSWER.** A description good enough to
 file a cost is useless for telling two costs apart, and the only reason this was
