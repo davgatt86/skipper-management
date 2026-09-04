@@ -5,5 +5,6 @@
 export { default as YearDashboard } from '../src/pages/invoices/YearDashboard.jsx'
 export { default as AllYears } from '../src/pages/invoices/AllYears.jsx'
 export { default as FindInvoices } from '../src/pages/invoices/FindInvoices.jsx'
+export { default as Arrivals } from '../src/pages/invoices/Arrivals.jsx'
 export { resolveCategories } from '../src/lib/invoices/categories.js'
 export { resolveEras } from '../src/lib/invoices/vessels.js'

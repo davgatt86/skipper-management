@@ -119,7 +119,7 @@ await esbuild.build({
   logLevel: 'warning',
 })
 
-const { YearDashboard, AllYears, FindInvoices, resolveCategories, resolveEras } =
+const { YearDashboard, AllYears, FindInvoices, Arrivals, resolveCategories, resolveEras } =
   await import(pathToFileURL(bundle).href)
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { createElement: h } = await import('react')
@@ -128,7 +128,31 @@ const cats = resolveCategories(null)
 const eras = resolveEras(null)
 const noop = () => {}
 
+/* 364 bundles back to 2017 is what this tab really holds, and the reason it
+   needed a way in at all. Two of them unread, one of them old — an unread
+   bundle is a job rather than a record and must show however far back it is. */
+const batches = []
+for (let y = 2017; y <= 2026; y++) {
+  for (let m = 1; m <= (y === 2026 ? 8 : 12); m += (y < 2024 ? 3 : 1)) {
+    const d = `${y}-${String(m).padStart(2, '0')}-13`
+    batches.push({
+      id: `b-${y}-${m}`, received_at: d + 'T09:00:00Z',
+      filename: `${d} ${y}${String(m).padStart(2, '0')}13091108402.pdf`,
+      subject: 'Audacious invoices for approval', from_email: 'denise.nicolson@donfishing.com',
+      page_count: 8, status: 'filed', invoiceCount: 7,
+    })
+  }
+}
+batches.reverse()
+batches[0].status = 'new'; batches[0].invoiceCount = 0
+/* An OLD unread one, buried past the recent cut. */
+batches[batches.length - 6].status = 'new'; batches[batches.length - 6].invoiceCount = 0
+
 const panes = [
+  ['+ Invoice batch — 364 bundles, two unread, one of them old',
+   h(Arrivals, { batches, loading: false, canUpload: true, fileInput: { current: null },
+                 onRead: noop, onReadAll: noop, onUpload: noop, onIgnore: noop,
+                 onDelete: noop, reading: false, busy: false })],
   ['The year — 2026, part finished, against 2025 to the same day',
    h(YearDashboard, { invoices: inv, suppliers, cats, basis: 'total', on: 'invoice',
                       year: 2026, setYear: noop, onDrill: noop, onOpen: noop })],
@@ -178,33 +202,46 @@ const hasnt = (i, t, why) => {
 }
 
 /* The one thing this page must never do. */
-has(0, 'not finished', 'the dashboard says 2026 is a part year')
-has(0, 'to the same day', 'and that last year is cut at the same point')
-has(0, 'Ten years', 'the year strip')
-has(0, 'What 2026 went on', 'the per-category read that was asked for')
+has(1, 'not finished', 'the dashboard says 2026 is a part year')
+has(1, 'to the same day', 'and that last year is cut at the same point')
+has(1, 'Ten years', 'the year strip')
 
-has(1, 'Which boat', 'the three hulls')
-has(1, '/yr over', 'compared per year of service, not by raw total')
-has(1, 'distrust', 'and the oldest boat says why hers is the shaky one')
-has(1, 'lump billing', 'the lump billings are offered')
-has(1, 'not filed to a category', 'and the unfiled firm is named as work to do')
-has(1, 'no date', 'the undated invoice has its own column')
-has(1, 'Every year, by trade', 'the grid')
+/* THE ARRIVALS TAB HOLDS TEN YEARS NOW, and needed a way into them. */
+has(0, 'Find a bundle', 'a ten-year arrivals list can be searched')
+has(0, 'bundles on record, back to', 'and says how far back it goes')
+has(0, 'older bundle', 'and says how many it is not showing, rather than just stopping')
+has(0, 'Read again', 'an already-filed bundle can be read again')
+/* An unread bundle is a job rather than a record: it shows however old it is. */
+{
+  const old = batches[batches.length - 6]
+  has(0, old.filename, 'an OLD unread bundle still shows, past the recent cut')
+  has(0, '8 pages · ' + old.filename,
+     'and the row names the file it came from, since that is what you search')
+}
+has(1, 'What 2026 went on', 'the per-category read that was asked for')
+
+has(2, 'Which boat', 'the three hulls')
+has(2, '/yr over', 'compared per year of service, not by raw total')
+has(2, 'distrust', 'and the oldest boat says why hers is the shaky one')
+has(2, 'lump billing', 'the lump billings are offered')
+has(2, 'not filed to a category', 'and the unfiled firm is named as work to do')
+has(2, 'no date', 'the undated invoice has its own column')
+has(2, 'Every year, by trade', 'the grid')
 
 /* SPREAD IS REPORTED, NEVER SILENT. */
-hasnt(1, 'divided by days rather than read off a date',
+hasnt(2, 'divided by days rather than read off a date',
       'nothing is spread when the grid is dated by the invoice')
-has(2, 'divided by days rather than read off a date',
+has(3, 'divided by days rather than read off a date',
     'and the work-dated grid says which years hold an apportionment')
 
-has(3, 'Trevor McDonald', 'the drill-through finds the engine invoices')
-has(3, 'p. ', 'and offers the scan at its page where one was read')
-has(4, 'Nothing matches', 'a term that matches nothing says so')
+has(4, 'Trevor McDonald', 'the drill-through finds the engine invoices')
+has(4, 'p. ', 'and offers the scan at its page where one was read')
+has(5, 'Nothing matches', 'a term that matches nothing says so')
 /* The firm dropdown legitimately lists every firm, so the check has to be on
    something only a RESULT ROW carries — a description. Asserting on the firm
    name failed here and the page was right; the assertion was wrong. */
-hasnt(4, 'Trawl repairs and netting', 'and no result row is rendered')
-has(4, 'clear the filters', 'with a way back out of an empty answer')
+hasnt(5, 'Trawl repairs and netting', 'and no result row is rendered')
+has(5, 'clear the filters', 'with a way back out of an empty answer')
 
 console.log(out)
 console.log(`  ${inv.length} invoices · ${suppliers.length} firms · ${panes.length} panes rendered`)

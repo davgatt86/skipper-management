@@ -459,8 +459,21 @@ Monday scan through it is the test.
   every other search still passed because "scantrol" became "cantrol" and matched
   anyway. The regression test is `q: "sos"`, the query that tells them apart.
 
-`scripts/invoices-page-preview.mjs` bundles the three real tabs and
-server-renders them against a fixture shaped like the real record — three hulls,
+**AND THE ARRIVALS LIST NEEDED A WAY IN.** It was written when the tab held
+the Monday arrivals and a handful of them; after the date backfill it holds **364
+bundles going back to February 2017** in one flat run, so re-reading a particular
+one meant scrolling past a decade. The recent twelve and anything unread show
+without asking — an unread bundle is a job rather than a record and shows however
+far back it is — and the rest are behind a search box that says how many it is
+not showing. **The file name is rendered now too**: the search offers to match on
+it, which is no use if you cannot see what to type, and for the 364 loaded by
+hand the subject is a stub so the scanner file name is the only thing telling one
+from another. `src/pages/invoices/Arrivals.jsx`, its own file so it can be
+rendered without a login.
+
+`scripts/invoices-page-preview.mjs` bundles the four real tabs and
+server-renders them against a fixture shaped like the real record — 364 arrivals,
+three hulls,
 a lump billing, a job spanning a year end, an unfiled firm, an undated invoice,
 a part-finished year — then reads the markup back. **A build passing proves
 nothing here**: an undefined identifier is valid JavaScript, and this repo has
