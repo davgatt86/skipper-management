@@ -6,7 +6,7 @@ import { normaliseSupplier } from './suppliers.js'
  * bundle is the source, and reading it twice should produce it afresh rather
  * than a second copy alongside the first.
  *
- * BUT TWO COLUMNS ARE NOT THE READER'S. `vessel_era` and `category` are the
+ * BUT FOUR COLUMNS ARE NOT THE READER'S. `vessel_era` and `category` are the
  * skipper's answers to questions the invoice cannot answer — which of three
  * boats a 2018 winch order was for, whether "Lease 20tn N/S Cod" is quota or
  * fishing gear. They are expensive answers: 102 invoices carry a vessel
@@ -62,8 +62,9 @@ export function invoiceKey(r) {
 export function carryDecisions(kept = [], rows = []) {
   const held = new Map()
   for (const k of kept) {
-    if (!k?.category && !k?.vessel_era) continue
-    held.set(invoiceKey(k), { row: k, category: k.category ?? null, vessel_era: k.vessel_era ?? null })
+    if (!k?.category && !k?.vessel_era && !k?.work_from && !k?.work_to) continue
+    held.set(invoiceKey(k), { row: k, category: k.category ?? null, vessel_era: k.vessel_era ?? null,
+                              work_from: k.work_from ?? null, work_to: k.work_to ?? null })
   }
 
   const used = new Set()
@@ -75,6 +76,12 @@ export function carryDecisions(kept = [], rows = []) {
       ...r,
       category: r.category ?? hit.category,
       vessel_era: r.vessel_era ?? hit.vessel_era,
+      /* WHEN THE WORK WAS DONE IS THE SKIPPER'S ANSWER TOO, and a dearer one to
+         make than either of the others: it is read off the invoice by a person
+         and cannot be recovered from anything the reader returns. It carries
+         for the same reason. */
+      work_from: r.work_from ?? hit.work_from,
+      work_to: r.work_to ?? hit.work_to,
     }
   })
 

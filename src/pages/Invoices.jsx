@@ -7,13 +7,18 @@ import {
   listBatches, listInvoices, listSuppliers, createSupplier, addAlias,
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
-  setInvoiceVessels,
+  setInvoiceVessels, setInvoicesWork, setInvoiceCategory,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
 import { addsWrong, figuresMissing, explainReadError } from '../lib/invoices/periods'
-import { categoryMatrix, categoryLabel, suggestCategory, resolveCategories } from '../lib/invoices/categories'
-import { bySupplierRows } from '../lib/invoices/bySupplier'
-import { resolveEras, eraLabel, vesselOf, vesselSplit } from '../lib/invoices/vessels'
+import { suggestCategory, resolveCategories } from '../lib/invoices/categories'
+import { resolveEras } from '../lib/invoices/vessels'
+import { yearsCovered } from '../lib/invoices/dashboard'
+import { workLabel } from '../lib/invoices/when'
+import YearDashboard from './invoices/YearDashboard'
+import AllYears from './invoices/AllYears'
+import FindInvoices from './invoices/FindInvoices'
+import { Segmented } from './invoices/shared'
 
 /* THE BOAT'S INVOICES — the weekly bundle, split by supplier.
  *
@@ -50,7 +55,29 @@ export default function Invoices() {
   const { appUser } = useAuth()
   const fleetId = appUser?.fleet_id
 
-  const [tab, setTab] = useState('arrivals')
+  /* THE DASHBOARD IS THE PAGE NOW, and the three-step flow is one tab inside it.
+   *
+   * David, Sep 2026: "the arrivals/check/what it cost is almost like it was put
+   * there for the initial upload. now we will be adding a pdf per week, it needs
+   * to look better there too. invoice dashboard with a + invoice batch tab."
+   *
+   * He is right about why it looked like that: those three tabs WERE the initial
+   * load, when 364 bundles went in over a weekend and the whole page was a
+   * conveyor. That is done. What happens now is one PDF on a Monday and ten
+   * years of costs to read the rest of the week, so the reading is the page and
+   * adding a bundle is a thing you do to it. */
+  const [tab, setTab] = useState('dashboard')
+
+  /* Which date a cost is counted on. Billed is the honest default and is what
+     every one of the 2,625 already filed uses; worked moves a job to the year it
+     was actually done in, where somebody has said when that was. */
+  const [on, setOn] = useState('invoice')
+  const [basis, setBasis] = useState('total')
+  const [year, setYear] = useState(null)
+  /* One filter object, shared by the search box and by every drill-through from
+     a grid cell — so a cell opens the SAME list, with its filters visible and
+     wideable by hand rather than a pop-up that can only be dismissed. */
+  const [filter, setFilter] = useState({ q: '' })
   const [batches, setBatches] = useState([])
   const [invoices, setInvoices] = useState([])
   const [suppliers, setSuppliers] = useState([])
@@ -344,6 +371,57 @@ export default function Invoices() {
     } catch (e) { setErr(e.message || String(e)) }
   }
 
+  /* The years the record covers, and the one being read. Defaults to the latest
+     rather than to the calendar's year: if the last bundle in is from August
+     2026 then 2026 is the year with something in it, and landing on an empty
+     year would look like a boat that had stopped spending. */
+  const years = useMemo(() => yearsCovered(invoices, on), [invoices, on])
+  const shownYear = year ?? years[0] ?? new Date().getFullYear()
+
+  /* A CELL OPENS THE INVOICES BEHIND IT. Everything lands in the one list with
+     its filters filled in and showing, so the answer can be widened by hand the
+     moment it is nearly right. */
+  const drill = useCallback((f) => { setFilter({ q: '', ...f }); setTab('find') }, [])
+
+  const openInvoice = useCallback((inv) => {
+    if (!inv?.file_path) return
+    openDocument(inv.file_path, inv.page_from).catch((e) => setErr(e.message || String(e)))
+  }, [])
+
+  /* WHEN THE WORK WAS DONE — the answer that moves a cost into the year it was
+     incurred. Applied to a whole lump billing at once, because that is how it
+     was billed: six engine jobs invoiced on one day are one visit, and asking
+     six times is how the answer does not get given at all. */
+  const setWork = useCallback(async (ids, from, to) => {
+    setErr(''); setMsg('')
+    try {
+      await setInvoicesWork(ids, from, to)
+      const f = from || null, t = to || null
+      setInvoices((prev) => prev.map((i) =>
+        (ids.includes(i.id) ? { ...i, work_from: f, work_to: t } : i)))
+      const when = workLabel({ work_from: f, work_to: t })
+      setMsg(ids.length + (ids.length === 1 ? ' invoice' : ' invoices')
+        + (when ? ' put to work done ' + when + '.' : ' cleared of their work dates.')
+        + ' Switch "Dated by" to Worked to see it move.')
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  const placeVessel = useCallback(async (ids, era) => {
+    setErr('')
+    try {
+      await setInvoiceVessels(ids, era)
+      setInvoices((prev) => prev.map((i) => (ids.includes(i.id) ? { ...i, vessel_era: era } : i)))
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  const setOneCategory = useCallback(async (id, category) => {
+    setErr('')
+    try {
+      await setInvoiceCategory(id, category)
+      setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, category } : i)))
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
   if (!fleetId) return <AppShell maxWidth={1040}><PageHeader title="Invoices" /></AppShell>
 
   return (
@@ -354,55 +432,81 @@ export default function Invoices() {
         sub="The weekly bundle, split by supplier"
       />
 
-      <div className="flowbar" style={{ marginBottom: '1rem' }}>
-        <Tab id="arrivals" tab={tab} set={setTab}>
-          1 · Arrivals{batches.filter((b) => b.status === 'new').length
-            ? ` (${batches.filter((b) => b.status === 'new').length})` : ''}
+      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center',
+                    marginBottom: '0.9rem' }}>
+        <Tab id="dashboard" tab={tab} set={setTab}>The year</Tab>
+        <Tab id="allyears" tab={tab} set={setTab}>All years</Tab>
+        <Tab id="find" tab={tab} set={setTab}>Find an invoice</Tab>
+        <Tab id="add" tab={tab} set={setTab}>
+          + Invoice batch{queue.length ? ' · ' + queue.length + ' to check' : ''}
         </Tab>
-        <span className="flow-ar">→</span>
-        <Tab id="review" tab={tab} set={setTab} disabled={!queue.length && !progress}>
-          2 · Check the read{queue.length ? ` (${queue.length})` : ''}
-        </Tab>
-        <span className="flow-ar">→</span>
-        <Tab id="costs" tab={tab} set={setTab}>3 · What it cost</Tab>
+        <span style={{ flex: 1 }} />
+        {/* NET AND GROSS DIFFER BY £563,735 OF VAT, which is real money, so the
+            basis is shown rather than one being quietly assumed. */}
+        <Segmented label="Count" value={basis} onChange={setBasis} options={[
+          { value: 'total', label: 'Gross', title: 'What left the account, VAT included' },
+          { value: 'net', label: 'Net', title: 'Before VAT' },
+        ]} />
+        <Segmented label="Dated by" value={on} onChange={setOn} options={[
+          { value: 'invoice', label: 'Billed', title: 'The date on the invoice' },
+          { value: 'work', label: 'Worked', title: 'When the job was done, where that has been recorded' },
+        ]} />
       </div>
 
       {err && <p className="error" style={{ marginTop: 0 }}>{err}</p>}
       {msg && <p className="muted" style={{ marginTop: 0 }}>{msg}</p>}
       {stage === 'uploading' && <p className="muted" style={{ marginTop: 0 }}>Uploading…</p>}
 
-      {tab === 'arrivals' && (
-        <Arrivals batches={batches} loading={loading} onRead={readBatch}
-                  onReadAll={readAllNew} reading={!!progress}
-                  busy={!!stage || !!progress} canUpload={!!boatId}
-                  fileInput={fileInput} onUpload={uploadBundle}
-                  onIgnore={async (b) => { await setBatchStatus(b.id, 'ignored'); refresh() }}
-                  onDelete={async (b) => {
-                    if (!window.confirm(
-                      `Delete the bundle of ${fmtDate(String(b.received_at).slice(0, 10))}?\n\n`
-                      + 'Any invoices already read out of it are KEPT — the cost stood whether '
-                      + 'or not the scan does. Only the document goes.')) return
-                    await deleteBatch(b.id); refresh()
-                  }} />
-      )}
+      {tab === 'dashboard' && (loading ? <p className="muted">Loading…</p> : (
+        <YearDashboard invoices={invoices} suppliers={suppliers} cats={cats}
+                       basis={basis} on={on} year={shownYear} setYear={setYear}
+                       onDrill={drill} onOpen={openInvoice} />
+      ))}
 
-      {tab === 'review' && (
-        <Review items={matched.items} unknown={matched.unknown} suppliers={suppliers}
-                progress={progress} onStop={() => { cancelRead.current = true }}
-                onEdit={editRow} onFile={fileSupplier} onSave={saveItems}
-                onDrop={(id) => setQueue((q) => q.filter((x) => x.batch.id !== id))} />
-      )}
+      {tab === 'allyears' && (loading ? <p className="muted">Loading…</p> : (
+        <AllYears invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
+                  basis={basis} on={on}
+                  onDrill={drill} onFileSupplier={fileSupplierCategory}
+                  onSuggestAll={suggestAll} onPlaceVessel={placeVessel} onSetWork={setWork} />
+      ))}
 
-      {tab === 'costs' && (
-        <Costs invoices={invoices} suppliers={suppliers} cats={cats} eras={eras} loading={loading}
-               onFileSupplier={fileSupplierCategory} onSuggestAll={suggestAll}
-               onPlaceVessel={async (ids, era) => {
-                 try {
-                   await setInvoiceVessels(ids, era)
-                   setInvoices((prev) => prev.map((i) =>
-                     (ids.includes(i.id) ? { ...i, vessel_era: era } : i)))
-                 } catch (e) { setErr(e.message || String(e)) }
-               }} />
+      {tab === 'find' && (loading ? <p className="muted">Loading…</p> : (
+        <FindInvoices invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
+                      basis={basis} on={on} filter={filter} setFilter={setFilter}
+                      onOpen={openInvoice} onSetWork={setWork}
+                      onPlaceVessel={placeVessel} onSetCategory={setOneCategory} />
+      ))}
+
+      {/* ---- ADDING A BUNDLE, WHICH IS NOW ONE PDF ON A MONDAY --------------
+          The drop, the unread bundles and the check-the-read are one flow in one
+          place. They were three tabs because the initial load WAS a conveyor —
+          364 bundles over a weekend — and a weekly arrival is not that.
+
+          What does not change is that nothing is filed unlooked-at. The bundle is
+          a photograph read by a model: a misread supplier is a miscategorised
+          cost for ever, and a misread total is money. */}
+      {tab === 'add' && (
+        <>
+          <Arrivals batches={batches} loading={loading} onRead={readBatch}
+                    onReadAll={readAllNew} reading={!!progress}
+                    busy={!!stage || !!progress} canUpload={!!boatId}
+                    fileInput={fileInput} onUpload={uploadBundle}
+                    onIgnore={async (b) => { await setBatchStatus(b.id, 'ignored'); refresh() }}
+                    onDelete={async (b) => {
+                      if (!window.confirm(
+                        'Delete the bundle of ' + fmtDate(String(b.received_at).slice(0, 10)) + '?'
+                        + '\n\nAny invoices already read out of it are KEPT — the cost stood '
+                        + 'whether or not the scan does. Only the document goes.')) return
+                      await deleteBatch(b.id); refresh()
+                    }} />
+
+          {(queue.length > 0 || progress) && (
+            <Review items={matched.items} unknown={matched.unknown} suppliers={suppliers}
+                    progress={progress} onStop={() => { cancelRead.current = true }}
+                    onEdit={editRow} onFile={fileSupplier} onSave={saveItems}
+                    onDrop={(id) => setQueue((q) => q.filter((x) => x.batch.id !== id))} />
+          )}
+        </>
       )}
     </AppShell>
   )
@@ -457,12 +561,22 @@ function Dropzone({ canUpload, fileInput, onUpload, busy }) {
   )
 }
 
+/* A TAB, NOT A STEP. It used to be a numbered chip in a left-to-right flow —
+ * arrivals, then check, then costs — which was right while the whole page was a
+ * conveyor for the initial load and is wrong now: three of the four tabs are
+ * places you read, and only one is a thing you do. */
 function Tab({ id, tab, set, children, disabled }) {
+  const now = tab === id
   return (
-    <button className={'flow' + (tab === id ? ' is-now' : '')}
-            onClick={() => !disabled && set(id)} disabled={disabled}
-            style={{ border: 'none', cursor: disabled ? 'default' : 'pointer',
-                     opacity: disabled ? 0.45 : 1, font: 'inherit' }}>
+    <button type="button" onClick={() => !disabled && set(id)} disabled={disabled}
+            style={{
+              font: 'inherit', fontSize: '0.88rem', fontWeight: now ? 700 : 500,
+              padding: '0.34rem 0.8rem', borderRadius: 6, cursor: disabled ? 'default' : 'pointer',
+              opacity: disabled ? 0.45 : 1,
+              border: '1px solid ' + (now ? 'var(--hull)' : 'transparent'),
+              background: now ? 'color-mix(in srgb, var(--hull) 12%, transparent)' : 'transparent',
+              color: now ? 'var(--hull)' : 'var(--ink)',
+            }}>
       {children}
     </button>
   )
@@ -747,6 +861,9 @@ function InvoiceRow({ r, filePath, pageCount, onChange }) {
      at least 1, and inside a document that has that many pages. */
   const asPage = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 ? Number(v) : null)
   const pageAt = asPage(r.page_from)
+  /* Refused rather than reversed, the same rule the pages follow: which of
+     the two dates is wrong is not knowable. */
+  const workBad = !!r.work_from && !!r.work_to && r.work_to < r.work_from
   const overrun = !!pageCount && [r.page_from, r.page_to].some((v) => asPage(v) > pageCount)
   const edge = bad || missing.length ? 'var(--rust)'
     : r.supplier_id ? 'var(--kelp)' : 'var(--brass)'
@@ -797,6 +914,37 @@ function InvoiceRow({ r, filePath, pageCount, onChange }) {
           </label>
         ))}
       </div>
+      {/* WHEN THE WORK WAS DONE, if the invoice says.
+        *
+        * Filled in HERE where it is cheapest — the scan is open, the reader has
+        * just been through it, and a service invoice normally prints its job
+        * dates. Left blank the cost counts on the invoice date exactly as every
+        * one of the 2,625 already filed does; there is no second date anybody
+        * has to supply before the page works. */}
+      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-end', flexWrap: 'wrap',
+                    marginTop: '0.4rem' }}>
+        <label style={{ width: '9rem' }}>
+          <span className="muted" style={{ fontSize: '0.72rem' }}>Work done from</span>
+          <input type="date" value={r.work_from || ''} style={{ width: '100%' }}
+                 onChange={(e) => onChange({ work_from: e.target.value })} />
+        </label>
+        <label style={{ width: '9rem' }}>
+          <span className="muted" style={{ fontSize: '0.72rem' }}>
+            to{workBad && <span style={{ color: 'var(--rust)' }}> · before the start</span>}
+          </span>
+          <input type="date" value={r.work_to || ''} style={{ width: '100%' }}
+                 onChange={(e) => onChange({ work_to: e.target.value })} />
+        </label>
+        <span className="muted" style={{ fontSize: '0.76rem', flex: '1 1 12rem' }}>
+          {r.work_from
+            ? 'Counted in ' + String(r.work_from).slice(0, 4)
+              + (r.work_to && String(r.work_to).slice(0, 4) !== String(r.work_from).slice(0, 4)
+                  ? '–' + String(r.work_to).slice(0, 4) + ', divided by days' : '')
+              + ' when the grid is dated by work.'
+            : 'Blank counts it on the invoice date, which is the usual case.'}
+        </span>
+      </div>
+
 
       {/* WHICH PAGES OF THE BUNDLE THIS ONE IS.
         *
@@ -875,304 +1023,3 @@ function UnknownFirm({ u, suppliers, onFile }) {
   )
 }
 
-/* ── 3 · WHAT IT COST ──────────────────────────────────────────────────────
- *
- * TEN YEARS AND £8m, so a list of years is the wrong shape. Eleven cards down a
- * page answers "what did 2023 cost" and hides the only question worth asking of
- * a decade, which is what is going UP. Categories down, years across, and the
- * trend is there to be read.
- *
- * By SUPPLIER is still a click away, inside the category — a firm is who you
- * pay, a category is what for, and after ten years the second is the one you
- * cannot get from the invoices themselves.
- */
-function Costs({ invoices, suppliers, cats, eras, loading, onFileSupplier, onSuggestAll, onPlaceVessel }) {
-  const [basis, setBasis] = useState('total')
-  const [open, setOpen] = useState(null)
-  const [view, setView] = useState('category')
-  /* Which boat is being looked at. All means all three, which is the honest
-     default for a firm's whole history — but the trend inside a category is
-     only readable one hull at a time. */
-  const [era, setEra] = useState('')
-
-  const split = useMemo(() => vesselSplit(invoices, eras, { basis }), [invoices, eras, basis])
-  const shown = useMemo(
-    () => (era ? invoices.filter((i) => vesselOf(i, eras) === era) : invoices),
-    [invoices, eras, era])
-
-  const byId = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
-  const matrix = useMemo(
-    () => categoryMatrix(shown, suppliers, { basis }), [shown, suppliers, basis])
-
-  /* Firms with no category yet, what they are worth, and WHAT THEY HAVE SOLD.
-     The descriptions matter: 79 of this boat's 153 firms have a name that says
-     nothing about their trade — "PBP Services", "Melpass Limited", "Cromwell" —
-     and the only thing that places them is the work on their invoices. */
-  const unfiled = useMemo(() => {
-    const spend = new Map()
-    for (const i of invoices) {
-      if (byId.get(i.supplier_id)?.category || i.category) continue
-      const s = byId.get(i.supplier_id)
-      if (!s) continue
-      const cur = spend.get(s.id) || { s, total: 0, count: 0, descriptions: [] }
-      cur.total += Number(i[basis]) || 0; cur.count++
-      // A handful is plenty to place a firm, and keeps the guess quick.
-      if (i.description && cur.descriptions.length < 8) cur.descriptions.push(i.description)
-      spend.set(s.id, cur)
-    }
-    return [...spend.values()].sort((a, b) => b.total - a.total)
-  }, [invoices, byId, basis])
-
-  if (loading) return <p className="muted">Loading…</p>
-  if (!invoices.length) {
-    return <div className="card"><p style={{ margin: 0 }}>
-      No invoices filed yet. Read a bundle on the Arrivals tab and they will total up here.
-    </p></div>
-  }
-
-  const pct = (v) => (matrix.grand ? Math.round((v / matrix.grand) * 100) : 0)
-
-  return (
-    <>
-      <div className="card" style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap',
-                                     alignItems: 'baseline' }}>
-        <b style={{ fontSize: '1.15rem' }}>{money0(matrix.grand)}</b>
-        <span className="muted" style={{ flex: 1, fontSize: '0.86rem' }}>
-          {invoices.length.toLocaleString('en-GB')} invoices ·{' '}
-          {suppliers.length} suppliers ·{' '}
-          {matrix.columns.filter((c) => c !== 'undated').length} years
-        </span>
-        <label>
-          {/* Net and gross differ by the VAT, which is real money — the basis is
-              always shown rather than one being quietly assumed. */}
-          <select value={basis} onChange={(e) => setBasis(e.target.value)}>
-            <option value="total">Total (what left the account)</option>
-            <option value="net">Net (before VAT)</option>
-          </select>
-        </label>
-      </div>
-
-      {/* THREE BOATS, ONE NAME. Comparing 2019 gear spend against 2025 is
-          comparing two different hulls fishing two different ways, so the grid
-          says which one it is showing rather than pretending they are one. */}
-      <div className="card">
-        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <b style={{ marginRight: '0.3rem' }}>Boat</b>
-          <button className="secondary" onClick={() => setEra('')}
-                  style={{ fontWeight: era === '' ? 700 : 400 }}>All three</button>
-          {split.rows.map((r) => (
-            <button key={r.key} className="secondary" onClick={() => setEra(r.key)}
-                    style={{ fontWeight: era === r.key ? 700 : 400 }}>
-              {r.label}
-              <span className="muted" style={{ fontWeight: 400 }}> {money0(r.total)}</span>
-            </button>
-          ))}
-        </div>
-        <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.8rem' }}>
-          {split.rows.map((r) => `${r.label}: ${r.note}`).join(' · ')}
-          {split.undated.count > 0 && ` · ${split.undated.count} invoice${split.undated.count === 1 ? '' : 's'} carrying ${money0(split.undated.total)} has no date, so no boat.`}
-        </p>
-      </div>
-
-      {/* WHERE THE DATE CANNOT SAY. A boat is fitted out before she fishes, so
-          her bills start months ahead of her — and across a changeover both
-          hulls are plausible. These are OFFERED to the boat that was in
-          service, because routine running costs are the common case, and shown
-          biggest first because that is the order they are worth deciding in. */}
-      {split.uncertain.length > 0 && (
-        <div className="card" style={{ borderColor: 'var(--brass)' }}>
-          <b>{split.uncertain.length} invoice{split.uncertain.length === 1 ? '' : 's'} could belong to either boat</b>
-          <span className="muted" style={{ fontSize: '0.84rem' }}> · {money0(split.unsureTotal)}</span>
-          <p className="muted" style={{ margin: '0.35rem 0 0.6rem', fontSize: '0.82rem' }}>
-            Dated inside a changeover, when the old boat was still fishing and the new one
-            was being fitted out. Counted against the boat in service until you say otherwise.
-          </p>
-          {split.uncertain.slice(0, 10).map((u) => (
-            <div key={u.invoice.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center',
-                                             flexWrap: 'wrap', padding: '0.3rem 0',
-                                             borderTop: '1px solid var(--line)' }}>
-              <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '5.6rem' }}>
-                {u.invoice.invoice_date}
-              </span>
-              <span style={{ flex: '1 1 12rem' }}>
-                {u.invoice.supplier}
-                <span className="muted" style={{ fontSize: '0.78rem' }}> · {u.invoice.invoice_no || 'no number'}</span>
-              </span>
-              <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '5.5rem',
-                             textAlign: 'right' }}>{money0(u.amount)}</span>
-              <button className="secondary"
-                      onClick={() => onPlaceVessel([u.invoice.id], u.offered)}>
-                {eraLabel(u.offered, eras)}
-              </button>
-              <button onClick={() => onPlaceVessel([u.invoice.id], u.alsoCould)}>
-                {eraLabel(u.alsoCould, eras)}
-              </button>
-            </div>
-          ))}
-          {split.uncertain.length > 10 && (
-            <p className="muted" style={{ fontSize: '0.8rem', margin: '0.4rem 0 0' }}>
-              …and {split.uncertain.length - 10} smaller ones worth{' '}
-              {money0(split.uncertain.slice(10).reduce((t, u) => t + u.amount, 0))} together.
-              Settling the big ones first is what moves the figures.
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* THE JOB TO DO, ABOVE THE FIGURES. A grid where a third of the money is
-          in "Not filed" is not a report; saying so first is what stops it being
-          read as one. */}
-      {unfiled.length > 0 && (
-        <div className="card" style={{ borderColor: 'var(--brass)' }}>
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
-            <b>{unfiled.length} firm{unfiled.length === 1 ? '' : 's'} not filed to a category</b>
-            <span className="muted" style={{ flex: 1, fontSize: '0.84rem' }}>
-              {money0(unfiled.reduce((s, u) => s + u.total, 0))} between them
-            </span>
-            <button onClick={onSuggestAll}>Suggest categories</button>
-          </div>
-          <p className="muted" style={{ margin: '0.4rem 0 0.6rem', fontSize: '0.82rem' }}>
-            One decision files every invoice a firm has ever sent. Biggest first — the
-            top few are most of the money.
-          </p>
-          {unfiled.slice(0, 12).map((u) => (
-            <FileFirm key={u.s.id} s={u.s} total={u.total} count={u.count}
-                      descriptions={u.descriptions} cats={cats} onFile={onFileSupplier} />
-          ))}
-          {unfiled.length > 12 && (
-            <p className="muted" style={{ fontSize: '0.8rem', margin: '0.4rem 0 0' }}>
-              …and {unfiled.length - 12} smaller ones, worth{' '}
-              {money0(unfiled.slice(12).reduce((s, u) => s + u.total, 0))} together.
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="card">
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
-          <button className="secondary" onClick={() => setView('category')}
-                  style={{ fontWeight: view === 'category' ? 700 : 400 }}>By category</button>
-          <button className="secondary" onClick={() => setView('supplier')}
-                  style={{ fontWeight: view === 'supplier' ? 700 : 400 }}>By supplier</button>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left', padding: '0.3rem 0.4rem' }}>
-                  {view === 'category' ? 'What for' : 'Who'}
-                </th>
-                {matrix.columns.map((c) => (
-                  <th key={c} style={{ textAlign: 'right', padding: '0.3rem 0.4rem',
-                                       fontFamily: 'var(--font-mono, monospace)',
-                                       color: c === 'undated' ? 'var(--brass)' : undefined }}>
-                    {c === 'undated' ? 'no date' : c}
-                  </th>
-                ))}
-                <th style={{ textAlign: 'right', padding: '0.3rem 0.4rem' }}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(view === 'category' ? matrix.rows : bySupplierRows(matrix)).map((r) => (
-                <RowAndDetail key={r.key} r={r} columns={matrix.columns} cats={cats}
-                              view={view} pct={pct}
-                              open={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
-              ))}
-            </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '2px solid var(--line)', fontWeight: 700 }}>
-                <td style={{ padding: '0.4rem' }}>All</td>
-                {matrix.columns.map((c) => (
-                  <td key={c} style={{ textAlign: 'right', padding: '0.4rem',
-                                       fontFamily: 'var(--font-mono, monospace)' }}>
-                    {money0(matrix.rows.reduce((s, r) => s + (r.cells[c] || 0), 0))}
-                  </td>
-                ))}
-                <td style={{ textAlign: 'right', padding: '0.4rem',
-                             fontFamily: 'var(--font-mono, monospace)' }}>{money0(matrix.grand)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-    </>
-  )
-}
-
-
-function RowAndDetail({ r, columns, cats, view, open, onToggle, pct }) {
-  const unfiled = r.key === '__none__'
-  const label = view === 'category' ? categoryLabel(unfiled ? null : r.key, cats) : r.name
-  return (
-    <>
-      <tr style={{ borderTop: '1px solid var(--line)', cursor: view === 'category' ? 'pointer' : 'default' }}
-          onClick={() => view === 'category' && onToggle()}>
-        <td style={{ padding: '0.3rem 0.4rem', color: unfiled ? 'var(--brass)' : undefined }}>
-          {view === 'category' && <span className="muted" style={{ marginRight: 4 }}>{open ? '▾' : '▸'}</span>}
-          {label}
-          <span className="muted" style={{ fontSize: '0.76rem' }}> · {r.count}</span>
-        </td>
-        {columns.map((c) => (
-          <td key={c} style={{ textAlign: 'right', padding: '0.3rem 0.4rem',
-                               fontFamily: 'var(--font-mono, monospace)',
-                               color: r.cells[c] ? undefined : 'var(--mute)' }}>
-            {r.cells[c] ? money0(r.cells[c]) : '·'}
-          </td>
-        ))}
-        <td style={{ textAlign: 'right', padding: '0.3rem 0.4rem', fontWeight: 600,
-                     fontFamily: 'var(--font-mono, monospace)' }}>
-          {money0(r.total)}
-          <span className="muted" style={{ fontWeight: 400, fontSize: '0.74rem' }}> {pct(r.total)}%</span>
-        </td>
-      </tr>
-      {open && view === 'category' && (
-        <tr>
-          <td colSpan={columns.length + 2} style={{ padding: '0 0.4rem 0.5rem 1.6rem' }}>
-            {r.suppliers.slice(0, 15).map((s) => (
-              <div key={s.id || s.name} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.82rem',
-                                                 padding: '0.1rem 0' }}>
-                <span style={{ flex: 1 }}>{s.name}</span>
-                <span className="muted">{s.count}</span>
-                <span style={{ fontFamily: 'var(--font-mono, monospace)', minWidth: '6rem',
-                               textAlign: 'right' }}>{money0(s.total)}</span>
-              </div>
-            ))}
-            {r.suppliers.length > 15 && (
-              <div className="muted" style={{ fontSize: '0.78rem' }}>
-                …and {r.suppliers.length - 15} more
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
-    </>
-  )
-}
-
-/* One firm, its suggestion, and the decision. THE SUGGESTION IS SHOWN AND NEVER
-   APPLIED — £8m is a lot of money to have bucketed by a regex, and this
-   codebase has already said so once about crew tickets. */
-function FileFirm({ s, total, count, descriptions, cats, onFile }) {
-  const guess = suggestCategory(s.name, descriptions)
-  const [pick, setPick] = useState(guess?.key || '')
-  return (
-    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap',
-                  padding: '0.3rem 0', borderTop: '1px solid var(--line)' }}>
-      <span style={{ flex: '1 1 13rem' }}>
-        <b>{s.name}</b>
-        <span className="muted" style={{ fontSize: '0.78rem' }}>
-          {' '}· {count} invoice{count === 1 ? '' : 's'} · {money0(total)}
-        </span>
-      </span>
-      <select value={pick} onChange={(e) => setPick(e.target.value)} style={{ maxWidth: '13rem' }}>
-        <option value="">— pick a category —</option>
-        {cats.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-      </select>
-      {guess && pick === guess.key && (
-        <span className="muted" style={{ fontSize: '0.74rem' }}>suggested from {guess.why}</span>
-      )}
-      <button className="secondary" disabled={!pick} onClick={() => onFile(s.id, pick)}>File</button>
-    </div>
-  )
-}

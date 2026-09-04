@@ -23,7 +23,7 @@ const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
 
 const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
   + 'description, net, vat, total, currency, account_code, status, paid_date, '
-  + 'page_from, page_to, file_path, confidence, category, vessel_era'
+  + 'page_from, page_to, file_path, confidence, category, vessel_era, work_from, work_to'
 
 /** The bundles that have arrived, newest first. */
 export async function listBatches(fleetId) {
@@ -133,7 +133,7 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
    * to make with a near-miss name. */
   const { data: kept } = await supabase
     .from('su_invoices')
-    .select('invoice_no, supplier, total, invoice_date, category, vessel_era')
+    .select('invoice_no, supplier, total, invoice_date, category, vessel_era, work_from, work_to')
     .eq('batch_id', batch.id)
 
 
@@ -175,6 +175,10 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
          a decision made just now beats one made last time. */
       category: r.category ?? null,
       vessel_era: r.vessel_era ?? null,
+      /* WHEN THE WORK WAS DONE, where the invoice says. Blank means "use the
+         invoice date", which is what every one of the 2,625 already filed does. */
+      work_from: dateOrNull(r.work_from),
+      work_to: dateOrNull(r.work_to),
     }))
 
   if (clean.length) {
@@ -249,6 +253,26 @@ export async function loadCategorySettings(fleetId) {
  * Ten years here are three hulls, all called AUDACIOUS BF83, and a boat's bills
  * start months before she fishes — so an invoice inside a changeover is
  * genuinely undecidable from its date. This is the skipper settling one. */
+/* WHEN THE WORK WAS DONE — the skipper reading it off the invoice.
+ *
+ * A span that ends before it starts is refused by a CHECK on the table rather
+ * than being quietly reversed here: which of the two dates is wrong is not
+ * knowable, the same rule the page numbers and the settlement totals follow. */
+export async function setInvoiceWork(id, from, to) {
+  const { error } = await supabase.from('su_invoices')
+    .update({ work_from: dateOrNull(from), work_to: dateOrNull(to) }).eq('id', id)
+  if (error) throw error
+}
+
+/** A whole lump billing answered in one action — the usual case, since a firm
+ *  that bills six jobs on one day is the reason this exists at all. */
+export async function setInvoicesWork(ids, from, to) {
+  if (!ids.length) return
+  const { error } = await supabase.from('su_invoices')
+    .update({ work_from: dateOrNull(from), work_to: dateOrNull(to) }).in('id', ids)
+  if (error) throw error
+}
+
 export async function setInvoiceVessel(id, era) {
   const { error } = await supabase.from('su_invoices')
     .update({ vessel_era: era || null }).eq('id', id)
@@ -295,5 +319,12 @@ const num = (v) => {
   const n = Number(String(v).replace(/[^0-9.-]/g, ''))
   return Number.isFinite(n) ? n : null
 }
+/* A DATE OR NOTHING. An empty box is not a date, and '' reaches Postgres as an
+   invalid input rather than a null — the same class of trap as page 0. */
+const dateOrNull = (v) => {
+  const s = String(v ?? '').slice(0, 10)
+  return /^d{4}-d{2}-d{2}$/.test(s) ? s : null
+}
+
 /* The rule lives in src/lib/invoices/pages.js so it can be tested without a
    database — see the note there about page 0. */

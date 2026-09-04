@@ -162,3 +162,59 @@ export function vesselSplit(invoices = [], eras = DEFAULT_ERAS, opts = {}) {
     unsureTotal: uncertain.reduce((s, u) => s + u.amount, 0),
   }
 }
+
+/* COMPARING THE THREE BOATS' TOTALS IS COMPARING THREE DIFFERENT LENGTHS OF
+ * TIME, and the page was doing exactly that.
+ *
+ * The record holds two and a half years of the old boat, nearly four of the
+ * pair/single and four of the twin — so the totals rank the boats by how long
+ * each one sits in the record, not by what she cost to run. £ per year of
+ * service is the comparable figure.
+ *
+ * THE FIRST BOAT'S FIGURE IS THE ONE TO DISTRUST, and it says so. She was sold
+ * in August 2018 and the invoices only start in 2016, so her window is where
+ * the RECORD begins rather than where she did — a boat is dearest when she is
+ * new and when she is worn out, and we hold only the end of her. The flag
+ * `fromRecord` marks a window that is an artefact of what was kept.
+ */
+export function eraService(era, invoices = [], eras = DEFAULT_ERAS) {
+  const dates = invoices
+    .map((i) => (i.invoice_date ? String(i.invoice_date).slice(0, 10) : null))
+    .filter(Boolean)
+    .sort()
+  const earliest = dates[0] || null
+  const latest = dates[dates.length - 1] || null
+  if (!earliest || !latest) return null
+
+  const e = eras.find((x) => x.key === era)
+  if (!e) return null
+
+  /* No start means "everything before the next one", so the window opens where
+     the record does — a fact about the record rather than about the boat. No
+     end means she is still fishing, so it closes where the record reaches. */
+  const from = e.from && e.from > earliest ? e.from : earliest
+  const to = e.to && e.to < latest ? e.to : latest
+  const days = (Date.parse(to + 'T00:00:00Z') - Date.parse(from + 'T00:00:00Z')) / 86400000 + 1
+  if (!Number.isFinite(days) || days <= 0) return null
+
+  return { from, to, years: days / 365.25, fromRecord: !e.from, stillFishing: !e.to }
+}
+
+/** The split, with each boat's service window and her cost per year of it. */
+export function vesselSplitPerYear(invoices = [], eras = DEFAULT_ERAS, opts = {}) {
+  const split = vesselSplit(invoices, eras, opts)
+  return {
+    ...split,
+    rows: split.rows.map((r) => {
+      const service = eraService(r.key, invoices, eras)
+      return {
+        ...r,
+        service,
+        /* Null rather than 0 where there is no window to divide by. A boat with
+           nothing on record has no cost per year, and a 0 would rank her as the
+           cheapest hull this business ever ran. */
+        perYear: service && service.years > 0 ? r.total / service.years : null,
+      }
+    }),
+  }
+}

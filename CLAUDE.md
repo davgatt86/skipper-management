@@ -347,6 +347,112 @@ two untouched prompts are asserted verbatim by test, but no five-page Monday
 scan has been read through it — the page is behind a login. One bundle re-read
 settles it.
 
+### THE PAGE IS A DASHBOARD NOW — and three tabs were a conveyor (Sep 2026)
+
+David: *"the arrivals/check/what it cost is almost like it was put there for
+the initial upload. now we will be adding a pdf per week, it needs to look
+better there too. invoice dashboard with a + invoice batch tab."*
+
+**He was right about why it looked like that.** Those three numbered steps WERE
+the initial load, when 364 bundles went in over a weekend and the whole page was
+a conveyor. That is finished. What happens now is one PDF on a Monday and ten
+years of costs to read the rest of the week — so the reading is the page, and
+adding a bundle is a thing you do to it.
+
+    The year   ·   All years   ·   Find an invoice   ·   + Invoice batch
+
+`src/pages/invoices/` — `YearDashboard`, `AllYears`, `FindInvoices`, `shared`.
+`Invoices.jsx` keeps the state and the handlers and is 1,191 → 1,026 lines.
+**Nothing about checking the read changed**: the drop, the unread bundles and
+the review are one flow in one tab, and a bundle is still never filed unlooked-at.
+
+**THE SUPPLIER TABLE WAS RENDERING A ROW OF DOTS**, which is what started all of
+this. `categoryMatrix` gave a CATEGORY its year cells and gave a SUPPLIER only a
+total, so ten year headings sat above ten empty cells. **A missing figure and a
+figure of nothing look identical in a table** — which is why it survived the
+whole 2,625-invoice load. Merged across category rows, too: a firm appears under
+two categories the moment one of its invoices is filed differently, and reading
+it out of the first row would report part of a firm as the whole of it.
+
+**AND ALL 364 BUNDLES CLAIMED TO ARRIVE ON 1–2 SEPTEMBER 2026.** `received_at`
+defaults to `now()` and the backlog was uploaded over two days. Recoverable only
+because `gmail-attachments.gs` prefixed each file with its email date: **363 of
+364 restored, 2017-02-27 to 2026-08-31** (`supabase/invoice_arrival_dates.sql`).
+The one with no prefix keeps the upload date and is honestly wrong rather than
+dishonestly plausible.
+
+#### WHEN THE WORK WAS DONE, which is not when it was billed
+
+David: *"although it was received in 1 batch from him, the actual works spans
+multiple years. is it possible to put the work done into relevant year not when
+invoice was received."*
+
+**THE CASE IS WORTH £397,271.** Trevor McDonald (Marine Engine Services) — the
+eighth biggest supplier — sent seven invoices, every one dated 5–8 October 2025:
+a turbocharger failure, a MAK M20 major overhaul, an annual maintenance, an air
+starter. Billed in a lump, so **30% of the whole of 2025** (£1,312,459) lands on
+two days from one firm, and whichever years that work was really done in are
+understated by the same amount.
+
+**THREE DATES, THREE DIFFERENT FACTS** — received, invoiced, worked.
+`su_invoices.work_from` / `work_to`, both nullable, **null means use the invoice
+date**, so every one of the 2,625 already filed reads exactly as before.
+
+**A DATE IS A FACT AND A SPREAD IS AN ASSUMPTION**, so they are kept apart. One
+work date lands the cost WHOLE in its year — which is the common case, because
+each of those seven is one job with one date. Only a stated SPAN is divided, only
+pro rata by days, and the grid reports how much of a year is apportionment rather
+than reading. Spreading an overhaul evenly across three years is an invented
+distribution; inventing one where a date exists would be the worst of both.
+
+`lumpBillings()` offers the ones worth answering — several invoices, one firm,
+one day, real money, no work date yet — and one action answers the whole run,
+because that is how it was billed. There is no point asking for a work date on a
+£40 box of gloves. **Once answered it stops asking.**
+
+`src/lib/invoices/when.js`, and the review row carries the two boxes so it can be
+filled in where it is cheapest — the scan is open and the reader has just been
+through it. **The reader is NOT asked for them yet**: whether these invoices
+print their job dates has not been checked against a real one, and this repo has
+twice shipped parser changes written blind.
+
+#### The rest of the rebuild
+
+- **A part year is never compared with a whole one.** 2026 is £693,796 against
+  2025's £1,312,459 and the record stops on 26 August — side by side that reads
+  as spending halving. Both windows are cut at the last invoice on record, and
+  the page says which day. Never annualised either: this boat’s costs are lumpy
+  enough that a projection would be wrong by more than the answer is worth.
+- **A trade that STOPPED is the most interesting row**, and would not appear at
+  all if only this year’s categories were listed. A category that is new has
+  **no** percentage — nothing to something is not a percentage.
+- **The three boats are compared per YEAR OF SERVICE.** Their totals ranked them
+  by how long each sits in the record. The oldest boat’s figure is flagged: she
+  was sold in Aug 2018 and the invoices start in 2016, so her window is where the
+  RECORD begins, not where she did.
+- **The grid is shaded, and scaled against the 90th percentile — not the max.**
+  Found by rendering it: against the maximum, the £616,200 BOPP cell left one
+  dark square and two hundred pale ones, a picture of the outlier rather than of
+  the decade. Flattening the top costs nothing since the figure is in the cell.
+- **Every cell opens the invoices behind it**, into the one search list with its
+  filters visible and wideable. There was no way to see a single invoice
+  anywhere on this page before.
+- **Search across firm, number, description and amount**, terms ANDed. A term
+  matching nothing returns nothing — "no invoice says that" is an answer.
+  `split(/\s+/)` lost its backslash to a heredoc and split on the LETTER "s";
+  every other search still passed because "scantrol" became "cantrol" and matched
+  anyway. The regression test is `q: "sos"`, the query that tells them apart.
+
+`scripts/invoices-page-preview.mjs` bundles the three real tabs and
+server-renders them against a fixture shaped like the real record — three hulls,
+a lump billing, a job spanning a year end, an unfiled firm, an undated invoice,
+a part-finished year — then reads the markup back. **A build passing proves
+nothing here**: an undefined identifier is valid JavaScript, and this repo has
+already shipped a commit where two pages called a function they never imported.
+
+`test-invoice-dashboard.mjs` 59 · `test-invoice-categories.mjs` 50 ·
+`test-invoices.mjs` 118 · `test-invoice-vessels.mjs` 45.
+
 ### THE AGENT GRANT IS A READ, AND A WORKSHEET WAS WRITTEN THROUGH IT
 
 Found Sep 2026 while checking the fleet was ready for invoice forwarding.

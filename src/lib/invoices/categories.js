@@ -1,3 +1,5 @@
+import { yearShares } from './when.js'
+
 /* WHAT THE MONEY WENT ON.
  *
  * David, Sep 2026: "catagorize them into catagories. engine repairs, filters,
@@ -171,50 +173,59 @@ export const categoryOf = (invoice, supplierById) =>
  * across, and the trend is there to be read.
  */
 export function categoryMatrix(invoices = [], suppliers = [], opts = {}) {
-  const { basis = 'total', years } = opts
+  const { basis = 'total', years, on = 'invoice' } = opts
   const byId = new Map(suppliers.map((s) => [s.id, s]))
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
 
   const cols = new Set()
   const rows = new Map()
+  /* How much of each year is an APPORTIONMENT rather than a dated reading. A
+     work span crossing a year boundary is divided pro rata by days, which is an
+     assumption — a defensible one, but a column that is partly assumption must
+     be able to say so rather than looking exactly like one that is not. */
+  const spread = new Map()
   let grand = 0
 
   for (const inv of invoices) {
-    const y = inv.invoice_date ? Number(String(inv.invoice_date).slice(0, 4)) : null
-    /* An invoice with no date cannot sit in a year column. It is kept in its
-       category row and counted apart, never dropped and never guessed into the
-       current year. */
-    const col = y ?? 'undated'
-    if (years && y && !years.includes(y)) continue
-    cols.add(col)
+    const amt = num(inv[basis])
+    /* WHICH YEARS THIS INVOICE BELONGS TO, on the basis being used. Normally
+       one, with its whole value; several only where the invoice states a work
+       span that crosses a year end. An invoice with no usable date returns
+       none, and is kept in its category row under its own column — never
+       dropped, never guessed into the current year. */
+    const shares = yearShares(inv, on)
+    const parts = shares.length
+      ? shares.map((sh) => ({ col: sh.year, amount: amt * sh.share, spread: sh.spread }))
+      : [{ col: 'undated', amount: amt, spread: false }]
+
+    if (years && parts.every((pt) => pt.col === 'undated' || !years.includes(pt.col))) continue
 
     const key = categoryOf(inv, byId) || '__none__'
     let row = rows.get(key)
     if (!row) { row = { key, total: 0, count: 0, cells: new Map(), suppliers: new Map() }; rows.set(key, row) }
 
-    const amt = num(inv[basis])
-    row.total += amt
-    row.count++
-    row.cells.set(col, (row.cells.get(col) || 0) + amt)
-    grand += amt
-
     const sid = inv.supplier_id || 'unfiled'
-    /* A SUPPLIER CARRIES THE SAME YEAR CELLS THE CATEGORY DOES.
-     *
-     * It did not, and the supplier table has been rendering a row of dots under
-     * ten year headings ever since — David: "in the table of suppliers, there
-     * isn't a breakdown per year". The columns were there and the row rendered
-     * them; there was simply nothing behind them to render. A missing figure and
-     * a figure of nothing look identical in a table, which is why this survived.
-     *
-     * `first` and `last` come free off the same pass and answer the question a
-     * row of years raises: a firm that stops appearing is one you have stopped
-     * using, and that is worth seeing beside what they were worth. */
     const sup = row.suppliers.get(sid)
       || { id: inv.supplier_id, name: byId.get(inv.supplier_id)?.name || inv.supplier || 'no supplier',
            total: 0, count: 0, cells: new Map(), first: null, last: null }
-    sup.total += amt; sup.count++
-    sup.cells.set(col, (sup.cells.get(col) || 0) + amt)
+
+    /* COUNTED ONCE, ALLOCATED IN PIECES. An invoice divided across two years is
+       still one invoice; counting it twice would make the row's own tally
+       disagree with the number of documents behind it. */
+    row.count++
+    sup.count++
+
+    for (const pt of parts) {
+      if (years && pt.col !== 'undated' && !years.includes(pt.col)) continue
+      cols.add(pt.col)
+      row.total += pt.amount
+      row.cells.set(pt.col, (row.cells.get(pt.col) || 0) + pt.amount)
+      sup.total += pt.amount
+      sup.cells.set(pt.col, (sup.cells.get(pt.col) || 0) + pt.amount)
+      grand += pt.amount
+      if (pt.spread) spread.set(pt.col, (spread.get(pt.col) || 0) + pt.amount)
+    }
+
     if (inv.invoice_date) {
       const d = String(inv.invoice_date).slice(0, 10)
       if (!sup.first || d < sup.first) sup.first = d
@@ -226,20 +237,38 @@ export function categoryMatrix(invoices = [], suppliers = [], opts = {}) {
   const years_ = [...cols].filter((c) => c !== 'undated').sort((a, b) => b - a)
   const columns = [...years_, ...(cols.has('undated') ? ['undated'] : [])]
 
-  return {
-    columns,
-    grand,
-    rows: [...rows.values()]
-      .map((r) => ({
-        ...r,
-        cells: Object.fromEntries(r.cells),
-        suppliers: [...r.suppliers.values()]
-          .map((sp) => ({ ...sp, cells: Object.fromEntries(sp.cells) }))
-          .sort((a, b) => b.total - a.total),
-        share: grand ? r.total / grand : 0,
-      }))
-      /* Unfiled last whatever it is worth: it is a job to do, not a category,
-         and putting it at the top would bury the ones that were chosen. */
-      .sort((a, b) => (a.key === '__none__') - (b.key === '__none__') || b.total - a.total),
-  }
+  const built = [...rows.values()]
+    .map((r) => ({
+      ...r,
+      cells: Object.fromEntries(r.cells),
+      suppliers: [...r.suppliers.values()]
+        .map((sp) => ({ ...sp, cells: Object.fromEntries(sp.cells) }))
+        .sort((a, b) => b.total - a.total),
+      share: grand ? r.total / grand : 0,
+    }))
+    /* Unfiled last whatever it is worth: it is a job to do, not a category,
+       and putting it at the top would bury the ones that were chosen. */
+    .sort((a, b) => (a.key === '__none__') - (b.key === '__none__') || b.total - a.total)
+
+  /* The column totals, worked out once here rather than by each place that
+     draws the grid — the footer and the heatmap have to agree, and two passes
+     over the same numbers is how the chalk sheet and the catalogue came to
+     disagree about the sale order. */
+  const totals = {}
+  for (const c of columns) totals[c] = built.reduce((t, r) => t + (r.cells[c] || 0), 0)
+  const cells = built.flatMap((r) => columns.map((c) => r.cells[c] || 0)).filter((v) => v > 0)
+  const peak = Math.max(0, ...cells)
+  /* WHAT THE SHADING IS SCALED AGAINST, and it is deliberately NOT the biggest
+     cell. One order was £616,200 on a single day while most cells are under
+     £20,000 — so against the maximum every ordinary cell renders almost white
+     and the heat map shows one dark square: a picture of the outlier rather
+     than of the decade. Checked by rendering it, not by reading it.
+
+     Scaled against the 90th percentile instead, with everything above it at
+     full strength. Flattening the top of the range costs nothing — the exact
+     figure is written in the cell — and buys back the shape of the other 200. */
+  const sorted = cells.slice().sort((a, b) => a - b)
+  const scale = sorted.length ? sorted[Math.floor(sorted.length * 0.9)] : 0
+
+  return { columns, grand, rows: built, totals, peak, scale, spread: Object.fromEntries(spread) }
 }
