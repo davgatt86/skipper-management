@@ -78,11 +78,20 @@ Respond ONLY with the JSON object, no markdown fences, no commentary.`;
  * So they are asked for, and a page it is not sure of comes back NULL. A wrong
  * page number is worse than none: it opens the scan at the wrong invoice and
  * looks authoritative doing it, where a missing one just says the bundle has to
- * be read through. Same rule as `confidence` on the figures. */
+ * be read through. Same rule as `confidence` on the figures.
+ *
+ * THE WORK DATES ARE THE SAME BARGAIN. An engine or yard invoice normally
+ * prints when the job was actually done, and that is the only thing that can
+ * put a cost in the year it was incurred rather than the year it was billed —
+ * seven Trevor McDonald invoices dated one October day are 30% of that year.
+ * The failure mode is not a wrong date but a COPIED one, so the prompt spends
+ * most of its words forbidding that and `fixWorkDates` enforces it below. */
 const INVOICE_PROMPT = `You are reading one or more supplier invoices addressed to a fishing vessel (there may be several invoices in one document; skip any pages that are emails or letters rather than invoices). Extract as JSON:
-{ "invoices": [ { "supplier": string, "invoice_no": string|null, "invoice_date": "YYYY-MM-DD"|null, "description": string|null, "net": number, "vat": number, "total": number, "account_code": string|null, "boat_name": string|null, "page_from": number|null, "page_to": number|null } ] }
+{ "invoices": [ { "supplier": string, "invoice_no": string|null, "invoice_date": "YYYY-MM-DD"|null, "description": string|null, "net": number, "vat": number, "total": number, "account_code": string|null, "boat_name": string|null, "page_from": number|null, "page_to": number|null, "work_from": "YYYY-MM-DD"|null, "work_to": "YYYY-MM-DD"|null } ] }
 Rules: one entry per invoice. description should be a short summary of what was supplied (max ~90 chars). account_code is any handwritten/stamped account code box if visible (e.g. 6850), else null. total = invoice total including VAT.
 page_from and page_to are the pages this invoice occupies in the document AS SUPPLIED: count from 1 at the very first page and count EVERY page, including any cover notes, emails or blank pages you are skipping over. An invoice that sits on one page has page_from equal to page_to; one that runs over two pages has page_from 3 and page_to 4. Work through the document in order, so the invoices you return are in page order and their page ranges do not overlap. If you are not certain which page an invoice is on, return null for both rather than guessing - a wrong page number sends the reader to the wrong invoice, which is worse than no page number at all.
+work_from and work_to are WHEN THE WORK WAS DONE, and they are almost always different from the invoice date: an engine or yard invoice normally prints a service period, a job date, dated worksheet lines, or an attendance date. Give the first and last of those dates. If the invoice states only one date for the work, put it in work_from and leave work_to null.
+THE MOST IMPORTANT RULE HERE IS A NEGATIVE ONE. If the only date on the document is the invoice date, the order date or the due date, return null for BOTH - never copy the invoice date into work_from. A work date that is really just the invoice date repeated is worse than no work date at all, because it looks like something was read off the page when nothing was. The same goes for a date you are inferring rather than reading: if the invoice does not say when the work was done, say so by returning null.
 Respond ONLY with the JSON object, no markdown fences, no commentary.`;
 
 // Canonicalise a crew name to one stable identity, merging company/spelling variants.
@@ -160,6 +169,37 @@ function fixPages(rows: Record<string, unknown>[], pageCount: number | null): Re
   });
 }
 
+/* THE WORK DATES, CHECKED AGAINST THE ONE THING THAT WOULD MAKE THEM USELESS.
+ *
+ * The failure mode is not a wrong date, it is a COPIED one: a model handed an
+ * invoice with only an invoice date on it will happily put that date in
+ * work_from, and the result looks exactly like a reading. Every invoice would
+ * then carry a work date, the "dated by work" grid would be identical to the
+ * billed one, and nothing on the page would say why. So a work date equal to
+ * the invoice date is dropped: where it is genuinely true it changes no year
+ * and costs nothing, and where it is the model repeating itself it is removed.
+ *
+ * A span that ends before it starts is refused whole rather than reversed —
+ * which of the two dates is wrong is not knowable — and a span whose ends are
+ * the same day is stored as one date, because a single date is a reading and a
+ * span is a thing that gets divided between years. */
+function fixWorkDates(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const day = (v: unknown) => {
+    const t = String(v ?? "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : null;
+  };
+  return rows.map((r) => {
+    let from = day(r.work_from);
+    let to = day(r.work_to);
+    const billed = day(r.invoice_date);
+    if (from && to && to < from) { from = null; to = null; }
+    if (from && to && to === from) to = null;
+    if (from && !to && billed && from === billed) from = null;
+    if (!from) to = null;
+    return { ...r, work_from: from, work_to: to };
+  });
+}
+
 async function runParse(admin: ReturnType<typeof createClient>, jobId: string, paths: string[], docType: string, apiKey: string, pageCount: number | null) {
   try {
     const content: unknown[] = [];
@@ -205,7 +245,7 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
        * with pdf.js — the one fact about this document that is not the model's
        * opinion. Absent, the sanity check simply does less. */
       if (Array.isArray(parsed.invoices)) {
-        parsed.invoices = fixPages(parsed.invoices as Record<string, unknown>[], pageCount);
+        parsed.invoices = fixWorkDates(fixPages(parsed.invoices as Record<string, unknown>[], pageCount));
       }
     } else if (Array.isArray(parsed.crew_payments)) {
       // normalise crew names on the way out (Audacious settlements only)

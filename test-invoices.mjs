@@ -445,4 +445,52 @@ eq(pageLabel('', ''), '', 'an unread page says nothing rather than "p. 0"')
   eq(fresh.rows[0].vessel_era, 'twin', 'an answer given now wins over the one carried')
 }
 
+/* ---- THE READER IS ASKED FOR THE WORK DATES TOO -------------------------
+ *
+ * David, Sep 2026: "add work dates." Typing them onto 2,625 invoices was never
+ * going to happen, and an engine or yard invoice normally prints when the job
+ * was actually done.
+ *
+ * THE FAILURE MODE IS NOT A WRONG DATE, IT IS A COPIED ONE. A model handed an
+ * invoice carrying only an invoice date will put that date in work_from, and
+ * the result is indistinguishable from a reading: every invoice would then have
+ * a work date, the "dated by work" grid would be an exact copy of the billed
+ * one, and nothing on the page would say why. Both halves of the guard are
+ * asserted here because the prompt lives on a server and the enforcement does
+ * not run in this process.
+ */
+{
+  const fn = readFileSync('supabase/functions/su-parse-document/index.ts', 'utf8')
+
+  ok(fn.includes('"work_from": "YYYY-MM-DD"|null, "work_to": "YYYY-MM-DD"|null'),
+     'the invoice prompt asks for the work dates')
+  ok(fn.includes('never copy the invoice date into work_from'),
+     'and forbids the one answer that would look like a reading and be none')
+  ok(fn.includes('if (from && !to && billed && from === billed) from = null;'),
+     'and the function drops a work date equal to the invoice date anyway')
+  ok(fn.includes('if (from && to && to < from) { from = null; to = null; }'),
+     'a span ending before it starts is refused whole, never reversed')
+  ok(fn.includes('if (from && to && to === from) to = null;'),
+     'and a one-day span is stored as one date - a date is read, a span is divided')
+  ok(fn.includes('fixWorkDates(fixPages('),
+     'and both checks actually run on the way out')
+
+  /* THE THREE PROMPTS MUST NOT DRIFT INTO ONE ANOTHER. This file is deployed
+     by hand, so the two that this change does not touch are pinned here: a
+     settling sheet misread because a sentence moved while the invoice prompt
+     was being edited would be invisible until a settlement came out wrong. */
+  ok(fn.includes('at 31% of 136421 the boat share is about 42300, NOT 38300'),
+     'the Beryl boat-share sanity check is untouched')
+  ok(fn.includes('it is usually a letter followed by 3 digits (e.g. G035, H033)'),
+     'and so is the settlement crew code')
+}
+
+/* The client has to carry them onto the review row, or the reader fills in a
+   field nobody ever sees and the save writes null over it. */
+{
+  const parse = readFileSync('src/lib/su/parse.js', 'utf8')
+  ok(parse.includes('work_from: i.work_from'),
+     'mapInvoices carries the work dates onto the row the skipper checks')
+}
+
 console.log('boat invoices: ' + n + ' checks passed')

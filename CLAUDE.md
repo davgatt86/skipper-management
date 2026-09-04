@@ -412,9 +412,25 @@ because that is how it was billed. There is no point asking for a work date on a
 
 `src/lib/invoices/when.js`, and the review row carries the two boxes so it can be
 filled in where it is cheapest — the scan is open and the reader has just been
-through it. **The reader is NOT asked for them yet**: whether these invoices
-print their job dates has not been checked against a real one, and this repo has
-twice shipped parser changes written blind.
+through it.
+
+**AND THE READER ASKS FOR THEM (v10).** Typing them onto 2,625 invoices was
+never going to happen, and a service invoice normally prints a job date, a
+service period or dated worksheet lines.
+
+**THE FAILURE MODE IS NOT A WRONG DATE, IT IS A COPIED ONE.** A model handed an
+invoice carrying only an invoice date will put that date in `work_from`, and the
+result is indistinguishable from a reading — every invoice would then have a
+work date, the *dated by work* grid would be an exact copy of the billed one,
+and nothing on the page would say why. So most of the added prompt is a negative
+rule, and `fixWorkDates` drops a work date equal to the invoice date regardless:
+where it is genuinely true it changes no year and costs nothing.
+
+Same refusals as the pages — a span ending before it starts is dropped whole
+rather than reversed, and a one-day span is stored as one date, because a date
+is read and a span is divided. **Not yet proven on a real bundle**: whether
+these particular invoices print their job dates is unchecked, so the first
+Monday scan through it is the test.
 
 #### The rest of the rebuild
 

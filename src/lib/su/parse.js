@@ -224,6 +224,12 @@ export function mapInvoices(d) {
        reader was not sure: page 0 does not exist, and a number that looks like
        an answer is worse than an honest gap. */
     page_from: n(i.page_from), page_to: n(i.page_to),
+    /* WHEN THE WORK WAS DONE, where the invoice states it. The reader is told
+       in as many words not to copy the invoice date here, and the function
+       drops one that matches it anyway — a work date that is really the invoice
+       date repeated looks exactly like a reading and would make the whole
+       "dated by work" view a copy of the billed one. */
+    work_from: i.work_from || '', work_to: i.work_to || '',
     status: 'unpaid',
   }))
 }
