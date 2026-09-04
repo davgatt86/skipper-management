@@ -555,6 +555,45 @@ already shipped a commit where two pages called a function they never imported.
 `test-invoice-dashboard.mjs` 59 · `test-invoice-categories.mjs` 50 ·
 `test-invoices.mjs` 118 · `test-invoice-vessels.mjs` 45.
 
+### THE GMAIL SEARCH WAS TOO NARROW, AND THAT IS WHERE THE HOLES CAME FROM
+
+Found Sep 2026 by asking why 2020 and 2025 had no duplicates. 2025 turned out
+complete and 2020 turned out to be Covid — the office stopped RAISING invoices
+in the first lockdown and caught up on 19 May, which the Superintendent
+Engineer's Fee proves: a standing £969 quarterly charge, Q2 2020 covering
+01/04-30/06 but dated **19 May**, the day after the bundles resumed. A delivery
+delay cannot move an invoice's own date; the office sets that when it raises it.
+
+**BUT THE SAME METRONOME EXPOSED SOMETHING BIGGER.** That fee is on the record
+for **20 of its 30 quarters**. 2023 is missing three of four while carrying 46
+bundles; 2022 is missing half. The gaps have nothing to do with lockdown.
+
+**THE CAUSE IS THE SEARCH THAT LOADED THEM.** `gmail-attachments.gs` v1 asked
+for `from:denise.nicolson@donfishing.com subject:"invoices for approval"`, which
+is the Monday bundle and nothing else. Three faults, all real:
+
+- **The subject had to match that phrase exactly.** The office also sends single
+  invoices as they arise and calls them what they are — *PBP Invoice for
+  approval*, *Diving Invoice*, *Audacious VCU Invoice*, *Bremner Fishing - Quota
+  invoice*, and *Audacious invoice for approval* in the SINGULAR. A heavy week
+  gets split as *Audacious invoices - 3 of 3*, and only the parts whose subject
+  happened to fit came through.
+- **Only Denise.** Morna Grieve sends invoices too.
+- **It deduped on the name it invented**, which begins with the email's date —
+  so one pdf arriving twice was two keys. **That is exactly how
+  `20221213090636545.pdf` got in twice**, 8 invoices and £25,931.95, caught nine
+  months later by a duplicate sweep rather than at the door.
+
+v2 searches the whole company, filters on a subject pattern that **fails towards
+including** (a price sheet saved by mistake is deleted in a second; an invoice
+never saved is a cost nobody ever sees), and keys the dedupe on the
+ATTACHMENT'S OWN NAME AND BYTE SIZE. `origName_()` strips a date prefix left by
+v1, so nothing already saved is fetched again. Both filters are asserted against
+16 real subjects taken out of Gmail.
+
+**Not yet re-run** — the count is unknown, because Gmail's own
+`resultCountEstimate` returns 201 for every query and cannot be used to size it.
+
 ### AN INVOICE THAT IS ALREADY ON FILE — £240,015.96 counted twice
 
 Swept out of the record Sep 2026 after 3098/3098b: **60 groups, 61 rows,
