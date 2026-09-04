@@ -149,12 +149,22 @@ function savePdfAttachments_(query, folderName, keep, skip) {
      returns, and because the six-minute limit means this may not finish in one
      go. Everything already saved is skipped on the next run, so stopping early
      costs nothing but a second press of Run. */
-  var page = first, finished = true;
-  for (; page < first + 60; page++) {
+  var page = first, finished = true, outOfTime = false;
+  for (; page < first + 60 && !outOfTime; page++) {
     var threads = GmailApp.search(query, page * 50, 50);
     if (!threads.length) break;
 
     for (var t = 0; t < threads.length; t++) {
+      /* THE CLOCK IS CHECKED HERE, PER THREAD, NOT PER PAGE. Checked between
+         pages it was useless: fifty threads of multi-megabyte scans take well
+         over the minute of headroom, so the run was killed at six minutes with
+         its place never written down — and the next run began at the same page
+         and died in the same spot. Stopping mid-page is free, because the
+         dedupe means re-reading what was already saved costs nothing. */
+      if (new Date().getTime() - start > 4.5 * 60 * 1000) {
+        outOfTime = true;
+        break;
+      }
       var messages = threads[t].getMessages();
       for (var m = 0; m < messages.length; m++) {
         var msg = messages[m];
@@ -194,14 +204,13 @@ function savePdfAttachments_(query, folderName, keep, skip) {
       }
     }
 
-    /* Stop with five minutes gone rather than being killed at six, so the log
-       says what happened instead of the run simply vanishing. */
-    if (new Date().getTime() - start > 5 * 60 * 1000) {
-      props.setProperty(cursorKey, String(page + 1));
+    /* Out of time: write down the page being read — not the one after it, since
+       it was left half finished — so the next run picks it up. */
+    if (outOfTime) {
+      props.setProperty(cursorKey, String(page));
       finished = false;
       Logger.log('Stopped on the time limit — press Run again and it carries on '
                  + 'from here rather than starting over.');
-      break;
     }
   }
 

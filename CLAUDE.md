@@ -612,8 +612,34 @@ Two faults that run exposed, both fixed:
   backed off one page because new mail shifts the pages down, and clears it on
   reaching the end so the next run sweeps from the newest again.
 
+**123 SO FAR, AND THE SWEEP IS NOT FINISHED.** Run 2, with the query narrowed,
+read 856 office emails against 241 and discarded **1** on the subject rather than
+725. It found **91 more**, back to 2021-06-01. The record stands at 364 loaded +
+123 never loaded, with 2017 to mid-2021 still unread — a third missing, holding
+steady across both runs.
+
+**THEN THE THIRD RUN WAS KILLED AT SIX MINUTES WITH NOTHING WRITTEN DOWN**, and
+the reason is the guard being checked in the wrong place. It sat between PAGES,
+so a page of fifty threads of multi-megabyte scans ran straight through the
+minute of headroom — and because the cursor is only saved by that guard, the run
+recorded nothing and **the next run would have begun on the same page and died
+in the same spot, for ever.** Only the files already written let it creep
+forward at all.
+
+The clock is checked per THREAD now, at 4.5 minutes, and the cursor is set to the
+page being read rather than the one after it, since it is left half done.
+Stopping mid-page is free — the dedupe means re-reading what is already saved
+costs nothing.
+
+**AND THE FIRST SIMULATION OF THAT FIX WAS WRONG IN THE SAME WAY AS THE BUG.**
+It only applied the six-minute kill at page boundaries, so it reported the broken
+version stopping cleanly. The runtime kills mid-page, wherever it has got to;
+modelled properly, the old shape is killed on page 1 with no cursor and the new
+one stops cleanly and resumes. **Checking a clock too rarely was the bug and the
+test for it both.**
+
 Still unknown: the total. Gmail's `resultCountEstimate` returns 201 for every
-query, so only finishing the run will say.
+query, so only finishing the sweep will say.
 
 ### AN INVOICE THAT IS ALREADY ON FILE — £240,015.96 counted twice
 
