@@ -768,6 +768,64 @@ knowable only from the mail that carried it.
 The two already uploaded were repaired in place: dates read off their names,
 status back to `new`, stored reads cleared. `test-arrival.mjs` — 18 checks.
 
+### THE READER WAS NEVER ASKED WHAT CURRENCY AN INVOICE IS IN (Sep 2026)
+
+David, on a 2017 invoice: *"i think this one is in danish kroner and needs to be
+converted. check other potential dodgy looking ones for danish kroner and
+possibly euros."* He was right, and it is not one invoice.
+
+**ALL 2,660 INVOICES ARE STAMPED GBP.** `INVOICE_PROMPT` never mentioned
+currency at all — it asked for numbers and nothing about what they are
+denominated in — and `saveBatchInvoices` defaults an empty one to `'GBP'`.
+So every foreign invoice this boat has ever had is in the record at **FACE
+VALUE**.
+
+**READ OFF THE SCANS, not inferred from the firm's nationality.** The files are
+still on disk, so this was answerable rather than arguable:
+
+    BOPP FA000743      "Discount | TOTAL | Advance | Remain to pay ... EUR"
+    Nordsøtrawl Pi002779   "Current currency ......... DKK"
+    Vest-EL 22711      "I alt inkl. moms. DKK 48.084,02"
+
+    in the record  £1,018,834      actually  ≈ £669,385
+    OVERSTATED BY ROUGHLY £349,449
+
+Vest-EL's autopilot install is the clearest: **kr 48,084.02 is about £5,700**,
+and it went in as £48,084 — eight times over. Three more are unread and small
+(We-Tech £11,520, Scantrol £6,968, VCU £2,650).
+
+**THE NUMBER FORMAT IS HALF THE DANGER.** Continental invoices write
+`48.084,02` and `92 500,00` — a full stop or space for thousands and a COMMA
+for the decimal. A reader that takes the comma as a thousands separator turns
+forty-eight thousand into forty-eight. The prompt now says so explicitly.
+
+**THE READER IS TOLD NOT TO CONVERT.** It returns the currency and the figures
+AS PRINTED. Converting needs the rate on the day, which is not on the invoice —
+and a converted figure that looks like a printed one cannot be checked
+afterwards, which is the settling-sheet discipline exactly. `mapInvoices`
+passes a BLANK currency through rather than filling in GBP, so the one guess is
+made in one place (`saveBatchInvoices`) where it is visible.
+
+**Nothing has been converted.** The currency is now recorded on the 14 confirmed
+invoices, which stops the record getting worse; the figures still read as
+sterling on the page until the rate question is settled. Recording it first is
+the half that cannot be wrong.
+
+### AND THAT SCAN WAS ADDRESSED TO ANOTHER BOAT
+
+Nordsøtrawl Pi002779, £104,859.75, is headed **"Faithlie FR.220"** — a different
+fleet — with **"50%" written on it by hand**. So an invoice in Audacious's record
+is billed to another vessel and apparently split. Raised, not touched: how Don
+Fishing apportions a shared gear order is not something the data can answer.
+
+**And Pi001844 is in the record twice** — same number, same date, same
+kr 50,734.15, out of the bundles of 30 Jun and 20 Sep 2016. The duplicate check
+missed it because the reader returned the firm as *"Nordsøtrawl AS"* on one and
+*"Nordsøtrawl AS (Hampiðjan Group)"* on the other, and `docKey` normalises a
+trailing company suffix but not a parenthetical group. The supplier ALIASES had
+already linked the two to one firm, so the app knew they were the same firm and
+the duplicate check did not use that knowledge — it keys on the raw text.
+
 ### THE BACKLOG IS GOING IN — 2015 and 2016 filed (Sep 2026)
 
 First real load through the corrected search. **+18 bundles, +40 invoices,

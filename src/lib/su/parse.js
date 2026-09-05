@@ -219,6 +219,18 @@ export function mapInvoices(d) {
     invoice_date: i.invoice_date || '',
     description: i.description || '',
     net: n(i.net), vat: n(i.vat), total: n(i.total),
+    /* WHAT THE FIGURES ARE DENOMINATED IN, and it is not always sterling. This
+       boat is billed by Danish, Dutch and French suppliers, and until Sep 2026
+       nothing ever asked: all 2,660 invoices were stamped GBP and £1,039,972 of
+       foreign invoices sat in the record at FACE VALUE. Vest-EL's autopilot
+       reads "DKK 48.084,02" on the invoice and went in as £48,084 — about eight
+       times what it cost.
+
+       BLANK, NEVER GBP, where the reader did not say. `saveBatchInvoices`
+       defaults an empty one to GBP, which is the right guess for a Peterhead
+       boat, but the guess has to be made in ONE place and be visible there —
+       filling it in here would hide it. */
+    currency: (i.currency || '').toUpperCase().trim(),
     account_code: i.account_code || '',
     /* Which pages of the bundle this invoice is. Blank rather than 0 when the
        reader was not sure: page 0 does not exist, and a number that looks like
