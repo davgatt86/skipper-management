@@ -811,6 +811,27 @@ invoices, which stops the record getting worse; the figures still read as
 sterling on the page until the rate question is settled. Recording it first is
 the half that cannot be wrong.
 
+### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
+
+    invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out
+    foreign invoices with no currency read: 0
+    currencies on record: DKK, EUR, GBP, NOK
+
+**We-Tech ApS is DKK** — kr 11,520, filed as £11,520, actually **£1,371**. Its
+bundle also holds the Bremner quota invoice, read as GBP £15,600, which is right:
+that is the one headed *"FAITHLIE FR220 / AUDACIOUS BF83"* with £7,800 written in
+the account box.
+
+**AND FIVE MORE BOPP INVOICES HAD ARRIVED UNCHECKED**, £34,304 across four
+bundles from the big load, none of them in the 24 because the sweep that built
+that list ran before they were noticed. All five read EUR. They were read rather
+than assumed even though BOPP has billed euros on every invoice so far — which is
+exactly the assumption that lost three times in the previous run.
+
+**The lesson from this whole run, in one line: the currency is a property of the
+INVOICE, never of the firm and never of the country.** Six suppliers in this
+record contradict their own nationality or their own previous invoice.
+
 ### THE 24 FOREIGN BUNDLES WERE RE-READ, AND NATIONALITY LOST THREE TIMES
 
 Driven from here rather than the page: the reader takes storage paths, so the 24
