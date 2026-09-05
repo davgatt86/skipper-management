@@ -855,6 +855,50 @@ document itself is untouched — which is what David asked for.
 `saveBatchInvoices` assigns one on every future save so this never needs doing
 again.
 
+**AND THE FIRST THING IT CAUGHT WAS DELETED 04-09-2026.** David: *"DekMar
+£10,200 is a genuine duplicate the old check couldn't see, and those three
+'Unknown' £0 rows are a log record that got read as invoices — delete them."*
+
+    DekMar Ltd  £10,200.00  01-02-2022, arrived 21-02 AND again 24-08-2022
+    Unknown     £0.00 x 3   the fish/oil log record, read as three invoices
+
+    invoices  3,280 -> 3,276      value  £11,309,935.27 -> £11,299,735.27
+    suppliers  218 -> 217         102 vessel decisions and 58 conversions stand
+
+**NEITHER COULD EVER HAVE BEEN FOUND BEFORE.** Both are invoices with no number,
+so `docKey` returned null for them and the duplicate check skipped them by
+design — they were invisible to it from the day they were filed. The derived
+reference is the only reason they were visible at all.
+
+**THE PAGE NUMBER WAS NOT CARRIED ACROSS**, and that is the whole discipline in
+one field. The doomed DekMar copy held a page number the keeper lacked, which
+every other carry-over rule says to lift — but it was page 1 of the AUGUST scan,
+and the surviving row points at the six-invoice FEBRUARY one. A wrong page opens
+at the wrong invoice and looks certain doing it.
+
+**The £0 rows took nothing out of the record**, which is exactly why they had sat
+there: a cost of nothing is invisible in every total on the page. It was a LOG,
+not an invoice, and the app keeps a fuel log of its own. The `Unknown` supplier
+went with them — it was never a firm, it was the reader failing to read one, and
+those three rows were all it had.
+
+**Both bundles are now empty and both were KEPT.** The arrival is the record that
+the scan exists, and these scans are real — the office did send that DekMar
+invoice a second time. The reason is on each bundle's `note`, because `su_*` has
+no audit trail and a delete here leaves no other trace of itself.
+
+**TWO REFERENCE COLLISIONS REMAIN and neither is settled.** Both are one bundle
+carrying a row twice, and both are on DIFFERENT PAGES of it, which is the part
+that cannot be decided from the record:
+
+    RBS business card  £2,206.42  03-07-2019   pages 1 and 4 of one scan
+    Strachan Trawls    £1,523.00  undated      pages 2 and 3 of one scan
+
+Strachan reads like ONE invoice spanning two pages — page 2 says *"partial
+invoice, total £1,523.00"* and page 3 lists the items, and both rows carry the
+full total. That would be a real double count. It is £3,729 between them and now
+answerable in a minute, because the page numbers open the scan where it matters.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out
