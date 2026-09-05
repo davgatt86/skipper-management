@@ -66,11 +66,27 @@ export function matchExisting(row, index) {
   const t = num(row.total)
   const d = day(row.invoice_date)
   const exact = hits.filter((h) => num(h.total) === t && day(h.invoice_date) === d)
+
+  /* A MATCH ON A REFERENCE THIS APP MADE UP IS WEAKER EVIDENCE, and must not be
+     dressed as `certain`. An assigned reference is BUILT from the firm, the date
+     and the total, so a match on one says only that those three agree — which is
+     precisely the guess this module has always refused to make on a numberless
+     invoice, because it fires on every routine repeat order. It is worth showing
+     and it is not the same claim, so it gets its own kind. */
+  if (isAssigned(row) || hits.some(isAssigned)) {
+    return { kind: 'derived', hits: exact.length ? exact : hits }
+  }
+
   return {
     kind: exact.length ? 'certain' : 'similar',
     hits: exact.length ? exact : hits,
   }
 }
+
+/* Ours rather than the office's — either flagged in the database or wearing the
+   prefix, since a row read off the page has the prefix before it has the flag. */
+const isAssigned = (r) =>
+  r?.invoice_no_assigned === true || /^NN-/.test(String(r?.invoice_no ?? '').trim())
 
 /** Index the invoices already filed, so a bundle is checked in one pass. */
 export function indexInvoices(invoices = [], { ignoreBatch = null } = {}) {
@@ -169,5 +185,6 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     similar: found.filter((f) => f.kind === 'similar').length,
     within: found.filter((f) => f.kind === 'within').length,
     run: found.filter((f) => f.kind === 'run').length,
+    derived: found.filter((f) => f.kind === 'derived').length,
   }
 }

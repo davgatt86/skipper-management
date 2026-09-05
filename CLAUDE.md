@@ -811,6 +811,50 @@ invoices, which stops the record getting worse; the figures still read as
 sterling on the page until the rate question is settled. Recording it first is
 the half that cannot be wrong.
 
+### AN INVOICE WITH NO NUMBER NOW HAS A REFERENCE (Sep 2026)
+
+David: *"just make up a number for the page to log it as, not alter the invoice
+itself."* 54 invoices worth £340,351 carried none — a handwritten chit, a card
+statement, a delivery note used as an invoice. `docKey` returns null without a
+number, deliberately, so **none of them could ever be matched.**
+
+**DERIVED, NEVER INVENTED FRESH — that is the whole thing.** A random reference
+would be worse than none: two arrivals of the SAME invoice would get two
+different ones, so they would still not match, and they would have stopped
+looking like invoices with no number, which is the honest signal. Built from the
+firm, the date and the total, the same invoice always produces the same
+reference and its copies collide.
+
+    NN-DEKMAR-20220201-10200.00      readable, checkable against the row
+    NN-STRACHANTR-undated-1523.00    undated says so rather than faking a date
+    NN-JACKSONTRA-undated-0.00       and no total is not a total of nothing
+
+**READABLE, NOT HASHED.** A four-character hash would say nothing, and the first
+time two collided nobody could tell whether it was the same invoice or the hash
+being small.
+
+**AND IT IMMEDIATELY FOUND FOUR COLLISIONS**, the point of doing it:
+
+    DekMar £10,200      2 bundles, 21 Feb + 24 Aug 2022 - a real re-send
+    RBS card £2,206.42  one bundle, the reader returned it twice
+    Strachan £1,523     one bundle, twice
+    "Unknown" £0 x3     the fish/oil log record, which is not an invoice at all
+
+**A MATCH ON AN ASSIGNED REFERENCE IS WEAKER EVIDENCE, and says so.** The
+reference IS firm + date + total, so a match on one says only that those three
+agree — which is exactly the guess this module has always refused to make,
+because it fires on every routine repeat order. It is a fifth kind, `derived`,
+worded *"Two identical orders on one day look the same. Worth opening both."*
+Collapsing it into `certain` would be the 3098/3098b mistake again.
+
+**NEVER THE OFFICE'S NUMBER.** `su_invoices.invoice_no_assigned` marks it and
+the `NN-` prefix shows it; neither should be quoted back to Don Fishing. The
+document itself is untouched — which is what David asked for.
+
+`src/lib/invoices/reference.js`, `test-reference.mjs` 13 checks, and
+`saveBatchInvoices` assigns one on every future save so this never needs doing
+again.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out

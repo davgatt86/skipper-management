@@ -1,6 +1,7 @@
 import { supabase } from '../../supabaseClient'
 import { pageRange } from '../invoices/pages'
 import { carryDecisions } from '../invoices/identity'
+import { assignedRef } from '../invoices/reference.js'
 import { matchAll, withAlias } from '../invoices/suppliers'
 import { figuresMissing } from '../invoices/periods'
 
@@ -22,7 +23,7 @@ const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
   + 'read_result, read_at'
 
 const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
-  + 'description, net, vat, total, currency, account_code, status, paid_date, '
+  + 'description, net, vat, total, currency, invoice_no_assigned, account_code, status, paid_date, '
   + 'page_from, page_to, file_path, confidence, category, vessel_era, work_from, work_to'
 
 /** The bundles that have arrived, newest first. */
@@ -153,7 +154,17 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
       batch_id: batch.id,
       supplier_id: r.supplier_id || null,
       supplier: (r.supplier || '').trim(),
-      invoice_no: (r.invoice_no || '').trim() || null,
+      /* A REFERENCE WHERE THE DOCUMENT CARRIES NO NUMBER, marked as ours.
+         54 invoices had none — a handwritten chit, a card statement, a delivery
+         note used as an invoice — and without a number `docKey` returns null, so
+         they could never be matched at all. The reference is DERIVED from the
+         firm, the date and the total, so two arrivals of the same invoice
+         produce the same one and collide; a random reference would have left
+         them unmatchable AND stopped them looking like invoices with no number.
+         `invoice_no_assigned` is what keeps it from ever being mistaken for the
+         office's own number. */
+      invoice_no: (r.invoice_no || '').trim() || assignedRef(r),
+      invoice_no_assigned: !((r.invoice_no || '').trim()),
       invoice_date: r.invoice_date || null,
       description: (r.description || '').trim() || null,
       /* NOT NULL with a default of 0 — sending null explicitly OVERRIDES the

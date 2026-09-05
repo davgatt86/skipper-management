@@ -299,6 +299,7 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
           <b style={{ color: 'var(--brass)', fontSize: '0.86rem' }}>
             {duplicate.kind === 'within' ? 'This bundle carries it twice'
               : duplicate.kind === 'run' ? 'Also in another bundle you are about to save'
+              : duplicate.kind === 'derived' ? 'Same firm, date and amount already on file'
               : duplicate.kind === 'certain' ? 'Already on file'
               : 'Same firm and number already on file'}
           </b>
@@ -319,6 +320,11 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
                 were the same invoice reissued with one line corrected, and
                 £147,985.99 turned on telling those apart. */}
             {duplicate.kind === 'similar' && ' — a different amount, so possibly a corrected reissue'}
+            {/* NOT THE SAME CLAIM as a match on a printed number. Neither
+                document has one, so this is the firm, the day and the figure
+                agreeing — which two separate identical orders would also do. */}
+            {duplicate.kind === 'derived'
+              && ' — neither carries an invoice number, so this is the firm, the date and the amount agreeing. Two identical orders on one day look the same. Worth opening both.'}
           </span>
           <button onClick={onDropRow}>Leave it out</button>
         </div>
