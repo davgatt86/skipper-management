@@ -210,6 +210,19 @@ export async function saveBatchInvoices(batch, rows, fleetId) {
  *
  * These rows are still NOT invoices until the skipper has looked at them —
  * this is the queue made durable, not a way round the review. */
+/* PUT A BUNDLE BACK TO UNREAD, stored read and all.
+ *
+ * The opposite of storeRead, and it has to clear BOTH halves. Leaving
+ * `read_result` behind would put the bundle back on the queue the moment the
+ * page reloaded — the effect that restores a half-checked run after closing the
+ * laptop, which is right there and wrong here. */
+export async function clearRead(id) {
+  const { error } = await supabase.from('su_invoice_batches')
+    .update({ read_result: null, read_at: null, status: 'new' })
+    .eq('id', id)
+  if (error) throw error
+}
+
 export async function storeRead(id, rows) {
   const { error } = await supabase.from('su_invoice_batches')
     .update({ read_result: rows, read_at: new Date().toISOString(), status: 'read' })

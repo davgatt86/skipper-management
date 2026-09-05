@@ -712,6 +712,62 @@ removals out of date. **Measure the database rather than quoting this file** —
 days-at-sea note made that mistake twice, and a headline figure is the most quoted
 thing in here.
 
+### THREE BUGS ON THE FIRST TWO BUNDLES OF THE 290 (Sep 2026)
+
+David uploaded two and could not get rid of them: *"trying to discard them and
+upload again but this one won't discard."* Three separate faults, and the one he
+could see was the least of them.
+
+**SAVE HAS BEEN THROWING SINCE 0b86852.**
+
+    const lost = [], bundles = 0
+    ...
+    bundles++        // TypeError: Assignment to constant variable
+
+Strict mode, so it throws — **after** `saveBatchInvoices` has already filed the
+rows. The invoices go in, the catch reports *"Stopped at the bundle of ..."*, and
+`setQueue` never runs, so the card stays on screen looking unsaved. Filing is
+idempotent per batch, so pressing Save again replaces rather than duplicates and
+no data was hurt — but every save since that commit has reported a failure that
+did not happen. **Assigning to a const is valid JavaScript right up until it
+runs**, so the build never said a word; found by compile-checking the file for an
+unrelated change. A repo-wide sweep for the same shape found three more and all
+three were false positives — a `let` in scope and a `const` of the same name
+in another function.
+
+**DISCARD PUT THE BUNDLE IN LIMBO.** `onDrop` was
+`setQueue(q => q.filter(...))` and nothing else — the card left the screen and
+nothing was written down. But reading sets the batch to `read`, so a discarded
+bundle sat `read` with no invoices: past `readAllNew()`, which offers only
+`new`; out of the queue; absent from the record. **Invisible to every part of
+the page at once**, which is why re-uploading looked like the only way out. Now
+`clearRead()` puts it back to unread — both halves, or the stored read would
+put it straight back on the queue at the next reload — and it returns to
+Arrivals. Deleting is a different act with its own button: the arrival is the
+record that the scan exists.
+
+**AND `received_at` WAS NEVER SET ON UPLOAD**, so it defaulted to `now()` and
+both bundles claimed to arrive on 05-09-2026. **This is the 364-bundles-on-1-2-
+September bug about to happen again, 290 times.** It was repaired once by
+`supabase/invoice_arrival_dates.sql`, and that repair only worked because
+`gmail-attachments.gs` writes the email's date on the front of every file — so
+the fact was always in the name and nothing was reading it.
+
+`src/lib/invoices/arrival.js` reads it at the door instead. **Null, never
+today**, where there is no prefix: the column then falls back to `now()` and is
+visibly wrong for that one bundle rather than quietly wrong for all of them, and
+the upload message says how many were dated. Checked as a real date — 31 February
+is refused here rather than by Postgres at the end of an upload of hundreds — and
+a future date is refused too, or a scanner with its clock wrong sits at the top of
+Arrivals for ever.
+
+**THE ARRIVAL DATE IS THE ONE FACT ABOUT A BUNDLE THAT IS NOT IN IT.** Supplier,
+number, total, even the page — all readable back off the scan. When it arrived is
+knowable only from the mail that carried it.
+
+The two already uploaded were repaired in place: dates read off their names,
+status back to `new`, stored reads cleared. `test-arrival.mjs` — 18 checks.
+
 **290 BUNDLES, NOT 152 — AND THE GAP IS THE CRASH.** `collectWhatIsNew` moved
 **290 files dated 2015-04-24 to 2026-08-31** into *"New - to upload"*, against
 360 bundles in the record: **81% again on top of the whole ten-year load.** The

@@ -5,7 +5,7 @@ import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
 import {
   listBatches, listInvoices, listSuppliers, createSupplier, addAlias,
-  saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead,
+  saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead, clearRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
   setInvoiceVessels, setInvoicesWork, setInvoiceCategory,
 } from '../lib/su/invoices'
@@ -14,6 +14,7 @@ import { suggestCategory, resolveCategories } from '../lib/invoices/categories'
 import { resolveEras } from '../lib/invoices/vessels'
 import { yearsCovered } from '../lib/invoices/dashboard'
 import { workLabel } from '../lib/invoices/when'
+import { arrivalFromName, arrivalSubject } from '../lib/invoices/arrival'
 import YearDashboard from './invoices/YearDashboard'
 import AllYears from './invoices/AllYears'
 import FindInvoices from './invoices/FindInvoices'
@@ -152,6 +153,7 @@ export default function Invoices() {
     setErr(''); setMsg(''); setStage('uploading')
     try {
       const { ensurePdfjs } = await import('../lib/pdfjs.js')
+      let dated = 0
       for (const f of list) {
         const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_')
         const path = `${boatId}/${Date.now()}_${safe}`
@@ -168,17 +170,37 @@ export default function Invoices() {
           pages = doc.numPages
         } catch { /* a photo rather than a PDF — no page count, and that is fine */ }
 
+        /* WHEN IT ARRIVED, OFF THE FILE NAME. `received_at` defaults to now(),
+           so without this every bundle dropped on the page claims to have
+           arrived today — which is exactly how all 364 of the original load came
+           to claim 1-2 September and needed a migration to put right. The date
+           is on the front of the name because gmail-attachments.gs puts it
+           there; nothing was reading it. Null where there is none, so the column
+           falls back to now() and is wrong for that one bundle rather than
+           quietly wrong for all of them. */
+        const arrived = arrivalFromName(f.name)
+        if (arrived) dated++
+
         const { error: ie } = await supabase.from('su_invoice_batches').insert({
           fleet_id: fleetId, boat_id: boatId,
           file_path: path, filename: f.name, bytes: f.size, page_count: pages,
+          ...(arrived ? { received_at: arrived } : {}),
           /* NO manager's balance. It lives in the sentence Denise writes in the
              email body, and a file dropped in has no body. Blank is honest;
              carrying the last one forward would be a figure nobody stated. */
-          subject: 'Added by hand', from_email: null,
+          subject: arrivalSubject(f.name), from_email: null,
         })
         if (ie) throw ie
       }
-      setMsg(`${list.length} bundle${list.length === 1 ? '' : 's'} added. Read ${list.length === 1 ? 'it' : 'them'} below.`)
+      setMsg(`${list.length} bundle${list.length === 1 ? '' : 's'} added. `
+        /* SAID OUT LOUD, because a wrong arrival date is invisible afterwards —
+           it looks exactly like a real one. */
+        + (dated === list.length
+            ? `Arrival date${list.length === 1 ? '' : 's'} read off the file name${list.length === 1 ? '' : 's'}. `
+            : dated
+              ? `${dated} carried an arrival date in the file name; the other ${list.length - dated} are filed as arriving today. `
+              : `No arrival date in the file name${list.length === 1 ? '' : 's'}, so ${list.length === 1 ? 'it is' : 'they are'} filed as arriving today. `)
+        + `Read ${list.length === 1 ? 'it' : 'them'} below.`)
       await refresh()
     } catch (e) {
       setErr(e.message || String(e))
@@ -298,13 +320,54 @@ export default function Invoices() {
 
   /* Saved bundle by bundle even from a "save all", so a failure part-way leaves
      the ones before it filed rather than rolling the whole afternoon back. */
+  /* DISCARD PUTS THE BUNDLE BACK, it does not make it disappear.
+   *
+   * It used to be `setQueue(q => q.filter(...))` and nothing else — the card
+   * left the screen and NOTHING WAS WRITTEN DOWN. But reading a bundle sets its
+   * status to `read` and stores the result, so a discarded bundle was left
+   * `read` with no invoices: past `readAllNew()`, which only offers `new`; gone
+   * from the queue; absent from the record. **Invisible to every part of this
+   * page at once.** David hit it on the first two bundles of the 290 —
+   * "trying to discard them and upload again but this one won't discard" — and
+   * re-uploading is what you resort to when the thing has no way back.
+   *
+   * So it goes back to unread, and the stored read is cleared with it. The
+   * bundle returns to the arrivals list where it came from and can be read
+   * again. Deleting it is a different act with its own button, and it should be:
+   * the arrival is the record that the scan exists at all.
+   *
+   * THE COST OF BEING WRONG DECIDES THE DIRECTION. Back-to-unread costs another
+   * read if he really did want rid of it; leaving it `read` loses the bundle
+   * with nothing on screen to say so. */
+  async function dropBundle(id) {
+    setQueue((q) => q.filter((x) => x.batch.id !== id))
+    try {
+      await clearRead(id)
+      await refresh()
+      setMsg('Put back as unread. It is in Arrivals and can be read again.')
+    } catch (e) {
+      /* NAMED, NOT SWALLOWED. The card has already gone from the screen, so a
+         silent failure here is exactly the limbo this function exists to end. */
+      setErr('Taken off the list, but it could not be put back as unread — '
+        + (e.message || String(e)) + ' It may still show as read with no invoices.')
+    }
+  }
+
   async function saveItems(items) {
     setErr(''); setMsg('')
     let saved = 0
     /* Vessel and category answers lifted off the rows being replaced — see
        carryDecisions(). Counted so a re-read can say it kept them. */
     let carried = 0
-    const lost = [], bundles = 0
+    /* `let`, not `const`. As `const lost = [], bundles = 0` the `bundles++`
+       below threw "Assignment to constant variable" on EVERY save — after
+       saveBatchInvoices had already filed the rows, so the invoices went in,
+       the catch reported "Stopped at the bundle of ...", and setQueue never ran
+       so the card stayed on screen looking unsaved. Shipped in 0b86852 and
+       invisible to the build, because assigning to a const is perfectly valid
+       JavaScript right up until it runs. */
+    const lost = []
+    let bundles = 0
     for (const item of items) {
       if (!item.rows.length) continue
       try {
@@ -515,7 +578,7 @@ export default function Invoices() {
                     onOpenPage={(path, page) => openDocument(path, page)}
                     progress={progress} onStop={() => { cancelRead.current = true }}
                     onEdit={editRow} onDropRow={dropRow} onFile={fileSupplier} onSave={saveItems}
-                    onDrop={(id) => setQueue((q) => q.filter((x) => x.batch.id !== id))} />
+                    onDrop={dropBundle} />
           )}
         </>
       )}
