@@ -768,6 +768,38 @@ knowable only from the mail that carried it.
 The two already uploaded were repaired in place: dates read off their names,
 status back to `new`, stored reads cleared. `test-arrival.mjs` — 18 checks.
 
+### THE BACKLOG IS GOING IN — 2015 and 2016 filed (Sep 2026)
+
+First real load through the corrected search. **+18 bundles, +40 invoices,
++£177,727**, and the record now starts **20-01-2015** where it began 2016-11-01.
+
+    batches   360 -> 378       invoices  2,590 -> 2,630
+    value     £7,856,570 -> £8,034,297   suppliers  153 -> 157
+
+**NOT ONE DUPLICATE CAME OUT OF IT.** All 37 groups still flagged are the
+pre-existing ones David asked to be left. The run-aware check earned its keep on
+its first outing — a year of consecutive Mondays is precisely the shape it was
+built for.
+
+**The old boat is the one that moves.** She read £178,306 for a hull that fished
+until Aug 2018, which was plainly too little; pre-April-2018 spend is now
+**£318,494**, with 2017 and early 2018 still to load.
+
+**FOUR NEW FIRMS, and only one needed asking.** Nordsøtrawl AS (Hampiðjan) at
+**£101,468** is gear off its own invoice — *"shortened wings and new net in upper
+panel"*; North East Scotland College is training (an STCW first-aid course for
+seven crew); Scottaspress printed the fish tally books. All three read off WHAT
+WAS SOLD rather than off the firm's name, which is the reliable direction — the
+Lockers Trawlers mistake ran the other way.
+
+**MEASURING PLATES GO TO ENGINE & MACHINERY. David's call, and there is to be no
+deck category.** VCU TCD B.V., five invoices on one day in 2016, all *"Measuring
+plates fish"* — genuinely unreadable from the description, since they could be
+graders or plain boards. Offered as either a new *Deck & machinery* bucket or the
+existing engine one; he took the existing one. **Recorded because it cannot be
+re-derived**: a future reader seeing deck kit in the engine line would otherwise
+take it for a misfiling and "fix" it.
+
 ### THE DUPLICATE CHECK WAS BLIND TO THE RUN IT WAS IN (Sep 2026)
 
 David, before loading a year at a time: *"will the reader pick up any potential
