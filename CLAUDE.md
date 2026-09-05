@@ -811,6 +811,47 @@ invoices, which stops the record getting worse; the figures still read as
 sterling on the page until the rate question is settled. Recording it first is
 the half that cannot be wrong.
 
+### THE DUPLICATES ARE OUT AND THE READER IS DEPLOYED (Sep 2026)
+
+**94 invoices removed, £1,251,294 of double counting.** Zero duplicate groups
+remain. On David's word, keeping the earliest copy of each — which is also the
+copy whose arrival matches the scanner date — and **£142,795.99 for the Trevor
+McDonald pair**, the figure September's line-by-line read proved correct.
+
+    batches   650 -> 648      invoices  3,374 -> 3,280
+    value     £14,200,135 -> £12,101,280
+
+**THE DECISIONS WERE CARRIED BEFORE ANYTHING WAS DELETED, and 44 rows needed
+it.** A doomed copy often held what the keeper did not — a vessel decision, a
+category, work dates, page numbers, or a currency conversion. `vessel_era` and
+`category` are the skipper's answers to questions the invoice cannot answer,
+and a conversion rests on somebody having read the printed currency off a scan.
+**FX moves as one unit** — the converted total, the printed original and the rate
+belong together and half of it is worse than none. 102 vessel decisions stand
+after the sweep, exactly as before it.
+
+**The reason is written on each of the 56 bundles that lost a row**, naming the
+firm, the number and the amount. `su_*` has no audit trail — it is written by an
+edge function on the service-role key where `auth.uid()` is null — so the note
+is the only record a row ever left.
+
+**THE READER IS DEPLOYED — v12, and it asks for currency now.** The live copy had
+NOT drifted: it was v11, this repo's file at the commit before the currency work,
+so nothing written in the console was lost.
+
+**The prompt asks PER INVOICE and says why.** Thyborøn bills DKK on six invoices
+and EUR on the seventh, so a per-supplier rule would have been wrong by a factor
+of seven; and a Norwegian firm prints *"Total to pay GBP 6 968,00"*, so foreign
+nationality is not evidence either. `fixCurrency` drops anything unrecognised to
+null rather than guessing, and a blank stays blank — `saveBatchInvoices` makes
+the one GBP assumption, in one visible place.
+
+**AND THE DEPLOY BRIEFLY MADE THE REPO THE STALE COPY.** The prompt was
+strengthened and `fixCurrency` added while deploying, so for a few minutes the
+live function was ahead of version control — the exact failure this file exists
+to prevent, committed by the person writing the warning. The repo was brought
+back into line and every distinctive string checked against the deployed copy.
+
 ### THE WHOLE BACKLOG IS IN — 650 bundles, and what the sweep found (Sep 2026)
 
     batches 650 · invoices 3,374 · suppliers 218 · 2015-01-20 to 2026-08-26

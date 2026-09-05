@@ -85,11 +85,18 @@ Respond ONLY with the JSON object, no markdown fences, no commentary.`;
  * put a cost in the year it was incurred rather than the year it was billed —
  * seven Trevor McDonald invoices dated one October day are 30% of that year.
  * The failure mode is not a wrong date but a COPIED one, so the prompt spends
- * most of its words forbidding that and `fixWorkDates` enforces it below. */
+ * most of its words forbidding that and `fixWorkDates` enforces it below.
+ *
+ * AND THE CURRENCY, because nothing ever asked. All 3,374 invoices were stamped
+ * GBP, and this boat is billed by Danish, Norwegian, Dutch and French firms —
+ * Vest-EL's autopilot reads "DKK 48.084,02" on the page and went into the record
+ * as £48,084, eight times what it cost. Thyborøn is the reason it is asked per
+ * INVOICE and not per supplier: the same firm bills DKK on six invoices and EUR
+ * on the seventh. */
 const INVOICE_PROMPT = `You are reading one or more supplier invoices addressed to a fishing vessel (there may be several invoices in one document; skip any pages that are emails or letters rather than invoices). Extract as JSON:
 { "invoices": [ { "supplier": string, "invoice_no": string|null, "invoice_date": "YYYY-MM-DD"|null, "description": string|null, "net": number, "vat": number, "total": number, "currency": "GBP"|"EUR"|"DKK"|"NOK"|"SEK"|"USD"|null, "account_code": string|null, "boat_name": string|null, "page_from": number|null, "page_to": number|null, "work_from": "YYYY-MM-DD"|null, "work_to": "YYYY-MM-DD"|null } ] }
 Rules: one entry per invoice. description should be a short summary of what was supplied (max ~90 chars). account_code is any handwritten/stamped account code box if visible (e.g. 6850), else null. total = invoice total including VAT.
-currency is the currency THE INVOICE IS DENOMINATED IN, and it is not always sterling: this boat is billed by Danish, Norwegian, Dutch and French suppliers. Read it off the document - a currency code printed beside the total ("DKK 48.084,02", "64 750,00 EUR"), a "Current currency" field, a "kr" or a euro sign, an IBAN beginning DK/NO/NL/FR, or a VAT line reading "moms" or "TVA". Return the code, or null if the document genuinely does not say. DO NOT ASSUME GBP BECAUSE THE BOAT IS BRITISH - a foreign invoice taken at face value overstates the cost several times over, and 48,084 Danish kroner is about 5,800 pounds.
+currency is the currency THE INVOICE IS DENOMINATED IN, and it is not always sterling: this boat is billed by Danish, Norwegian, Dutch and French suppliers. Read it off the document - a currency code printed beside the total ("DKK 48.084,02", "Total DKK : 273.500,00", "64 750,00 EUR"), a "Current currency" field, a "kr" or a euro sign, an IBAN beginning DK/NO/NL/FR, or a VAT line reading "moms", "mva" or "TVA". Return the code, or null if the document genuinely does not say. DECIDE IT PER INVOICE, NEVER PER SUPPLIER - one Danish firm in this record bills in kroner on six invoices and in euros on the seventh. DO NOT ASSUME GBP BECAUSE THE BOAT IS BRITISH, and do not assume a foreign currency because the firm is foreign: a Norwegian supplier here prints "Total to pay GBP 6 968,00". A foreign invoice taken at face value overstates the cost several times over, and 48,084 Danish kroner is about 5,800 pounds.
 Give net, vat and total AS PRINTED, in that currency. Do not convert anything to sterling yourself: converting needs the rate on the day, which is not on the invoice, and a converted figure that looks like a printed one cannot be checked afterwards.
 Watch the number format too. Continental invoices write 92 500,00 or 48.084,02 - a space or full stop for thousands and a COMMA for the decimal. 48.084,02 is forty-eight thousand, not forty-eight.
 page_from and page_to are the pages this invoice occupies in the document AS SUPPLIED: count from 1 at the very first page and count EVERY page, including any cover notes, emails or blank pages you are skipping over. An invoice that sits on one page has page_from equal to page_to; one that runs over two pages has page_from 3 and page_to 4. Work through the document in order, so the invoices you return are in page order and their page ranges do not overlap. If you are not certain which page an invoice is on, return null for both rather than guessing - a wrong page number sends the reader to the wrong invoice, which is worse than no page number at all.
@@ -197,6 +204,21 @@ function fixPages(rows: Record<string, unknown>[], pageCount: number | null): Re
   });
 }
 
+/* THE CURRENCY, KEPT ONLY IF IT IS ONE WE KNOW.
+ *
+ * A blank comes back as null rather than "GBP": the client defaults an empty one
+ * in a single visible place, and filling it in here would hide the guess inside
+ * the reader where nobody would find it again. Anything unrecognised is dropped
+ * for the same reason — a currency code nobody can convert is worse than an
+ * admitted gap. */
+function fixCurrency(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const known = new Set(["GBP", "EUR", "DKK", "NOK", "SEK", "USD", "ISK"]);
+  return rows.map((r) => {
+    const c = String(r.currency ?? "").toUpperCase().trim();
+    return { ...r, currency: known.has(c) ? c : null };
+  });
+}
+
 /* THE WORK DATES, CHECKED AGAINST THE ONE THING THAT WOULD MAKE THEM USELESS.
  *
  * The failure mode is not a wrong date, it is a COPIED one: a model handed an
@@ -275,7 +297,7 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
        * with pdf.js — the one fact about this document that is not the model's
        * opinion. Absent, the sanity check simply does less. */
       if (Array.isArray(parsed.invoices)) {
-        parsed.invoices = fixWorkDates(fixPages(parsed.invoices as Record<string, unknown>[], pageCount));
+        parsed.invoices = fixCurrency(fixWorkDates(fixPages(parsed.invoices as Record<string, unknown>[], pageCount)));
       }
     } else if (Array.isArray(parsed.crew_payments)) {
       // normalise crew names on the way out (Audacious settlements only)
