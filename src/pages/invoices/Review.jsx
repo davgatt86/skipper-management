@@ -152,7 +152,21 @@ export default function Review({ items, unknown, suppliers, filed, progress, onS
 
           {/* WHAT WANTS A LOOK, named separately rather than as one count. */}
           <p style={{ margin: '0.4rem 0 0.6rem', fontSize: '0.84rem' }}>
-            {flags.firm + flags.adds + flags.date + flags.figs + dupes === 0
+            {/* NO ROWS IS NOT A CLEAN BILL OF HEALTH.
+                With nothing read, the all-clear below reads "every row has a
+                filed firm, a date, and figures that add up" — a sentence about
+                rows, printed when there are none, above a "Save all 0" button.
+                David hit it on three 2017 files: one was French bank details and
+                one a duplicate down-payment request, so finding nothing was
+                CORRECT, and the page made a correct outcome look like a fault.
+                An empty result and a clean result must never read alike. */
+             rows.length === 0
+              ? <span className="muted">
+                  The reader found no invoices in {items.length === 1 ? 'this one' : 'any of these'}.
+                  That is the right answer for a covering letter, a statement or a
+                  set of bank details — open the scan to check, then discard it.
+                </span>
+              : flags.firm + flags.adds + flags.date + flags.figs + dupes === 0
               ? <span className="muted">Nothing flagged — every row has a filed firm, a date, and figures that add up, and none of them is already on file.</span>
               : <>
                   <b>Worth a look:</b>{' '}
@@ -168,9 +182,11 @@ export default function Review({ items, unknown, suppliers, filed, progress, onS
           </p>
 
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
-            <button onClick={() => onSave(items)}>
-              Save all {rows.length}
-            </button>
+            {rows.length > 0 && (
+              <button onClick={() => onSave(items)}>
+                Save all {rows.length}
+              </button>
+            )}
             <span className="muted" style={{ fontSize: '0.8rem', alignSelf: 'center' }}>
               or save a bundle at a time below
             </span>

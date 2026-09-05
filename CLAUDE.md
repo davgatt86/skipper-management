@@ -811,12 +811,72 @@ invoices, which stops the record getting worse; the figures still read as
 sterling on the page until the rate question is settled. Recording it first is
 the half that cannot be wrong.
 
+### CONVERTED — and reading the scans is what stopped two wrong guesses
+
+David: *"convert exchange rates using best guess at those dates."* Done, on the
+**eight invoices whose currency was read off the document**, never off the firm's
+nationality. **18 invoices converted, £262,190 taken out of the record.**
+
+**TWO WOULD HAVE GONE WRONG ON NATIONALITY ALONE:**
+
+- **Scantrol AS is Norwegian and bills in STERLING** — *"Total to pay GBP
+  6 968,00"*. Converted from NOK it would have become about £560. Its
+  `fx_note` now says so in as many words, so nobody converts it later on the
+  strength of the AS in its name.
+- **VCU TCD B.V. states no currency code at all**, but it is a Dutch invoice —
+  *Factuurnummer*, *Subtotaal*, *BTW 21%* — so euros.
+
+**WE-TECH ApS IS LEFT AT FACE VALUE AND SAYS SO.** Danish company form, currency
+not yet read off its scan. An unconverted figure that admits it is unconverted is
+worth more than a converted one resting on a guess.
+
+**THE PRINTED FIGURES SURVIVE THE CONVERSION.** `orig_net` / `orig_vat` /
+`orig_total` / `fx_rate` / `fx_note` (`invoice_currency_originals`).
+`net`/`vat`/`total` hold GBP so every grid and category total stays right
+without touching the reporting code, and what the invoice actually said is still
+there to be re-rated. **Null in those columns means nothing was converted** —
+as against a copy of the total, which would look like a conversion that happened
+to be 1.0.
+
+**DKK IS DERIVED THROUGH THE EURO PEG** (7.46, held since 1999) rather than
+guessed separately, so the two currencies cannot drift into an inconsistency of
+my own making. Every rate is labelled *a best guess at the date, not the rate the
+boat was charged* — the real figure is what Don Fishing billed in sterling, which
+is on the settlement and not on the invoice.
+
+### AN EMPTY RESULT AND A CLEAN RESULT MUST NOT READ ALIKE
+
+Three 2017 files read as **0 invoices**, over a summary saying *"Nothing flagged
+— every row has a filed firm, a date, and figures that add up"* and a **Save all
+0** button. A sentence about rows, printed when there are none.
+
+**And the reader was RIGHT all three times**: `RIB ARKEA.pdf` is a French bank
+details slip, one *demande d'acompte* is a down-payment request whose twin is
+already filed off the 11 May bundle, and the third did read and file. So the page
+made a correct outcome look like a fault — the same class as the summary that
+contradicted its own cards.
+
 ### AND THAT SCAN WAS ADDRESSED TO ANOTHER BOAT
 
 Nordsøtrawl Pi002779, £104,859.75, is headed **"Faithlie FR.220"** — a different
 fleet — with **"50%" written on it by hand**. So an invoice in Audacious's record
-is billed to another vessel and apparently split. Raised, not touched: how Don
-Fishing apportions a shared gear order is not something the data can answer.
+is billed to another vessel and apparently split. **Deleted 05-09-2026** — David: *"discard any faithlie fr220 invoices. not my
+boat."*
+
+**But the other three Nordsøtrawl invoices are Audacious's**, checked one by one
+rather than removed as a firm: Pi001844 and Pi002629 are both headed *"Andacious
+bf.83"*, the office's own misspelling. Deleting by supplier would have thrown
+away £16,400 of this boat's gear.
+
+**THE OFFICE SPLITS SHARED COSTS ON THE PAGE, BY HAND**, and that is worth
+knowing before reading any of these. A Strachan Trawls invoice in the same bundle
+is addressed to *M.V. ADORNE* struck out and *M.V. AUDACIOUS* written in green,
+with *50%* at the top and *FAITHLIE* in the margin. A Bremner quota invoice is
+headed *"FAITHLIE FR220 / AUDACIOUS BF83"* with Audacious highlighted, totals
+£15,600, and carries £7,800 in the account box — exactly half. **The app holds
+the whole invoice in both cases.** Nothing has been halved: which share is this
+boat's is written in biro by somebody at Don Fishing, and it is his call, not a
+rule.
 
 **And Pi001844 is in the record twice** — same number, same date, same
 kr 50,734.15, out of the bundles of 30 Jun and 20 Sep 2016. The duplicate check
