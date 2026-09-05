@@ -250,7 +250,13 @@ export default function Invoices() {
     setErr(''); setMsg('')
     cancelRead.current = false
     setProgress({ done: 0, total: list.length })
-    setTab('review')
+    /* 'add', NOT 'review'. There has been no tab called `review` since the page
+       became a dashboard — the checking moved INSIDE the add tab, and this line
+       was left behind. Setting a tab that matches no branch renders the header,
+       the tab strip and nothing else, so pressing Read blanked the page and the
+       only way back was to leave and return. David: "the page goes blank when i
+       choose to read the invoices ... need to come off it and back again." */
+    setTab('add')
 
     for (let i = 0; i < list.length; i++) {
       if (cancelRead.current) break
@@ -493,6 +499,15 @@ export default function Invoices() {
     } catch (e) { setErr(e.message || String(e)) }
   }, [])
 
+  /* A TAB ID THAT MATCHES NO BRANCH MUST NOT RENDER AN EMPTY PAGE.
+     `setTab('review')` survived the rebuild that replaced the review tab with a
+     step inside "add", and the result was a page with a header, a tab strip and
+     nothing under it — which reads as broken rather than as a bug in one line.
+     Falling back to the dashboard means the worst a stale id can now do is show
+     the wrong tab, which is visible and recoverable. */
+  const TABS = ['dashboard', 'allyears', 'find', 'add']
+  const shownTab = TABS.includes(tab) ? tab : 'dashboard'
+
   if (!fleetId) return <AppShell maxWidth={1040}><PageHeader title="Invoices" /></AppShell>
 
   return (
@@ -505,10 +520,10 @@ export default function Invoices() {
 
       <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center',
                     marginBottom: '0.9rem' }}>
-        <Tab id="dashboard" tab={tab} set={setTab}>The year</Tab>
-        <Tab id="allyears" tab={tab} set={setTab}>All years</Tab>
-        <Tab id="find" tab={tab} set={setTab}>Find an invoice</Tab>
-        <Tab id="add" tab={tab} set={setTab}>
+        <Tab id="dashboard" tab={shownTab} set={setTab}>The year</Tab>
+        <Tab id="allyears" tab={shownTab} set={setTab}>All years</Tab>
+        <Tab id="find" tab={shownTab} set={setTab}>Find an invoice</Tab>
+        <Tab id="add" tab={shownTab} set={setTab}>
           + Invoice batch{queue.length ? ' · ' + queue.length + ' to check' : ''}
         </Tab>
         <span style={{ flex: 1 }} />
@@ -528,20 +543,20 @@ export default function Invoices() {
       {msg && <p className="muted" style={{ marginTop: 0 }}>{msg}</p>}
       {stage === 'uploading' && <p className="muted" style={{ marginTop: 0 }}>Uploading…</p>}
 
-      {tab === 'dashboard' && (loading ? <p className="muted">Loading…</p> : (
+      {shownTab === 'dashboard' && (loading ? <p className="muted">Loading…</p> : (
         <YearDashboard invoices={invoices} suppliers={suppliers} cats={cats}
                        basis={basis} on={on} year={shownYear} setYear={setYear}
                        onDrill={drill} onOpen={openInvoice} />
       ))}
 
-      {tab === 'allyears' && (loading ? <p className="muted">Loading…</p> : (
+      {shownTab === 'allyears' && (loading ? <p className="muted">Loading…</p> : (
         <AllYears invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
                   basis={basis} on={on}
                   onDrill={drill} onFileSupplier={fileSupplierCategory}
                   onSuggestAll={suggestAll} onPlaceVessel={placeVessel} onSetWork={setWork} />
       ))}
 
-      {tab === 'find' && (loading ? <p className="muted">Loading…</p> : (
+      {shownTab === 'find' && (loading ? <p className="muted">Loading…</p> : (
         <FindInvoices invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
                       basis={basis} on={on} filter={filter} setFilter={setFilter}
                       onOpen={openInvoice} onSetWork={setWork}
@@ -556,8 +571,29 @@ export default function Invoices() {
           What does not change is that nothing is filed unlooked-at. The bundle is
           a photograph read by a model: a misread supplier is a miscategorised
           cost for ever, and a misread total is money. */}
-      {tab === 'add' && (
+      {shownTab === 'add' && (
         <>
+          {/* WHAT IS WAITING TO BE CHECKED COMES FIRST.
+              It used to sit under the arrivals list, which was fine when that
+              list was a handful of Mondays. After the date backfill it is 362
+              bundles going back to 2015, so the one thing actually asking for a
+              decision was below a decade of history and you had to scroll past
+              all of it — David: "the ones i need to deal with are at foot of
+              page. again confusing."
+
+              A read costs money and a bundle is not filed until somebody looks
+              at it, so when there IS something to look at, it is the page. The
+              arrivals list is a record and can wait underneath. */}
+          {(queue.length > 0 || progress) && (
+            <Review items={matched.items} unknown={matched.unknown} suppliers={suppliers}
+                    filed={invoices}
+                    onOpenScan={(b) => openDocument(b.file_path)}
+                    onOpenPage={(path, page) => openDocument(path, page)}
+                    progress={progress} onStop={() => { cancelRead.current = true }}
+                    onEdit={editRow} onDropRow={dropRow} onFile={fileSupplier} onSave={saveItems}
+                    onDrop={dropBundle} />
+          )}
+
           <Arrivals batches={batches} loading={loading} onRead={readBatch}
                     onReadAll={readAllNew} reading={!!progress}
                     busy={!!stage || !!progress} canUpload={!!boatId}
@@ -570,16 +606,6 @@ export default function Invoices() {
                         + 'whether or not the scan does. Only the document goes.')) return
                       await deleteBatch(b.id); refresh()
                     }} />
-
-          {(queue.length > 0 || progress) && (
-            <Review items={matched.items} unknown={matched.unknown} suppliers={suppliers}
-                    filed={invoices}
-                    onOpenScan={(b) => openDocument(b.file_path)}
-                    onOpenPage={(path, page) => openDocument(path, page)}
-                    progress={progress} onStop={() => { cancelRead.current = true }}
-                    onEdit={editRow} onDropRow={dropRow} onFile={fileSupplier} onSave={saveItems}
-                    onDrop={dropBundle} />
-          )}
         </>
       )}
     </AppShell>

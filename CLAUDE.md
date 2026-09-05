@@ -768,6 +768,32 @@ knowable only from the mail that carried it.
 The two already uploaded were repaired in place: dates read off their names,
 status back to `new`, stored reads cleared. `test-arrival.mjs` — 18 checks.
 
+### PRESSING READ BLANKED THE PAGE — a tab id left behind (Sep 2026)
+
+David: *"the page goes blank when i choose to read the invoices ... then i come
+off that page to another page, then i go back and see them."*
+
+`readBatches` ended with `setTab('review')`, and **there has been no tab
+called `review` since the page became a dashboard** — the checking moved INSIDE
+the add tab. Every branch is `tab === 'dashboard' | 'allyears' | 'find' | 'add'`,
+so an id matching none of them rendered the header, the tab strip and **nothing
+at all**. Leaving the page and returning reset `tab` to its default, which is
+why it came back.
+
+**A DEAD TAB ID FAILS SILENTLY AND TOTALLY, which is the worst combination.**
+Nothing throws, nothing logs, the build is clean, and the page reads as broken
+rather than as one stale string. So the id is now checked against the list:
+`TABS.includes(tab) ? tab : 'dashboard'`. The worst a stale id can do is show
+the wrong tab — visible, and recoverable by clicking.
+
+**AND WHAT NEEDS CHECKING NOW COMES FIRST.** The review cards sat UNDER the
+arrivals list, which was fine when that list was a handful of Mondays. After the
+date backfill it is 362 bundles back to 2015, so the one thing actually asking
+for a decision was below a decade of history — David: *"the ones i need to deal
+with are at foot of page. again confusing."* A read costs money and nothing is
+filed unlooked-at, so when there is something to look at, it IS the page; the
+arrivals list is a record and can wait underneath.
+
 **290 BUNDLES, NOT 152 — AND THE GAP IS THE CRASH.** `collectWhatIsNew` moved
 **290 files dated 2015-04-24 to 2026-08-31** into *"New - to upload"*, against
 360 bundles in the record: **81% again on top of the whole ten-year load.** The
