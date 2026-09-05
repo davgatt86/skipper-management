@@ -811,6 +811,46 @@ invoices, which stops the record getting worse; the figures still read as
 sterling on the page until the rate question is settled. Recording it first is
 the half that cannot be wrong.
 
+### THE 24 FOREIGN BUNDLES WERE RE-READ, AND NATIONALITY LOST THREE TIMES
+
+Driven from here rather than the page: the reader takes storage paths, so the 24
+were fired at the deployed v12 directly and the results read back out of
+`su_parse_jobs`. **£777,623 came out of the record.**
+
+    invoices  3,280 (unchanged - nothing was re-filed, only re-priced)
+    value     £12,101,280 -> £11,323,657
+    converted 52 invoices, £1,842,285 taken off in total
+    boat decisions 102, untouched
+
+**THREE READINGS THAT NATIONALITY WOULD HAVE GOT WRONG, all in one run:**
+
+    Skaginn 3X ehf.  Icelandic, billed in GBP   -> not converted
+    Kæling ehf       Icelandic, billed in EUR   -> not ISK, which is 175x out
+    Scantrol AS      Norwegian, billed in EUR   -> and in GBP back in 2017
+
+**Scantrol is the whole argument in one supplier.** It printed *"Total to pay GBP
+6 968,00"* in 2017 and EUR in 2023. Any per-supplier rule is wrong for that firm
+in one direction or the other, which is why the prompt says DECIDE IT PER
+INVOICE, NEVER PER SUPPLIER. Thyborøn does the same: DKK on most, EUR on 36294.
+
+**Nordsøtrawl Pi005001 was the biggest single correction** — kr 341,943 was
+sitting in the record as £341,943 and is £41,710.
+
+**AND I CONVERTED A FRASERBURGH INVOICE INTO EUROS.** The update matched on
+`invoice_no` alone, and **an invoice number is only unique within a firm**:
+Jackson Trawls 34561 collided with VCU TCD 34561, so a £195 British trawl bill
+was re-priced at 0.92 and became £179.40. Caught in the returning clause of the
+statement that did it, and put straight back with the reason on the row.
+
+The same shape as `docKey` needing firm AND number to identify an invoice — a
+rule this repo already knew and I did not apply to my own UPDATE. **A WHERE
+clause on a number alone is a join with the firm left out.**
+
+**Two invoices remain unconverted and both are correct**: Skaginn's, read as
+sterling. One is still open — **We-Tech ApS £11,520**, whose bundle carries other
+invoices and was not in the 24; its currency has still never been read, and its
+note says so.
+
 ### THE DUPLICATES ARE OUT AND THE READER IS DEPLOYED (Sep 2026)
 
 **94 invoices removed, £1,251,294 of double counting.** Zero duplicate groups
