@@ -811,6 +811,74 @@ invoices, which stops the record getting worse; the figures still read as
 sterling on the page until the rate question is settled. Recording it first is
 the half that cannot be wrong.
 
+### THE WHOLE BACKLOG IS IN — 650 bundles, and what the sweep found (Sep 2026)
+
+    batches 650 · invoices 3,374 · suppliers 218 · 2015-01-20 to 2026-08-26
+
+David: *"check all new uploads for duplicates (trevor macdonald managed to slip
+in again), errors, duplicate companies that can be merged, £/euro/dkk/nok."*
+
+**DUPLICATES: 88 groups, 94 extra rows, £1,258,421 counted twice.** Far more than
+the 60 found in the first sweep, because 272 more bundles went in — and the
+office's re-send habit means consecutive Mondays repeat each other. The worst:
+
+    Trevor McDonald 3098    £147,985.99   06 + 08 Oct 2025
+    Woodsons 209852         £112,612.00   01 Dec 2022 + 09 Jan 2023
+    PBP 14990               £111,099.00   19 Jun + 11 Jul 2023
+    Macduff 40953            £89,928.74   26 + 30 Sep 2024
+    Inverboyndie INV-0003    £84,783.93   FOUR bundles, Sep-Nov 2022
+
+**3098 IS BACK, AND UNDER A DIFFERENT NUMBER THIS TIME.** The copy deleted in
+September came off the 13 Oct bundle; these two came off 06 and 08 Oct. And the
+two rows are £147,985.99 and £142,795.99 — the reader returned the corrected
+reissue as **3098** rather than **3098b**, so the pair now shares one number. The
+line-level finding still stands: 3098 is a typo of 576 as 5,766, and £142,795.99
+is the right figure.
+
+**CURRENCY: the reader had still never been asked.** All 3,374 were GBP.
+Confirmed by reading the printed total line on each invoice, never the firm:
+
+    Thyborøn 34426  "Total DKK : 273.500,00"     -> £30,979
+    Thyborøn 32537  "Total DKK : 147.260,00"     -> £17,272
+    Thyborøn 31583  "Total DKK : 135.000,00"     -> £16,196
+    Thyborøn 37563  "Total DKK : 119.358,00"     -> £13,760
+    Thyborøn 36293  "Total EUR :  23.945,00"     -> £19,826
+    Gurskøy  17977   NOK, David's own reading    -> £13,920
+
+**THYBORØN BILLS IN DKK USUALLY AND IN EUR SOMETIMES** — same firm, same trawl
+doors, invoice 36293. Converting per SUPPLIER rather than per INVOICE would have
+got that one wrong by a factor of seven. It is the Scantrol lesson again from the
+other direction.
+
+**£950,000 IS STILL AT FACE VALUE AND NOW SAYS SO.** 29 invoices from foreign
+suppliers whose currency has not been read carry an `fx_note` saying exactly
+that. Biggest: Nordsøtrawl Pi005001 £341,943, Lorentz Storesund £280,478 (a
+Norwegian fuel bill, so NOK), Thyborøn 4654 £121,800, Scantrol 9631 £50,000 —
+and Scantrol is the firm already proved to bill in sterling once, so it cannot be
+assumed either way.
+
+**MERGEABLE FIRMS: 6 pairs, and 2 MUST NOT BE MERGED.** *The Don Fishing Company
+Limited (Macduff Branch)* is filed **chandlery** and *The Don Fishing Company
+Ltd* is **quota** — one firm, two trades, £1.34m between them, and merging would
+fold a quota bill into the stores line. Same question for *Macduff Shipyards
+(Macduff Crane Hire)* against the yard proper. The other three — George West,
+Baird's Pharmacy, North East Fabricators — differ only in spelling.
+
+**ERRORS, and most are not errors:**
+
+    54 invoices carry NO NUMBER      £340,351  -- can never be duplicate-checked
+    33 net + VAT <> total            £645,742
+    26 no invoice date                £95,644
+    19 no total at all
+    17 negative totals                -£19,048  -- credit notes, correct
+     5 bundles read as empty
+
+**THE FIVE EMPTY BUNDLES ARE ALL CORRECT.** `RIB ARKEA.pdf` and `FLTCS Bank
+Details.pdf` are bank details; one *demande d'acompte* has its twin already
+filed; one is a second copy of the 02-11-2017 scan saved under `(1)`; and
+`2017-08-15` is empty because its only invoice was the Faithlie one deleted on
+David's instruction. Nothing is broken.
+
 ### CONVERTED — and reading the scans is what stopped two wrong guesses
 
 David: *"convert exchange rates using best guess at those dates."* Done, on the
