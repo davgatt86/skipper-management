@@ -20,6 +20,7 @@ import {
 } from './src/lib/invoices/periods.js'
 import { pageOrNull, pageRange, pageLabel } from './src/lib/invoices/pages.js'
 import { invoiceKey, carryDecisions } from './src/lib/invoices/identity.js'
+import { checkForDuplicates } from './src/lib/invoices/duplicates.js'
 import { readFileSync } from 'node:fs'
 
 let n = 0
@@ -493,4 +494,69 @@ eq(pageLabel('', ''), '', 'an unread page says nothing rather than "p. 0"')
      'mapInvoices carries the work dates onto the row the skipper checks')
 }
 
+
+/* ---- THE SAME INVOICE IN TWO BUNDLES OF ONE RUN --------------------------
+ *
+ * The gap David asked about before loading 2016: every other check compares
+ * against what is FILED, and a run of bundles read together is not filed yet.
+ * The office re-sends until approved, and 38 of the 54 cross-bundle duplicates
+ * on record are 2-10 days apart — consecutive Mondays, which is exactly what
+ * lands in one run when a year goes in at a time.
+ */
+{
+  const inv = (no, total, date, supplier = 'Inverboyndie Trawls Ltd') =>
+    ({ supplier, invoice_no: no, total, invoice_date: date })
+
+  const monday1 = { batch: { id: 'b1', received_at: '2023-06-06' },
+                    rows: [inv('INV-0114', 34971.60, '2023-05-19'), inv('INV-0120', 500, '2023-06-01')] }
+  const monday2 = { batch: { id: 'b2', received_at: '2023-06-13' },
+                    rows: [inv('INV-0114', 34971.60, '2023-05-19'), inv('INV-0131', 900, '2023-06-08')] }
+  const run = [monday1, monday2]
+
+  // Nothing on file, so the check as it stood found nothing at all.
+  const blind = checkForDuplicates(monday2.rows, [], { ignoreBatch: 'b2' })
+  ok(blind.found.length === 0, 'without the run it sees nothing')
+
+  const seen = checkForDuplicates(monday2.rows, [], { ignoreBatch: 'b2', alsoInRun: run })
+  ok(seen.run === 1, 'with the run it catches the re-send')
+  ok(seen.found.length === 1, 'and only the one row')
+  ok(seen.found[0].row.invoice_no === 'INV-0114', 'it is the right row')
+  ok(seen.found[0].hits[0]._batch.received_at === '2023-06-06', 'it names the other bundle')
+  ok(Math.round(seen.value) === 34972, 'the value is what filing it twice would cost')
+
+  // A BUNDLE IS NOT ITS OWN DUPLICATE, or every row of a re-read lights up.
+  const self = checkForDuplicates(monday2.rows, [], { ignoreBatch: 'b2', alsoInRun: [monday2] })
+  ok(self.found.length === 0, 'its own rows are not counted against it')
+
+  // ON FILE BEATS IN THE RUN — both can be true, and the filed one is confirmed.
+  const filed = [{ ...inv('INV-0114', 34971.60, '2023-05-19'), batch_id: 'old' }]
+  const both = checkForDuplicates(monday2.rows, filed, { ignoreBatch: 'b2', alsoInRun: run })
+  ok(both.certain === 1 && both.run === 0, 'already filed wins over in the run')
+
+  // THE FOUR KINDS STAY FOUR FACTS.
+  const twice = { batch: { id: 'b3', received_at: '2023-07-04' },
+                  rows: [inv('INV-9', 10, '2023-07-01'), inv('INV-9', 10, '2023-07-01')] }
+  const w = checkForDuplicates(twice.rows, [], { ignoreBatch: 'b3', alsoInRun: [twice] })
+  ok(w.within === 1 && w.run === 0, 'a bundle carrying it twice is still "within"')
+
+  // NO NUMBER IS NEVER MATCHED, in the run either — guessing from amount and
+  // date would flag every routine repeat order a firm sends.
+  const noNo = { batch: { id: 'b4', received_at: '2023-08-01' }, rows: [inv('', 250, '2023-07-20')] }
+  const noNo2 = { batch: { id: 'b5', received_at: '2023-08-08' }, rows: [inv('', 250, '2023-07-20')] }
+  const blank = checkForDuplicates(noNo2.rows, [], { ignoreBatch: 'b5', alsoInRun: [noNo, noNo2] })
+  ok(blank.found.length === 0, 'an invoice with no number is not matched in the run')
+
+  // The firm still goes through normaliseSupplier: it is the half that comes off
+  // a photograph and drifts between two reads of the same document.
+  const drift = { batch: { id: 'b6', received_at: '2023-09-04' },
+                  rows: [inv('INV-0114', 34971.60, '2023-05-19', 'INVERBOYNDIE TRAWLS LIMITED')] }
+  const d = checkForDuplicates(drift.rows, [], { ignoreBatch: 'b6', alsoInRun: [monday1, drift] })
+  ok(d.run === 1, 'a drifted firm name still matches in the run')
+
+  // An absent run must change nothing — every existing caller passes none.
+  const none = checkForDuplicates(monday2.rows, [], { ignoreBatch: 'b2', alsoInRun: undefined })
+  ok(none.found.length === 0 && none.run === 0, 'no run given behaves exactly as before')
+}
+
 console.log('boat invoices: ' + n + ' checks passed')
+

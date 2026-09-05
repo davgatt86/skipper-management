@@ -768,6 +768,47 @@ knowable only from the mail that carried it.
 The two already uploaded were repaired in place: dates read off their names,
 status back to `new`, stored reads cleared. `test-arrival.mjs` — 18 checks.
 
+### THE DUPLICATE CHECK WAS BLIND TO THE RUN IT WAS IN (Sep 2026)
+
+David, before loading a year at a time: *"will the reader pick up any potential
+duplicates? we don't know if there duplicates just incase there is."*
+
+Nearly. Two things checked out — `listInvoices` pages properly, so the check
+compares against all 2,592 filed invoices rather than a silently truncated 1,000;
+and **99-100% of invoices carry an invoice number in every year back to 2015**
+(9 of 2,587 do not), so the deliberate refusal to match a numberless invoice
+costs almost nothing.
+
+**BUT A RUN OF BUNDLES READ TOGETHER IS NOT FILED YET.** Every check compared
+against the database and against the bundle's own rows. Two DIFFERENT bundles in
+the same queue carrying the same invoice matched nothing, and both saved.
+
+That is not a rare shape — it is the commonest one. The office re-sends an
+invoice in the following week's PDF until it is approved, and **38 of the 54
+cross-bundle duplicates already in the record are 2 to 10 days apart**:
+consecutive Mondays, which is exactly what lands in one run when a year is loaded
+at a time.
+
+**AND SAVING ONE AT A TIME HID IT.** A single save ends in `refresh()`, so the
+next card sees the newly filed rows and flags them. **"Save all" does the lot
+before that refresh** — so the one button that exists for loading in bulk was the
+one with no guard, and bulk loading is the entire job in hand.
+
+`indexRun()` and a fourth kind, `run`. **Four kinds because they are four
+different facts**, the 3098/3098b discipline again: `certain` and `similar`
+differ by whether the amount agrees and £147,985.99 turned on that; `within`
+and `run` are not history at all — nothing is filed yet, so the answer is
+simply to leave one out. The message names the OTHER BUNDLE by its date, since
+"it is in one of the twelve on this screen" is not an answer.
+
+**On file beats in the run** where both are true, the filed row being the
+confirmed one. A bundle is never its own duplicate. The summary count takes the
+run too — the header and the cards disagreeing is the fault that made nobody
+believe the summary the first time.
+
+`test-invoices.mjs` 127 → **139**, including that the check found NOTHING on the
+real re-send shape before this, and that passing no run behaves exactly as before.
+
 ### PRESSING READ BLANKED THE PAGE — a tab id left behind (Sep 2026)
 
 David: *"the page goes blank when i choose to read the invoices ... then i come

@@ -89,15 +89,50 @@ export function indexInvoices(invoices = [], { ignoreBatch = null } = {}) {
 }
 
 /**
+ * Index the OTHER bundles waiting in the same run.
+ *
+ * THE HOLE THIS FILLS. Every other check compares against what is already
+ * filed — but a run of bundles read together is not filed yet, so two of them
+ * carrying the same invoice matched nothing and both saved. That is not a rare
+ * shape: the office re-sends an invoice in the following week's PDF until it is
+ * approved, and **38 of the 54 cross-bundle duplicates in the record are 2 to 10
+ * days apart** — consecutive Mondays, which is precisely what lands in one run
+ * when a year is loaded at a time.
+ *
+ * Saving one bundle at a time hid it, because the save refreshes what is filed
+ * and the next card then sees it. "Save all" does the lot before that refresh,
+ * so the very button that exists for loading in bulk was the one with no guard.
+ */
+export function indexRun(bundles = [], { exceptBatch = null } = {}) {
+  const m = new Map()
+  for (const b of bundles || []) {
+    if (exceptBatch && b?.batch?.id === exceptBatch) continue
+    for (const r of b?.rows || []) {
+      const k = docKey(r)
+      if (!k) continue
+      if (!m.has(k)) m.set(k, [])
+      m.get(k).push({ ...r, _batch: b.batch })
+    }
+  }
+  return m
+}
+
+/**
  * Check a whole read before it is filed.
  *
- * Returns one entry per row that looks like something already on file OR like
- * another row in the same read — six of the sixty groups were a single bundle
- * where the reader returned the same invoice twice, so checking only against
- * the database would have missed them.
+ * Returns one entry per row that looks like something already on file, like
+ * another row in the same bundle — six of the sixty groups were a single bundle
+ * where the reader returned the same invoice twice — or like a row in another
+ * bundle waiting in the same run.
+ *
+ * FOUR KINDS, AND THEY ARE FOUR DIFFERENT FACTS. Collapsing them would be the
+ * 3098/3098b mistake again: `certain` and `similar` differ by whether the amount
+ * agrees, and £147,985.99 turned on that. `within` and `run` are not history at
+ * all — nothing is filed yet and the answer is simply to leave one out.
  */
 export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
   const index = indexInvoices(invoices, opts)
+  const run = indexRun(opts.alsoInRun, { exceptBatch: opts.ignoreBatch })
   const seen = new Map()
   const found = []
 
@@ -113,8 +148,15 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     }
     if (k) seen.set(k, i)
 
+    /* ON FILE BEATS IN THE RUN. Both may be true; what is already filed is the
+       confirmed fact and carries the stronger claim. */
     const m = matchExisting(row, index)
-    if (m) found.push({ index: i, row, ...m })
+    if (m) { found.push({ index: i, row, ...m }); return }
+
+    const alsoHere = k && run.get(k)
+    if (alsoHere && alsoHere.length) {
+      found.push({ index: i, row, kind: 'run', hits: alsoHere })
+    }
   })
 
   const value = found.reduce((t, f) => t + (num(f.row.total) || 0), 0)
@@ -126,5 +168,6 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     certain: found.filter((f) => f.kind === 'certain').length,
     similar: found.filter((f) => f.kind === 'similar').length,
     within: found.filter((f) => f.kind === 'within').length,
+    run: found.filter((f) => f.kind === 'run').length,
   }
 }

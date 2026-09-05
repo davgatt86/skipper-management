@@ -60,7 +60,7 @@ export default function Review({ items, unknown, suppliers, filed, progress, onS
    * worse than either of them being wrong on its own: it is the reason nobody
    * believes the summary again. */
   const dupes = items.reduce((t, it) => t + checkForDuplicates(
-    it.rows, filed || [], { ignoreBatch: it.batch.id }).found.length, 0)
+    it.rows, filed || [], { ignoreBatch: it.batch.id, alsoInRun: items }).found.length, 0)
   const failed = items.filter((i) => i.error)
 
   return (
@@ -179,7 +179,7 @@ export default function Review({ items, unknown, suppliers, filed, progress, onS
       )}
 
       {items.filter((i) => i.rows.length).map((item) => (
-        <BundleCard key={item.batch.id} item={item} filed={filed}
+        <BundleCard key={item.batch.id} item={item} filed={filed} run={items}
                     onEdit={onEdit} onDropRow={onDropRow} onSave={onSave} onDrop={onDrop}
                     onOpenScan={onOpenScan} onOpenPage={onOpenPage} />
       ))}
@@ -194,10 +194,11 @@ export default function Review({ items, unknown, suppliers, filed, progress, onS
  * week's PDF — Inverboyndie INV-0114 is in three consecutive Mondays — and only
  * the skipper knows whether a second copy is that or a genuine second charge.
  * £240,015.96 across ten years says it is nearly always the former. */
-function BundleCard({ item, filed, onEdit, onDropRow, onSave, onDrop, onOpenScan, onOpenPage }) {
+function BundleCard({ item, filed, run, onEdit, onDropRow, onSave, onDrop, onOpenScan, onOpenPage }) {
   const dupes = useMemo(
-    () => checkForDuplicates(item.rows, filed || [], { ignoreBatch: item.batch.id }),
-    [item.rows, filed, item.batch.id])
+    () => checkForDuplicates(item.rows, filed || [], {
+      ignoreBatch: item.batch.id, alsoInRun: run,
+    }), [item.rows, filed, item.batch.id, run])
   const flagged = useMemo(
     () => new Map(dupes.found.map((f) => [f.index, f])), [dupes])
 
@@ -281,12 +282,21 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
                       marginBottom: '0.45rem' }}>
           <b style={{ color: 'var(--brass)', fontSize: '0.86rem' }}>
             {duplicate.kind === 'within' ? 'This bundle carries it twice'
+              : duplicate.kind === 'run' ? 'Also in another bundle you are about to save'
               : duplicate.kind === 'certain' ? 'Already on file'
               : 'Same firm and number already on file'}
           </b>
           <span className="muted" style={{ fontSize: '0.8rem', flex: 1 }}>
             {duplicate.kind === 'within'
               ? 'the reader returned the same invoice more than once'
+              /* NOT ON FILE YET, so the answer is to leave one out rather than
+                 to go looking through history. Names the other bundle, because
+                 "it is in one of the twelve on this screen" is not an answer. */
+              : duplicate.kind === 'run'
+                ? 'not filed yet — it is also in the bundle of '
+                  + duplicate.hits.map((h) => fmtDate(String(h._batch?.received_at || '').slice(0, 10))
+                      || 'another bundle').join(' and ')
+                  + '. Leave it out of one of them.'
               : duplicate.hits.map((h) => (h.invoice_date || 'no date') + ' · ' + money(h.total))
                   .join(' · ')}
             {/* SIMILAR IS NOT CERTAIN, and saying so matters: 3098 and 3098b
