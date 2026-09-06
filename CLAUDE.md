@@ -1300,6 +1300,62 @@ gloves tested alongside it.
 
 `test-invoices.mjs` 158 → **166** · `test-invoice-dashboard.mjs` 73 → **76**.
 
+### NET + VAT ≠ TOTAL IS ALMOST NEVER A WRONG TOTAL (Sep 2026)
+
+David: *"now check the ones where net + vat doesn't equal total."* 27 rows.
+**Exactly one total was wrong, and it was out by 20p.**
+
+    invoices 3,263 (unchanged)   value £10,908,165.07 -> £10,908,165.27
+    rows disagreeing 27 -> 9, and all nine are understood
+
+**THE ONE REAL ERROR: pounds and pence in ruled columns.** Kinnaird Travel
+117762 prints its money in two ruled columns and the totals line reads
+`£ 454 | 20`. The reader took the pounds as the total and **the pence as a VAT
+of 20**. It is £454.20. Twenty pence, and the only one in twenty-seven.
+
+#### The other 26 were the NET being something other than the total less VAT
+
+- **No split printed at all.** Macduff Shipyards bills one TOTAL and no VAT line
+  — four rows, including the £56,596.64 refit.
+- **Carriage or freight charged outside the net.** Macduff Diesels prints *Total
+  Net Amount* and *Carriage Net* as separate lines; MAN Diesel 95517490 adds
+  **Ex works 6,481.02 + Overtime 199.87 + Packing 46.09 + Freight 1,035.52 +
+  Insurance 26.05 = CIP Aberdeen Airport 7,788.55**. Our `net` column means net
+  OF VAT, which is all of it, so those were corrected to net = total — safe only
+  because the invoice charges no VAT, so it is not a guess.
+- **SOMEBODY ELSE PAID THE GOODS AND THE BOAT OWES THE VAT ALONE**, so the total
+  legitimately EQUALS the VAT. Two of these, and both looked exactly like the net
+  had been dropped:
+  - **Gray & Adams A1900685** — an accident repair on the Ford Tourneo. *Total
+    Repair Cost Nett £2,581.67, LESS Insurer Contribution £2,581.67*, and the VAT
+    Analysis prints *Nett £0.00, VAT £516.33, Total Due £516.33*. The insurer paid
+    the repair.
+  - **Macduff Ship Design 3539** — *"250.00* + VAT 50.00 = 300.00"* and then
+    *"* Fee Paid By Scottish Fishermen's Trust — Therefore VAT due £50.00"*. Don
+    Fishing posted £50.00.
+
+  **The reader was right both times**, and a rule that "total = VAT means the net
+  was lost" would have been wrong twice out of two.
+- **A line struck off by hand.** Strachan 11301's printed **£547.85 is crossed
+  out** with **£225.92** written beside it and several line amounts ticked; the
+  office posted 225.92. The net and VAT are the printed figures for the whole
+  invoice, so they cannot add to what the boat was charged. **Reported, never
+  resolved** — the disagreement is the record.
+- **The office's own biro allocation read as a net**, on the card statements.
+
+#### The flag said the wrong thing, and it says so now
+
+The row message read **"One of the three is misread."** That is a claim, and the
+sweep measured it false 26 times in 27. It now names the ordinary reasons and
+points at the TOTAL, which is the figure that counts — and a disagreeing split is
+**brass, not rust**: a question, not a fault. A figure the reader could not get
+at all is still rust, because that IS a hole.
+
+**This is the second belief in this file overturned by opening the scans**, after
+the one in `test-invoice-dashboard.mjs` about numberless rows. Both were written
+from reasoning and both were half right. Measure before wording a warning as an
+accusation.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out

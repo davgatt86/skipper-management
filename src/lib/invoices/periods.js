@@ -244,6 +244,29 @@ export function readManagerBalance(text) {
  * A FIGURE THE READER COULD NOT MAKE OUT IS NOT A DISAGREEMENT. Flagging a blank
  * as "does not add up" would put a red mark on every row the model was honest
  * about, which is how a warning stops being read.
+ *
+ * AND A DISAGREEMENT IS RARELY A WRONG TOTAL. Swept over the whole record in
+ * Sep 2026: 27 rows disagreed and exactly ONE total was wrong, by 20p — Kinnaird
+ * Travel, whose invoice rules pounds and pence into separate columns so "£ 454 |
+ * 20" was read as £454 plus a VAT of 20. The other 26 were the NET being
+ * something other than the total less VAT, and every one of them was right:
+ *
+ *   - no split printed at all. Macduff Shipyards bills one TOTAL and no VAT line.
+ *   - carriage or freight charged outside the net. Macduff Diesels prints "Total
+ *     Net Amount" and "Carriage Net" as separate lines; MAN Diesel adds Ex works,
+ *     Overtime, Packing, Freight and Insurance to reach CIP Aberdeen Airport.
+ *   - SOMEBODY ELSE PAID THE GOODS AND THE BOAT OWES THE VAT ALONE, so the total
+ *     legitimately EQUALS the VAT. The insurer paid a £2,581.67 accident repair
+ *     and Gray & Adams billed £516.33; the Scottish Fishermen's Trust paid a £250
+ *     fee and Macduff Ship Design billed £50. Both looked like the net had been
+ *     dropped, and both were exactly right.
+ *   - a line struck off by hand. Strachan's printed £547.85 is crossed out with
+ *     £225.92 written beside it, which is what Don Fishing posted.
+ *   - the office's own biro allocation read as a net, on a card statement.
+ *
+ * So this flag asks about the SPLIT and points at the total. It must never be
+ * worded as an accusation that one of the three figures is misread - it said
+ * exactly that until the sweep proved otherwise.
  */
 export function addsWrong(r) {
   /* `Number(null)` is 0 and `Number('')` is 0, and BOTH are finite — so reading

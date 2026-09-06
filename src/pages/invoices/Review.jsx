@@ -40,8 +40,10 @@ export default function Review({ items, unknown, suppliers, filed, progress, onS
 
   /* The three things worth stopping for, counted across the whole run. Each is
      a different KIND of doubt and they are not lumped together: an unfiled firm
-     is a decision, a sum that does not add up is a misread, a missing date puts
-     the cost in no period at all. */
+     is a decision, a sum that does not add up is a QUESTION ABOUT THE SPLIT
+     rather than a misread, and a missing date puts the cost in no period at
+     all. Measured Sep 2026 over all 27 rows in the record that disagreed: one
+     total was wrong, by 20p. */
   const flags = {
     firm: rows.filter((r) => !r.supplier_id).length,
     adds: rows.filter((r) => addsWrong(r)).length,
@@ -273,7 +275,10 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
   const bad = addsWrong(r)
   const missing = figuresMissing(r)
   /* The left edge carries the state at a glance down a long list: green filed,
-     brass a firm to file, rust a sum that does not add up. */
+     brass something to look at, rust a figure the reader could not get. A
+     DISAGREEING SPLIT IS NOT RUST any more — it is a question, and measured
+     over the whole record it is the right answer 26 times in 27. A missing
+     figure is still a hole. */
   /* A page number is only worth offering if it could be true: a whole number,
      at least 1, and inside a document that has that many pages. */
   const asPage = (v) => (Number.isInteger(Number(v)) && Number(v) >= 1 ? Number(v) : null)
@@ -285,8 +290,8 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
   /* A duplicate is not a misread — it is brass, the colour of a decision, and
      it wins the edge because leaving the row out makes every other flag on it
      moot. */
-  const edge = duplicate ? 'var(--brass)'
-    : bad || missing.length ? 'var(--rust)'
+  const edge = missing.length ? 'var(--rust)'
+    : duplicate || bad ? 'var(--brass)'
     : r.supplier_id ? 'var(--kelp)' : 'var(--brass)'
   return (
     <div style={{
@@ -480,10 +485,19 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
           is marked as never read.
         </p>
       )}
+      {/* IT IS USUALLY NOT A MISREAD, and this used to say it was. Of the 27 rows
+          in the record that disagreed, ONE total was wrong — by 20p, where the
+          invoice ruled pounds and pence into separate columns and the pence
+          were taken as VAT. The other 26 were the net being something other
+          than "total less VAT". So it points at the total, which is the figure
+          that counts, and names the ordinary reasons rather than accusing. */}
       {bad && (
-        <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--rust)' }}>
+        <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--brass)' }}>
           Net and VAT come to {money(Number(r.net) + Number(r.vat))}, not {money(r.total)} —
-          out by {money(Number(r.net) + Number(r.vat) - Number(r.total))}. One of the three is misread.
+          out by {money(Number(r.net) + Number(r.vat) - Number(r.total))}. Usually the net is
+          not simply the total less VAT: carriage or freight charged outside it, somebody else
+          paying the goods so only the VAT falls on the boat, or a line struck off by hand.
+          Check the total.
         </p>
       )}
     </div>
