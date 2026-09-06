@@ -35,6 +35,20 @@ export const NAV = [
     ],
   },
   {
+    label: 'Market',
+    items: [
+      { to: '/daily-prices', label: 'Daily Prices', access: 'all' },
+      { to: '/estimator', label: 'Where to Land', access: 'fleetTools' },
+      // Laying the trip out on the market floor once the destination is settled.
+      { to: '/market-layout', label: 'Market Layout', access: 'fleetTools' },
+      // Which clock each fish goes on and how high it stacks. Read by the
+      // layout page, changed only by the skipper — the market moves species
+      // between clocks and that should not need a deploy.
+      { to: '/market-rules', label: 'Market Rules', access: 'fleetTools' },
+      { to: '/forecast', label: 'Market Forecast', access: 'skipper' },
+    ],
+  },
+  {
     label: 'Sales',
     items: [
       { to: '/sales', label: 'Fish Sales', access: 'fleetTools' },
@@ -53,40 +67,9 @@ export const NAV = [
     ],
   },
   {
-    label: 'Market',
-    items: [
-      { to: '/daily-prices', label: 'Daily Prices', access: 'all' },
-      { to: '/estimator', label: 'Where to Land', access: 'fleetTools' },
-      // Laying the trip out on the market floor once the destination is settled.
-      { to: '/market-layout', label: 'Market Layout', access: 'fleetTools' },
-      // Which clock each fish goes on and how high it stacks. Read by the
-      // layout page, changed only by the skipper — the market moves species
-      // between clocks and that should not need a deploy.
-      { to: '/market-rules', label: 'Market Rules', access: 'fleetTools' },
-      { to: '/forecast', label: 'Market Forecast', access: 'skipper' },
-    ],
-  },
-  {
     label: 'Quota',
     items: [
       { to: '/quota', label: 'Quota Position', access: 'skipper' },
-    ],
-  },
-  {
-    // The five crew sections. These match CrewTabs.jsx exactly — the tab strip
-    // on the crew pages and this menu group are the same five destinations,
-    // so keep them in step.
-    label: 'Crew',
-    items: [
-      // An officer adds a man and files his tickets, so these three are his as
-      // well. Contracted Crew is NOT — that is contracts, bonuses and pay,
-      // which he is denied at the database.
-      { to: '/crew', label: 'Crew Status', access: ['all', 'officer'], end: true },
-      { to: '/contracted-crew', label: 'Contracted Crew', access: 'all' },
-      { to: '/crew-list', label: 'Crew List', access: 'officer' },
-      { to: '/rota', label: 'Rota Planner', access: 'fleetTools' },
-      { to: '/crew-certs', label: 'Certificates', access: 'officer' },
-      { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },
     ],
   },
   {
@@ -133,6 +116,23 @@ export const NAV = [
       // Deck work, so it is the mate's as much as the skipper's.
       { to: '/gear', label: 'Gear Log', access: 'officer' },
       { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },
+    ],
+  },
+  {
+    // The five crew sections. These match CrewTabs.jsx exactly — the tab strip
+    // on the crew pages and this menu group are the same five destinations,
+    // so keep them in step.
+    label: 'Crew',
+    items: [
+      // An officer adds a man and files his tickets, so these three are his as
+      // well. Contracted Crew is NOT — that is contracts, bonuses and pay,
+      // which he is denied at the database.
+      { to: '/crew', label: 'Crew Status', access: ['all', 'officer'], end: true },
+      { to: '/contracted-crew', label: 'Contracted Crew', access: 'all' },
+      { to: '/crew-list', label: 'Crew List', access: 'officer' },
+      { to: '/rota', label: 'Rota Planner', access: 'fleetTools' },
+      { to: '/crew-certs', label: 'Certificates', access: 'officer' },
+      { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },
     ],
   },
   {

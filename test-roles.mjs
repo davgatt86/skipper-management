@@ -1,4 +1,4 @@
-import { canSee, accessForPath, navFor } from './src/nav.js'
+import { NAV, canSee, accessForPath, navFor } from './src/nav.js'
 import { keepsLogs, keepsCrewRecords, keepsStores, homeFor, isOfficer, isCook, isSkipper } from './src/lib/roles.js'
 
 let fail = 0
@@ -64,7 +64,14 @@ eq('officer menu', offNav, [
   // The gear log is deck work — a mate keeps it as much as the skipper does.
   '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/gear', '/maintenance', '/parts', '/vessel-certs',
 ])
-eq('officer sees Crew and Vessel only', navFor(officer).map((g) => g.label), ['Crew', 'Vessel'])
+eq('officer sees Vessel and Crew only', navFor(officer).map((g) => g.label), ['Vessel', 'Crew'])
+
+/* THE ORDER OF THE SIDEBAR IS A DECISION, so it is asserted rather than left to
+   whoever last edited the array. David set it Sep 2026 to follow the working
+   day: what the market is doing, what the fish made, what is left to catch,
+   what the office paid, then the boat, then the crew, then the settings. */
+eq('the sidebar runs in the agreed order', NAV.map((g) => g.label),
+   ['Overview', 'Market', 'Sales', 'Quota', 'Settlement', 'Vessel', 'Crew', 'Admin'])
 // The money must not appear anywhere in his menu.
 for (const gone of ['/sales', '/quota', '/settlements', '/reconcile', '/contracted-crew', '/users', '/']) {
   eq(`officer menu excludes ${gone}`, offNav.includes(gone), false)
