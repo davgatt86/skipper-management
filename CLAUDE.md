@@ -1056,6 +1056,72 @@ CCITT fax with no text layer, so there is nothing to grep; pdf.js decodes the
 page images and the PNG is written with nothing but zlib, the way
 `scripts/make-icons.mjs` does it.
 
+### ALL 21 SAME-TOTAL GROUPS OPENED — 17 genuine, 3 wrong, 1 unreadable (Sep 2026)
+
+David: *"check the other 25 same total group for wrong totals."* Every remaining
+pair was read off its own scan rather than reasoned about.
+
+    invoices 3,273 -> 3,271     value £11,191,146.48 -> £11,189,885.82
+
+**SEVENTEEN ARE GENUINE and both sides print the same figure**, verified page by
+page: Woodsons £3,766 · £1,294 · £1,180 (three separate bundles) · £86.11 ·
+Jackson £1,625 · Ironside £510 · £480 · £270 twice · DFDS £504 · Dingbro
+£113.52 · John A Smith £167.88 · Seagate £100 · £50 · D. Steven £60. **A firm
+billing the same amount twice is ordinary** — Woodsons' £1,180 is a monthly
+standing charge and appears in three different years.
+
+**THE TELL IS THE INVOICE NUMBER, and it held on all 21.** Every genuine pair
+carries the office's own number on BOTH sides. Every wrong one had something
+missing or copied.
+
+#### The three that were wrong, and none of them was a duplicate of the kind expected
+
+**PETERHEAD MARINE INV69069 — £723.49 filed, £639.90 printed.** Pages 9-16 of
+the 30-09-2024 bundle are all this firm: INV69036 spans pages 9-14 at £10,708.76,
+page 15 is INV69070 (*seven 80W LED floodlights, supplied 13/8/24*) at £723.49,
+and page 16 is INV69069 (*one 3KW 4POLE MOTOR, supplied 07/08/24*) at £639.90.
+**The reader copied INV69070's whole reading — figures AND description — onto
+INV69069.** Overstated by £83.59. Corrected, nothing deleted.
+
+**INVERBOYNDIE INV-0364 — one invoice filed as two, and the head got the wrong
+total.** Pages 3-6 are INV-0364 and pages 7-8 are INV-0361, both scanned back
+page first. The reader filed page 3 as a separate NUMBERLESS invoice at the
+correct **£30,978.06**, then filed pages 4-6 as INV-0364 carrying INV-0361's
+£1,020.96. So the record held the right money under an assigned reference and a
+phantom under the real number. The numberless row **is** INV-0364 and was given
+its number, date and span; the £1,020.96 impostor went. £1,020.96 of double
+counting out, and no cost lost.
+
+**JOHN A. SMITH 002302 — an invoice and its own delivery docket.** Page 3 is
+sales invoice SC 91366, priced by hand: one oilskin 84.50, ten Showa 40.42, one
+gloves 5.17, net 130.09, VAT 26.02, **total 156.11**. Page 4 is the DELIVERY
+DOCKET for the same three items, stamped **002302** — a docket number, not an
+invoice number — filed as a second invoice at the same total. The docket row
+went. This is the only true duplicate in the twenty-one.
+
+**THE SPLIT RULE WOULD NOT HAVE CAUGHT ANY OF THE THREE, and that is not a fault
+in it.** It keys on firm + total with one side numberless. Peterhead's pair have
+the office's numbers on both sides; Inverboyndie's two halves disagree on total
+(£30,978.06 against £1,020.96) precisely because the head was given the wrong
+one. **The check that found all three was the plain same-firm-same-total sweep**,
+and what it flags is not "a duplicate" but "two rows that cannot both be right".
+
+#### One could not be read, and it says so
+
+Jackson Trawls £150 twice off the 10-06-2020 bundle (38076 and 38096, five days
+apart). That scan lays each page down as a background image plus about fifty
+one-bit STENCIL MASKS carrying the text, so taking the first XObject renders a
+blank sheet; compositing the masks by their own transforms gets the layout and
+the handwriting but not the machine type. **It has the shape of every genuine
+pair here** — the office's own number on both sides, days apart — but that is an
+argument, not a reading, and it is recorded as unchecked rather than passed.
+
+**`scripts/scan-corners.mjs`** joins the other two: it crops the same corner
+from every page of one or more scans and tiles them numbered, so *"what does each
+page total?"* is answered for a whole bundle in one look — which is the only
+question a same-total pair actually asks. Twenty-one groups across twenty scans
+came down to about a dozen images.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out
