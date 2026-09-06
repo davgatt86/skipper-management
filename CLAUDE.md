@@ -1056,19 +1056,20 @@ CCITT fax with no text layer, so there is nothing to grep; pdf.js decodes the
 page images and the PNG is written with nothing but zlib, the way
 `scripts/make-icons.mjs` does it.
 
-### ALL 21 SAME-TOTAL GROUPS OPENED — 17 genuine, 3 wrong, 1 unreadable (Sep 2026)
+### ALL 21 SAME-TOTAL GROUPS OPENED — 18 genuine, 3 wrong, none left (Sep 2026)
 
 David: *"check the other 25 same total group for wrong totals."* Every remaining
 pair was read off its own scan rather than reasoned about.
 
     invoices 3,273 -> 3,271     value £11,191,146.48 -> £11,189,885.82
 
-**SEVENTEEN ARE GENUINE and both sides print the same figure**, verified page by
+**EIGHTEEN ARE GENUINE and both sides print the same figure**, verified page by
 page: Woodsons £3,766 · £1,294 · £1,180 (three separate bundles) · £86.11 ·
 Jackson £1,625 · Ironside £510 · £480 · £270 twice · DFDS £504 · Dingbro
-£113.52 · John A Smith £167.88 · Seagate £100 · £50 · D. Steven £60. **A firm
-billing the same amount twice is ordinary** — Woodsons' £1,180 is a monthly
-standing charge and appears in three different years.
+£113.52 · John A Smith £167.88 · Seagate £100 · £50 · D. Steven £60 · Jackson
+£150. **A firm billing the same amount twice is ordinary** — Woodsons' £1,180 is
+a monthly standing charge and appears in three different years, and Jackson's
+£150 is the yard's rate for a lorry run.
 
 **THE TELL IS THE INVOICE NUMBER, and it held on all 21.** Every genuine pair
 carries the office's own number on BOTH sides. Every wrong one had something
@@ -1106,15 +1107,34 @@ the office's numbers on both sides; Inverboyndie's two halves disagree on total
 one. **The check that found all three was the plain same-firm-same-total sweep**,
 and what it flags is not "a duplicate" but "two rows that cannot both be right".
 
-#### One could not be read, and it says so
+#### THE ONE I COULD NOT RENDER, THE AI READER READ STRAIGHT OFF
 
-Jackson Trawls £150 twice off the 10-06-2020 bundle (38076 and 38096, five days
-apart). That scan lays each page down as a background image plus about fifty
-one-bit STENCIL MASKS carrying the text, so taking the first XObject renders a
-blank sheet; compositing the masks by their own transforms gets the layout and
-the handwriting but not the machine type. **It has the shape of every genuine
-pair here** — the office's own number on both sides, days apart — but that is an
-argument, not a reading, and it is recorded as unchecked rather than passed.
+Jackson Trawls £150 twice off the 10-06-2020 bundle. That scan lays each page
+down as a background image plus about fifty one-bit STENCIL MASKS carrying the
+text, so taking the first XObject renders a blank sheet, and compositing the
+masks by their own transforms gets the layout and the handwriting but not the
+machine type. It was left recorded as unchecked rather than passed on the
+argument that it looked genuine.
+
+David: *"read the jackson 150 with the ai reader."* One call, `doc_type:
+'invoice_lines'` with `only: ['38076','38096']`, and it came back in seconds:
+
+    38076  15-05-2020  page 8   "Deliverying Net from Drome to Harbour"      £150.00
+    38096  20-05-2020  page 10  "Hire of Scania Lorry @ 1.5hrs Net from
+                                 Harbour to Drome"                          £150.00
+
+**Two haulage jobs five days apart in opposite directions at the yard's standard
+rate.** Both totals right, both single-line invoices, Nett 150 / VAT 0 / Invoice
+Total 150 on each. Genuine — and the record gained the two page numbers it never
+had. *"Deliverying"* is the office's own spelling, returned as printed, which is
+some evidence the read is faithful rather than tidied.
+
+**THE READER IS THE FALLBACK WHEN LOCAL RENDERING FAILS, and that is worth
+remembering** — it takes the PDF whole and does not care how the page was
+constructed, where anything decoding image XObjects by hand does. The `only`
+list keeps it to two invoices out of fifteen pages, so the read is cheap and the
+answer is small. Reach for it on a scan that will not render, rather than
+recording a guess.
 
 **`scripts/scan-corners.mjs`** joins the other two: it crops the same corner
 from every page of one or more scans and tiles them numbered, so *"what does each
