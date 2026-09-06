@@ -299,6 +299,7 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
           <b style={{ color: 'var(--brass)', fontSize: '0.86rem' }}>
             {duplicate.kind === 'within' ? 'This bundle carries it twice'
               : duplicate.kind === 'split' ? 'One invoice read as two — check the pages'
+              : duplicate.kind === 'carried' ? 'These may be one invoice’s running total'
               : duplicate.kind === 'run' ? 'Also in another bundle you are about to save'
               : duplicate.kind === 'derived' ? 'Same firm, date and amount already on file'
               : duplicate.kind === 'certain' ? 'Already on file'
@@ -313,6 +314,15 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
               /* THE PAGES ARE THE ANSWER HERE, not the history. Both halves are
                  in the scan in front of you: one has the items, the other the
                  total, and they are the same invoice. */
+              /* THE DEAREST MISTAKE IN THE RECORD, at £136,140.56: Macduff 36766
+                 was one five-page invoice whose every page carries a running
+                 carried-forward figure, filed as four invoices. */
+              : duplicate.kind === 'carried'
+                ? duplicate.hits.length + ' more row' + (duplicate.hits.length === 1 ? '' : 's')
+                  + ' from this firm on the same date, none with an invoice number and'
+                  + ' none with a net or VAT of its own. That is what a running'
+                  + ' carried-forward figure looks like read page by page — one invoice,'
+                  + ' not ' + (duplicate.hits.length + 1) + '. Find the page printing the TOTAL.'
               : duplicate.kind === 'split'
                 ? 'same firm and the same total off '
                   + (duplicate.hits.every((h) => h.page_from) && duplicate.row?.page_from

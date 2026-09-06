@@ -157,6 +157,7 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
   const index = indexInvoices(invoices, opts)
   const run = indexRun(opts.alsoInRun, { exceptBatch: opts.ignoreBatch })
   const split = indexSplits(rows)
+  const carried = indexCarried(rows)
   const seen = new Map()
   const found = []
 
@@ -188,6 +189,12 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     const halves = split.get(splitKey(row))
     if (halves && halves.length > 1 && halves[0].i === i) {
       found.push({ index: i, row, kind: 'split', hits: halves.slice(1).map((h) => h.row) })
+      return
+    }
+
+    const run2 = carried.get(carriedKey(row))
+    if (run2 && run2.length > 1 && run2[0].i === i) {
+      found.push({ index: i, row, kind: 'carried', hits: run2.slice(1).map((h) => h.row) })
     }
   })
 
@@ -203,6 +210,7 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     run: found.filter((f) => f.kind === 'run').length,
     derived: found.filter((f) => f.kind === 'derived').length,
     split: found.filter((f) => f.kind === 'split').length,
+    carried: found.filter((f) => f.kind === 'carried').length,
   }
 }
 
@@ -249,5 +257,60 @@ function indexSplits(rows = []) {
   })
   /* Only where at least one side has no number of its own. */
   for (const [k, v] of m) if (v.length < 2 || !v.some((x) => noOfficeNumber(x.row))) m.delete(k)
+  return m
+}
+
+/* A RUNNING CARRIED-FORWARD FIGURE READ AS AN INVOICE — the dearest mistake in
+ * the record, at £136,140.56.
+ *
+ * Macduff Shipyards 36766 of 10-11-2021 is ONE invoice printed over five pages,
+ * scanned back page first. Every printed page carries a brought-forward figure
+ * at the top and a carried-forward at the foot, and the reader took each page's
+ * carry-forward as that page's invoice total:
+ *
+ *     scan p5  c/f £32,102.57      scan p3  c/f £54,483.39
+ *     scan p4  c/f £50,413.79      scan p2  c/f £55,737.45
+ *
+ * — four invoices totalling £192,737.20 for one job that came to £56,596.64.
+ * The page carrying the real TOTAL was skipped, so nothing on the record
+ * contradicted it. `split` cannot see this: the four totals are all different,
+ * and `split` keys on firm + total.
+ *
+ * THREE THINGS AT ONCE, and it needs all three or it fires on ordinary work:
+ *   - SEVERAL rows, one firm, none with a number the office printed — a page
+ *     with no header has no number, so every page of one invoice looks numberless;
+ *   - all carrying THE SAME invoice date — one job invoiced once on one day,
+ *     where genuine separate invoices from a firm land on different days;
+ *   - and NO NET/VAT SPLIT on any of them. This is the strongest of the three.
+ *     A real invoice prints its net and its VAT; a carry-forward line is a bare
+ *     running figure, so the reader has nothing to split and returns zeroes.
+ *
+ * Swept over the whole ten-year record it fires on Macduff and NOTHING else —
+ * not the seven numberless Jackson rows in one bundle, nor the five Strachan,
+ * because those all carry a real net and VAT of their own.
+ *
+ * REPORTED, NEVER RESOLVED, like everything else here. Which page holds the real
+ * total is a question for whoever opens the scan, and the answer is often a page
+ * that got no row at all.
+ */
+const carriedKey = (row) =>
+  normaliseSupplier(row?.supplier || '') + '|' + day(row?.invoice_date)
+
+function indexCarried(rows = []) {
+  const m = new Map()
+  rows.forEach((row, i) => {
+    if (!day(row?.invoice_date)) return          // undated tells us nothing here
+    if (!noOfficeNumber(row)) return
+    const t = num(row?.total)
+    if (t === null || t === 0) return
+    /* NO SPLIT READ AT ALL — not "no VAT", which is ordinary on zero-rated gear
+       and shows as net === total. Both at nought with money in the total means
+       the reader found a bare figure, which is what a carry-forward line is. */
+    if (num(row?.net) !== 0 || num(row?.vat) !== 0) return
+    const k = carriedKey(row)
+    if (!m.has(k)) m.set(k, [])
+    m.get(k).push({ i, row })
+  })
+  for (const [k, v] of m) if (v.length < 2) m.delete(k)
   return m
 }

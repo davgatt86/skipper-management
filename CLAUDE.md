@@ -1142,6 +1142,92 @@ page total?"* is answered for a whole bundle in one look — which is the only
 question a same-total pair actually asks. Twenty-one groups across twenty scans
 came down to about a dozen images.
 
+### THE NUMBERLESS INVOICES CHECKED — and the dearest mistake in the record
+
+David: *"now check the invoices with no number for wrong totals."* 46 rows, and
+the answer is £136,140.56.
+
+    invoices 3,271 -> 3,266     value £11,189,885.82 -> £11,051,204.26
+    numberless rows 46 -> 41
+
+#### MACDUFF 36766 — one five-page invoice filed as four, £192,737.20 for a £56,596.64 job
+
+The bundle of 10-05-2022 is FIVE PAGES OF ONE INVOICE, scanned back page first:
+scan page 1 is the invoice's page 5, scan page 5 its page 1. Every printed page
+carries a **brought-forward at the top and a carried-forward at the foot**, and
+the reader took each page's carry-forward as that page's invoice total:
+
+    scan p5  c/f £32,102.57        scan p3  c/f £54,483.39
+    scan p4  c/f £50,413.79        scan p2  c/f £55,737.45
+
+Four invoices, all dated 10/11/2021, all with **net 0 and VAT 0**, totalling
+**£192,737.20**. And the page carrying the real figure got no row at all: scan
+page 1 prints **TOTAL £56,596.64**, with Don Fishing's own posting beside it
+reading `6850 | 56596 64`. **OVERSTATED BY £136,140.56** — the largest single
+error in the whole ten-year load, and it sat there because nothing on the record
+contradicted it.
+
+**`split` could not see this.** That rule keys on firm + total, and the four
+totals are all different — they are four points on one rising sequence. So there
+is a seventh kind, `carried`, and it needs **three things at once**:
+
+- **several rows, one firm, none with a number the office printed** — a page
+  with no header has no number, so every page of one invoice looks numberless;
+- **all carrying THE SAME invoice date** — one job invoiced once on one day,
+  where genuine separate invoices land on different days;
+- **and NO NET/VAT SPLIT on any of them**, which is the strongest of the three.
+  A real invoice prints its net and its VAT; a carry-forward line is a bare
+  running figure, so the reader has nothing to split and returns zeroes.
+
+**Zero-rated is NOT the same as no split read**, and the test says so: gear
+invoiced at 0% shows net === total, not net === 0. Swept over the whole record
+the rule fires on Macduff and **nothing else** — not the seven numberless
+Jackson rows in one bundle, nor the five Strachan, because those carry a real
+net and VAT of their own.
+
+#### Two more that were not invoices at all
+
+**PETERHEAD PORT AUTHORITY £2,541.00 is 2,541 KILOGRAMS.** The document is the
+market's *"Supply Catalog — per clock, supplier and species"* for AUDACIOUS BF83,
+pages 3 and 4 of 4, and the figure filed as a cost is the supplier total in the
+**Total weight (kg)** column. It is the boat's own landing, read as a bill.
+Third document of this kind after the fish/oil log record.
+
+**A CONTINUATION PAGE IS NOT AN INVOICE.** Page 8 of the 15-page Jackson bundle
+carries lines and no totals block, and was filed at **£0.00**. It is the second
+page of the £19,985.83 invoice whose totals page is page 7 — the same
+back-page-first order as pages 5 and 6 of that bundle. The surviving row now
+spans 7-8.
+
+#### One left alone, and flagged
+
+**MAN Diesel & Turbo £1,717.89 is an ORDER CONFIRMATION**, No. 31898255, not an
+invoice — *"Total EXW Frederikshavn"*, a quoted price. Page 2 of the same scan is
+the real invoice, 95497252, at £39.33. Every other MAN Diesel entry in the record
+carries a proper 95xxxxxx number; this one has none because it is not an invoice.
+**But no MAN Diesel invoice for £1,717.89 exists anywhere in the record**, so if
+the parts were supplied this is the only trace of the cost. It stays, with the
+reason on its bundle. It will double count if the real invoice ever turns up, and
+that is the skipper's call, not a rule's.
+
+#### Everything else was verified, page by page
+
+All seven remaining numberless Jackson rows against their printed *Total £ Incl.
+VAT*; both Inverboyndie rows (£4,157.47 and £6,471.71, both printed *Amount Due
+GBP*); both queried RBS statements (£1,564.98 and £712.57, both printed *TOTAL
+ACTIVITY*). **The odd `net` on a card statement is the office's handwritten
+allocation being read as a net** — £627.07 against a £712.57 total is what
+somebody wrote on the page in biro, not a figure the bank printed.
+
+**And the shape that carries the risk is now known**: every error found in this
+sweep is either a MULTI-PAGE invoice read as several, or a document that was
+never an invoice. A one-page bill with one printed total has been right every
+time. That is why the check is *several rows from one firm in one bundle* rather
+than a row-by-row audit — after the fixes only three such clusters remain, and
+all three were read page by page.
+
+`test-invoices.mjs` 149 → **158**.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out

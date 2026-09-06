@@ -623,5 +623,49 @@ eq(pageLabel('', ''), '', 'an unread page says nothing rather than "p. 0"')
   ok(both.found[0].kind === 'certain', 'what is already filed is the stronger claim')
 }
 
+
+/* ---- A RUNNING CARRIED-FORWARD FIGURE READ AS AN INVOICE ------------------
+ *
+ * The dearest mistake in the record, at £136,140.56. Macduff Shipyards 36766 of
+ * 10-11-2021 is ONE invoice over five pages, scanned back page first, and every
+ * page carries a brought-forward at the top and a carried-forward at the foot.
+ * The reader took each page's carry-forward as that page's invoice total, and
+ * the page printing the real TOTAL of £56,596.64 got no row at all.
+ */
+{
+  const pg = (total, o = {}) => ({ supplier: 'Macduff Shipyards Ltd', invoice_no: '',
+                                   invoice_date: '2021-11-10', net: 0, vat: 0, total, ...o })
+  const r = checkForDuplicates([pg(55737.45), pg(54483.39), pg(50413.79), pg(32102.57)], [])
+  ok(r.carried === 1, 'four pages of one running total are flagged once')
+  ok(r.found[0].hits.length === 3, 'and it names the other three')
+  ok(r.split === 0, 'split cannot see it — the four totals are all different')
+
+  // ALL THREE CONDITIONS ARE NEEDED. Drop any one and it must fall silent.
+  ok(checkForDuplicates([pg(55737.45, { net: 46447.88, vat: 9289.57 }),
+                         pg(54483.39, { net: 45402.83, vat: 9080.56 })], []).carried === 0,
+     'rows carrying a real net and VAT are ordinary invoices')
+  ok(checkForDuplicates([pg(55737.45, { invoice_date: '2021-11-10' }),
+                         pg(54483.39, { invoice_date: '2021-11-24' })], []).carried === 0,
+     'two dates means two invoices, not one running total')
+  ok(checkForDuplicates([pg(55737.45, { invoice_no: '36766' }), pg(54483.39)], []).carried === 0,
+     'a number the office printed means it is an invoice')
+  ok(checkForDuplicates([pg(55737.45, { invoice_date: null }), pg(54483.39, { invoice_date: null })], [])
+       .carried === 0, 'undated rows say nothing either way')
+
+  // THE SEVEN NUMBERLESS JACKSON ROWS IN ONE REAL BUNDLE MUST NOT FIRE. They
+  // each carry their own net and VAT off their own printed totals block.
+  const jackson = [
+    { supplier: 'Jackson Trawls Ltd', invoice_no: '', invoice_date: null, net: 4143.96, vat: 96.79, total: 4240.75 },
+    { supplier: 'Jackson Trawls Ltd', invoice_no: '', invoice_date: null, net: 19965.05, vat: 20.78, total: 19985.83 },
+    { supplier: 'Jackson Trawls Ltd', invoice_no: '', invoice_date: null, net: 4250, vat: 0, total: 4250 },
+  ]
+  ok(checkForDuplicates(jackson, []).carried === 0, 'a bundle of real numberless invoices is left alone')
+
+  // net === total with no VAT is ORDINARY on zero-rated fishing gear and is not
+  // the same thing as no split having been read at all.
+  ok(checkForDuplicates([pg(4250, { net: 4250 }), pg(2070, { net: 2070 })], []).carried === 0,
+     'zero-rated is not the same as no split read')
+}
+
 console.log('boat invoices: ' + n + ' checks passed')
 
