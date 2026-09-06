@@ -987,7 +987,7 @@ number this app invented can never match a row carrying the office's own, since
 bundles: **one pair in the whole record, £187.10.** So the numberless rows are
 not silently duplicating numbered ones.
 
-#### STILL OPEN — Woodsons £112,612.00, twice
+#### Woodsons £112,612.00, twice — SETTLED, see below
 
 `209852` and `209853`, both dated 16-11-2022, both **£112,612.00 to the penny**,
 both off the 18-page bundle of 01-12-2022, describing different goods (a motion
@@ -999,6 +999,62 @@ split. It needs the scan opened or a line-level read, the way 3098/3098b was
 settled.
 
 `test-invoices.mjs` 139 → **149**.
+
+### SETTLED — three deleted, and WOODSONS WAS NOT A DUPLICATE (Sep 2026)
+
+David: *"check woodsons scan. three calls for you, are they duplicates? if they
+are, delete, if not, keep."*
+
+    invoices  3,276 -> 3,273     value  £11,299,735.27 -> £11,191,146.48
+    page splits remaining: 0     58 conversions stand
+
+**THE THREE WERE DUPLICATES AND WENT — £7,976.79.** The tail row of each Strachan
+pair, and page 4 of the RBS scan. The survivors took the page spans the whole
+invoice actually occupies (2–3 and 5–6), and the £4,247.37 row took the **VAT of
+7.07** that was printed on the half being deleted — the row that carried the date
+had it as 12. **A duplicate is two readings of one document, so the better half of
+each field belongs on the row that survives.**
+
+**AND THE £1,523 ROW HAD CLAIMED PAGES 3–4**, where page 4 is a different invoice
+altogether — Strachan INV-18221, 22 Mar 2022, £1,520.00. A wrong span is a wrong
+page with extra confidence.
+
+#### WOODSONS WAS A WRONG TOTAL, NOT A DOUBLE COUNT — £100,612 OUT
+
+Pages 9–18 of the 01-12-2022 bundle are all Woodsons, and the scan settles it:
+
+    page 9      209851  lease purchase, SCANBAS 365      £3,611.82
+    pages 10-11 209853  sales                           £12,000.00
+    pages 12-18 209852  sales                          £112,612.00
+
+**Each one is scanned back page first**, the same habit as Strachan — so 209853's
+totals page is page 10 and its items are on page 11. **Page 10 prints "Invoice
+Total 12,000.00", with the office's own posting "6850 | 12000 00" written beside
+it in biro.** Only 209852 is £112,612.00.
+
+So the reader gave 209853 the total off the *other* invoice. **The record was
+OVERSTATED by £100,612.00** — and it presented as a duplicate, which is the thing
+to remember: two rows agreeing to the penny is not always one cost counted twice.
+Sometimes it is one cost counted once and a second cost counted wrongly. Reading
+the scan is what tells them apart, and deleting on the strength of the
+coincidence would have destroyed a real £12,000 invoice and left the £100,612
+error in place.
+
+**Nothing was deleted there.** 209853 corrected to £12,000.00, and all three page
+spans set from the scan — 209852 had claimed **page 1**, which is a Peterhead
+Marine Electrics bill for £155.26.
+
+**The split rule was right to stay quiet on it.** Both carry the office's own
+number, so it is not a page split, and the rule requires one side to have none.
+A rule that had fired here would have been arguing for the wrong answer.
+
+**A contact sheet is how eighteen pages got read for the cost of three looks** —
+`scratchpad/sheet.mjs` tiles every page of a scan shrunk into one image, and
+`band.mjs` crops the same horizontal strip from a run of pages, so ten invoice
+numbers or ten totals arrive in one picture. The scans are photographs or
+CCITT fax with no text layer, so there is nothing to grep; pdf.js decodes the
+page images and the PNG is written with nothing but zlib, the way
+`scripts/make-icons.mjs` does it.
 
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
