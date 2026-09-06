@@ -899,6 +899,107 @@ invoice, total £1,523.00"* and page 3 lists the items, and both rows carry the
 full total. That would be a real double count. It is £3,729 between them and now
 answerable in a minute, because the page numbers open the scan where it matters.
 
+### ONE INVOICE READ AS TWO — the office scans back page first (Sep 2026)
+
+Both scans were opened. The Strachan guess above was right and it was worse than
+that: **the same bundle does it twice, and the second pair is one the derived
+reference cannot see.**
+
+**THE OFFICE FEEDS A TWO-PAGE INVOICE INTO THE SCANNER BACK PAGE FIRST**, so the
+bundle runs [totals page, items page]. The reader takes each as an invoice of its
+own and files the cost twice. Off the bundle of 11 May 2022:
+
+    page 2   TOTAL GBP 1,523.00, due 18 Apr, bank details, POSTED stamp, NO items
+    page 3   the header and 18 items, subtotal 1,507.79 + VAT 15.21 = 1,523.00
+
+    page 5   one last line, subtotal 4,240.30 + VAT 7.07, TOTAL GBP 4,247.37
+    page 6   the header, invoice date 28 Mar 2022, and 20 items
+
+**£5,770.37 counted twice off one bundle.**
+
+**NEITHER `docKey` NOR THE DERIVED REFERENCE CAN SEE IT, and for two different
+reasons.** `docKey` needs an invoice NUMBER and a page with no header has none.
+The reference is firm + DATE + total — and the two halves DISAGREE about the
+date, because only the header page carries one. So the £4,247.37 pair came out
+`NN-STRACHANTR-undated-4247.37` against `NN-STRACHANTR-20220328-4247.37` and
+matched nothing at all. **The £1,523 pair only collided because neither half had
+a date.** Half of this was invisible to everything the app had.
+
+**SO THE KEY DROPS THE DATE** and keeps what both halves of one invoice must
+agree on: **the firm and the printed total**. `indexSplits` in
+`duplicates.js`, a sixth kind, `split`.
+
+**THE GUARD IS THAT ONE SIDE CARRIES NO NUMBER.** Two invoices from one firm for
+the same amount in one bundle are perfectly ordinary — Woodsons bill £1,180 most
+months, Ironside £270 — and every genuine pair carries the office's own number on
+BOTH sides, because both are real headers. A page with no header has nothing to
+read. Measured over the whole record: **25 same-firm-same-total groups, of which
+the rule flags 3** — and those 3 are exactly the ones opening the scans proved.
+Not one genuine pair is touched.
+
+**BLANK COUNTS AS "no office number", not just `NN-`.** The reference is
+assigned in `saveBatchInvoices`, so a row on the REVIEW screen carries an empty
+number — a check that only knew about the `NN-` prefix would work beautifully on
+the record and do nothing at the one moment it is wanted.
+
+**THE RBS PAIR IS A DIFFERENT ANIMAL and both halves are the whole document.**
+Pages 1 and 4 of the 25 Nov 2019 bundle are the SAME statement page — 04 June to
+03 July 2019, the same six transactions, `TOTAL ACTIVITY £2,206.42`, card
+5473 5650 0172 7378, both stamped *Page 2 of 2*. Scanned twice. The only
+difference is the biro:
+
+    page 1   £912.81  code 6857   (CJP 29/19)
+    page 4   £257.50  code 6550   (CJP 29/19)
+
+That is Don Fishing splitting a shared cost by hand, the same habit as the *50%*
+written on the Strachan and Bremner invoices. **The record holds £4,412.84 for a
+statement whose face value is £2,206.42 and whose two written allocations come to
+£1,170.31.** Which is this boat's is his call, not a rule — but the £2,206.42 is
+counted twice either way.
+
+#### AND THE PAGES THAT READ AS NOTHING WERE ALL FINE
+
+The blank-page sweep looked alarming and was not. **29 of 273 fully-paged bundles
+have a page with no invoice filed against it, 58 pages.** Five of them were
+opened, on the other 11 May bundle:
+
+    p2  Jackson Trawls TPSI006065  09-02-2022  £6,721.64
+    p3  Jackson Trawls TPSI006253  18-02-2022  £6,255.00
+    p4  Jackson Trawls TPSI006540  01-03-2022  £2,985.00
+    p5+6 Jackson Trawls TPSI006544 03-03-2022  £4,051.02
+    p10 Jackson Trawls TPSI006615  17-03-2022  £7,140.71
+
+**Every one is already on the record**, filed off the bundles of 28 Feb, 07 Mar
+and 28 Mar. Same for Strachan INV-18080 (£7,087.00) and INV-18221 (£1,520.00) on
+the 9-page bundle. The 11 May scans are the office **re-sending invoices already
+approved weeks earlier** — the habit this file has documented all along, seen
+from the other end. Nothing is missing.
+
+**A BLANK PAGE IS A CANDIDATE, NEVER A FINDING**, and there are three innocent
+reasons for one: a re-send already on file, the second page of an invoice whose
+`page_to` was not set, and a row the duplicate sweep deleted. The 13 Oct 2025
+bundle shows all of the last kind — 11 blank pages, every one where a duplicate
+row used to be.
+
+**A cross-check that found nothing, which is the useful outcome.** A row whose
+number this app invented can never match a row carrying the office's own, since
+`docKey` is firm + number. Matched instead on firm + total + date across
+bundles: **one pair in the whole record, £187.10.** So the numberless rows are
+not silently duplicating numbered ones.
+
+#### STILL OPEN — Woodsons £112,612.00, twice
+
+`209852` and `209853`, both dated 16-11-2022, both **£112,612.00 to the penny**,
+both off the 18-page bundle of 01-12-2022, describing different goods (a motion
+sensor against a complete scales system). Two real invoices agreeing to the penny
+is unlikely, and the page recorded for 209852 is demonstrably wrong — page 1 of
+that scan is a Peterhead Marine Electrics bill for £155.26. The new rule does NOT
+flag it, correctly: both carry the office's own number, so it is not a page
+split. It needs the scan opened or a line-level read, the way 3098/3098b was
+settled.
+
+`test-invoices.mjs` 139 → **149**.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out

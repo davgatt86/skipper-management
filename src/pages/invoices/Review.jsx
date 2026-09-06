@@ -298,6 +298,7 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
                       marginBottom: '0.45rem' }}>
           <b style={{ color: 'var(--brass)', fontSize: '0.86rem' }}>
             {duplicate.kind === 'within' ? 'This bundle carries it twice'
+              : duplicate.kind === 'split' ? 'One invoice read as two — check the pages'
               : duplicate.kind === 'run' ? 'Also in another bundle you are about to save'
               : duplicate.kind === 'derived' ? 'Same firm, date and amount already on file'
               : duplicate.kind === 'certain' ? 'Already on file'
@@ -309,6 +310,16 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
               /* NOT ON FILE YET, so the answer is to leave one out rather than
                  to go looking through history. Names the other bundle, because
                  "it is in one of the twelve on this screen" is not an answer. */
+              /* THE PAGES ARE THE ANSWER HERE, not the history. Both halves are
+                 in the scan in front of you: one has the items, the other the
+                 total, and they are the same invoice. */
+              : duplicate.kind === 'split'
+                ? 'same firm and the same total off '
+                  + (duplicate.hits.every((h) => h.page_from) && duplicate.row?.page_from
+                      ? 'pages ' + [duplicate.row.page_from, ...duplicate.hits.map((h) => h.page_from)].join(' and ')
+                      : 'this bundle')
+                  + ', and at least one carries no invoice number. A two-page invoice'
+                  + ' scanned back page first reads as two. Open both before saving.'
               : duplicate.kind === 'run'
                 ? 'not filed yet — it is also in the bundle of '
                   + duplicate.hits.map((h) => fmtDate(String(h._batch?.received_at || '').slice(0, 10))

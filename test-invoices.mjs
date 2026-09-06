@@ -558,5 +558,70 @@ eq(pageLabel('', ''), '', 'an unread page says nothing rather than "p. 0"')
   ok(none.found.length === 0 && none.run === 0, 'no run given behaves exactly as before')
 }
 
+
+/* ---- ONE INVOICE READ AS TWO — the page split -----------------------------
+ *
+ * Off the real Strachan Trawls bundle of 11 May 2022, opened Sep 2026. The
+ * office feeds a two-page invoice back page first, so the scan runs
+ * [totals page, items page] and the reader files the cost twice. Neither
+ * docKey nor the derived reference can see it: docKey needs a number and
+ * neither page has one, and the reference is firm + DATE + total while only
+ * the header page carries a date.
+ */
+{
+  const row = (o) => ({ supplier: 'Strachan Trawls (Fraserburgh) Ltd', invoice_no: '',
+                        invoice_date: null, total: 1523, ...o })
+
+  // Page 2 is the tail: a total, a due date, no items and no header, so no date.
+  // Page 3 is the head: the items and the invoice date.
+  const tailPage = row({ page_from: 2, page_to: 2 })
+  const headPage = row({ page_from: 3, page_to: 3, invoice_date: '2022-03-18' })
+  const r = checkForDuplicates([tailPage, headPage], [])
+  ok(r.split === 1, 'the two halves of one invoice are flagged')
+  ok(r.found[0].index === 0 && r.found[0].hits[0].page_from === 3,
+     'it flags the first half and points at the other page')
+  ok(r.value === 1523, 'the cost of filing it twice is the one total, not two')
+
+  // THE DATES DISAGREE ON PURPOSE. This is the £4,247.37 pair, which the derived
+  // reference missed for exactly this reason: NN-STRACHANTR-undated-4247.37
+  // against NN-STRACHANTR-20220328-4247.37.
+  const refMiss = checkForDuplicates(
+    [row({ total: 4247.37, invoice_no: 'NN-STRACHANTR-undated-4247.37', invoice_no_assigned: true }),
+     row({ total: 4247.37, invoice_date: '2022-03-28',
+           invoice_no: 'NN-STRACHANTR-20220328-4247.37', invoice_no_assigned: true })], [])
+  ok(refMiss.split === 1 && refMiss.derived === 0,
+     'a pair the derived reference cannot match is still caught')
+
+  // TWO REAL INVOICES FOR THE SAME AMOUNT ARE ORDINARY and must not be flagged.
+  // Woodsons bill £1,180 most months; both sides carry the office's own number.
+  const genuine = checkForDuplicates(
+    [{ supplier: 'Woodsons Of Aberdeen Ltd', invoice_no: '191042', invoice_date: '2020-04-02', total: 1180 },
+     { supplier: 'Woodsons Of Aberdeen Ltd', invoice_no: '190364', invoice_date: '2020-03-02', total: 1180 }], [])
+  ok(genuine.found.length === 0, 'two numbered invoices for the same amount are left alone')
+
+  // A BLANK NUMBER IS THE PRE-SAVE SHAPE. The derived reference is assigned in
+  // saveBatchInvoices, so on the review screen the row carries '' — a check that
+  // only knew about NN- would do nothing at the one moment it is wanted.
+  ok(checkForDuplicates([row({ page_from: 2 }), row({ page_from: 3 })], []).split === 1,
+     'it fires before the reference has been assigned')
+
+  // Different firms, same total: not a split.
+  ok(checkForDuplicates([row({}), row({ supplier: 'Jackson Trawls Ltd' })], []).split === 0,
+     'the same total from two different firms is not a split')
+
+  // A NIL TOTAL MATCHES EVERYTHING, so it is never a key. Number('') === 0 has
+  // caught this repo four times.
+  ok(checkForDuplicates([row({ total: 0 }), row({ total: 0 })], []).split === 0,
+     'two rows with no total are not called the same invoice')
+
+  // On file beats a split: the stronger claim wins and the row is reported once.
+  const filed = [{ id: 'x', batch_id: 'other', supplier: 'Strachan Trawls (Fraserburgh) Limited',
+                   invoice_no: 'INV-18080', invoice_date: '2022-02-20', total: 1523 }]
+  const both = checkForDuplicates(
+    [row({ invoice_no: 'INV-18080', invoice_date: '2022-02-20' }), row({ page_from: 3 })], filed)
+  ok(both.found.filter((f) => f.index === 0).length === 1, 'a row is reported once, not twice')
+  ok(both.found[0].kind === 'certain', 'what is already filed is the stronger claim')
+}
+
 console.log('boat invoices: ' + n + ' checks passed')
 

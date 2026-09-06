@@ -88,6 +88,13 @@ export function matchExisting(row, index) {
 const isAssigned = (r) =>
   r?.invoice_no_assigned === true || /^NN-/.test(String(r?.invoice_no ?? '').trim())
 
+/* NOTHING THE OFFICE PRINTED. Wider than `isAssigned` on purpose: a row on the
+   review screen has not been saved yet, so a numberless invoice carries a BLANK
+   number rather than an `NN-` reference — the reference is assigned in
+   `saveBatchInvoices`. A check that only knew about `NN-` would therefore work
+   on the record and do nothing at the one moment it is wanted. */
+const noOfficeNumber = (r) => !flatNo(r?.invoice_no) || isAssigned(r)
+
 /** Index the invoices already filed, so a bundle is checked in one pass. */
 export function indexInvoices(invoices = [], { ignoreBatch = null } = {}) {
   const m = new Map()
@@ -149,6 +156,7 @@ export function indexRun(bundles = [], { exceptBatch = null } = {}) {
 export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
   const index = indexInvoices(invoices, opts)
   const run = indexRun(opts.alsoInRun, { exceptBatch: opts.ignoreBatch })
+  const split = indexSplits(rows)
   const seen = new Map()
   const found = []
 
@@ -172,6 +180,14 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     const alsoHere = k && run.get(k)
     if (alsoHere && alsoHere.length) {
       found.push({ index: i, row, kind: 'run', hits: alsoHere })
+      return
+    }
+
+    /* LAST, because it is the weakest claim and every other kind is about a
+       different document. This one is about the same document read twice. */
+    const halves = split.get(splitKey(row))
+    if (halves && halves.length > 1 && halves[0].i === i) {
+      found.push({ index: i, row, kind: 'split', hits: halves.slice(1).map((h) => h.row) })
     }
   })
 
@@ -186,5 +202,52 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     within: found.filter((f) => f.kind === 'within').length,
     run: found.filter((f) => f.kind === 'run').length,
     derived: found.filter((f) => f.kind === 'derived').length,
+    split: found.filter((f) => f.kind === 'split').length,
   }
+}
+
+/* ONE INVOICE READ AS TWO — the page split.
+ *
+ * Found Sep 2026 by opening two scans David asked about. The office feeds a
+ * two-page invoice into the scanner BACK PAGE FIRST, so the bundle runs
+ * [totals page, items page]. The reader takes each as an invoice of its own and
+ * files the same cost twice:
+ *
+ *     Strachan Trawls, bundle of 11 May 2022
+ *       page 2   TOTAL GBP 1,523.00, due date, bank details, no items
+ *       page 3   the header and the items, subtotal 1,507.79 + VAT 15.21
+ *     ...which is 1,523.00. One invoice, filed twice.
+ *
+ * NEITHER `docKey` NOR THE DERIVED REFERENCE CAN SEE IT. docKey needs a number
+ * and neither page has one; the derived reference is firm + DATE + total, and
+ * the two halves disagree about the date because only the header page carries
+ * it — so the £4,247.37 pair came out as NN-STRACHANTR-undated-4247.37 against
+ * NN-STRACHANTR-20220328-4247.37 and matched nothing at all.
+ *
+ * SO THE KEY DROPS THE DATE and keeps what both halves of one invoice must
+ * agree on: the firm and the printed total.
+ *
+ * THE GUARD IS THAT ONE SIDE HAS NO NUMBER. Two invoices from one firm for the
+ * same amount in one bundle are perfectly ordinary — Woodsons bill £1,180 most
+ * months and Ironside £270 — and every one of those carries the office's own
+ * number on BOTH sides, because both are real headers. A page with no header
+ * has no number to read. Measured over the whole record: 25 same-firm-same-total
+ * groups, of which this rule flags 3 — and those 3 are exactly the ones opening
+ * the scans proved. No genuine pair is touched.
+ */
+const splitKey = (row) =>
+  normaliseSupplier(row?.supplier || '') + '|' + (num(row?.total) ?? 'x')
+
+function indexSplits(rows = []) {
+  const m = new Map()
+  rows.forEach((row, i) => {
+    const t = num(row?.total)
+    if (t === null || t === 0) return          // a nil total matches everything
+    const k = splitKey(row)
+    if (!m.has(k)) m.set(k, [])
+    m.get(k).push({ i, row })
+  })
+  /* Only where at least one side has no number of its own. */
+  for (const [k, v] of m) if (v.length < 2 || !v.some((x) => noOfficeNumber(x.row))) m.delete(k)
+  return m
 }
