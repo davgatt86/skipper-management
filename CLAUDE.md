@@ -1356,6 +1356,69 @@ the one in `test-invoice-dashboard.mjs` about numberless rows. Both were written
 from reasoning and both were half right. Measure before wording a warning as an
 accusation.
 
+### NO TOTAL AT ALL — £55,619.14 recovered, and the last of the list (Sep 2026)
+
+David: *"check ones with no total at all."* 13 rows filed at £0.00, every one of
+them with a real invoice number, a real date and a real description — the reader
+read the invoice and could not get the money.
+
+    invoices 3,263 -> 3,262     value £10,908,165.27 -> £10,963,784.41
+    rows at nil 13 -> 7, and all seven are the document, not a failed read
+
+**FIVE REAL TOTALS, ALL ON A PAGE THE READER NEVER LOOKED AT:**
+
+    Furuno 205144        £43,670.00   totals on invoice page 3 = SCAN PAGE 1
+    Inverboyndie INV-0207 £5,416.18   on its own payment advice
+    Macduff V 108412      £3,083.18   totals page 1, items page 2
+    Woodsons 210914       £2,947.67   totals page 1, items page 2
+    Macduff 32930           £502.11   read back at line level, page 30
+
+**Four of the five are back-page-first again** — the pattern that has now
+produced the page split, the Macduff carried-forward, the Inverboyndie head/tail
+and this. **It is the single most productive fact in the whole load.**
+
+**INVERBOYNDIE INV-0239 WAS THE SAME INVOICE TWICE, filed as one row with the
+money and no number and another with the number and no money.** Exactly INV-0364
+on the 2025-07-07 bundle. Merged onto one row; **no value changed**, because the
+£6,471.71 was only ever counted once. The reader's own line detail settled it —
+22 lines and the date *(29/04/24)* printed among them.
+
+#### The other seven are the document being honest
+
+**WOODSONS 215446 IS GENUINELY NIL.** *Lease Purchase Contract 1334 complete*,
+printing **Goods Total 0.00, VAT Total 0.00, Invoice Total 0.00**, with
+*"No charge."* written on it by hand.
+
+**SIX ARE HANDWRITTEN JOHN A. SMITH DOCKETS WITH AN EMPTY TOTAL BOX.** The shop
+writes the items — and sometimes the prices — in biro and never totals it. One
+carries seven priced lines and *"* FOR LORENZO *"*, signed by the man who took
+them, and the ruled TOTAL box is blank. **Fired at the reader to be sure, and it
+returns null for net, VAT and total on all of them** — which is the honest
+answer, not a failure.
+
+**AND THE LINES WERE NOT ADDED UP.** Summing them would put a figure on the
+record that the document does not carry, which is the one thing this app refuses
+to do everywhere else — the settlement shows both totals and makes you
+acknowledge, the parser recomputes a starred price only from a figure that IS
+printed. A docket with no total is a question for the office, not arithmetic.
+
+**`su_invoices.total` IS NOT NULL, so nought and never-stated cannot be told
+apart in the column.** That is the same trap as `Number('') === 0`, which this
+codebase has now hit five times, and it is the reason those six rows must say so
+in words. Making it nullable is the honest fix and is NOT done here: `sum()`
+would still be right, but every page that formats a total would need to handle
+it, and that is a change to make deliberately rather than in the middle of a
+sweep.
+
+#### That is the whole error list
+
+    54 no number       done - GBP 136,140.56 out, one invoice read as four
+    33 net + VAT off   done - one wrong total, by 20p
+    26 no date         done - GBP 142,795.99 of duplicate found sideways
+    19 no total        done - GBP 55,619.14 recovered
+    17 negative        credit notes, correctly negative
+     5 empty bundles   all five correct reads
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out
