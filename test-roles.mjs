@@ -62,16 +62,20 @@ const offNav = navFor(officer).flatMap((g) => g.items.map((i) => i.to)).sort()
 eq('officer menu', offNav, [
   '/crew', '/crew-certs', '/crew-list',
   // The gear log is deck work — a mate keeps it as much as the skipper does.
-  '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/gear', '/maintenance', '/parts', '/vessel-certs',
+  '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/gear', '/maintenance', '/parts',
+  // The annual self-certification is record-keeping: the mate works through it,
+  // and only the skipper may sign it off. That refusal is in RLS, not the menu.
+  '/self-certification', '/vessel-certs',
 ])
-eq('officer sees Vessel and Crew only', navFor(officer).map((g) => g.label), ['Vessel', 'Crew'])
+eq('officer sees Vessel, Certification and Crew only', navFor(officer).map((g) => g.label),
+   ['Vessel', 'Certification', 'Crew'])
 
 /* THE ORDER OF THE SIDEBAR IS A DECISION, so it is asserted rather than left to
    whoever last edited the array. David set it Sep 2026 to follow the working
    day: what the market is doing, what the fish made, what is left to catch,
    what the office paid, then the boat, then the crew, then the settings. */
 eq('the sidebar runs in the agreed order', NAV.map((g) => g.label),
-   ['Overview', 'Market', 'Sales', 'Quota', 'Settlement', 'Vessel', 'Crew', 'Admin'])
+   ['Overview', 'Market', 'Sales', 'Quota', 'Settlement', 'Vessel', 'Certification', 'Crew', 'Admin'])
 // The money must not appear anywhere in his menu.
 for (const gone of ['/sales', '/quota', '/settlements', '/reconcile', '/contracted-crew', '/users', '/']) {
   eq(`officer menu excludes ${gone}`, offNav.includes(gone), false)

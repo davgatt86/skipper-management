@@ -31,6 +31,7 @@ const FuelLog = lazy(() => import('./pages/FuelLog'))
 const GearLog = lazy(() => import('./pages/GearLog'))
 const Familiarisation = lazy(() => import('./pages/Familiarisation'))
 const GarbageLog = lazy(() => import('./pages/GarbageLog'))
+const SelfCertification = lazy(() => import('./pages/SelfCertification'))
 const BuyerLeague = lazy(() => import('./pages/BuyerLeague'))
 const Activity = lazy(() => import('./pages/Activity'))
 const Reconcile = lazy(() => import('./pages/Reconcile'))
@@ -307,6 +308,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <BuyerLeague />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/self-certification" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <SelfCertification />
             </Suspense>
           </ProtectedRoute>
         } />
