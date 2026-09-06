@@ -318,15 +318,30 @@ eq(slicesForYear([{ invoice_date: '2026-01-01', total: 10 }], 2026)[0].amount, 1
   eq(twice.found[0].kind, 'within', 'and named as this bundle carrying it twice')
   eq(twice.found[0].at, 0, 'pointing at the row it repeats')
 
-  /* AN INVOICE WITH NO NUMBER CANNOT BE MATCHED THIS WAY, and must not be
-     guessed at from the amount and date — a firm sending the same £40 box of
-     gloves every month would be flagged every single time, and a guard that
-     fires on the ordinary case stops being read. */
+  /* AN INVOICE WITH NO NUMBER STILL CANNOT BE MATCHED ON ONE — docKey needs a
+     number and there is none, so `certain` and `similar` are both out of reach.
+     THE ASSERTION HERE USED TO BE THAT NOTHING WAS REPORTED AT ALL, on the
+     reasoning that guessing from amount and date would flag a firm's monthly £40
+     box of gloves every time. Half of that was right and half was wrong: opening
+     the scans in Sep 2026 turned up three real duplicates that no number-based
+     check could see, one of them C & I Hydraulics at £187.10 — read as DFC12265
+     on one scan and with no number at all on the other. So it is reported, as
+     the weakest kind, and the DATE is what keeps the gloves quiet: a monthly
+     charge lands on a different day each time. */
   const noNumber = checkForDuplicates(
     [{ supplier: 'Inverboyndie Trawls LLP', invoice_no: '', invoice_date: '2023-05-19', total: 34971.60 }],
     filed)
-  eq(noNumber.found.length, 0, 'no invoice number means no claim either way')
-  eq(docKey({ supplier: 'A Firm', invoice_no: null }), null, 'and no key at all')
+  eq(noNumber.certain, 0, 'no invoice number means no claim on the number')
+  eq(noNumber.similar, 0, 'nor the weaker one that still rests on a number')
+  eq(noNumber.sameamount, 1, 'but the same firm and amount on that day is worth saying')
+  eq(docKey({ supplier: 'A Firm', invoice_no: null }), null, 'and there is still no key at all')
+
+  /* THE GLOVES. Same firm, same amount, ANOTHER DAY — silence, which is the
+     whole reason the date is in the rule. */
+  const gloves = checkForDuplicates(
+    [{ supplier: 'Inverboyndie Trawls LLP', invoice_no: '', invoice_date: '2023-06-19', total: 34971.60 }],
+    filed)
+  eq(gloves.found.length, 0, 'the same amount on another date is left alone')
 }
 
 

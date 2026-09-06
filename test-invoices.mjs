@@ -667,5 +667,60 @@ eq(pageLabel('', ''), '', 'an unread page says nothing rather than "p. 0"')
      'zero-rated is not the same as no split read')
 }
 
+
+/* ---- THE SAME AMOUNT ON FILE UNDER A DIFFERENT NUMBER ---------------------
+ *
+ * docKey is firm + number, and a number is the field most likely to be misread:
+ * handwritten, short, sometimes not read at all. Three real duplicates got past
+ * every other check that way, the dearest being Trevor McDonald at £142,795.99 -
+ * the standalone scan is NAMED 3098B.pdf and was filed as 3098, while the Monday
+ * bundle has the same invoice as 3098b. It survived the whole 88-group sweep.
+ */
+{
+  const filed = (no, o = {}) => ({ id: no, batch_id: 'old', supplier: 'Trevor McDonald (Marine Engine Services)',
+                                   invoice_no: no, invoice_date: '2025-10-05', total: 142795.99, ...o })
+  const row = { supplier: 'Trevor McDonald (Marine Engine Services)', invoice_no: '3098b',
+                invoice_date: '2025-10-05', total: 142795.99 }
+  const r = checkForDuplicates([row], [filed('3098')], { ignoreBatch: 'new' })
+  ok(r.sameamount === 1, '3098b against a filed 3098 is flagged')
+  ok(r.value === 142795.99, 'and it is worth the whole invoice')
+
+  // A MATCH ON THE NUMBER IS THE STRONGER CLAIM and must win outright.
+  const exact = checkForDuplicates([{ ...row, invoice_no: '3098' }], [filed('3098')], { ignoreBatch: 'new' })
+  ok(exact.certain === 1 && exact.sameamount === 0, 'a real number match beats it and is reported once')
+
+  // THE DATE IS WHAT KEEPS IT QUIET. A firm billing the same amount on another
+  // day is ordinary - Woodsons' £1,180 lands every month.
+  const monthly = checkForDuplicates(
+    [{ supplier: 'Woodsons Of Aberdeen Ltd', invoice_no: '211294', invoice_date: '2023-02-01', total: 1180 }],
+    [{ id: 'x', batch_id: 'old', supplier: 'Woodsons Of Aberdeen Ltd', invoice_no: '210630',
+       invoice_date: '2023-01-05', total: 1180 }], { ignoreBatch: 'new' })
+  ok(monthly.found.length === 0, 'a monthly standing charge on another date is left alone')
+
+  // UNDATED ON EITHER SIDE IS NOT EVIDENCE AGAINST - the Fraserburgh security
+  // charge carries a PERIOD and no invoice date at all, and that is the pair
+  // this rule found: a handwritten 472 read as L472 on the other scan.
+  const undated = checkForDuplicates(
+    [{ supplier: 'Fraserburgh Harbour Patrol', invoice_no: '472', invoice_date: null, total: 56.1 }],
+    [{ id: 'y', batch_id: 'old', supplier: 'Fraserburgh Harbour Patrol', invoice_no: 'L472',
+       invoice_date: null, total: 56.1 }], { ignoreBatch: 'new' })
+  ok(undated.sameamount === 1, 'an undated pair still matches on firm and amount')
+
+  // One side with no number at all is the C & I Hydraulics case, £187.10.
+  const noNumber = checkForDuplicates(
+    [{ supplier: 'C & I Hydraulics', invoice_no: '', invoice_date: null, total: 187.1 }],
+    [{ id: 'z', batch_id: 'old', supplier: 'C & I Hydraulics', invoice_no: 'DFC12265',
+       invoice_date: '2022-12-23', total: 187.1 }], { ignoreBatch: 'new' })
+  ok(noNumber.sameamount === 1, 'a numberless row against a numbered one is flagged')
+
+  // The bundle being re-read is never its own duplicate, here as everywhere.
+  ok(checkForDuplicates([row], [filed('3098', { batch_id: 'new' })], { ignoreBatch: 'new' })
+       .found.length === 0, 're-reading a bundle does not flag it against itself')
+
+  // A different firm at the same amount on the same day is not a match.
+  ok(checkForDuplicates([row], [{ ...filed('3098'), supplier: 'Jackson Trawls Ltd' }],
+       { ignoreBatch: 'new' }).found.length === 0, 'the firm still has to agree')
+}
+
 console.log('boat invoices: ' + n + ' checks passed')
 

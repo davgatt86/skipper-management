@@ -300,6 +300,7 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
             {duplicate.kind === 'within' ? 'This bundle carries it twice'
               : duplicate.kind === 'split' ? 'One invoice read as two — check the pages'
               : duplicate.kind === 'carried' ? 'These may be one invoice’s running total'
+              : duplicate.kind === 'sameamount' ? 'Same firm and amount on file, different number'
               : duplicate.kind === 'run' ? 'Also in another bundle you are about to save'
               : duplicate.kind === 'derived' ? 'Same firm, date and amount already on file'
               : duplicate.kind === 'certain' ? 'Already on file'
@@ -317,6 +318,15 @@ function InvoiceRow({ r, filePath, pageCount, duplicate, onDropRow, onOpenPage, 
               /* THE DEAREST MISTAKE IN THE RECORD, at £136,140.56: Macduff 36766
                  was one five-page invoice whose every page carries a running
                  carried-forward figure, filed as four invoices. */
+              /* A NUMBER IS THE FIELD MOST LIKELY TO BE MISREAD - handwritten, short,
+                 and sometimes not read at all. Trevor McDonald 3098 against 3098b
+                 was GBP 142,795.99 that got past every check keyed on one. */
+              : duplicate.kind === 'sameamount'
+                ? 'this firm has ' + money(duplicate.row?.total ?? 0) + ' on file already, as '
+                  + duplicate.hits.map((h) => (h.invoice_no || 'no number') + ' of '
+                      + (h.invoice_date || 'no date')).join(' and ')
+                  + '. The numbers differ, so it may be two invoices - or one document whose'
+                  + ' number was read two ways. Worth opening both.'
               : duplicate.kind === 'carried'
                 ? duplicate.hits.length + ' more row' + (duplicate.hits.length === 1 ? '' : 's')
                   + ' from this firm on the same date, none with an invoice number and'

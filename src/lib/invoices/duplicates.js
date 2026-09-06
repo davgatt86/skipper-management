@@ -158,6 +158,7 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
   const run = indexRun(opts.alsoInRun, { exceptBatch: opts.ignoreBatch })
   const split = indexSplits(rows)
   const carried = indexCarried(rows)
+  const amounts = indexAmounts(invoices, opts)
   const seen = new Map()
   const found = []
 
@@ -195,7 +196,13 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     const run2 = carried.get(carriedKey(row))
     if (run2 && run2.length > 1 && run2[0].i === i) {
       found.push({ index: i, row, kind: 'carried', hits: run2.slice(1).map((h) => h.row) })
+      return
     }
+
+    /* WEAKEST OF ALL, and last for that reason. */
+    const sameSum = (amounts.get(splitKey(row)) || []).filter((h) =>
+      flatNo(h.invoice_no) !== flatNo(row.invoice_no) && datesFit(row, h))
+    if (sameSum.length) found.push({ index: i, row, kind: 'sameamount', hits: sameSum })
   })
 
   const value = found.reduce((t, f) => t + (num(f.row.total) || 0), 0)
@@ -211,6 +218,7 @@ export function checkForDuplicates(rows = [], invoices = [], opts = {}) {
     derived: found.filter((f) => f.kind === 'derived').length,
     split: found.filter((f) => f.kind === 'split').length,
     carried: found.filter((f) => f.kind === 'carried').length,
+    sameamount: found.filter((f) => f.kind === 'sameamount').length,
   }
 }
 
@@ -312,5 +320,57 @@ function indexCarried(rows = []) {
     m.get(k).push({ i, row })
   })
   for (const [k, v] of m) if (v.length < 2) m.delete(k)
+  return m
+}
+
+/* THE SAME AMOUNT ALREADY ON FILE UNDER A DIFFERENT NUMBER.
+ *
+ * `docKey` is firm + number, so it cannot see a document whose number was read
+ * two different ways — and a number is the field most likely to be misread,
+ * because it is often handwritten and always short. Three real duplicates in the
+ * record got past every other check for exactly that reason:
+ *
+ *   Trevor McDonald  £142,795.99  the standalone scan is NAMED 3098B.pdf and the
+ *                                 reader filed it as 3098; the Monday bundle a
+ *                                 few days later has it as 3098b
+ *   Fraserburgh HP        £56.10  a HANDWRITTEN 472, read 472 on one scan and
+ *                                 L472 on the other - identical documents down
+ *                                 to the posting box and the batch reference
+ *   C & I Hydraulics     £187.10  read as DFC12265 on one and with no number at
+ *                                 all on the other
+ *
+ * £142,795.99 of that survived the whole 88-group sweep of Sep 2026.
+ *
+ * SO MATCH ON WHAT WAS NOT MISREAD: the firm and the printed total, plus the
+ * invoice DATE where both carry one. The date is what keeps it quiet — a firm
+ * billing the same round amount twice is ordinary (Woodsons' £1,180 a month,
+ * Fraserburgh's £56.10 a month), and those land on different days. Swept over
+ * the whole ten-year record the rule fires NINE times, three of them the real
+ * duplicates above.
+ *
+ * IT IS THE WEAKEST CLAIM HERE and is reported last, after every kind that rests
+ * on a number. Two invoices of the same amount on one day from one firm is a
+ * thing that happens — VCU billed four measuring plates twice on 06-09-2016 —
+ * so the wording asks rather than tells.
+ */
+const amountKey = splitKey                      // firm + printed total
+
+/* Undated on either side is not evidence against: the office's own security
+   charge carries a PERIOD and no date at all, and that is the pair this found. */
+function datesFit(a, b) {
+  const x = day(a?.invoice_date), y = day(b?.invoice_date)
+  return !x || !y || x === y
+}
+
+export function indexAmounts(invoices = [], { ignoreBatch = null } = {}) {
+  const m = new Map()
+  for (const inv of invoices) {
+    if (ignoreBatch && inv.batch_id === ignoreBatch) continue
+    const t = num(inv?.total)
+    if (t === null || t === 0) continue
+    const k = amountKey(inv)
+    if (!m.has(k)) m.set(k, [])
+    m.get(k).push(inv)
+  }
   return m
 }

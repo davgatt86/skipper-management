@@ -1228,6 +1228,78 @@ all three were read page by page.
 
 `test-invoices.mjs` 149 → **158**.
 
+### THE UNDATED INVOICES — and £142,795.99 that survived every sweep
+
+David: *"now check the invoices with no dates for wrong totals."* 14 rows. The
+totals were nearly all right; the sweep found something else.
+
+    invoices 3,266 -> 3,263     value £11,051,204.26 -> £10,908,165.07
+    undated rows 14 -> 12
+
+**ONLY ONE TOTAL WAS EVEN ARGUABLE, and it was correct.** Scanmar UK-2110015 is
+filed at £16,866.00 described as *"Shipping costs (freight)"*, which reads as
+sixteen thousand pounds of freight. The scan is **page 2 of 2** — the totals page,
+whose only line is a £105.00 freight charge above *Total GBP 14,055.00 + 20% VAT
+2,811.00 = 16,866.00*. The total is exactly right; page 1, with the goods and the
+invoice date, is not in the scan, which is why the row is undated. Description
+corrected, figure untouched.
+
+#### WHAT IT ACTUALLY FOUND: a number is the field most likely to be misread
+
+An undated row is usually a page with no header — and a page with no header has
+no NUMBER either. Chasing that turned up three duplicates that **every check
+keyed on a number had missed**, because `docKey` is firm + number:
+
+    Trevor McDonald  £142,795.99   the standalone scan is NAMED 3098B.pdf and
+                                   the reader filed it as 3098; the Monday
+                                   bundle five days later has it as 3098b
+    Fraserburgh HP        £56.10   a HANDWRITTEN 472, read 472 on one scan and
+                                   L472 on the other
+    C & I Hydraulics     £187.10   DFC12265 on one, no number at all on the other
+
+**THE TREVOR McDONALD ONE SURVIVED THE 88-GROUP SWEEP OF SEP 2026** and is the
+second-largest single error in the record. The two rows agree on firm, date,
+amount and the work itself; the file name settles it. The 13-10 copy was kept
+because it carries the **work dates** read off the invoice — Feb to Sep 2023,
+the reading that moved £290,782 of engine work out of 2025 — which the other row
+does not have.
+
+**Fraserburgh and C & I are the same failure in miniature.** The Harbour Patrol
+pair are the same photograph twice: same handwriting, same *"472 (aui)"*
+annotation, same posting box, same batch reference **1017985**, same RECEIVED
+stamp. Only the reading of a handwritten number differs.
+
+#### The eighth kind: `sameamount`
+
+Match on **what was not misread** — the firm and the printed total — plus the
+invoice DATE where both sides carry one.
+
+**THE DATE IS WHAT KEEPS IT QUIET.** A firm billing the same amount twice is
+ordinary: Woodsons' £1,180 lands every month and Fraserburgh's £56.10 does too.
+Those land on different days. Measured over the whole ten-year record the rule
+fires **nine times**, three of them the real duplicates above — one in three, on
+a check that costs nothing at review time. Without the date it fires 68 times
+within a month, and 1,411 times over all.
+
+**Undated on either side is NOT evidence against**, and that is not a
+convenience: the Harbour Patrol invoice carries a *Period* and no date at all,
+and it is the pair this found.
+
+It is reported **last, after every kind that rests on a number**, and worded as a
+question. Two invoices of the same amount on one day does happen — VCU billed
+four measuring plates twice on 06-09-2016.
+
+**AND A TEST HAD TO BE REWRITTEN, which is the honest part.**
+`test-invoice-dashboard.mjs` asserted that a numberless row against a filed one
+produced **nothing at all**, reasoning that guessing from amount and date would
+flag a firm's monthly box of gloves every time. Half right: the gloves need
+guarding, and the date does it. But the belief that no claim could be made was
+wrong, and C & I Hydraulics is the £187.10 proving it. The assertion now says
+what is actually true — no claim **on the number**, one on the amount — with the
+gloves tested alongside it.
+
+`test-invoices.mjs` 158 → **166** · `test-invoice-dashboard.mjs` 73 → **76**.
+
 ### EVERY FOREIGN INVOICE IS NOW READ — nothing left at face value (Sep 2026)
 
     invoices 3,280 · £11,309,935 · 58 converted · £1,856,006 taken out
