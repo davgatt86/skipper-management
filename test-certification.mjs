@@ -155,4 +155,179 @@ const eq = (a, b, why) => { assert.deepStrictEqual(a, b, why); n++ }
   ok(a !== b, 'and each caller gets its own copy to render')
 }
 
+/* ==== THE OIL RECORD BOOK PART I ==========================================
+ * Reg 20 of the Merchant Shipping (Prevention of Oil Pollution) Regulations
+ * 2019. Audacious is 498 GT, so she must have one. The list below is the form
+ * itself and is not ours to design.
+ */
+const orb = await import('./src/lib/certification/orb.js')
+const {
+  CODES, CODE_LETTERS, allEntries, validEntry, orbRequired, keepUntil, unsigned,
+  weeklyGaps, nextPageNo, openPageOf, entriesByPage, correctionsOf, describeEntry,
+  entryRef, itemText,
+} = orb
+
+/* ---- The prescribed list -------------------------------------------------
+ * ONE OF THESE TWO LISTS IS A COPY, and this repo has been bitten by that
+ * before. `supabase/oil_record_book.sql` seeds `orb_items` with the same 41
+ * pairs and the database now refuses anything else, so editing one without
+ * the other has to fail here rather than at save time on a boat.
+ */
+{
+  eq(CODE_LETTERS, ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'], 'nine codes, A to I')
+  const items = allEntries()
+  eq(items.length, 41, '41 numbered items across the eight coded sections')
+
+  /* The exact pairs seeded into public.orb_items. If this fails, the migration
+     and the JS have drifted and one of them is now wrong. */
+  const SEEDED = [
+    'A/1', 'A/2', 'A/3.1', 'A/3.2', 'A/3.3', 'A/4.1', 'A/4.2',
+    'B/5', 'B/6', 'B/7', 'B/8', 'B/9.1', 'B/9.2', 'B/10',
+    'C/11.1', 'C/11.2', 'C/11.3', 'C/11.4', 'C/12.1', 'C/12.2', 'C/12.3', 'C/12.4',
+    'D/13', 'D/14', 'D/15.1', 'D/15.2', 'D/15.3',
+    'E/16', 'E/17', 'E/18',
+    'F/19', 'F/20', 'F/21',
+    'G/22', 'G/23', 'G/24', 'G/25',
+    'H/26.1', 'H/26.2', 'H/26.3', 'H/26.4',
+  ]
+  eq(items.map((i) => `${i.code}/${i.n}`), SEEDED, 'the JS list is exactly what the database holds')
+  ok(items.every((i) => i.text.trim().length > 8), 'every item carries the wording off the form')
+
+  /* CODE (I) IS THE ONLY PLACE FREE TEXT BELONGS, and it is the only code with
+     no numbered items. Give it one and the whole discipline goes. */
+  eq(CODES.find((c) => c.code === 'I').items.length, 0, 'code (I) has no numbered items')
+  ok(CODES.find((c) => c.code === 'I').freeText, 'and is the remarks code')
+  ok(CODES.filter((c) => c.code !== 'I').every((c) => !c.freeText), 'no other code takes free text')
+}
+
+/* ---- REFUSED, NEVER CORRECTED -------------------------------------------
+ * A wrongly coded entry is a deficiency. Quietly moving one to the nearest
+ * valid item would put a figure in this book that nobody chose.
+ */
+{
+  ok(validEntry('C', '11.3').ok, 'a real code and item is accepted')
+  ok(!validEntry('C', '99.9').ok, 'an item the form does not have is refused')
+  ok(!validEntry('C', '99.9').why.includes('11.3'), 'and it is not nudged towards the nearest one')
+  ok(!validEntry('Z', '1').ok, 'so is a code that does not exist')
+  ok(!validEntry('C').ok, 'a coded entry needs its item number')
+  ok(validEntry('I').ok, 'code (I) needs none')
+  ok(!validEntry('I', '1').ok, 'and must not carry one')
+  /* `A/11.3` is the shape this catches: both halves are real, the pair is not.
+     It is also exactly what the composite FK in the migration refuses. */
+  ok(!validEntry('A', '11.3').ok, 'a real item under the wrong code is still refused')
+}
+
+/* ---- WHO NEEDS ONE ------------------------------------------------------- */
+{
+  eq(orbRequired({ gross_tonnage: 498 }).required, true, 'Audacious at 498 GT must have one')
+  eq(orbRequired({ gross_tonnage: 400 }).required, true, '400 GT is the line, and it is inclusive')
+  eq(orbRequired({ gross_tonnage: 399 }).required, false, 'below it, none is required')
+  /* NOT REQUIRED AND NOT KNOWN MUST NOT READ ALIKE. `null` is not `false`. */
+  eq(orbRequired({}).required, null, 'no tonnage on file is unknown, never "not required"')
+  eq(orbRequired(null).required, null, 'and neither is no particulars')
+  eq(orbRequired({ gross_tonnage: '' }).required, null, 'a blank tonnage is not a zero-ton ship')
+}
+
+/* ---- THREE YEARS AFTER THE LAST ENTRY, not three years per entry ---------
+ * Reg 20. The date the whole book may be let go MOVES every time anybody
+ * writes in it, which is the opposite of a per-row retention.
+ */
+{
+  const e = [{ entry_date: '2023-01-04' }, { entry_date: '2026-09-01' }, { entry_date: '2024-06-06' }]
+  eq(keepUntil(e), '2029-09-01', 'three years after the LAST entry, not the first')
+  eq(keepUntil([{ entry_date: '2023-01-04' }]), '2026-01-04', 'one entry sets it on its own')
+  eq(keepUntil([]), null, 'an empty book has no retention date to state')
+  eq(keepUntil([{ entry_date: 'rubbish' }]), null, 'and an unreadable date is not a date')
+}
+
+/* ---- TWO SIGNATURES, and they are not interchangeable --------------------
+ * The officer signs the OPERATION, the master signs the PAGE, and they are
+ * chased from different people.
+ */
+{
+  const pages = [
+    { id: 'p1', page_no: 1, closed_at: '2026-08-01', master_signed_at: '2026-08-02' },
+    { id: 'p2', page_no: 2, closed_at: '2026-09-01', master_signed_at: null },
+    { id: 'p3', page_no: 3, closed_at: null, master_signed_at: null },
+  ]
+  const entries = [
+    { id: 'a', page_id: 'p1', officer_name: 'D Henderson', entry_date: '2026-08-01' },
+    { id: 'b', page_id: 'p2', officer_name: 'N Wood', entry_date: '2026-09-01' },
+    { id: 'c', page_id: 'p3', officer_name: '', entry_date: '2026-09-05' },
+  ]
+  const u = unsigned(entries, pages)
+  eq(u.noOfficer.map((x) => x.id), ['c'], 'an entry with no officer named is its own outstanding thing')
+  eq(u.openPages.map((p) => p.page_no), [2, 3], 'and a page the master has not signed is another')
+  eq(u.onSignedPage.map((x) => x.id), ['a'], 'an entry on a signed page is settled')
+
+  /* THE OPEN PAGE IS THE ONE ENTRIES GO ON: open, unsigned, highest numbered. */
+  eq(openPageOf(pages).page_no, 3, 'the open page is the unclosed one')
+  eq(openPageOf(pages.slice(0, 2)), null, 'with everything closed there is no page to write on')
+  /* THE NUMBER IS THE BOAT OWN RECORD, NOT A COUNT OF ROWS — a book started at
+     40 because thirty-nine are on paper carries on from there. */
+  eq(nextPageNo(pages), 4, 'the next page follows the highest on record')
+  eq(nextPageNo([]), 1, 'an empty book starts at one')
+  eq(nextPageNo([], 40), 40, 'or wherever the paper book has reached')
+  eq(nextPageNo([{ page_no: 39 }]), 40, 'and never at the row count')
+}
+
+/* ---- THE WEEKLY SLUDGE READING ------------------------------------------
+ * Code C item 11.3 is required weekly even on a voyage longer than a week, and
+ * a gap in it is the first thing a port state inspector counts. REPORTED,
+ * NEVER FILLED IN.
+ */
+{
+  const wk = (d) => ({ code: 'C', item_n: '11.3', entry_date: d })
+  const four = weeklyGaps([], '2026-08-03', '2026-08-30')
+  eq(four.length, 4, 'four weeks with nothing recorded are four gaps')
+  eq(four[0].from, '2026-08-03', 'each named by the Monday it begins')
+
+  const some = weeklyGaps([wk('2026-08-05'), wk('2026-08-20')], '2026-08-03', '2026-08-30')
+  eq(some.map((g) => g.from), ['2026-08-10', '2026-08-24'], 'only the weeks actually missing')
+  eq(weeklyGaps([wk('2026-08-05')], '2026-08-03', '2026-08-09').length, 0, 'a week with a reading is not a gap')
+
+  /* ONLY 11.3 COUNTS. A sludge disposal is not a sludge reading, and the two
+     are different items for a reason. */
+  eq(weeklyGaps([{ code: 'C', item_n: '12.1', entry_date: '2026-08-05' }], '2026-08-03', '2026-08-09').length, 1,
+     'a disposal under 12.1 does not answer the weekly 11.3')
+  eq(weeklyGaps([{ code: 'H', item_n: '26.3', entry_date: '2026-08-05' }], '2026-08-03', '2026-08-09').length, 1,
+     'and neither does a bunkering')
+  eq(weeklyGaps([], '2026-08-30', '2026-08-03'), [], 'a backwards window asks nothing')
+}
+
+/* ---- A CORRECTION IS A FURTHER ENTRY, never an edit ---------------------- */
+{
+  const entries = [
+    { id: 'a', page_id: 'p1', entry_date: '2026-08-01', recorded_at: '2026-08-01T09:00:00Z' },
+    { id: 'b', page_id: 'p1', entry_date: '2026-08-03', recorded_at: '2026-08-03T09:00:00Z', corrects_entry_id: 'a' },
+    { id: 'c', page_id: 'p2', entry_date: '2026-08-02', recorded_at: '2026-08-02T09:00:00Z' },
+  ]
+  const by = entriesByPage(entries)
+  eq([...by.keys()].sort(), ['p1', 'p2'], 'entries group onto their page')
+  eq(by.get('p1').map((e) => e.id), ['a', 'b'], 'oldest first — a record book is read forwards')
+
+  const cor = correctionsOf(entries)
+  eq(cor.get('a').map((e) => e.id), ['b'], 'the correction is filed against what it corrects')
+  eq(cor.has('b'), false, 'and the correction itself is not superseded')
+  /* THE ORIGINAL STAYS. Nothing here removes it, and nothing may. */
+  eq(entries.filter((e) => e.id === 'a').length, 1, 'the corrected entry is still in the book')
+}
+
+/* ---- IT NEVER INVENTS A FIGURE ------------------------------------------ */
+{
+  eq(describeEntry({ tank: 'Sludge tank', quantity: 3.4, unit: 'm3' }), 'Sludge tank · 3.4 m3', 'what was written')
+  eq(describeEntry({ tank: 'Sludge tank' }), 'Sludge tank', 'a missing quantity shows nothing at all')
+  /* A QUANTITY OF NOUGHT IS A REAL READING, and Number('') === 0 has bitten
+     this repo five times. Nought must print; blank must not. */
+  eq(describeEntry({ quantity: 0, unit: 'm3' }), '0 m3', 'nought is a reading and is printed')
+  eq(describeEntry({ quantity: '' }), '', 'a blank is not nought')
+  eq(describeEntry(null), '', 'and nothing at all is nothing at all')
+
+  eq(entryRef({ code: 'C', item_n: '11.3' }), '(C) 11.3', 'written the way it is read out of the book')
+  eq(entryRef({ code: 'I' }), '(I)', 'and the remarks code carries no number')
+  ok(itemText('C', '11.3').includes('total quantity of retention'), 'the prescribed wording is available')
+  eq(itemText('C', '99'), null, 'and an item that does not exist has none')
+  eq(itemText('Z', '1'), null, 'nor does a code that does not exist')
+}
+
 console.log('certification: ' + n + ' checks passed')

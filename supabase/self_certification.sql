@@ -155,7 +155,16 @@ create trigger audit_self_certification_items
   after insert or update or delete on public.self_certification_items
   for each row execute function public.audit_trigger();
 
--- NOTE FOR WHOEVER ADDS THE NEXT TABLE: officer_role.sql carries its allow-list
--- THREE times and cook_role.sql once more. These two tables are handled by the
--- explicit policies above instead, so neither file needs re-running for them —
--- but anything added later still does.
+-- THAT NOTE WAS WRONG AND IT WOULD HAVE COST THE OFFICER THIS PAGE.
+--
+-- It used to say these two tables were handled by the explicit policies above
+-- and so neither officer_role.sql nor cook_role.sql needed re-running for them.
+-- They do. officer_role.sql denies every table OUTSIDE its allow-list with a
+-- RESTRICTIVE policy, and a restrictive policy ANDs, so re-running that file
+-- would have overridden every permissive policy written here and shut the mate
+-- out of a checklist he is meant to work through. The same trap CLAUDE.md
+-- records from crew_certificates, arriving from the other direction.
+--
+-- Both tables are in that file's allow-list now, in the deny loop and in the 2b
+-- cleanup, but deliberately NOT in its officer_works loop, which grants ALL.
+-- What he may do here is written above and nowhere else.

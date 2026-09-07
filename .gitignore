@@ -164,3 +164,6 @@ invoices-page-preview.html
 invoice-duplicates.html
 self-cert-preview.html
 public/_selfcert-preview.html
+
+# Rendered by scripts/orb-preview.mjs for checking the Oil Record Book
+orb-preview.html

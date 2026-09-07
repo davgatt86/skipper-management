@@ -62,7 +62,12 @@ const offNav = navFor(officer).flatMap((g) => g.items.map((i) => i.to)).sort()
 eq('officer menu', offNav, [
   '/crew', '/crew-certs', '/crew-list',
   // The gear log is deck work — a mate keeps it as much as the skipper does.
-  '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/gear', '/maintenance', '/parts',
+  '/engine-logs', '/engine-room', '/fuel-log', '/garbage-log', '/gear', '/maintenance',
+  // The Oil Record Book is the engineer's book — he makes the entries and
+  // signs each one as the officer in charge of the operation. The MASTER signs
+  // the completed page, and that refusal is in RLS rather than in this menu:
+  // an officer's update carrying a master_signed_at is denied by policy.
+  '/oil-record-book', '/parts',
   // The annual self-certification is record-keeping: the mate works through it,
   // and only the skipper may sign it off. That refusal is in RLS, not the menu.
   '/self-certification', '/vessel-certs',

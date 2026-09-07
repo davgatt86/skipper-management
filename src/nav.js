@@ -145,6 +145,10 @@ export const NAV = [
       { to: '/self-certification', label: 'Self-Certification', access: 'officer' },
       { to: '/crew-list', label: 'Crew List', access: 'officer' },
       { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },
+      // The MARPOL Annex I book. Beside the garbage book because they are the
+      // two record books an inspector asks for by name, and both are the
+      // engineer's to keep and the master's to sign.
+      { to: '/oil-record-book', label: 'Oil Record Book', access: 'officer' },
     ],
   },
   {
