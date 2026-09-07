@@ -220,3 +220,19 @@
   .login-in { padding: 52px 60px; align-items: center; justify-content: flex-end; }
   .login-h1 { font-size: clamp(58px, 6vw, 84px); }
 }
+
+/* A link that is really a button: it changes what this screen is asking for
+   rather than going anywhere, so it must not be an <a href> — a screen reader
+   should not announce a navigation that never happens. */
+.login-textbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: #9FC4FF;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.login-textbtn:hover { color: #fff; }
+.login-textbtn:focus-visible { outline: 2px solid #9FC4FF; outline-offset: 2px; border-radius: 2px; }
