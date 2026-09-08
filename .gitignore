@@ -168,3 +168,7 @@ self-cert-preview.html
 
 # Rendered by the certification preview scripts for sighting
 _sight/
+
+# Rendered by scripts/dashboard-preview.mjs
+dashboard-preview.html
+upload-panel-preview.html
