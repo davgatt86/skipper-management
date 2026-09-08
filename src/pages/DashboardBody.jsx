@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { speciesBasis, boatBlocks, toDo, isNewBoat, FIRST_STEPS } from '../lib/dashboard'
+import { speciesBasis, boatBlocks, isNewBoat, FIRST_STEPS } from '../lib/dashboard'
 
 /* THE FRONT PAGE, DRAWN — prices, your boat, what to do next.
  *
@@ -8,6 +8,13 @@ import { speciesBasis, boatBlocks, toDo, isNewBoat, FIRST_STEPS } from '../lib/d
  * is behind a login and the interesting states are the empty ones: six of the
  * thirteen fleets have uploaded nothing at all, and until now they opened the
  * app on a blank page.
+ *
+ * EVERY STYLE IS A CLASS IN `index.css`, deliberately. The first cut was inline
+ * styles, and all four faults David found came out of that: a table left to
+ * size its own columns put a grade name a foot away from its price, and a
+ * `background: transparent` button inherited `color: var(--on-navy)` off the
+ * global cobalt button rule and turned white on white. Drawing it WITH the
+ * design system rather than beside it is the fix.
  */
 export default function DashboardBody({
   vessel, board, species = [], landed = [], basis = 'value', onBasis,
@@ -37,66 +44,60 @@ export default function DashboardBody({
   )
 }
 
+/* ==== THE MARKET ========================================================== */
+
 function Market({ board, species, landed, basis, onBasis, source, onSource }) {
   const basisOf = speciesBasis(landed, { basis })
   const from = Object.fromEntries(basisOf.map((x) => [x.species, x.from]))
+  const port = source === 'DK' ? 'Denmark' : 'Peterhead'
 
   return (
-    <div className="card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                    gap: '1rem', flexWrap: 'wrap' }}>
-        <h3 style={{ margin: 0 }}>
-          The market{board?.day ? <span className="muted" style={{ fontWeight: 400 }}> · {fmt(board.day)}</span> : null}
-        </h3>
-        <span style={{ display: 'flex', gap: '0.3rem' }}>
-          <Toggle now={source} set={onSource} options={[['PD', 'Peterhead'], ['DK', 'Denmark']]} />
+    <section className="card">
+      <div className="dash-head">
+        <div>
+          <h3>The market</h3>
+          <p className="dash-when">
+            {port} board{board?.day ? ' · ' + longDate(board.day) : ' · no prices yet'}
+          </p>
+        </div>
+        <span className="dash-tools">
+          <Seg now={source} set={onSource} options={[['PD', 'Peterhead'], ['DK', 'Denmark']]} />
           {/* THE TOGGLE ONLY CHANGES WHICH EXTRAS ARE PICKED. Cod, haddock and
               saithe are pinned either way — they are the market everyone
               watches, whatever a particular boat happens to land. */}
-          <Toggle now={basis} set={onBasis} options={[['value', 'by value'], ['volume', 'by volume']]} />
+          <Seg now={basis} set={onBasis} options={[['value', 'By value'], ['volume', 'By volume']]} />
         </span>
       </div>
 
       {!board?.day ? (
-        <p className="muted" style={{ fontSize: '0.85rem', margin: '0.5rem 0 0' }}>
-          No prices on the board for {source === 'DK' ? 'Denmark' : 'Peterhead'} yet.
+        <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>
+          No prices on the {port} board yet.
         </p>
       ) : (
         <>
-          {/* ONE TABLE, ONE HEADER. It was six tables with six headers and a
-              row for every grade that did not sell — about thirty rows of
-              mostly dashes, which is the wall of numbers this panel exists to
-              avoid. Species are a row band inside one grid now, and grades
-              that did not sell are named once at the foot of their species
-              rather than given a line each. */}
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem',
-                          marginTop: '0.5rem' }}>
-            <thead>
-              <tr className="muted" style={{ fontSize: '0.66rem', textTransform: 'uppercase',
-                                             letterSpacing: '0.05em', textAlign: 'right' }}>
-                <th style={{ textAlign: 'left', fontWeight: 400, paddingBottom: 3 }}>Grade</th>
-                <th style={{ fontWeight: 400, width: '5rem' }}>Average</th>
-                <th style={{ fontWeight: 400, width: '4.6rem' }}
-                    title={board.previous ? `against ${fmt(board.previous)}` : undefined}>Day</th>
-                <th style={{ fontWeight: 400, width: '4.6rem' }}
-                    title={`against the four weeks to ${fmt(board.day)}`}>4 wk</th>
-              </tr>
-            </thead>
+          {/* A TILE PER SPECIES, NOT ONE WIDE TABLE. Four columns across the
+              full width of a laptop left the grade name at the far left and its
+              price at the far right with a foot of nothing between them — which
+              is the "looks horrible" in one sentence. At 268px a grade and its
+              price are an inch apart and the eye reads across. */}
+          <div className="dash-grid">
             {board.rows.map((r) => (
-              <SpeciesBlock key={r.species} row={r} from={from[r.species]} />
+              <SpeciesTile key={r.species} row={r} from={from[r.species]} />
             ))}
-          </table>
-          <p className="muted" style={{ fontSize: '0.72rem', margin: '0.5rem 0 0' }}>
-            <b>Day</b> is against {board.previous ? fmt(board.previous) : 'the day before'};{' '}
-            <b>4 wk</b> against the four weeks to {fmt(board.day)}, not counting that day.
+          </div>
+          <p className="dash-foot">
+            <b>Avg</b> is the day's average price a kilo. <b>Day</b> is the move against{' '}
+            {board.previous ? shortDate(board.previous) : 'the day before'}; <b>4 wk</b> the move
+            against the four weeks to {shortDate(board.day)}, not counting that day.
+            Cod, haddock and saithe are on every boat's page — the rest are yours.
           </p>
         </>
       )}
-    </div>
+    </section>
   )
 }
 
-function SpeciesBlock({ row, from }) {
+function SpeciesTile({ row, from }) {
   /* GRADES THAT DID NOT SELL ARE NAMED, NOT GIVEN A LINE EACH. On a real board
      day a third of them have no price, and a row of four dashes says nothing
      the word "unsold" does not say better in a tenth of the space. They are
@@ -106,50 +107,45 @@ function SpeciesBlock({ row, from }) {
   const unsold = row.grades.filter((g) => g.ave == null).map((g) => g.grade)
 
   return (
-    <tbody style={{ borderTop: '1px solid var(--line)' }}>
-      <tr>
-        <td colSpan={4} style={{ paddingTop: '0.5rem' }}>
-          <b style={{ fontSize: '0.88rem' }}>{row.species}</b>
-          {/* A BOAT'S OWN TOP SPECIES AND A GENERAL GUESS MUST NOT READ ALIKE.
-              Telling a skipper these are "his biggest" when they are what most
-              boats land is the quiet lie this codebase keeps refusing to tell. */}
-          <span className="muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-            {from === 'pinned' ? 'watched by everyone'
-              : from === 'own' ? 'one of yours'
-                : 'what most boats land'}
-          </span>
-        </td>
-      </tr>
+    <article className="sp">
+      <div className="sp-h">
+        <h4>{row.species}</h4>
+        {/* A BOAT'S OWN TOP SPECIES AND A GENERAL GUESS MUST NOT READ ALIKE.
+            Telling a skipper these are "his biggest" when they are what most
+            boats land is the quiet lie this codebase keeps refusing to tell.
+            The pinned three carry NO chip: three identical "watched by
+            everyone" labels stacked down the page is noise, and the footnote
+            says it once. */}
+        {from === 'own' && <span className="chip">yours</span>}
+        {from === 'typical' && <span className="chip guess">typical</span>}
+      </div>
 
       {/* A SPECIES THE BOARD DOES NOT CARRY SAYS SO. Dropping it would read as
           the boat not landing it. */}
       {!row.onBoard ? (
-        <tr><td colSpan={4} className="muted" style={{ fontSize: '0.78rem', paddingBottom: '0.3rem' }}>
-          Not on this board{row.boardName !== row.species ? ` — it calls it ${row.boardName}` : ''}.
-        </td></tr>
+        <p className="sp-nil sp-nil-top">
+          Not on this board{row.boardName !== row.species ? ' — it calls it ' + row.boardName : ''}.
+        </p>
       ) : (
         <>
+          {sold.length > 0 && (
+            <div className="sp-cols">
+              <span>Grade</span><span>Avg</span><span>Day</span><span>4 wk</span>
+            </div>
+          )}
           {sold.map((g) => (
-            <tr key={g.grade}>
-              <td style={{ padding: '1px 0' }}>{g.grade}</td>
-              <td style={{ fontFamily: MONO, textAlign: 'right', fontWeight: 600 }}>{money(g.ave)}</td>
-              <td style={{ textAlign: 'right' }}><Move v={g.onDay} /></td>
-              <td style={{ textAlign: 'right' }}><Move v={g.onAvg} /></td>
-            </tr>
+            <div className="sp-r" key={g.grade}>
+              <span className="g" title={g.grade}>{g.grade}</span>
+              <span className="v">{money(g.ave)}</span>
+              <span className="d"><Move v={g.onDay} /></span>
+              <span className="d"><Move v={g.onAvg} /></span>
+            </div>
           ))}
-          {unsold.length > 0 && (
-            <tr><td colSpan={4} className="muted" style={{ fontSize: '0.72rem', paddingBottom: '0.3rem' }}>
-              {unsold.join(', ')} did not sell
-            </td></tr>
-          )}
-          {sold.length === 0 && (
-            <tr><td colSpan={4} className="muted" style={{ fontSize: '0.72rem', paddingBottom: '0.3rem' }}>
-              nothing sold on the day
-            </td></tr>
-          )}
+          {unsold.length > 0 && <p className="sp-nil">{unsold.join(', ')} did not sell</p>}
+          {sold.length === 0 && <p className="sp-nil">Nothing sold on the day</p>}
         </>
       )}
-    </tbody>
+    </article>
   )
 }
 
@@ -157,143 +153,205 @@ function SpeciesBlock({ row, from }) {
    no move; a grade that sold at exactly yesterday's price moved by nothing, and
    that is a real and different fact. */
 function Move({ v }) {
-  if (v == null) return <span className="muted">—</span>
-  if (v === 0) return <span className="muted" title="no change">0.00</span>
-  const up = v > 0
+  if (v == null) return <span className="nil" title="no price to compare">·</span>
+  if (v === 0) return <span className="flat" title="no change">0.00</span>
   return (
-    <span style={{ fontFamily: MONO, color: up ? 'var(--kelp)' : 'var(--rust)' }}>
-      {up ? '+' : '−'}{Math.abs(v).toFixed(2)}
+    <span className={v > 0 ? 'up' : 'dn'}>
+      {v > 0 ? '+' : '−'}{Math.abs(v).toFixed(2)}
     </span>
   )
 }
 
-function Boat({ blocks, vessel, canSeeMoney }) {
+/* ==== YOUR BOAT =========================================================== */
+
+function Boat({ blocks, canSeeMoney }) {
   const { lastTrip, month, quota, expiring, books } = blocks
   return (
     <>
       {lastTrip.has && canSeeMoney && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>
-            Last trip <span className="muted" style={{ fontWeight: 400 }}>
-              · {fmt(lastTrip.date)}{lastTrip.vessel ? ` · ${lastTrip.vessel}` : ''}
-            </span>
-          </h3>
-          <div style={{ display: 'flex', gap: '1.4rem', flexWrap: 'wrap' }}>
-            <Fig label="Gross" value={money0(lastTrip.gross)} />
-            <Fig label="Boxes" value={lastTrip.boxes ?? '—'} />
-            <Fig label="Kilos" value={lastTrip.kg == null ? '—' : Math.round(lastTrip.kg).toLocaleString('en-GB')} />
-            <Fig label="£/kg" value={lastTrip.ppk == null ? '—' : money(lastTrip.ppk)} />
+        <section className="card">
+          <div className="dash-head">
+            <div>
+              <h3>Last trip</h3>
+              <p className="dash-when">
+                {longDate(lastTrip.date)}{lastTrip.vessel ? ' · ' + lastTrip.vessel : ''}
+              </p>
+            </div>
+          </div>
+          <div className="stats">
+            <Stat k="Gross" n={money0(lastTrip.gross)} />
+            <Stat k="Boxes" n={lastTrip.boxes ?? '—'} />
+            <Stat k="Kilos" n={lastTrip.kg == null ? '—' : Math.round(lastTrip.kg).toLocaleString('en-GB')} />
+            <Stat k="A kilo" n={lastTrip.ppk == null ? '—' : money(lastTrip.ppk)} />
           </div>
           {/* A NOTE THAT DID NOT RECONCILE CANNOT BE TRUSTED FOR ITS FIGURES,
               and the front page is the worst place to print them silently. */}
           {lastTrip.reconciled === false && (
-            <p style={{ margin: '0.4rem 0 0', fontSize: '0.8rem', color: 'var(--brass)' }}>
+            <p className="dash-foot warn">
               This note did not add up to its own printed total, so these figures cannot be
               trusted. <Link to="/sales">Fish Sales</Link> says by how much.
             </p>
           )}
-        </div>
+        </section>
       )}
 
       {month.has && canSeeMoney && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>
-            This month
-            {/* WHICH DAYS, SAID PLAINLY. The comparison is the first N days
-                against the first N days, and a reader who assumed whole month
-                against whole month would read a half-finished month as a
-                collapse — which is exactly what the page did. */}
-            {month.through ? <span className="muted" style={{ fontWeight: 400 }}>
-              {' '}· to the {ordinal(month.through)}
-            </span> : null}
-          </h3>
-          <div style={{ display: 'flex', gap: '1.4rem', flexWrap: 'wrap' }}>
-            <Fig label="Gross" value={money0(month.gross)} />
-            <Fig label="Trips" value={month.trips} />
+        <section className="card">
+          <div className="dash-head">
+            <div>
+              <h3>This month</h3>
+              {/* WHICH DAYS, SAID PLAINLY. The comparison is the first N days
+                  against the first N days, and a reader who assumed whole month
+                  against whole month would read a half-finished month as a
+                  collapse — which is exactly what the page did. */}
+              <p className="dash-when">
+                {monthName(month.month)} · to the {ordinal(month.through)}
+              </p>
+            </div>
+          </div>
+          <div className="stats">
+            <Stat k="Gross" n={money0(month.gross)} />
+            <Stat k="Trips" n={month.trips} />
             {/* NOTHING TO SOMETHING IS NOT A CHANGE. A boat in her first year
                 gets the figure and no percentage. */}
             {month.lastYear != null && (
-              <Fig label={`To the ${ordinal(month.through)} last year`} value={money0(month.lastYear)}
-                   hint={`${month.lastYearTrips} trip${month.lastYearTrips === 1 ? '' : 's'} · `
-                     + pct(month.gross, month.lastYear)} />
+              <Stat k={'To the ' + ordinal(month.through) + ' last year'}
+                    n={money0(month.lastYear)}
+                    sub={month.lastYearTrips + ' trip' + (month.lastYearTrips === 1 ? '' : 's')}
+                    delta={pct(month.gross, month.lastYear)} />
             )}
           </div>
           {month.lastYear != null && (
-            <p className="muted" style={{ fontSize: '0.72rem', margin: '0.4rem 0 0' }}>
-              The same days of the month, not the whole of it — the month is not finished.
+            <p className="dash-foot">
+              The same days of the month either side, not the whole of it — the month is not
+              finished.
             </p>
           )}
-        </div>
+        </section>
       )}
 
-      {/* QUOTA IS A BLOCK LIKE ANY OTHER NOW, and absent for the twelve fleets
-          that have none. It used to be the headline. */}
-      {quota.has && canSeeMoney && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>
-            Quota <span className="muted" style={{ fontWeight: 400 }}>
-              {quota.asAt ? `· as at ${fmt(quota.asAt)}` : ''}
-            </span>
-          </h3>
-          {quota.lines.slice(0, 6).map((l, i) => (
-            <div key={i} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.84rem',
-                                  borderTop: i ? '1px solid var(--line)' : undefined, padding: '2px 0' }}>
-              <span style={{ flex: 1 }}>{l.stock || l.species}</span>
-              <span style={{ fontFamily: MONO }}>{l.remaining ?? l.balance ?? '—'}</span>
-            </div>
-          ))}
-          <p className="muted" style={{ fontSize: '0.76rem', margin: '0.4rem 0 0' }}>
-            The statement position only — trips landed since are not in it.{' '}
-            <Link to="/quota">Quota</Link> adds them.
-          </p>
-        </div>
-      )}
+      {quota.has && canSeeMoney && <Quota quota={quota} />}
 
       {expiring.has && (
-        <div className="card" style={{ borderLeft: '3px solid var(--brass)' }}>
-          <h3 style={{ marginTop: 0 }}>Running out</h3>
-          {expiring.items.slice(0, 6).map((e, i) => (
-            <div key={i} style={{ fontSize: '0.84rem', padding: '1px 0' }}>
-              <b>{e.what}</b> <span className="muted">· {e.who || e.category || ''}</span>{' '}
-              {e.expiry_date < todayISO()
-                ? <span style={{ color: 'var(--rust)' }}>expired {fmt(e.expiry_date)}</span>
-                : <span>{fmt(e.expiry_date)}</span>}
-            </div>
-          ))}
-        </div>
+        <section className="card accent-brass">
+          <div className="dash-head"><div><h3>Running out</h3></div></div>
+          <div className="dlist">
+            {expiring.items.slice(0, 6).map((e, i) => (
+              <div className="di" key={i}>
+                <span>{e.what}{e.who ? <span className="sub3"> · {e.who}</span> : null}</span>
+                <span className={'when ' + (e.expiry_date < todayISO() ? 'dn' : '')}>
+                  {e.expiry_date < todayISO() ? 'expired ' : ''}{shortDate(e.expiry_date)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {books.has && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Books</h3>
-          {books.items.map((k) => (
-            <div key={k.book} style={{ fontSize: '0.84rem', padding: '1px 0' }}>
-              <b>{k.book}</b> —{' '}
-              {/* NEVER WRITTEN IN IS NOT "N DAYS AGO", and reporting a number
-                  there would invent a date the book does not have. */}
-              {k.last == null
-                ? <span className="muted">nothing in it yet</span>
-                : <>last entry {fmt(k.last)}
-                    {k.days > k.stale && <span style={{ color: 'var(--brass)' }}> · {k.days} days ago</span>}</>}
-            </div>
-          ))}
-        </div>
+        <section className="card">
+          <div className="dash-head"><div><h3>Books</h3></div></div>
+          <div className="dlist">
+            {books.items.map((k) => (
+              <div className="di" key={k.book}>
+                <span>{k.book}</span>
+                {/* NEVER WRITTEN IN IS NOT "N DAYS AGO", and reporting a number
+                    there would invent a date the book does not have. */}
+                {k.last == null
+                  ? <span className="sub3">nothing in it yet</span>
+                  : <span className={'when ' + (k.days > k.stale ? 'dn' : '')}>
+                      {shortDate(k.last)}{k.days > k.stale ? ' · ' + k.days + ' days ago' : ''}
+                    </span>}
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </>
   )
 }
 
-function ToDo({ items }) {
+/* THE ONE LINE THAT MATTERS IS THE ONE THAT IS OVER, and it used to look
+ * exactly like the five that were fine — a raw float, grey, at the far right:
+ *
+ *     NS Saithe    -86.54504
+ *
+ * Audacious is 86.5 t over on North Sea saithe, having caught 214.35 t against
+ * an allocation of 127.80. Sorted by how much of the allocation is GONE rather
+ * than by whatever order the rows arrived in, because a block listing the six
+ * with the most left is a block showing the six that do not matter.
+ */
+function Quota({ quota }) {
+  const lines = quotaRows(quota.lines).slice(0, 6)
   return (
-    <div className="card" style={{ borderLeft: '3px solid var(--hull)' }}>
-      <h3 style={{ marginTop: 0 }}>What to do next</h3>
-      {items.map((i) => (
-        <div key={i.key} style={{ fontSize: '0.86rem', padding: '2px 0' }}>
-          <span style={{ color: i.urgent ? 'var(--rust)' : undefined }}>{i.says}</span>{' '}
-          <Link to={i.to}>open</Link>
+    <section className="card">
+      <div className="dash-head">
+        <div>
+          <h3>Quota</h3>
+          <p className="dash-when">
+            The statement{quota.asAt ? ' · as at ' + shortDate(quota.asAt) : ''} · tonnes
+          </p>
+        </div>
+      </div>
+      {lines.map((l) => (
+        <div className={'qr ' + l.state} key={l.stock}>
+          <span className="qn">
+            {l.stock}
+            {l.used != null && <span className="qp">{Math.round(l.used * 100)}% caught</span>}
+          </span>
+          <b className="qv">
+            {l.balance == null ? '—'
+              : l.balance < 0 ? tonnes(-l.balance) + ' over'
+                : tonnes(l.balance) + ' left'}
+          </b>
+          {l.used != null && (
+            <span className="qbar"><i style={{ width: Math.round(Math.min(100, l.used * 100)) + '%' }} /></span>
+          )}
         </div>
       ))}
-    </div>
+      <p className="dash-foot">
+        The statement position only — trips landed since are not in it.{' '}
+        <Link to="/quota">Quota</Link> adds them.
+      </p>
+    </section>
+  )
+}
+
+/* `balance` is the column and `remaining` never existed, which is why the old
+   row fell through to the next thing it tried. A line with no allocation on it
+   is not scored at all — a blank is not a nought. */
+export function quotaRows(lines = []) {
+  return (Array.isArray(lines) ? lines : [])
+    .map((l) => {
+      const alloc = numOrNull(l.allocation)
+      const balance = numOrNull(l.balance ?? l.remaining)
+      const caught = numOrNull(l.catch_total)
+      const used = alloc > 0 && caught != null ? caught / alloc : null
+      return {
+        stock: l.stock || l.species || 'Unnamed', balance, used,
+        state: balance != null && balance < 0 ? 'over'
+          : used != null && used >= 0.85 ? 'tight' : '',
+      }
+    })
+    .filter((l) => l.balance != null || l.used != null)
+    .sort((a, b) => (b.used ?? -1) - (a.used ?? -1))
+}
+
+/* ==== WHAT TO DO NEXT ===================================================== */
+
+function ToDo({ items }) {
+  return (
+    <section className="card accent-hull">
+      <div className="dash-head"><div><h3>What to do next</h3></div></div>
+      <div className="dlist">
+        {items.map((i) => (
+          <div className="di" key={i.key}>
+            <span className={i.urgent ? 'dn' : undefined}>{i.says}</span>
+            <Link to={i.to} className="when">open</Link>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -302,46 +360,76 @@ function ToDo({ items }) {
    would fill the rest. */
 function FirstSteps() {
   return (
-    <div className="card">
-      <h3 style={{ marginTop: 0 }}>Nothing of your own on here yet</h3>
-      <p className="muted" style={{ fontSize: '0.85rem', marginTop: 0 }}>
+    <section className="card accent-hull">
+      <div className="dash-head"><div><h3>Nothing of your own on here yet</h3></div></div>
+      <p className="muted dash-lead">
         The prices above are the market and are there whether you upload anything or not. These
         three fill in the rest of the page.
       </p>
-      {FIRST_STEPS.map((s) => (
-        <div key={s.to} style={{ fontSize: '0.86rem', padding: '2px 0' }}>
-          <Link to={s.to}>{s.says}</Link> <span className="muted">— {s.then}</span>
-        </div>
-      ))}
-    </div>
+      <div className="dlist">
+        {FIRST_STEPS.map((s) => (
+          <div className="di" key={s.to}>
+            <span><Link to={s.to}>{s.says}</Link> <span className="sub3">— {s.then}</span></span>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
-function Toggle({ now, set, options }) {
+/* ==== bits ================================================================ */
+
+function Seg({ now, set, options }) {
   return (
-    <span style={{ display: 'inline-flex', border: '1px solid var(--line)', borderRadius: 4, overflow: 'hidden' }}>
+    <span className="seg">
       {options.map(([k, label]) => (
-        <button key={k} onClick={() => set?.(k)}
-                style={{ border: 0, borderRadius: 0, fontSize: '0.74rem', padding: '0.15rem 0.5rem',
-                         background: now === k ? 'var(--hull)' : 'transparent',
-                         color: now === k ? '#fff' : undefined, cursor: 'pointer' }}>
-          {label}
-        </button>
+        <button key={k} type="button" className={now === k ? 'on' : undefined}
+                onClick={() => set?.(k)}>{label}</button>
       ))}
     </span>
   )
 }
 
-function Fig({ label, value, hint }) {
+function Stat({ k, n, sub, delta }) {
   return (
-    <span>
-      <span className="muted" style={{ fontSize: '0.72rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-      <b style={{ fontSize: '1.05rem', fontFamily: MONO }}>{value}</b>
-      {hint && <span className="muted" style={{ fontSize: '0.72rem', display: 'block' }}>{hint}</span>}
+    <span className="stat">
+      <span className="k">{k}</span>
+      <b className="n">{n}</b>
+      {(sub || delta) && (
+        <span className="n2">
+          {sub}{sub && delta ? ' · ' : ''}
+          {delta ? <span className={delta.charAt(0) === '−' ? 'dn' : 'up'}>{delta}</span> : null}
+        </span>
+      )}
     </span>
   )
 }
 
+const todayISO = () => new Date().toISOString().slice(0, 10)
+const money = (n) => (n == null ? '—' : '£' + Number(n).toFixed(2))
+const money0 = (n) => (n == null ? '—' : '£' + Math.round(Number(n)).toLocaleString('en-GB'))
+
+/* RAW FLOATS OFF A NUMERIC COLUMN — "34.83933000000001" — were being printed
+   straight onto the front page. One decimal is what the office works in. */
+const tonnes = (n) => Number(n).toLocaleString('en-GB', { maximumFractionDigits: 1 }) + ' t'
+function numOrNull(v) {
+  if (v === '' || v == null) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December']
+const shortDate = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('-') : '—')
+function longDate(d) {
+  const s = String(d || '').slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '—'
+  return Number(s.slice(8)) + ' ' + MONTHS[Number(s.slice(5, 7)) - 1] + ' ' + s.slice(0, 4)
+}
+function monthName(m) {
+  const s = String(m || '')
+  return /^\d{4}-\d{2}$/.test(s) ? MONTHS[Number(s.slice(5, 7)) - 1] + ' ' + s.slice(0, 4) : ''
+}
 
 /* "to the 8th", not "to day 8" — the card is read on a boat, not in a report. */
 function ordinal(n) {
@@ -352,13 +440,8 @@ function ordinal(n) {
   return v + suf
 }
 
-const MONO = 'var(--mono, ui-monospace, monospace)'
-const todayISO = () => new Date().toISOString().slice(0, 10)
-const money = (n) => (n == null ? '—' : '£' + Number(n).toFixed(2))
-const money0 = (n) => (n == null ? '—' : '£' + Math.round(Number(n)).toLocaleString('en-GB'))
-const fmt = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('-') : '—')
 function pct(now, then) {
   if (!then) return ''
   const p = Math.round(((now - then) / then) * 100)
-  return `${p >= 0 ? '+' : ''}${p}%`
+  return (p >= 0 ? '+' : '−') + Math.abs(p) + '%'
 }

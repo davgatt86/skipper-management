@@ -727,3 +727,152 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
   font-size: 0.85rem;
   padding: 0.25rem 0.35rem;
 }
+
+/* ============================================================
+   THE DASHBOARD.
+
+   David, Sep 2026: "visually it looks terrible ... i wouldn't expect
+   anyone to pay to use this service with a design like that."
+
+   Four faults, and all four came from drawing it with inline styles
+   instead of the design system:
+
+   1  A FULL-WIDTH TABLE WITH FOUR COLUMNS puts the grade name on the
+      far left and its price a thousand pixels away on the right, with
+      nothing in between. Species are a GRID OF TILES now, so a grade
+      and its price are two inches apart and the eye reads across.
+   2  THE TOGGLES WERE WHITE ON WHITE. `button` is a cobalt block with
+      `color: var(--on-navy)`, so an unselected button with a
+      transparent background inherited white text and vanished. `.seg`
+      states both colours explicitly.
+   3  QUOTA PRINTED RAW FLOATS — "34.83933000000001", "-86.54504" — and
+      the one line that mattered, a stock 86.5 t OVER, looked exactly
+      like the five that were fine.
+   4  No hierarchy: one type size, one weight, no rules, no colour.
+   ============================================================ */
+
+.dash-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 16px;
+}
+.dash-head h3 {
+  margin: 0; font-family: var(--font-display); font-weight: 600;
+  font-size: 1.6rem; line-height: 1.1; letter-spacing: 0.01em;
+}
+.dash-when {
+  font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--mute); margin: 4px 0 0;
+}
+.dash-foot {
+  font-size: 0.74rem; color: var(--mute); margin: 12px 0 0;
+  padding-top: 10px; border-top: 1px solid var(--line-2);
+}
+
+/* ---- segmented control ---- */
+.seg {
+  display: inline-flex; border: 1px solid var(--line); border-radius: 3px;
+  overflow: hidden; background: var(--surface);
+}
+.seg button {
+  background: var(--surface); color: var(--mute); border: 0; border-radius: 0;
+  padding: 0.34rem 0.72rem; font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button:hover { background: var(--surface-2); color: var(--text); }
+.seg button.on, .seg button.on:hover { background: var(--hull); color: var(--on-navy); }
+
+/* ---- the market: a tile per species ---- */
+.dash-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+}
+.sp {
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--surface); overflow: hidden;
+}
+.sp-h {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 7px 10px 5px; background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+}
+.sp-h h4 {
+  margin: 0; font-family: var(--font-display); font-weight: 600;
+  font-size: 1.15rem; line-height: 1; letter-spacing: 0.01em;
+}
+.chip {
+  font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 2px 5px; border-radius: 2px;
+  background: var(--hull-pale); color: var(--hull); white-space: nowrap;
+}
+.chip.guess { background: transparent; color: var(--mute); border: 1px solid var(--line); }
+
+.sp-r, .sp-cols {
+  display: grid; grid-template-columns: 1fr 3.6rem 3rem 3rem;
+  align-items: baseline; gap: 5px; padding: 3px 10px;
+}
+.sp-cols {
+  font-family: var(--font-mono); font-size: 0.54rem; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--mute);
+  padding-top: 6px; padding-bottom: 2px;
+}
+.sp-cols span:not(:first-child), .sp-r .v, .sp-r .d { text-align: right; }
+.sp-r { font-size: 0.8rem; }
+.sp-r + .sp-r { border-top: 1px solid var(--line-2); }
+.sp-r .g { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-r .v { font-family: var(--font-mono); font-weight: 600; }
+.sp-r .d { font-family: var(--font-mono); font-size: 0.72rem; }
+.up { color: var(--kelp); }
+.dn { color: var(--rust); }
+.flat, .nil { color: var(--mute); }
+.sp-nil {
+  margin: 0; padding: 6px 10px 8px; font-size: 0.72rem; color: var(--mute);
+  border-top: 1px solid var(--line-2);
+}
+
+/* ---- figure strip ---- */
+.stats { display: flex; flex-wrap: wrap; row-gap: 14px; }
+.stat { padding: 0 1.4rem; border-left: 1px solid var(--line-2); }
+.stat:first-child { padding-left: 0; border-left: 0; }
+.stat .k {
+  display: block; font-family: var(--font-mono); font-size: 0.58rem;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--mute);
+  margin-bottom: 3px;
+}
+.stat .n { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 600; line-height: 1.1; }
+.stat .n2 { display: block; font-size: 0.73rem; color: var(--mute); margin-top: 2px; }
+
+/* ---- quota ---- */
+.qr {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+  align-items: baseline; padding: 8px 0;
+}
+.qr + .qr { border-top: 1px solid var(--line-2); }
+.qr .qn { font-size: 0.88rem; }
+.qr .qp { font-family: var(--font-mono); font-size: 0.68rem; color: var(--mute); margin-left: 6px; }
+.qr .qv { font-family: var(--font-mono); font-size: 0.92rem; font-weight: 600; white-space: nowrap; }
+.qr .qbar {
+  grid-column: 1 / -1; height: 4px; border-radius: 2px;
+  background: var(--line-2); overflow: hidden;
+}
+.qr .qbar i { display: block; height: 100%; background: var(--hull); }
+.qr.over .qv { color: var(--rust); }
+.qr.over .qbar i { background: var(--rust); }
+.qr.tight .qbar i { background: var(--brass); }
+.qr.tight .qv { color: var(--brass); }
+
+/* ---- lists ---- */
+.dlist { display: flex; flex-direction: column; }
+.dlist .di {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; padding: 8px 0; font-size: 0.88rem;
+}
+.dlist .di + .di { border-top: 1px solid var(--line-2); }
+.dlist .di .when { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
+.dlist .di .sub3 { color: var(--mute); font-size: 0.78rem; }
+.card.accent-brass { border-left: 3px solid var(--brass); }
+.card.accent-hull { border-left: 3px solid var(--hull); }
+.dash-tools { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.dash-lead { font-size: 0.86rem; margin: 0 0 4px; }
+.dash-foot.warn { color: var(--brass); }
+.sp-nil.sp-nil-top { border-top: 0; }

@@ -3261,6 +3261,56 @@ fail. It now carries two inside the window and one outside, so the cut has
 something to cut. **A fixture that cannot reach the code is a test that passes
 for the wrong reason.**
 
+
+#### AND THEN IT WAS DRAWN BESIDE THE DESIGN SYSTEM, NOT WITH IT
+
+David: *"visually it looks terrible ... i wouldn't expect anyone to pay to use
+this service with a design like that."* He was right, and every fault came from
+the same cause: the page was written in **inline styles** instead of classes in
+`index.css`, so it inherited none of the work already done.
+
+**A FULL-WIDTH TABLE PUT A GRADE NAME A FOOT FROM ITS PRICE.** Four columns
+across a laptop, three of them narrow and right-aligned, so `1fr` on the first
+swallowed 70% of the screen and `A2 Sprags` sat at the far left with
+`£8.29` at the far right and nothing in between. Species are a **grid of
+tiles** now (`auto-fill, minmax(268px, 1fr)`), so a grade and its price are an
+inch apart and the eye reads across. The column labels can repeat per tile
+precisely because they now sit above the figures they name.
+
+**THE TOGGLES WERE WHITE ON WHITE.** `button` in this app is a solid cobalt
+block — `background: var(--hull); color: var(--on-navy)`. The unselected half
+of each toggle was written `background: transparent` with no colour set, so it
+inherited the white and vanished. **Overriding a global button's background
+without also overriding its colour is invisible at exactly one of the two
+states**, which is why it passed every render check that only looked at the
+selected one. `.seg` states both colours for both states.
+
+**QUOTA PRINTED RAW FLOATS OFF A NUMERIC COLUMN** — `34.83933000000001`,
+`731.0510899999999` — because `remaining` is not a column on
+`quota_lines` (it is `balance`) and the fallback chain landed on the raw
+number. And the sort was whatever order the rows arrived in, so the block showed
+the six stocks with the MOST left.
+
+**THE ONE LINE THAT MATTERED LOOKED EXACTLY LIKE THE FIVE THAT DID NOT.**
+Audacious is **86.5 t OVER on North Sea saithe** — 214.35 t caught against an
+allocation of 127.80 — and it rendered as a tiny grey `-86.54504` at the far
+right of a row of five identical ones. Rows are sorted by **proportion of the
+allocation gone**, carry a bar, and an over-quota line is rust and says
+`86.5 t over` in words. A line with no allocation is not scored at all: a blank
+is not a nought.
+
+**THE PREVIEW HAD ITS OWN COPY OF THE STYLESHEET, which is why none of this was
+caught.** A dozen hand-copied tokens and its own `.card` rule — so it could
+render something that looked fine and shipped looking nothing like it. It had no
+global `button` rule at all, which is exactly the rule that made the toggles
+disappear. It inlines the real `src/index.css` now.
+
+**AND ITS QUOTA FIXTURE WAS NOT SHAPED LIKE THE TABLE.** It invented a
+`remaining` column and pre-formatted it as the string `'41 t'`, so the page's
+own number formatting was never executed once. The fixture now carries the real
+columns and the real floats, straight off the boat's 23-04-2026 statement.
+**Second fixture fault in one day** after the part-month one — a fixture that
+does not reach the code is a test that passes for the wrong reason.
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

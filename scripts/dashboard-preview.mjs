@@ -14,7 +14,7 @@
  *   4  by volume rather than by value, which changes the extras
  *   5  a board that has no prices for one of her species
  */
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import esbuild from 'esbuild'
@@ -88,8 +88,23 @@ const landings = [
   { landing_date: '2025-09-06', vessel: 'AUDACIOUS BF83', value: 104_500, weight_kg: 33_400, boxes: 890, reconcile_ok: true },
   { landing_date: '2025-09-10', vessel: 'AUDACIOUS BF83', value: 180_000, weight_kg: 52_000, boxes: 1400, reconcile_ok: true },
 ]
-const quota = { snapshot: { last_landing_date: '2026-08-26' },
-                lines: [{ stock: 'Cod North Sea', remaining: '41 t' }, { stock: 'Haddock North Sea', remaining: '212 t' }] }
+/* THE REAL COLUMN SHAPE, off quota_lines — allocation, catch_total, balance,
+   all numeric tonnes. The old fixture invented a "remaining" column that does
+   not exist and pre-formatted it as "41 t", so the page's own formatting was
+   never exercised and it shipped printing "34.83933000000001". A fixture that
+   is not shaped like the table proves nothing about the page.
+   These are Audacious's own figures at the 23-04-2026 statement. */
+const quota = { snapshot: { last_landing_date: '2026-04-23' }, lines: [
+  { stock: 'NS Saithe',   allocation: 127.80, catch_total: 214.35, balance: -86.54504 },
+  { stock: 'NS Haddock',  allocation: 990.21, catch_total: 259.16, balance: 731.0510899999999 },
+  { stock: 'NS Cod',      allocation: 44.72,  catch_total: 9.88,   balance: 34.83933000000001 },
+  { stock: 'NS Whiting',  allocation: 1410.08, catch_total: 38.23, balance: 1371.85 },
+  { stock: 'NS Megrims',  allocation: 209.51, catch_total: 2.03,   balance: 207.48 },
+  { stock: 'WC Monkfish', allocation: 170.40, catch_total: 19.16,  balance: 151.23 },
+  /* A line the statement carries with nothing on it — scored as unknown, not
+     as nought, and it must not push a real line off the six shown. */
+  { stock: 'Hake VIII',   allocation: null,   catch_total: null,   balance: null },
+] }
 const expiring = [
   { what: 'Inflatable Liferaft Service Certificate', who: 'LSA', expiry_date: '2026-08-20' },
   { what: 'ENG 1 medical', who: 'crew ticket', expiry_date: '2026-09-19' },
@@ -122,17 +137,22 @@ const panes = [
 ]
 
 const html = panes.map(([title, props]) =>
-  `<h2 style="font:600 15px system-ui;background:#0A1D26;color:#fff;padding:8px 12px;margin:28px 0 0">${title}</h2>`
+  `<h2 class="pv">${title}</h2>`
   + renderToStaticMarkup(React.createElement(MemoryRouter, null,
       React.createElement(DashboardBody, props)))).join('\n')
 
+const appCss = readFileSync('src/index.css', 'utf8')
 writeFileSync(out, `<!doctype html><meta charset="utf-8"><title>Dashboard preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<style>${appCss}</style>
 <style>
- body{font:14px/1.45 system-ui;margin:0;padding:0 16px 40px;background:#ECEFEE;color:#0A1D26}
- .card{background:#fff;border:1px solid #d7dcda;border-radius:6px;padding:12px 14px;margin:10px 0}
- .muted{color:#5d6b70} h3{font-size:0.95rem} a{color:#1749A8}
- :root{--kelp:#26654F;--rust:#C2342A;--brass:#A97614;--line:#d7dcda;--mute:#5d6b70;--hull:#1749A8}
-</style>${html}`)
+ /* Preview shell only — the app draws this page inside AppShell's main column. */
+ body{margin:0;padding:0 20px 48px;background:var(--paper)}
+ .wrap{max-width:1080px;margin:0 auto}
+ h2.pv{font:600 14px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+       background:var(--ink);color:#fff;padding:9px 14px;margin:28px 0 0;border-radius:3px}
+</style>
+<div class="wrap">${html}</div>`)
 
 const decode = (t) => t.replace(/&#x27;/g, "'").replace(/&#39;/g, "'")
   .replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
@@ -163,20 +183,26 @@ for (const i of [1, 2, 3, 4, 5]) {
   has(i, 'Cod', `pane ${i} carries cod`)
   has(i, 'Haddock', `pane ${i} carries haddock`)
   has(i, 'Saithe', `pane ${i} carries saithe`)
-  has(i, 'watched by everyone', `pane ${i} marks the pinned three as everyone's`)
+  has(i, "on every boat's page", `pane ${i} says the pinned three are everyone's`)
 }
 
-has(1, 'one of yours', "a boat's own species are marked as hers")
+has(1, '>yours<', "a boat's own species are chipped as hers")
 has(1, 'Monkfish', 'and her fourth by value is there')
 has(1, 'Lythe', 'as is her fifth — under the app name, not the board name')
 has(1, 'Grade', 'the columns are labelled')
 has(1, '4 wk', 'including the four-week column')
-/* SIX TABLES BECAME ONE, and that is the whole fix. David: "dashboard looks
-   horible" — it was six headers and about thirty rows of dashes, which is the
-   wall of numbers this panel exists to avoid. One header for the lot. */
-times('<thead>', 1, 1, 'and there is exactly one header for all six species')
-times('<table', 1, 1, 'in exactly one table')
-has(1, 'against the four weeks to', 'with the two comparisons explained once, at the foot')
+/* A TILE PER SPECIES, NOT ONE FULL-WIDTH TABLE. David: "visually it looks
+   terrible". Four columns across a laptop put the grade name a foot from its
+   price with nothing between. Six tiles in a grid; the labels sit an inch
+   above their own figures, which is the only reason repeating them is right. */
+times('<table', 1, 0, 'and there is no full-width table left')
+times('class="sp"', 1, 6, 'six species tiles')
+times('class="sp-cols"', 1, 6, 'each labelling its own columns, close to the figures')
+has(1, 'against the four weeks to', 'with the comparisons explained once, at the foot')
+/* THE TOGGLES WERE WHITE ON WHITE — a transparent button inheriting the global
+   cobalt rule's white text. Both states are explicit now. */
+has(1, 'class="seg"', 'the toggles are a proper segmented control')
+hasnt(1, 'background: transparent', 'with no transparent button left to vanish')
 /* NO CHANGE IS NOT NO PRICE. Cod A3 is deliberately flat. */
 has(1, '0.00', 'a grade that did not move shows nought')
 has(1, 'did not sell', 'and one that did not sell says so instead')
@@ -190,6 +216,14 @@ has(1, 'To the 8th last year', 'against the same DAYS of the same month last yea
 has(1, 'to the 8th', 'and the card says which days it is counting')
 has(1, 'not the whole of it', 'saying plainly that the month is not finished')
 has(1, 'Quota', 'and quota, for the one fleet that has it')
+/* RAW FLOATS WERE GOING STRAIGHT ONTO THE FRONT PAGE — "34.83933000000001" —
+   and the one line that mattered, a stock 86.5 t OVER, looked exactly like the
+   five that were fine. */
+has(1, '86.5 t over', 'a stock over its allocation says so, in tonnes')
+has(1, 'qr over', 'and is marked as over')
+has(1, '% caught', 'each line says how much of its allocation is gone')
+hasnt(1, '86.54504', 'and no raw float reaches the page')
+hasnt(1, '731.0510899999999', 'nor any other')
 has(1, 'Running out', 'what is expiring')
 has(1, 'What to do next', 'and what is waiting on a decision')
 has(1, 'certificate has expired', 'an expired certificate is called out')
@@ -205,8 +239,9 @@ hasnt(2, 'Last trip', 'and no empty last-trip heading')
 hasnt(2, 'Quota', 'no empty quota heading')
 hasnt(2, 'Running out', 'and nothing expiring')
 /* Her extras are the measured fallback, and are NOT claimed as her own. */
-has(2, 'what most boats land', 'her extras say they are typical, not hers')
-hasnt(2, 'one of yours', 'and none is claimed as hers')
+has(2, 'chip guess', 'her extras are chipped as typical, not hers')
+has(2, 'typical', 'and say so in words')
+hasnt(2, '>yours<', 'with none claimed as hers')
 
 has(3, 'Last trip', 'a part-way boat gets what she has')
 hasnt(3, 'Quota', 'and not what she has not')
@@ -215,7 +250,7 @@ hasnt(3, 'Nothing of your own on here yet', 'and is not treated as new')
 
 /* THE TOGGLE ONLY CHANGES THE EXTRAS. The three stay pinned either way. */
 has(4, 'Whiting', 'by volume, whiting comes into her six')
-has(4, 'watched by everyone', 'and the pinned three are still pinned')
+has(4, 'Saithe', 'and the pinned three are still pinned')
 
 has(5, 'Not on this board', 'a species with no prices says so')
 has(5, 'it calls it Pollack', 'and names what the board calls it')
