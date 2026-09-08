@@ -1953,6 +1953,196 @@ officer and cook are denied every money table — that denial is the reason thos
 roles exist.
 
 
+## CERTIFICATION — its own sidebar group, and NOT ON MAIN YET (Sep 2026)
+
+David: *"re arrange side bar to be; dashboard, market, sales, quota, settlement,
+vessel, crew, admin"*, then *"how do we go about making this a fishing vessel
+specific MCA certified page. so crew docs, vessel certs, records are accepted by
+audits"*, and — the standing instruction on all of it — ***"let's build this and
+not push to page till we're happy with it. i guess it would go into vessel part
+in sidebar, or possibily in it's own section next to vessel/crew. cerfication
+possibly. garbage, crew lists & oil record book would end up being part of
+certification part."***
+
+**EVERYTHING IN THIS SECTION IS ON BRANCH `certification` AND MUST NOT REACH
+`main`.** Netlify builds from `main` on push, so a merge is a deploy. The
+migrations ARE applied to the live database — additive, new tables, nothing
+renamed — because a schema cannot be branched and the probes have to run against
+the real one; nothing already live reads them.
+
+    Overview · Market · Sales · Quota · Settlement · Vessel · Certification · Crew · Admin
+
+**Certification is a NEW GROUP, not a corner of Vessel**, and Crew List and the
+Garbage Record Book MOVED INTO IT out of Crew and Vessel. His reasoning is the
+right one: these are the documents an inspector asks for, and what makes them
+one group is who wants to see them, not what they are about. `test-roles.mjs`
+asserts the WHOLE sidebar order now, so a reshuffle is a deliberate edit rather
+than something that drifts.
+
+### The annual self-certification — `/self-certification`
+
+**MSF 5550 rev 09.24, 148 items in 16 sections**, transcribed from the MCA's own
+aide memoire at MSIS 27 Ch 1 Annex 17b, not written from memory.
+`src/lib/certification/msf5550.js`.
+
+**WHICH CODE APPLIES IS DECIDED ON REGISTERED LENGTH, AND FOUR CENTIMETRES
+DECIDE IT HERE.** Audacious is **29.80 m overall and 23.96 m registered**, which
+puts her in the 15 m LOA to under-24 m RL band — MSN 1872, a 24-to-36-month
+inspection and this annual self-certificate. At 24.00 m registered she would be
+under MSN 1873 instead: an International Fishing Vessel Certificate and an
+annual class or MCA survey. Reading length OVERALL would have been wrong by six
+metres on this very boat, so `bandFor()` returns **no band at all** where only
+LOA is on file, and `SelfCertBody` REFUSES TO DRAW THE CHECKLIST rather than
+showing it with a warning above.
+
+**EVIDENCE INFORMS AN ITEM. IT NEVER ANSWERS ONE.** The app can speak to 14 of
+the 148 — it knows whether the liferaft service is in date; it knows nothing
+about the condition of the freeing ports. All 148 are answered by a person, and
+a pre-ticked box would be a declaration nobody made.
+
+Where the record positively DISAGREES with an item answered *complied*, that is
+listed and never blocks the signature: the skipper may be holding a certificate
+this app has never been told about, and software that overruled him would be
+wrong more often than he is. **The app not knowing is not evidence** — `unknown`
+raises nothing at all, because a warning that fires whenever the data is thin is
+a warning nobody reads.
+
+**THREE FACTS STOP A SIGN-OFF, NOT ONE COUNT.** Unanswered, not complied with,
+and *"not applicable"* carrying no reason. "37 outstanding" sends nobody
+anywhere. A bare N/A is its own kind of outstanding because a year later nobody
+can tell a considered exemption from a shrug.
+
+**The period hangs off the CERTIFICATE, never the calendar** — Audacious's UKFVC
+was issued 19-07-2022, so her year turns on 19 July and reads `2026/27`. **Year
+0 needs no self-certificate**: the survey that issued the certificate was the
+check, and the page says so rather than showing an empty form.
+
+The form code and revision are written onto the row at the start and never
+recomputed. *"The vessel complied"* means nothing without the list it complied
+with, and the MCA revises this form.
+
+`scripts/self-cert-preview.mjs` renders seven states — including a 24 m boat and
+a boat with no registered length, both of which must refuse.
+
+### THE OIL RECORD BOOK PART I — `/oil-record-book` (Sep 2026)
+
+David: *"do ORB."*
+
+**SHE MUST HAVE ONE, AND SHE HAS NOT GOT ONE IN THIS APP.** Regulation 20 of the
+Merchant Shipping (Prevention of Oil Pollution) Regulations 2019 requires an Oil
+Record Book Part I on every ship of 400 GT and above other than an oil tanker.
+**Audacious is 498 GT.** The Fuel & Oil Log already here is NOT one — it is a
+bunkering record, with no codes, no officer's signature and no master's
+signature.
+
+**THE FORM IS PRESCRIBED, NOT OURS TO DESIGN.** Every entry is a code letter and
+an item number out of Appendix III to MARPOL Annex I: **nine codes A–I, 41
+numbered items.** Free text belongs in code **(I)** and nowhere else, which is
+the only code carrying no item number.
+
+**NOTHING IS EVER EDITED OR DELETED, AND THAT IS THE WHOLE POINT.** On paper a
+wrong entry is struck through and initialled, never erased. So
+`oil_record_book_entries` has **no update policy and no delete policy at all**,
+and a mistake is put right by a FURTHER entry carrying `corrects_entry_id`. The
+page shows both — the original is what the book says happened, and the
+correction is a second fact about it.
+
+**A POLICY THAT DOES NOT EXIST IS NOT A LOCK.** Supabase's default ACL grants
+`arwdDxtm` on every new table in `public` to `authenticated`, so the absence of
+a policy is normally the only thing standing in the way — and one careless
+`for all` policy written here in a year would re-open both. UPDATE and DELETE
+are **revoked** as well, so it takes two mistakes rather than one.
+
+**A PAGE IS A REAL UNIT BECAUSE THE LAW SAYS SO.** Reg 20: *"each completed page
+must be signed by the master"*. Software would not invent pagination for a
+table. Two signatures, and they are not interchangeable — **the officer signs
+the OPERATION, the master signs the PAGE** — so they are reported separately,
+because they are chased from different people. **An entry may only be made on an
+OPEN page**: adding to a signed one would put an entry under a signature nobody
+gave it. Probed: an officer opens a page, makes an entry, closes the page, and
+is **refused when he signs as master**; the skipper signs; an entry on the
+signed page is then **refused**, and so is every delete by either of them.
+
+**THE PAGE NUMBER IS THE BOAT'S, NOT A COUNT OF ROWS.** A book started at 40
+because thirty-nine are on paper carries on from 40, or the electronic book and
+the paper one disagree about which page a surveyor is being shown. The empty
+state says so.
+
+**THREE YEARS AFTER THE LAST ENTRY, NOT THREE YEARS PER ENTRY.** Reg 20 again.
+The date the whole book may be let go MOVES every time anybody writes in it,
+which is the opposite of a per-row retention and exactly the sort of thing that
+gets built backwards.
+
+**THE WEEKLY SLUDGE READING IS REPORTED AND NEVER FILLED IN.** Code (C) item
+11.3 is required weekly *even where a voyage runs longer than a week*, and a gap
+in it is the first thing a port state inspector counts. `weeklyGaps()` names the
+weeks. **Inventing a sludge quantity nobody measured would be the worst thing
+this app could do** — and only 11.3 answers it: a disposal under 12.1 is a
+different item and does not.
+
+**THE ITEM LIST IS IN TWO PLACES AND THAT IS DELIBERATE.** `orb.js` has it for
+the form and `public.orb_items` has it as a lookup, with a composite FK
+`(code, item_n)` on every entry. **JS validation is not a constraint**: the
+first probe of this schema wrote `C/99.9` — a code and item the form does not
+have — straight into the book and nothing stopped it. `test-certification.mjs`
+asserts the JS list is exactly the 41 seeded pairs, so editing one without the
+other fails the suite rather than drifting quietly. It catches `A/11.3` too,
+where both halves are real and the pair is not.
+
+**AND IT IS NOT AN APPROVED ELECTRONIC RECORD BOOK.** MARPOL was amended by
+MEPC.314(74) to allow one, and the UK gives effect to that — but **MIN 644**
+requires the system to be approved against the **MEPC.312(74)** Guidelines by a
+Recognised Organisation, which issues a *Declaration of MARPOL electronic record
+book* to be kept aboard. Until that declaration exists **the paper book is the
+record**, and the page says so on every state where the book is drawn, asserted
+by the preview. An app that quietly let a skipper believe otherwise would be
+worse than one that had never offered the feature: **he would stop writing the
+paper book.**
+
+**Required, not required, and NOT KNOWN are three states.** `orbRequired()`
+returns `null` with no gross tonnage on file — a blank is not a zero-ton ship —
+and the page says the question is open rather than that no book is needed.
+
+`supabase/oil_record_book.sql` (applied) · `src/lib/certification/orb.js` ·
+`orbDb.js` · `src/pages/certification/OrbBody.jsx` ·
+`scripts/orb-preview.mjs` renders seven states.
+
+### THE OFFICER DENY LOOP WOULD HAVE TAKEN ALL FIVE TABLES
+
+`self_certification.sql` shipped with a note saying neither `officer_role.sql`
+nor `cook_role.sql` needed re-running for its two tables, because they carry
+their own explicit policies. **That was wrong and it was the documented trap
+arriving from the other direction.** The officer deny loop denies every table
+OUTSIDE its allow-list with a RESTRICTIVE policy, and a restrictive policy ANDs
+— so the next run of that file would have overridden every permissive policy
+those files wrote and shut the mate out of a checklist and a book he is meant to
+keep. Nothing would have errored.
+
+All five tables are in the allow-list now, in the deny loop and in the 2b
+cleanup, and **deliberately NOT in the `officer_works` loop**, which grants ALL
+and would hand back the update and delete the ORB migration spent two sections
+taking away. `cook_role.sql` needs no edit either way: the cook is denied by not
+appearing in the read policies' role list — an allow-list of roles, so a role
+added later sees nothing until somebody decides it should. Probed: cook reads
+**0 entries, 0 pages**, his write refused; another fleet's skipper reads **0**
+and cannot open a page on this boat.
+
+`test-certification.mjs` — **113 checks**.
+
+### Still open on the MCA question
+
+- **MSN 1873** — the document tracking for ITC69, stability books and gear
+  certificates. `vessel_certificates` already files against a chosen TYPE rather
+  than a typed name, which is the half that matters; what is missing is the
+  category work and the bundles (`L.S.A Certs.pdf` is 98 pages of many
+  certificates in one file, which the one-file-one-certificate model does not
+  fit).
+- **MGN 690** is the SOLAS V electronic-record-book route and is a much longer
+  road than MIN 644's. Neither is started, and neither should be claimed.
+- Nothing here makes the app "MCA certified", and no page says it does. What it
+  does is keep the records in the shape the regulations prescribe and say
+  plainly where the paper is still the record.
+
 ### Settlements (stage 2, in progress)
 
 `Settlements.jsx` reads the `su_*` tables; `SettlementImport.jsx` adds one from

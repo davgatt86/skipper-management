@@ -115,7 +115,54 @@ export const NAV = [
       // The third book the boat keeps: what was done to the nets, and when.
       // Deck work, so it is the mate's as much as the skipper's.
       { to: '/gear', label: 'Gear Log', access: 'officer' },
+    ],
+  },
+  {
+    /* THE STATUTORY BOOKS, and they answer to a different reader.
+     *
+     * Everything else in this menu is for the boat. These are for whoever comes
+     * aboard to check her — an MCA surveyor, a port state inspector — and they
+     * are kept to a standard the rest of the app does not have to meet.
+     *
+     * David, Sep 2026: "garbage, crew lists & oil record book would end up
+     * being part of certification part."
+     *
+     * THE CREW LIST MOVED HERE OUT OF CREW, which drops CrewTabs from five
+     * sections to four. It is a border document — an IMO FAL Form 5 — long
+     * before it is a crew admin page, and it belongs with the papers a boarding
+     * officer asks for.
+     *
+     * STILL MISSING: an Oil Record Book. Audacious is 498 GT, so MARPOL Annex I
+     * Part I applies, and the Fuel & Oil Log under Vessel is NOT one — it is a
+     * bunkering record, with no coded entries and no master's signature. That
+     * gap is real and is not closed by this group existing.
+     */
+    label: 'Certification',
+    items: [
+      // The annual self-certification, worked through the MCA's own aide
+      // memoire for the 15m to 24m band. Which band applies is decided on
+      // REGISTERED length, and Audacious is 23.96 m — see selfCert.js.
+      { to: '/self-certification', label: 'Self-Certification', access: 'officer' },
+      { to: '/crew-list', label: 'Crew List', access: 'officer' },
       { to: '/garbage-log', label: 'Garbage Record Book', access: 'officer' },
+      // The MARPOL Annex I book. Beside the garbage book because they are the
+      // two record books an inspector asks for by name, and both are the
+      // engineer's to keep and the master's to sign.
+      // SI 1981/570. Five of the records the boat keeps by hand are numbered
+      // entries in this ONE book: drills, steering gear tests, accommodation
+      // inspections, provisions and water, and accidents.
+      { to: '/official-log-book', label: 'Official Log Book', access: 'officer' },
+      { to: '/oil-record-book', label: 'Oil Record Book', access: 'officer' },
+      // SI 1999/3210. The mate keeps it; the SKIPPER inspects and signs each
+      // day's entries, which is enforced in RLS rather than by this menu.
+      { to: '/radio-log', label: 'Radio Log', access: 'officer' },
+      // Reg 7 of the H&S at Work regs, and LOLER/PUWER. THE FIRST TWO
+      // CERTIFICATION RECORDS WITH NO PAPER TWIN: reg 7 prescribes no form,
+      // and MGN 332 says a thorough examination report may be kept
+      // electronically. The mate keeps both -- he is the man doing the job
+      // being assessed and the inspection being recorded.
+      { to: '/risk-assessments', label: 'Risk Assessments', access: 'officer' },
+      { to: '/lifting-equipment', label: 'Lifting & Work Equipment', access: 'officer' },
     ],
   },
   {
@@ -129,7 +176,6 @@ export const NAV = [
       // which he is denied at the database.
       { to: '/crew', label: 'Crew Status', access: ['all', 'officer'], end: true },
       { to: '/contracted-crew', label: 'Contracted Crew', access: 'all' },
-      { to: '/crew-list', label: 'Crew List', access: 'officer' },
       { to: '/rota', label: 'Rota Planner', access: 'fleetTools' },
       { to: '/crew-certs', label: 'Certificates', access: 'officer' },
       { to: '/familiarisation', label: 'Familiarisation', access: 'skipper' },

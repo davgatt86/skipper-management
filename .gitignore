@@ -162,13 +162,16 @@ sheet-preview.html
 public/_sheet-preview.html
 invoices-page-preview.html
 invoice-duplicates.html
-
-# Rendered by scripts/self-cert-preview.mjs
 self-cert-preview.html
+public/_selfcert-preview.html
 
 # Rendered by the certification preview scripts for sighting
 _sight/
 
-# Rendered by scripts/dashboard-preview.mjs
+# Rendered by the preview scripts, none of them build artefacts
 dashboard-preview.html
 upload-panel-preview.html
+orb-preview.html
+olb-preview.html
+safety-preview.html
+radio-preview.html

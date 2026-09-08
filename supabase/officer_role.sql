@@ -73,6 +73,18 @@ declare
     -- writes: crew paperwork. A mate adds a man, files his tickets and makes
     -- the crew list — none of which touches what anyone is paid.
     'crew', 'crew_certificates', 'crew_lists', 'crew_list_members',
+    -- The books he keeps that are LEGAL RECORDS. Note these are deliberately
+    -- NOT in the officer_works loop below: that grants ALL, and an Oil Record
+    -- Book entry must never be updated or deleted by anybody. Their own
+    -- policies in oil_record_book.sql and self_certification.sql grant exactly
+    -- what he may do. They are listed HERE only so this deny loop leaves them
+    -- alone -- without that, re-running this file shuts him out of them.
+    'oil_record_book_pages', 'oil_record_book_entries', 'orb_items',
+    'official_log_books', 'official_log_book_entries', 'olb_items',
+    'risk_assessments', 'risk_assessment_hazards', 'risk_assessment_briefings',
+    'radio_log_entries', 'radio_log_days',
+    'work_equipment', 'equipment_examinations',
+    'self_certifications', 'self_certification_items',
     -- reads: the papers he needs, and the rows the app shell needs to boot
     'vessel_certificates', 'vessel_details', 'vessels', 'fleets', 'settings', 'app_users'
   ];
@@ -110,6 +122,12 @@ declare
     'maintenance_tasks','maintenance_events','engine_limits','parts','parts_movements',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
+    'oil_record_book_pages','oil_record_book_entries','orb_items',
+    'official_log_books','official_log_book_entries','olb_items',
+    'risk_assessments','risk_assessment_hazards','risk_assessment_briefings',
+    'radio_log_entries','radio_log_days',
+    'work_equipment','equipment_examinations',
+    'self_certifications','self_certification_items',
     'vessel_certificates','vessel_details','vessels','fleets','settings','app_users'
   ];
 begin

@@ -32,6 +32,12 @@ const FuelLog = lazy(() => import('./pages/FuelLog'))
 const GearLog = lazy(() => import('./pages/GearLog'))
 const Familiarisation = lazy(() => import('./pages/Familiarisation'))
 const GarbageLog = lazy(() => import('./pages/GarbageLog'))
+const SelfCertification = lazy(() => import('./pages/SelfCertification'))
+const OilRecordBook = lazy(() => import('./pages/OilRecordBook'))
+const OfficialLogBook = lazy(() => import('./pages/OfficialLogBook'))
+const RadioLog = lazy(() => import('./pages/RadioLog'))
+const RiskAssessments = lazy(() => import('./pages/RiskAssessments'))
+const LiftingEquipment = lazy(() => import('./pages/LiftingEquipment'))
 const BuyerLeague = lazy(() => import('./pages/BuyerLeague'))
 const Activity = lazy(() => import('./pages/Activity'))
 const Reconcile = lazy(() => import('./pages/Reconcile'))
@@ -321,6 +327,48 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <BuyerLeague />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/self-certification" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <SelfCertification />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/oil-record-book" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <OilRecordBook />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/official-log-book" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <OfficialLogBook />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/radio-log" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <RadioLog />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/risk-assessments" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <RiskAssessments />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/lifting-equipment" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <LiftingEquipment />
             </Suspense>
           </ProtectedRoute>
         } />
