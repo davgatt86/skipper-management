@@ -330,4 +330,192 @@ const {
   eq(itemText('Z', '1'), null, 'nor does a code that does not exist')
 }
 
+/* ==== THE OFFICIAL LOG BOOK ==============================================
+ * The Merchant Shipping (Official Log Books) (Fishing Vessels) Regulations
+ * 1981, SI 1981/570. Required of every UK fishing vessel of 55 feet and over.
+ *
+ * FIVE OF THE SEVEN RECORDS DAVID LISTED ARE THIS ONE BOOK -- drills, steering
+ * gear tests, accommodation inspections, provisions and water, and accidents
+ * are all numbered entries in the same Schedule.
+ */
+const olb = await import('./src/lib/certification/olb.js')
+const {
+  OLB_ENTRIES, IN_PERSON, RECURRING, entryOf, olbRequired,
+  entryProblems, overdue, openBook, DEFAULT_INTERVALS,
+  /* Aliased: the Oil Record Book exports its own validEntry and
+     correctionsOf, and both books are asserted in this one file. */
+  validEntry: validOlbEntry, correctionsOf: olbCorrections,
+} = olb
+
+/* ---- The Schedule -------------------------------------------------------
+ * ONE OF THESE TWO LISTS IS A COPY. `supabase/official_log_book.sql` seeds
+ * `olb_items` with the same 33 and the database refuses anything else, so
+ * editing one without the other has to fail HERE rather than at save time on
+ * a boat. Same guard as the ORB's `orb_items`, which exists because the first
+ * probe of that schema wrote an item the form does not have straight into the
+ * book.
+ */
+{
+  eq(OLB_ENTRIES.length, 33, 'the Schedule has 33 numbered entries')
+  eq(OLB_ENTRIES.map((e) => e.n), Array.from({ length: 33 }, (_, i) => i + 1),
+     'numbered 1 to 33 with none missing and none twice')
+  ok(OLB_ENTRIES.every((e) => e.text.trim().length > 10), 'every one carries its subject')
+  ok(OLB_ENTRIES.every((e) => String(e.signer || '').trim()), 'and the person who must sign it')
+
+  /* THE SEVEN THE SKIPPER MAY NOT DELEGATE, seeded identically in olb_items.
+     A death, a birth, a refusal to assist a vessel in distress, a doubt about
+     an officer's fitness, a handover of command. */
+  eq(IN_PERSON, [4, 11, 14, 24, 28, 29, 30], 'seven entries must be signed by the skipper in person')
+
+  /* The witnesses the Schedule prescribes, and they are not all the same
+     person -- an OFFICER for the two testing entries, the seaman himself for
+     his own complaint, and the mother of the child for a birth. */
+  eq(entryOf(20).witness, 'an officer', 'hoist testing is witnessed by an officer')
+  eq(entryOf(21).witness, 'an officer', 'and so is the steering gear')
+  eq(entryOf(23).witness, 'the seaman', 'a seaman witnesses his own complaint')
+  eq(entryOf(28).witness, 'the mother of the child', 'and a birth is witnessed by the mother')
+  eq(entryOf(1).witness, null, 'the opening entries need no witness')
+  eq(entryOf(18).witness, null, 'nor does the provisions and water inspection')
+}
+
+/* ---- WHO MUST HAVE ONE -------------------------------------------------- */
+{
+  /* 55 FEET, NOT METRES. The regulation is written in feet and the boat is on
+     record in metres, so the conversion is the test. 29.80 m is about 98 ft. */
+  eq(olbRequired({ length_overall: 29.8 }).required, true, 'Audacious at 29.8 m must keep one')
+  eq(olbRequired({ length_overall: 16 }).required, false, 'a 16 m boat is under 55 feet and need not')
+  eq(olbRequired({ length_overall: 16.764 }).required, true, 'and 55 feet exactly is inside it')
+  /* NOT REQUIRED AND NOT KNOWN MUST NOT READ ALIKE. */
+  eq(olbRequired({}).required, null, 'no length on file is unknown, never "not required"')
+  eq(olbRequired(null).required, null, 'and neither is no particulars')
+  eq(olbRequired({ length_overall: '' }).required, null, 'a blank length is not a zero-length boat')
+}
+
+/* ---- REFUSED, NEVER CORRECTED ------------------------------------------- */
+{
+  ok(validOlbEntry(7).ok, 'a real entry number is accepted')
+  ok(!validOlbEntry(34).ok, 'one past the end of the Schedule is refused')
+  ok(!validOlbEntry(0).ok, 'and so is nought')
+  ok(!validOlbEntry('rubbish').ok, 'and so is something that is not a number')
+}
+
+/* ---- WHAT IS MISSING BEFORE AN ENTRY IS COMPLETE ------------------------
+ * Three different faults, because they are put right by different people: a
+ * signature, a witness who has to be found, and an entry made after the book
+ * was closed.
+ */
+{
+  eq(entryProblems({ entry_n: 7, signed_name: 'D Gatt', witness_name: 'B Reid' }, {}), [],
+     'signed and witnessed is complete')
+
+  const noSig = entryProblems({ entry_n: 7, witness_name: 'B Reid' }, {})
+  eq(noSig.map((p) => p.kind), ['unsigned'], 'an unsigned entry says so')
+  const noWit = entryProblems({ entry_n: 7, signed_name: 'D Gatt' }, {})
+  eq(noWit.map((p) => p.kind), ['no-witness'], 'and one without its witness says so')
+  ok(noWit[0].says.includes('a member of the crew'), 'naming WHICH witness the Schedule wants')
+
+  /* An entry the Schedule gives no witness needs none, and must not be nagged
+     about -- a warning that fires on the ordinary case stops being read. */
+  eq(entryProblems({ entry_n: 1, signed_name: 'D Gatt' }, {}), [],
+     'an entry needing no witness is complete without one')
+
+  /* THE DELEGATION RULE, the book's distinctive one. An officer may sign for
+     the skipper on twenty-six of the thirty-three; on the other seven the
+     regulation says IN PERSON. */
+  const del = entryProblems(
+    { entry_n: 29, signed_name: 'N Wood', signed_by_officer: true, witness_name: 'B Reid' }, {})
+  eq(del.map((p) => p.kind), ['not-in-person'], 'one of the seven signed by an officer is caught')
+  eq(entryProblems(
+    { entry_n: 9, signed_name: 'N Wood', signed_by_officer: true, witness_name: 'B Reid' }, {}), [],
+     'while an ordinary entry may be signed by an authorised officer')
+
+  /* Reg 8: "no entry shall be made in an official log book after" it is
+     delivered. A closed book is closed. */
+  const late = entryProblems(
+    { entry_n: 7, occurred_on: '2026-09-05', signed_name: 'D Gatt', witness_name: 'B Reid' },
+    { closed_on: '2026-09-01' })
+  eq(late.map((p) => p.kind), ['after-close'], 'something that happened after the book closed is flagged')
+  eq(entryProblems(
+    { entry_n: 7, occurred_on: '2026-08-30', signed_name: 'D Gatt', witness_name: 'B Reid' },
+    { closed_on: '2026-09-01' }), [], 'and something before it is fine')
+
+  eq(entryProblems({ entry_n: 99, signed_name: 'x' }, {})[0].kind, 'unknown',
+     'an entry number the Schedule does not have is its own fault')
+}
+
+/* ---- WHAT HAS NOT BEEN WRITTEN DOWN ------------------------------------
+ * ONLY THE RECURRING ENTRIES CAN BE CHASED. A death cannot be predicted and a
+ * missing one is not evidence of anything -- reporting entry 29 as "overdue"
+ * would be the worst thing this page could say.
+ */
+{
+  eq(RECURRING, [7, 17, 18, 21], 'four entries happen on a rhythm: drills, accommodation, provisions, steering')
+
+  const none = overdue([], { asOf: '2026-09-08' })
+  eq(none.length, 4, 'an empty book has all four outstanding')
+  ok(none.every((o) => o.never), 'and every one says it has NEVER been written in')
+  /* NEVER WRITTEN IN IS NOT THE SAME AS OVERDUE BY N DAYS, and reporting a
+     number there would be inventing a date the book does not have. */
+  ok(none.every((o) => o.days === null), 'rather than a made-up number of days')
+
+  const some = overdue([
+    { entry_n: 7, occurred_on: '2026-05-02' },
+    { entry_n: 17, occurred_on: '2026-09-01' },
+    { entry_n: 18, occurred_on: '2026-09-01' },
+    { entry_n: 21, occurred_on: '2026-08-14' },
+    /* A one-off entry, recorded. It must never appear as overdue. */
+    { entry_n: 29, occurred_on: '2020-01-01' },
+  ], { asOf: '2026-09-08' })
+  eq(some.map((o) => o.n), [7], 'only the drill is actually late')
+  eq(some[0].days, 129, 'and it says by how long')
+  ok(!some.some((o) => o.n === 29), 'a death is never reported as overdue')
+
+  /* THE LAST ONE COUNTS, not the first. */
+  const latest = overdue([
+    { entry_n: 7, occurred_on: '2026-01-01' },
+    { entry_n: 7, occurred_on: '2026-09-01' },
+  ], { asOf: '2026-09-08' })
+  ok(!latest.some((o) => o.n === 7), 'the most recent drill is the one that matters')
+
+  /* THE INTERVALS ARE THE BOAT'S, NOT THE STATUTE'S. SI 1981/570 says what
+     must be recorded and who signs it, not how often a drill is held -- so
+     they are a setting, the same reasoning as the engine limits. */
+  eq(DEFAULT_INTERVALS[21], 90, 'steering gear is offered quarterly')
+  eq(overdue([{ entry_n: 7, occurred_on: '2026-08-01' }],
+             { asOf: '2026-09-08', intervals: { 7: 7 } }).length, 1,
+     'and a shorter interval set by the boat makes the same entry late')
+  eq(overdue([{ entry_n: 7, occurred_on: '2026-05-02' }],
+             { asOf: '2026-09-08', intervals: {} }).length, 0,
+     'while an entry with no interval set is never chased')
+
+  eq(overdue([{ entry_n: 7, occurred_on: 'rubbish' }], { asOf: '2026-09-08' })
+     .find((o) => o.n === 7).never, true, 'an unreadable date is no date at all')
+}
+
+/* ---- AN AMENDMENT IS A FURTHER ENTRY, never an edit --------------------
+ * Reg 9 word for word: "make and sign a further entry referring to the entry
+ * and amending or cancelling it".
+ */
+{
+  const entries = [
+    { id: 'a', entry_n: 32, occurred_on: '2026-08-30' },
+    { id: 'b', entry_n: 32, occurred_on: '2026-09-02', corrects_entry_id: 'a' },
+  ]
+  const cor = olbCorrections(entries)
+  eq(cor.get('a').map((x) => x.id), ['b'], 'the amendment is filed against what it amends')
+  eq(cor.has('b'), false, 'and the amendment itself is not amended')
+  eq(entries.filter((x) => x.id === 'a').length, 1, 'the original stays in the book')
+}
+
+/* ---- THE OPEN BOOK ------------------------------------------------------ */
+{
+  const books = [
+    { id: 'b0', opened_on: '2025-01-07', closed_on: '2026-01-05' },
+    { id: 'b1', opened_on: '2026-01-06', closed_on: null },
+  ]
+  eq(openBook(books).id, 'b1', 'the open book is the one not yet closed')
+  eq(openBook([books[0]]), null, 'with everything closed there is no book to write in')
+  eq(openBook([]), null, 'and none at all is none')
+}
+
 console.log('certification: ' + n + ' checks passed')

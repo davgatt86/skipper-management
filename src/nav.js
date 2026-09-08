@@ -148,6 +148,10 @@ export const NAV = [
       // The MARPOL Annex I book. Beside the garbage book because they are the
       // two record books an inspector asks for by name, and both are the
       // engineer's to keep and the master's to sign.
+      // SI 1981/570. Five of the records the boat keeps by hand are numbered
+      // entries in this ONE book: drills, steering gear tests, accommodation
+      // inspections, provisions and water, and accidents.
+      { to: '/official-log-book', label: 'Official Log Book', access: 'officer' },
       { to: '/oil-record-book', label: 'Oil Record Book', access: 'officer' },
     ],
   },

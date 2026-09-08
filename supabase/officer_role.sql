@@ -80,6 +80,7 @@ declare
     -- what he may do. They are listed HERE only so this deny loop leaves them
     -- alone -- without that, re-running this file shuts him out of them.
     'oil_record_book_pages', 'oil_record_book_entries', 'orb_items',
+    'official_log_books', 'official_log_book_entries', 'olb_items',
     'self_certifications', 'self_certification_items',
     -- reads: the papers he needs, and the rows the app shell needs to boot
     'vessel_certificates', 'vessel_details', 'vessels', 'fleets', 'settings', 'app_users'
@@ -119,6 +120,7 @@ declare
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
     'oil_record_book_pages','oil_record_book_entries','orb_items',
+    'official_log_books','official_log_book_entries','olb_items',
     'self_certifications','self_certification_items',
     'vessel_certificates','vessel_details','vessels','fleets','settings','app_users'
   ];

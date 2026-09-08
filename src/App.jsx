@@ -34,6 +34,7 @@ const Familiarisation = lazy(() => import('./pages/Familiarisation'))
 const GarbageLog = lazy(() => import('./pages/GarbageLog'))
 const SelfCertification = lazy(() => import('./pages/SelfCertification'))
 const OilRecordBook = lazy(() => import('./pages/OilRecordBook'))
+const OfficialLogBook = lazy(() => import('./pages/OfficialLogBook'))
 const BuyerLeague = lazy(() => import('./pages/BuyerLeague'))
 const Activity = lazy(() => import('./pages/Activity'))
 const Reconcile = lazy(() => import('./pages/Reconcile'))
@@ -337,6 +338,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <OilRecordBook />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/official-log-book" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <OfficialLogBook />
             </Suspense>
           </ProtectedRoute>
         } />

@@ -67,7 +67,7 @@ eq('officer menu', offNav, [
   // signs each one as the officer in charge of the operation. The MASTER signs
   // the completed page, and that refusal is in RLS rather than in this menu:
   // an officer's update carrying a master_signed_at is denied by policy.
-  '/oil-record-book', '/parts',
+  '/official-log-book', '/oil-record-book', '/parts',
   // The annual self-certification is record-keeping: the mate works through it,
   // and only the skipper may sign it off. That refusal is in RLS, not the menu.
   '/self-certification', '/vessel-certs',
