@@ -352,3 +352,65 @@ const dateOrNull = (v) => {
 
 /* The rule lives in src/lib/invoices/pages.js so it can be tested without a
    database — see the note there about page 0. */
+
+/* PUTTING AN INVOICE RIGHT, AND TAKING ONE OUT.
+ *
+ * Both go through a SECURITY DEFINER function rather than a plain update or
+ * delete, and that is not ceremony. `su_*` carries no audit trail by design --
+ * it is written by an edge function on the service-role key where `auth.uid()`
+ * is null, so the ordinary trigger would record that nobody did it. Every
+ * delete before this was done by hand with the reason typed onto the batch,
+ * and one of them was GBP 147,985.99. A button that can do the same thing and
+ * leave no trace is a hole, not a feature.
+ *
+ * `su_delete_invoice` snapshots the whole row into `su_invoice_changes` and
+ * removes it in ONE statement, so there is no window in which an invoice is
+ * gone and unrecorded. Nothing else in the app deletes an invoice.
+ */
+export async function deleteInvoice(id, reason) {
+  const { data, error } = await supabase.rpc('su_delete_invoice', {
+    p_id: id, p_reason: reason || null,
+  })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Correct the figures on one invoice.
+ *
+ * ONLY WHAT IS PRINTED ON THE SCAN. The boat, the trade and the work dates
+ * keep their own setters -- those are ANSWERS to questions the invoice cannot
+ * answer, not corrections to something misread, and folding them in here would
+ * put "I decided this" and "the reader got this wrong" in one record.
+ *
+ * The allow-list is enforced in the function as well; this copy is so the page
+ * cannot offer a field the database will refuse.
+ */
+export const EDITABLE = [
+  'supplier', 'invoice_no', 'invoice_date', 'net', 'vat', 'total',
+  'currency', 'description', 'page_from', 'page_to',
+]
+
+export async function editInvoice(id, patch, reason) {
+  const clean = {}
+  for (const k of EDITABLE) if (patch[k] !== undefined) clean[k] = patch[k] === '' ? null : patch[k]
+  if (!Object.keys(clean).length) return null
+  const { data, error } = await supabase.rpc('su_edit_invoice', {
+    p_id: id, p_patch: clean, p_reason: reason || null,
+  })
+  if (error) throw error
+  return data
+}
+
+/** What has been changed or removed, newest first. The only record there is. */
+export async function listInvoiceChanges(fleetId, limit = 100) {
+  if (!fleetId) return []
+  const { data, error } = await supabase
+    .from('su_invoice_changes')
+    .select('id, invoice_id, action, before, after, reason, changed_by, changed_at')
+    .eq('fleet_id', fleetId)
+    .order('changed_at', { ascending: false })
+    .limit(limit)
+  if (error) return []
+  return data || []
+}

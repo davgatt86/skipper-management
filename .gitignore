@@ -162,3 +162,6 @@ sheet-preview.html
 public/_sheet-preview.html
 invoices-page-preview.html
 invoice-duplicates.html
+
+# Rendered by scripts/self-cert-preview.mjs
+self-cert-preview.html

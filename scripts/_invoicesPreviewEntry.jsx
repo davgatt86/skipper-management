@@ -4,7 +4,7 @@
    reason KeptSheetView.jsx is a file of its own. */
 export { default as YearDashboard } from '../src/pages/invoices/YearDashboard.jsx'
 export { default as AllYears } from '../src/pages/invoices/AllYears.jsx'
-export { default as FindInvoices } from '../src/pages/invoices/FindInvoices.jsx'
+export { default as FindInvoices, CorrectFigures, RemoveInvoice } from '../src/pages/invoices/FindInvoices.jsx'
 export { default as Arrivals } from '../src/pages/invoices/Arrivals.jsx'
 export { default as Review } from '../src/pages/invoices/Review.jsx'
 export { resolveCategories } from '../src/lib/invoices/categories.js'

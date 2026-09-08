@@ -8,6 +8,7 @@ import {
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead, clearRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
   setInvoiceVessels, setInvoicesWork, setInvoiceCategory,
+  deleteInvoice, editInvoice,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
 import { suggestCategory, resolveCategories } from '../lib/invoices/categories'
@@ -499,6 +500,35 @@ export default function Invoices() {
     } catch (e) { setErr(e.message || String(e)) }
   }, [])
 
+  /* CORRECTING WHAT THE READER GOT WRONG — the figures printed on the scan.
+     Kept apart from the boat, the trade and the work dates, which are answers
+     to questions the invoice cannot answer rather than corrections. */
+  const editOne = useCallback(async (id, patch, reason) => {
+    setErr(''); setMsg('')
+    try {
+      const after = await editInvoice(id, patch, reason)
+      if (after) {
+        setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, ...after } : i)))
+        setMsg('Corrected, and what it said before is kept.')
+      }
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  /* TAKING ONE OUT. The whole row is snapshotted into su_invoice_changes in
+     the same statement, because `su_*` has no audit trail of its own and a
+     delete here would otherwise leave no trace whatever that it happened —
+     which is exactly the note CLAUDE.md has had to write by hand every time. */
+  const removeOne = useCallback(async (inv, reason) => {
+    setErr(''); setMsg('')
+    try {
+      await deleteInvoice(inv.id, reason)
+      setInvoices((prev) => prev.filter((i) => i.id !== inv.id))
+      setMsg(`Removed ${inv.supplier || 'that invoice'} ${inv.invoice_no || ''} — `
+        + `${money(inv.total)} is out of the totals. It is on record with the reason, `
+        + 'so it can be put back.')
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
   /* A TAB ID THAT MATCHES NO BRANCH MUST NOT RENDER AN EMPTY PAGE.
      `setTab('review')` survived the rebuild that replaced the review tab with a
      step inside "add", and the result was a page with a header, a tab strip and
@@ -560,7 +590,8 @@ export default function Invoices() {
         <FindInvoices invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
                       basis={basis} on={on} filter={filter} setFilter={setFilter}
                       onOpen={openInvoice} onSetWork={setWork}
-                      onPlaceVessel={placeVessel} onSetCategory={setOneCategory} />
+                      onPlaceVessel={placeVessel} onSetCategory={setOneCategory}
+                      onEdit={editOne} onDelete={removeOne} />
       ))}
 
       {/* ---- ADDING A BUNDLE, WHICH IS NOW ONE PDF ON A MONDAY --------------

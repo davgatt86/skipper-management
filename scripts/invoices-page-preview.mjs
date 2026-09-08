@@ -107,6 +107,15 @@ add({ supplier_id: 'zz', supplier: 'Melpass Limited', invoice_date: null,
       invoice_no: null, description: 'Undated, read off a poor scan',
       net: 500, vat: 100, total: 600 })
 
+/* The row that started this: Macduff 30543, the GBP 287,874 stage payment
+   filed twice off the same scan saved under a (1) suffix. */
+const stage = {
+  id: 'stage', supplier: 'Macduff Shipyards Limited', invoice_no: '30543',
+  invoice_date: '2017-10-31', net: 287874.10, vat: 0, total: 287874.10,
+  currency: 'GBP', page_from: 2, page_to: 2,
+  description: 'Stage payment due when hull is 100% completed - Yard 680',
+}
+
 /* ---- bundle the real components ----------------------------------------- */
 const dir = 'node_modules/.cache'
 mkdirSync(dir, { recursive: true })
@@ -119,7 +128,7 @@ await esbuild.build({
   logLevel: 'warning',
 })
 
-const { YearDashboard, AllYears, FindInvoices, Arrivals, Review, resolveCategories, resolveEras } =
+const { YearDashboard, AllYears, FindInvoices, CorrectFigures, RemoveInvoice, Arrivals, Review, resolveCategories, resolveEras } =
   await import(pathToFileURL(bundle).href)
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { createElement: h } = await import('react')
@@ -212,6 +221,35 @@ const panes = [
    h(FindInvoices, { invoices: inv, suppliers, cats, eras, basis: 'total', on: 'invoice',
                      filter: { q: 'kongsberg' }, setFilter: noop,
                      onOpen: noop, onSetWork: noop, onPlaceVessel: noop, onSetCategory: noop })],
+  /* THE TWO PANELS THAT CAN CHANGE THE RECORD. Rendered directly, because they
+     sit behind row state and a server render of the list can never reach them.
+     The row used here is the real shape of the one that started all this:
+     Macduff 30543, the £287,874 stage payment filed twice off the same scan. */
+  ['Correct the figures — what the reader took off the scan',
+   h(CorrectFigures, {
+     inv: stage,
+     val: (k) => ({ ...stage, total: '187874.10' })[k] ?? '',
+     put: () => noop, changed: ['total'],
+     why: 'read the scan again — page 2 says 187,874.10',
+     setWhy: noop, onSave: noop,
+   })],
+  ['Correct the figures — net and VAT do not add to the total',
+   h(CorrectFigures, {
+     inv: stage,
+     val: (k) => ({ ...stage, net: '100', vat: '20', total: '600' })[k] ?? '',
+     put: () => noop, changed: [], why: '', setWhy: noop, onSave: noop,
+   })],
+  ['Remove an invoice — no reason given yet',
+   h(RemoveInvoice, {
+     inv: stage, supplier: { name: 'Macduff Shipyards Limited' },
+     why: '', setWhy: noop, onRemove: noop,
+   })],
+  ['Remove an invoice — reason given',
+   h(RemoveInvoice, {
+     inv: stage, supplier: { name: 'Macduff Shipyards Limited' },
+     why: 'the same scan was loaded twice, this is the copy from the (1) file',
+     setWhy: noop, onRemove: noop,
+   })],
 ]
 
 const html = panes.map(([t, el]) => ({ t, m: renderToStaticMarkup(el) }))
@@ -307,6 +345,44 @@ has(6, 'Nothing matches', 'a term that matches nothing says so')
    name failed here and the page was right; the assertion was wrong. */
 hasnt(6, 'Trawl repairs and netting', 'and no result row is rendered')
 has(6, 'clear the filters', 'with a way back out of an empty answer')
+
+/* ---- THE TWO PANELS THAT CAN CHANGE THE RECORD -------------------------
+ * Rendered on their own because they sit behind row state and a server render
+ * of the list can never reach them. Extracting them caught a real fault the
+ * build was perfectly happy with: the bodies still referred to `killWhy` from
+ * the closure they had been lifted out of. An undefined identifier is valid
+ * JavaScript right up until it runs, which is the third time this repo has
+ * been told that.
+ */
+has(7, 'Correct the figures', 'the correction panel is headed as a correction')
+has(7, '30543', 'and carries the invoice number to be corrected')
+has(7, 'Save 1 change', 'it counts what has actually been altered')
+has(7, 'so a year from now this reads as a decision', 'and asks why before it will save')
+has(7, 'what it says now is kept either way', 'and says the old reading is kept')
+/* THE FIGURES ARE CORRECTABLE; THE DECISIONS ARE NOT HERE. Which boat, what
+   trade and when the work was done are answers to questions the invoice cannot
+   answer, and folding them in would put "I decided this" and "the reader got
+   this wrong" into one record. */
+hasnt(7, 'Which boat', 'the boat is not corrected here — it is decided elsewhere')
+hasnt(7, 'Work done from', 'and neither are the work dates')
+
+/* NET + VAT AGAINST THE TOTAL IS REPORTED, NEVER RESOLVED — the same rule as
+   the review screen, and this record measured it: 26 disagreements in 27 were
+   the invoice rather than the reading. */
+has(8, 'Net and VAT come to', 'a split that does not add up is reported')
+has(8, 'Often the invoice rather than the reading', 'in the words the sweep proved')
+has(8, 'The <b>total</b> is the figure that counts', 'and it points at the figure that counts')
+hasnt(8, 'is misread', 'never accusing one of the three of being wrong')
+
+has(9, 'out of the record?', 'removing one asks first')
+has(9, 'comes off every total on this page', 'and says what leaves the totals')
+has(9, '287,874.10', 'naming the money, because that is what is going')
+has(9, 'check which copy carries the page number', 'and which copy of a pair to keep')
+/* THE REASON IS REQUIRED. It is the only thing that will ever say why this row
+   went: su_* has no audit trail of its own, so without it a delete leaves no
+   trace whatever that it happened. */
+has(9, 'say why first', 'with no reason typed, it will not go')
+has(10, 'kept on record, so it can be put back', 'with one, it says the row survives the delete')
 
 console.log(out)
 console.log(`  ${inv.length} invoices · ${suppliers.length} firms · ${panes.length} panes rendered`)

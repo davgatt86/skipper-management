@@ -10,7 +10,7 @@
  * is the real one out of the database.
  */
 import assert from 'node:assert/strict'
-import { DEFAULT_ERAS, resolveEras, eraOf, eraLabel, vesselOf, vesselSplit }
+import { DEFAULT_ERAS, resolveEras, eraOf, eraLabel, vesselOf, vesselSplit, eraService, vesselSplitPerYear }
   from './src/lib/invoices/vessels.js'
 
 let n = 0
@@ -108,12 +108,89 @@ eq(vesselOf({ invoice_date: null }), null, 'while no date and no override is no 
 }
 
 // ---- THE ERAS ARE A SETTING ----------------------------------------------
-eq(resolveEras(null).length, 3, 'nothing stored is the three shipped boats')
+eq(resolveEras(null).length, 4, 'nothing stored is three hulls and the build bucket')
 {
   const r = resolveEras([{ key: 'twin', label: 'Twin rig' }])
   eq(r.find((e) => e.key === 'twin').label, 'Twin rig', 'a stored label wins')
   ok(r.find((e) => e.key === 'twin').from, 'while the rest of the shipped row survives')
 }
 eq(eraLabel(null), 'Not placed', 'and no hull reads as not placed, never as blank')
+
+/* ---- BUILDING A BOAT IS NOT RUNNING ONE ----------------------------------
+ * David, Sep 2026: "add a new category of boats. new build costs ... i think
+ * some bopp, shipyard & woodsons bills should be in the new build costs."
+ *
+ * Macduff 30543 makes the case on its own: £287,874 for "stage payment due
+ * when hull is 100% completed", dated October 2017 — a year before the
+ * pair/single ever fished and while the old boat still was. Charged to either
+ * hull it is a lie about what she cost to run.
+ */
+{
+  const eras = resolveEras(null)
+  eq(eras.map((e) => e.key), ['pair', 'newbuild', 'pair_single', 'twin'],
+     'four buckets, in the order David listed them')
+  const nb = eras.find((e) => e.key === 'newbuild')
+  ok(nb.manualOnly, 'the build bucket is filled by hand and never by date')
+  ok(!nb.from && !nb.to, 'and it deliberately carries no dates')
+
+  /* THE TRAP THIS FLAG EXISTS FOR. An era with neither `from` nor `to`
+     satisfies "on or after the start AND on or before the end" for EVERY date,
+     so without excluding it from the date logic New build costs would have
+     swallowed every invoice after the old boat was sold. */
+  for (const d of ['2015-01-01', '2016-06-01', '2017-10-31', '2019-01-01',
+                   '2021-01-01', '2023-01-01', '2026-09-01']) {
+    ok(eraOf(d).key !== 'newbuild', `${d} never falls to the build bucket on its own`)
+  }
+  /* And the dated boats still behave exactly as before it was added. */
+  eq(eraOf('2016-05-01').key, 'pair', 'the old boat still takes an early date')
+  eq(eraOf('2020-06-01').key, 'pair_single', 'the middle boat still takes a middle one')
+  eq(eraOf('2026-01-01').key, 'twin', 'and the twin still takes a recent one')
+  eq(eraOf('2018-05-28').certain, false, 'the changeover window is still a window')
+  eq(eraOf('2018-05-28').alsoCould, 'pair_single', 'naming the same other candidate')
+  eq(eraOf('2022-07-01').alsoCould, 'twin', 'and the second changeover too')
+
+  /* ONLY AN EXPLICIT DECISION PUTS AN INVOICE THERE. */
+  eq(vesselOf({ invoice_date: '2017-10-31' }), 'pair', 'the stage payment lands on the old boat by date')
+  eq(vesselOf({ invoice_date: '2017-10-31', vessel_era: 'newbuild' }), 'newbuild',
+     'and only the skipper moves it to the build')
+
+  eq(eraLabel('newbuild'), 'New build costs', 'it has a name of its own')
+}
+
+/* ---- A BUILD HAS NO YEARS OF SERVICE ------------------------------------
+ * So it has no cost per year of service either, and must not be ranked beside
+ * three hulls that actually fished.
+ */
+{
+  const eras = resolveEras(null)
+  const invoices = [
+    { invoice_date: '2017-10-31', total: 287874.10, vessel_era: 'newbuild' },
+    { invoice_date: '2018-05-28', total: 616200, vessel_era: 'newbuild' },
+    { invoice_date: '2020-01-01', total: 10000 },
+    { invoice_date: '2024-01-01', total: 20000 },
+  ]
+  eq(eraService('newbuild', invoices, eras), null, 'a build has no service window')
+  ok(eraService('twin', invoices, eras), 'while a hull that fished still has one')
+
+  const split = vesselSplitPerYear(invoices, eras)
+  const by = Object.fromEntries(split.rows.map((r) => [r.key, r]))
+  eq(by.newbuild.total, 904074.10, 'the build carries both orders')
+  eq(by.newbuild.perYear, null, 'and NO cost per year — a rate would be invented')
+  ok(by.twin.perYear > 0, 'the boats that fished still have one')
+  /* THE WHOLE POINT: the running costs of the hulls are now their own. */
+  eq(by.pair_single.total, 10000, 'the pair/single keeps only what she was run on')
+  eq(by.pair.total, 0, 'and the stage payment is off the old boat entirely')
+
+  /* An invoice moved to the build is SETTLED, so it stops being asked about. */
+  eq(split.uncertain.length, 0, 'nothing moved by hand is still undecided')
+}
+
+/* ---- IT IS A SETTING, like the other three ------------------------------- */
+{
+  const r = resolveEras([{ key: 'newbuild', label: 'Newbuild' }])
+  eq(r.find((e) => e.key === 'newbuild').label, 'Newbuild', 'a stored label wins')
+  ok(r.find((e) => e.key === 'newbuild').manualOnly,
+     'and the flag that keeps it out of the date logic survives the merge')
+}
 
 console.log('invoice vessels: ' + n + ' checks passed')
