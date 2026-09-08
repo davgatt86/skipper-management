@@ -165,3 +165,6 @@ invoice-duplicates.html
 
 # Rendered by scripts/self-cert-preview.mjs
 self-cert-preview.html
+
+# Rendered by the certification preview scripts for sighting
+_sight/

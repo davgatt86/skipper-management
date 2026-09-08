@@ -194,7 +194,50 @@ eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1
   eq('and the real row in between is the one kept', Number(rows[0].total_value), 1555.20)
 }
 
-eq('the version was bumped', PC.VERSION, '1.3.5')
+eq('the version was bumped', PC.VERSION, '1.3.6')
+
+/* ---- SPECIES NAMES ARE CANONICALISED (1.3.6) -------------------------
+ * Measured across every landing on the record, not guessed. The species
+ * column carried 57 distinct names for about 35 fish — the ninth outing for
+ * the pattern this repo keeps meeting, after crew ranks, fuel suppliers,
+ * vessel labels, buyer names, the quantity notation, stores units, pack sizes
+ * and invoice suppliers.
+ *
+ * David, Sep 2026: "lythe is pollock. cats are catfish."
+ */
+eq('cats are catfish', PC.canonSpecies('CAT'), 'Catfish')
+eq('and so are catfishes', PC.canonSpecies('Catfishes'), 'Catfish')
+/* LYTHE STAYS THE APP'S NAME and POLLACK maps onto it, which this map already
+   did. Not a preference: LYTHE is also a GRADE LABEL the estimator matches as
+   an exact string, and a species on the market clocks and in the auction
+   order. Renaming it would move three other things. */
+eq('pollack is lythe', PC.canonSpecies('POLLACK'), 'Lythe')
+eq('and lythe stays lythe', PC.canonSpecies('Lythe'), 'Lythe')
+eq('witches are witch', PC.canonSpecies('Witches'), 'Witch')
+eq('and so is witch flounder', PC.canonSpecies('Witch Flounder'), 'Witch')
+eq('lemons are lemon sole', PC.canonSpecies('LEMONS'), 'Lemon Sole')
+eq('megs are megrim', PC.canonSpecies('MEGS'), 'Megrim')
+eq('monks are monkfish', PC.canonSpecies('MONKS'), 'Monkfish')
+eq('black is saithe', PC.canonSpecies('BLACK'), 'Saithe')
+
+/* A PRESENTATION IS NOT A SPECIES. Every "(round)" row on the record carries
+   presentation WF, so the roundness is already held in its own column — and
+   left as its own species it costs Guiding Light a slot in her own top six,
+   because she has whiting twice. */
+eq('whiting round is whiting', PC.canonSpecies('Whiting (round)'), 'Whiting')
+eq('haddock round is haddock', PC.canonSpecies('Haddock (round)'), 'Haddock')
+
+/* AND A NAME NOBODY HAS RULED ON IS LEFT EXACTLY AS IT IS. "H" is 44 tonnes
+   and GBP 218,468 on one boat, and it prices and grades like hake — which is
+   not the same as knowing. Welding it onto the wrong fish is unrecoverable
+   once the note that would tell them apart is filed, the same rule
+   buyerAliases and normaliseSupplier both follow. */
+eq('an unruled name is untouched', PC.canonSpecies('H'), 'H')
+eq('and so is a one-off', PC.canonSpecies('Spot'), 'Spot')
+eq('and a generic one is not merged into a specific one', PC.canonSpecies('Skate / Ray'), 'Skate / Ray')
+eq('thornback stays its own fish', PC.canonSpecies('Thornback Skate'), 'Thornback Skate')
+eq('and nothing at all is nothing', PC.canonSpecies(''), '')
+
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

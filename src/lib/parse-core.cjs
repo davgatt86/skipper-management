@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.5";
+  const VERSION = "1.3.6";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
@@ -115,10 +115,37 @@
     "WHITING": "Whiting", "WITCH": "Witch", "MEGRIM": "Megrim", "LING": "Ling",
     "PLAICE": "Plaice", "TURBOT": "Turbot", "BRILL": "Brill", "TUSK": "Tusk",
     "HALIBUT": "Halibut", "FORKBEARD": "Forkbeard", "SAITHE": "Saithe", "LYTHE": "Lythe",
-    "SQUID": "Squid", "ATLANTIC HALIBUT": "Halibut", "WHITING U/R": "Whiting", "POLLACK": "Lythe"
+    "SQUID": "Squid", "ATLANTIC HALIBUT": "Halibut", "WHITING U/R": "Whiting", "POLLACK": "Lythe",
+    // 1.3.6 — the names actually found in the record, measured across every
+    // landing rather than guessed. Ninth outing for the pattern this repo
+    // keeps meeting: anything typed rather than picked will drift.
+    //
+    // David, Sep 2026: "lythe is pollock. cats are catfish."
+    //
+    // LYTHE stays the app's name for that fish and POLLACK maps onto it, which
+    // is what this map already did. It is not a preference: LYTHE is also a
+    // GRADE LABEL the estimator matches as an exact string, and it is a species
+    // on the market clocks and in the auction order. Renaming it would move
+    // three other things. The Peterhead board calls it Pollack, and that is
+    // handled where the board is read, not here.
+    //
+    // CATFISH is the species; CAT is a GRADE LABEL in the estimator and a
+    // different namespace entirely. Conflating the two is how the market
+    // layout would break.
+    "CATFISHES": "Catfish", "CAT": "Catfish",
+    "WITCHES": "Witch", "WITCH FLOUNDER": "Witch",
+    "LEMONS": "Lemon Sole", "MEGS": "Megrim", "MONKS": "Monkfish",
+    // BLACK is saithe in the trade — the market clocks already say so.
+    "BLACK": "Saithe", "COLEY": "Saithe",
+    "RED GURNARD": "Gurnard", "SPUR DOGS": "Dogfish", "SPURDOG": "Dogfish"
   };
   function canonSpecies(raw) {
-    const k = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+    let k = String(raw || "").toUpperCase().replace(/\s+/g, " ").trim();
+    // A PRESENTATION IS NOT A SPECIES. "Whiting (round)" is whiting, and the
+    // roundness is already in the presentation column — every such row on the
+    // record carries WF. Left as its own species it splits a fish in two and
+    // costs a boat a slot in her own top six: Guiding Light has whiting twice.
+    k = k.replace(/\s*\((ROUND|GUTTED|WHOLE|HEADED)\)$/, "").trim();
     return SPECIES_CANON[k] || (raw ? String(raw).trim() : "");
   }
   // Abbreviated-code formats (JSD three-letter, Shetland four-letter)
