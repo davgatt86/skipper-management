@@ -72,7 +72,10 @@ eq('officer menu', offNav, [
   // skipper's books. He makes the entries; the MASTER signs the ORB page and
   // opens and closes the OLB, and both refusals are in RLS rather than in this
   // menu — his update carrying a master signature is denied by policy.
-  '/official-log-book', '/oil-record-book', '/parts', '/risk-assessments',
+  '/official-log-book', '/oil-record-book', '/parts',
+  // The radio log: the mate keeps it, the SKIPPER signs each day's entries.
+  // That refusal is in RLS too — his insert into radio_log_days is denied.
+  '/radio-log', '/risk-assessments',
   // The annual self-certification is record-keeping: the mate works through it,
   // and only the skipper may sign it off. That refusal is in RLS, not the menu.
   '/self-certification', '/vessel-certs',

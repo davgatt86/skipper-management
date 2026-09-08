@@ -733,4 +733,156 @@ const {
   eq(list.map((x) => x.state).indexOf('unsafe'), 0, 'and nothing sorts above it')
 }
 
+/* ==== THE RADIO LOG ======================================================
+ * The Merchant Shipping (Radio) (Fishing Vessels) Regulations 1999,
+ * SI 1999/3210 — reg 19 for a Directive fishing vessel, reg 25 for a
+ * non-Directive one, and what must be recorded is in Schedule 3.
+ */
+const radio = await import('./src/lib/certification/radio.js')
+const {
+  radioPart, requiredKinds, offeredKinds, unsignedDays,
+  /* Aliased: the lifting register exports its own KINDS, and both are
+     asserted in this one file. */
+  KINDS: RADIO_KINDS,
+  positionGaps, entriesByDay, signatureFor, beyondSchedule,
+  DIRECTIVE_NEW_M, DIRECTIVE_EXISTING_M,
+} = radio
+
+/* ---- WHICH PART, AND IT IS THE 24 m QUESTION AGAIN ---------------------
+ * The third time that figure has settled something on this boat, and the
+ * second time four centimetres do it. A "Directive fishing vessel" is a NEW
+ * vessel of 24 m or more, or an EXISTING one of 45 m or more, on a RULE
+ * length — about 96% of the waterline length, near the registered length and
+ * nothing like the length overall.
+ */
+{
+  eq(DIRECTIVE_NEW_M, 24, 'a new vessel is Directive at 24 m')
+  eq(DIRECTIVE_EXISTING_M, 45, 'an existing one at 45 m')
+
+  const aud = radioPart({ length_registered: 23.96, length_overall: 29.8, year_built: 2022 })
+  eq(aud.part, 'II', 'Audacious at 23.96 m keeps the simplified log')
+  eq(aud.reg, 'reg 25', 'under reg 25')
+  ok(!aud.directive, 'and is not a Directive vessel')
+
+  /* FOUR CENTIMETRES. At 24.00 m she would keep a different book and owe four
+     more kinds of entry. */
+  eq(radioPart({ length_registered: 24.0, year_built: 2022 }).part, 'I',
+     '24.00 m registered is the full GMDSS log')
+  eq(radioPart({ length_registered: 24.0, year_built: 2022 }).reg, 'reg 19', 'under reg 19')
+
+  /* AN EXISTING VESSEL HAS A DIFFERENT THRESHOLD, and using 24 for her would
+     hand a 30 m boat a book she does not owe. */
+  eq(radioPart({ length_registered: 30, year_built: 1990 }).part, 'II',
+     'an existing vessel of 30 m is under the 45 m threshold')
+  eq(radioPart({ length_registered: 46, year_built: 1990 }).part, 'I', 'and one of 46 m is over it')
+
+  /* IT REFUSES RATHER THAN GUESSES, exactly as bandFor() does. Reading LOA
+     here would put Audacious at 29.8 m and hand her the wrong book. */
+  eq(radioPart({ length_overall: 29.8 }).part, null, 'length overall alone decides nothing')
+  ok(/rule length|OVERALL/.test(radioPart({ length_overall: 29.8 }).why),
+     'and it says which length the regulations actually mean')
+  eq(radioPart({ length_registered: 23.96 }).part, null, 'no year built decides nothing either')
+  ok(/24 m|45 m/.test(radioPart({ length_registered: 23.96 }).why),
+     'because the threshold turns on new against existing')
+  eq(radioPart({}).part, null, 'and nothing at all is unknown')
+  eq(radioPart({ length_registered: '', year_built: '' }).part, null, 'blank is not zero')
+}
+
+/* ---- SCHEDULE 3: WHAT EACH PART ASKS FOR ------------------------------- */
+{
+  eq(requiredKinds('II').map((k) => k.key), ['distress'],
+     'Part II is distress traffic and nothing else')
+  eq(requiredKinds('I').map((k) => k.key),
+     ['distress', 'urgency', 'safety', 'incident', 'position'],
+     'Part I adds urgency, safety, incidents and the daily position')
+  eq(requiredKinds(null), [], 'and an unsettled Part asks for nothing')
+
+  /* A TEST IS IN NEITHER PART. Equipment tests and battery checks are good
+     practice and the MCA's own combined book has room for them, but they are
+     not a duty under Schedule 3 — so they are OFFERED and never REQUIRED, and
+     the page says they are the boat's own. */
+  eq(RADIO_KINDS.find((k) => k.key === 'test').parts, [], 'an equipment test is required by neither Part')
+  ok(/not required by Schedule 3/.test(RADIO_KINDS.find((k) => k.key === 'test').note),
+     'and says so rather than dressing practice as law')
+  ok(offeredKinds('II').some((k) => k.key === 'test'), 'it is still offered')
+  ok(!requiredKinds('II').some((k) => k.key === 'test'), 'but never counted as owed')
+  eq(offeredKinds('II').map((k) => k.key), ['distress', 'test'],
+     'so a Part II boat is offered distress and a test, and nothing more')
+}
+
+/* ---- THE DAILY SIGNATURE, this book's distinctive rule -----------------
+ * Regs 19(2) and 25(2): "The skipper shall inspect and sign each day's
+ * entries." Not per entry as in the Oil Record Book, not per page, and not
+ * with a witness as in the Official Log Book — per DAY.
+ */
+{
+  const entries = [
+    { log_date: '2026-09-07', kind: 'distress' },
+    { log_date: '2026-09-07', kind: 'safety' },
+    { log_date: '2026-09-06', kind: 'distress' },
+  ]
+  const days = [{ log_date: '2026-09-06', signed_name: 'D Gatt' }]
+  const un = unsignedDays(entries, days)
+  eq(un.map((u) => u.date), ['2026-09-07'], 'only the day with entries and no signature')
+  eq(un[0].count, 2, 'counting what is on it')
+
+  /* A DAY WITH NO ENTRIES NEEDS NO SIGNATURE. The duty is to sign "each day's
+     ENTRIES"; where there are none there is nothing to attest, and chasing
+     every quiet day is a warning firing on the ordinary case. */
+  eq(unsignedDays([], [{ log_date: '2026-09-05' }]), [], 'a quiet day is never chased')
+  eq(unsignedDays(entries, [{ log_date: '2026-09-07' }, { log_date: '2026-09-06' }]), [],
+     'and everything signed leaves nothing')
+
+  eq(signatureFor('2026-09-06', days).signed_name, 'D Gatt', 'a day knows who signed it')
+  eq(signatureFor('2026-09-07', days), null, 'and an unsigned one says nothing')
+}
+
+/* ---- THE DAILY POSITION IS PART I ONLY --------------------------------
+ * A non-Directive vessel owes nothing of the kind, and telling her she is
+ * behind on it would be inventing a duty.
+ */
+{
+  const entries = [
+    { log_date: '2026-09-07', kind: 'distress' },
+    { log_date: '2026-09-06', kind: 'position' },
+  ]
+  eq(positionGaps(entries, 'I'), ['2026-09-07'], 'a Part I day with no position is chased')
+  eq(positionGaps(entries, 'II'), [], 'a Part II vessel owes no position at all')
+  eq(positionGaps(entries, null), [], 'and neither does one whose Part is unsettled')
+  /* Only days she was WRITING IN THE LOG. Inventing a duty for days tied up
+     would be the same failure as chasing a quiet unsigned day. */
+  eq(positionGaps([], 'I'), [], 'a day with nothing logged raises nothing')
+}
+
+/* ---- MORE THAN THE MINIMUM IS NOT A FAULT ----------------------------- */
+{
+  const entries = [
+    { log_date: '2026-09-07', kind: 'distress' },
+    { log_date: '2026-09-07', kind: 'safety' },
+    { log_date: '2026-09-07', kind: 'test' },
+  ]
+  eq(beyondSchedule(entries, 'II').map((e) => e.kind), ['safety', 'test'],
+     'a Part II boat logging safety traffic is beyond the Schedule')
+  eq(beyondSchedule(entries, 'I').map((e) => e.kind), ['test'],
+     'while for Part I only the equipment test is')
+  /* REPORTED, NEVER REFUSED. A skipper who writes down more has done
+     something useful, not something wrong. */
+  eq(entries.length, 3, 'and nothing is dropped for being beyond it')
+}
+
+/* ---- GROUPING ---------------------------------------------------------- */
+{
+  const entries = [
+    { id: 'b', log_date: '2026-09-07', occurred_at: '11:02' },
+    { id: 'a', log_date: '2026-09-07', occurred_at: '08:14' },
+    { id: 'c', log_date: '2026-09-06', occurred_at: '09:00' },
+  ]
+  const by = entriesByDay(entries)
+  eq([...by.keys()].sort(), ['2026-09-06', '2026-09-07'], 'entries group onto their day')
+  eq(by.get('2026-09-07').map((e) => e.id), ['a', 'b'], 'each day in the order things happened')
+  /* The TIME is part of the duty — Schedule 3 asks for "the time such
+     communications occurred" in every one of its limbs. */
+  eq(by.get('2026-09-07')[0].occurred_at, '08:14', 'and the time is kept')
+}
+
 console.log('certification: ' + n + ' checks passed')

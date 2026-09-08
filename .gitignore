@@ -173,3 +173,6 @@ olb-preview.html
 
 # Rendered by scripts/safety-preview.mjs
 safety-preview.html
+
+# Rendered by scripts/radio-preview.mjs
+radio-preview.html
