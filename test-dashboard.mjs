@@ -143,13 +143,27 @@ const p = (date, species, grade, ave) =>
       { landing_date: '2026-09-01', value: 1000, weight_kg: 100 },
       { landing_date: '2026-09-05', value: 500, weight_kg: 50 },
       { landing_date: '2026-08-20', value: 9999, weight_kg: 999 },
-      { landing_date: '2025-09-10', value: 1200, weight_kg: 120 },
+      /* Last September: two trips in the first eight days, two after. */
+      { landing_date: '2025-09-03', value: 1200, weight_kg: 120 },
+      { landing_date: '2025-09-07', value: 800, weight_kg: 80 },
+      { landing_date: '2025-09-10', value: 90_000, weight_kg: 9000 },
+      { landing_date: '2025-09-25', value: 200_000, weight_kg: 20_000 },
     ],
   })
   eq(b.month.gross, 1500, 'this month is September only')
   eq(b.month.trips, 2, 'two trips')
-  eq(b.month.lastYear, 1200, 'against the same month last year')
-  eq(b.month.lastYearTrips, 1, 'and how many trips that was')
+
+  /* A PART MONTH IS NEVER COMPARED WITH A WHOLE ONE, and this is the bug David
+     hit on the live page: on the 8th, this month held eight days and last
+     September held thirty, so the front page reported "4 trips, −98%" against
+     a boat that had simply not finished the month yet.
+     The invoice rule arriving somewhere else — and worse here, because a month
+     is short enough that one trip either way swings it by a hundred per cent. */
+  eq(b.month.lastYear, 2000, 'only the same DAYS of the same month last year')
+  eq(b.month.lastYearTrips, 2, 'and only those trips')
+  eq(b.month.through, 8, 'with the day it is compared through')
+  eq(b.month.month, '2026-09', 'and the month it is')
+  ok(b.month.lastYear < 290_000, 'the rest of last September is not in it')
 
   /* NOTHING TO SOMETHING IS NOT A CHANGE. A boat in her first year gets the
      figure and no comparison. */

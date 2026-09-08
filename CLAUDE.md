@@ -3225,6 +3225,42 @@ Four more things that verification caught, none visible by reading the code:
 - **A4 overflow of 1mm on the last page**, because that page alone carries the
   "laid lower" sentence. Measured, not eyeballed.
 
+### THREE FAULTS ON THE NEW FRONT PAGE, AND THE FIRST HID THE OTHER TWO (Sep 2026)
+
+David: *"(te || []).map is not a function ... dashboard looks horible. fix it."*
+
+**`fetchAll` RETURNS `{ data, error }`, NOT AN ARRAY.** `Dashboard.jsx` read her
+sales rows with it and then mapped the result. It threw before any state was
+set — so her own record was never loaded, her top species were never picked,
+and **the market panel silently fell back to what most boats land**. The page
+still rendered, still looked like a dashboard, and was showing a stranger's
+species to a boat with ten years of landings. A crash that degrades into a
+plausible-looking page is the worst shape there is.
+
+**A PART MONTH WAS COMPARED WITH A WHOLE ONE — the invoice rule arriving
+somewhere else, and worse.** On the 8th, this month held eight days and last
+September held thirty, so the card read **"4 trips · −98%"** against a boat that
+had simply not finished the month. It is worse than the invoice case because a
+month is short enough that one trip either way swings it by a hundred per cent.
+Both windows are now cut at the same day of the month and the card says which —
+*"This month · to the 8th"*, *"To the 8th last year"* — because a reader who
+assumes whole against whole reads a half-finished month as a collapse.
+
+**SIX TABLES, SIX HEADERS, AND THIRTY ROWS OF DASHES.** Every species drew its
+own table with its own column heads, and every grade got a row whether or not it
+sold — on a real board day about a third have no price. One table with one
+`<thead>` now; a species is a `<tbody>` band inside it, and grades that did not
+sell are **named once at the foot of their species** (*"A4 did not sell"*)
+rather than given four dashes each. They are still SAID: dropping them would
+read as the grade not existing.
+
+**The preview is what caught the density and the preview is what missed the
+maths.** Its 2025 fixture had one landing, on the 10th — past the day the month
+had reached, so the comparison never rendered at all and the assertion could not
+fail. It now carries two inside the window and one outside, so the cut has
+something to cut. **A fixture that cannot reach the code is a test that passes
+for the wrong reason.**
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

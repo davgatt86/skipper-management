@@ -134,10 +134,25 @@ export function boatBlocks({ landings = [], quota = null, expiring = [], books =
 
   const last = sorted[0] || null
   const thisMonth = sorted.filter((l) => day(l.landing_date).slice(0, 7) === today.slice(0, 7))
-  /* The SAME month last year, not last month — a boat's year is seasonal and
-     comparing September with August says nothing. */
-  const lastYear = sorted.filter((l) => day(l.landing_date).slice(0, 7)
-    === `${Number(today.slice(0, 4)) - 1}-${today.slice(5, 7)}`)
+
+  /* THE SAME MONTH LAST YEAR, AND ONLY AS FAR THROUGH IT.
+   *
+   * Two rules, and the second was missing. The same MONTH, because a boat's
+   * year is seasonal and September against August says nothing. And only the
+   * same DAYS OF IT, because on the 8th this month holds eight days and last
+   * September holds thirty — which is why the front page reported "4 trips,
+   * −98%" against a boat that had simply not finished the month yet.
+   *
+   * It is the invoice rule arriving somewhere else: a part period is never
+   * compared with a whole one. There it was a year; here it is a month, and it
+   * is worse, because a month is short enough that one trip either way swings
+   * it by a hundred per cent. */
+  const lastYearMonth = `${Number(today.slice(0, 4)) - 1}-${today.slice(5, 7)}`
+  const throughDay = today.slice(8, 10)
+  const lastYear = sorted.filter((l) => {
+    const d = day(l.landing_date)
+    return d.slice(0, 7) === lastYearMonth && d.slice(8, 10) <= throughDay
+  })
 
   return {
     lastTrip: last ? {
@@ -158,6 +173,10 @@ export function boatBlocks({ landings = [], quota = null, expiring = [], books =
          not a change, it is a start. */
       lastYear: lastYear.length ? sum(lastYear.map((l) => num(l.value))) : null,
       lastYearTrips: lastYear.length || null,
+      /* So the page can say WHICH days it is comparing, rather than leaving a
+         reader to assume it is the whole month against the whole month. */
+      through: Number(today.slice(8, 10)),
+      month: today.slice(0, 7),
     } : { has: false },
 
     /* QUOTA IS NOW A BLOCK LIKE ANY OTHER, and absent for the twelve fleets

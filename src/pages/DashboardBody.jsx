@@ -63,13 +63,33 @@ function Market({ board, species, landed, basis, onBasis, source, onSource }) {
         </p>
       ) : (
         <>
-          <p className="muted" style={{ fontSize: '0.78rem', margin: '0.35rem 0 0.6rem' }}>
-            Against {board.previous ? <>the day before ({fmt(board.previous)})</> : 'the day before'} and
-            the four weeks to {fmt(board.day)}.
+          {/* ONE TABLE, ONE HEADER. It was six tables with six headers and a
+              row for every grade that did not sell — about thirty rows of
+              mostly dashes, which is the wall of numbers this panel exists to
+              avoid. Species are a row band inside one grid now, and grades
+              that did not sell are named once at the foot of their species
+              rather than given a line each. */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem',
+                          marginTop: '0.5rem' }}>
+            <thead>
+              <tr className="muted" style={{ fontSize: '0.66rem', textTransform: 'uppercase',
+                                             letterSpacing: '0.05em', textAlign: 'right' }}>
+                <th style={{ textAlign: 'left', fontWeight: 400, paddingBottom: 3 }}>Grade</th>
+                <th style={{ fontWeight: 400, width: '5rem' }}>Average</th>
+                <th style={{ fontWeight: 400, width: '4.6rem' }}
+                    title={board.previous ? `against ${fmt(board.previous)}` : undefined}>Day</th>
+                <th style={{ fontWeight: 400, width: '4.6rem' }}
+                    title={`against the four weeks to ${fmt(board.day)}`}>4 wk</th>
+              </tr>
+            </thead>
+            {board.rows.map((r) => (
+              <SpeciesBlock key={r.species} row={r} from={from[r.species]} />
+            ))}
+          </table>
+          <p className="muted" style={{ fontSize: '0.72rem', margin: '0.5rem 0 0' }}>
+            <b>Day</b> is against {board.previous ? fmt(board.previous) : 'the day before'};{' '}
+            <b>4 wk</b> against the four weeks to {fmt(board.day)}, not counting that day.
           </p>
-          {board.rows.map((r) => (
-            <SpeciesBlock key={r.species} row={r} from={from[r.species]} />
-          ))}
         </>
       )}
     </div>
@@ -77,63 +97,59 @@ function Market({ board, species, landed, basis, onBasis, source, onSource }) {
 }
 
 function SpeciesBlock({ row, from }) {
-  return (
-    <div style={{ borderTop: '1px solid var(--line)', padding: '0.45rem 0' }}>
-      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <b style={{ fontSize: '0.9rem' }}>{row.species}</b>
-        {/* A BOAT'S OWN TOP SPECIES AND A GENERAL GUESS MUST NOT READ ALIKE.
-            Telling a skipper these are "his biggest" when they are what most
-            boats land is the quiet lie this codebase keeps refusing to tell. */}
-        <span className="muted" style={{ fontSize: '0.72rem' }}>
-          {from === 'pinned' ? 'watched by everyone'
-            : from === 'own' ? 'one of yours'
-              : 'what most boats land — yours will replace it'}
-        </span>
-      </div>
+  /* GRADES THAT DID NOT SELL ARE NAMED, NOT GIVEN A LINE EACH. On a real board
+     day a third of them have no price, and a row of four dashes says nothing
+     the word "unsold" does not say better in a tenth of the space. They are
+     still SAID — dropping them silently would look like the grade does not
+     exist. */
+  const sold = row.grades.filter((g) => g.ave != null)
+  const unsold = row.grades.filter((g) => g.ave == null).map((g) => g.grade)
 
-      {/* A SPECIES THE BOARD DOES NOT CARRY SAYS SO. Dropping the row would
-          read as the boat not landing it. */}
+  return (
+    <tbody style={{ borderTop: '1px solid var(--line)' }}>
+      <tr>
+        <td colSpan={4} style={{ paddingTop: '0.5rem' }}>
+          <b style={{ fontSize: '0.88rem' }}>{row.species}</b>
+          {/* A BOAT'S OWN TOP SPECIES AND A GENERAL GUESS MUST NOT READ ALIKE.
+              Telling a skipper these are "his biggest" when they are what most
+              boats land is the quiet lie this codebase keeps refusing to tell. */}
+          <span className="muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+            {from === 'pinned' ? 'watched by everyone'
+              : from === 'own' ? 'one of yours'
+                : 'what most boats land'}
+          </span>
+        </td>
+      </tr>
+
+      {/* A SPECIES THE BOARD DOES NOT CARRY SAYS SO. Dropping it would read as
+          the boat not landing it. */}
       {!row.onBoard ? (
-        <p className="muted" style={{ margin: 0, fontSize: '0.78rem' }}>
-          Not on this board{row.boardName !== row.species ? ` (it calls it ${row.boardName})` : ''}.
-        </p>
+        <tr><td colSpan={4} className="muted" style={{ fontSize: '0.78rem', paddingBottom: '0.3rem' }}>
+          Not on this board{row.boardName !== row.species ? ` — it calls it ${row.boardName}` : ''}.
+        </td></tr>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-          {/* THE COLUMNS ARE LABELLED ONCE. They were labelled on every row,
-              which only showed up on rendering it: seventeen rows of cod,
-              haddock and saithe each repeating the same thirty characters,
-              which buries the figures the panel exists to show. */}
-          <thead>
-            <tr className="muted" style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              <th style={{ textAlign: 'left', width: '4.5rem', fontWeight: 400 }}>Grade</th>
-              <th style={{ textAlign: 'right', width: '4.5rem', fontWeight: 400 }}>Average</th>
-              <th style={{ textAlign: 'right', width: '5rem', fontWeight: 400 }}>On the day</th>
-              <th style={{ textAlign: 'right', width: '5rem', fontWeight: 400 }}>
-                On {avgDays(row)}
-              </th>
-              <th />
+        <>
+          {sold.map((g) => (
+            <tr key={g.grade}>
+              <td style={{ padding: '1px 0' }}>{g.grade}</td>
+              <td style={{ fontFamily: MONO, textAlign: 'right', fontWeight: 600 }}>{money(g.ave)}</td>
+              <td style={{ textAlign: 'right' }}><Move v={g.onDay} /></td>
+              <td style={{ textAlign: 'right' }}><Move v={g.onAvg} /></td>
             </tr>
-          </thead>
-          <tbody>
-            {row.grades.map((g) => (
-              <tr key={g.grade}>
-                <td style={{ padding: '1px 0', width: '4.5rem' }}>{g.grade}</td>
-                <td style={{ fontFamily: MONO, textAlign: 'right', width: '4.5rem', fontWeight: 600 }}>
-                  {g.ave == null ? <span className="muted">—</span> : money(g.ave)}
-                </td>
-                <td style={{ textAlign: 'right', width: '5rem' }}><Move v={g.onDay} /></td>
-                <td style={{ textAlign: 'right', width: '5rem' }}><Move v={g.onAvg} /></td>
-                {/* Said only where it needs saying. A grade that did not sell
-                    is the exception, and the exception is what earns the words. */}
-                <td className="muted" style={{ paddingLeft: '0.6rem', fontSize: '0.72rem' }}>
-                  {g.ave == null ? 'did not sell' : ''}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          ))}
+          {unsold.length > 0 && (
+            <tr><td colSpan={4} className="muted" style={{ fontSize: '0.72rem', paddingBottom: '0.3rem' }}>
+              {unsold.join(', ')} did not sell
+            </td></tr>
+          )}
+          {sold.length === 0 && (
+            <tr><td colSpan={4} className="muted" style={{ fontSize: '0.72rem', paddingBottom: '0.3rem' }}>
+              nothing sold on the day
+            </td></tr>
+          )}
+        </>
       )}
-    </div>
+    </tbody>
   )
 }
 
@@ -181,18 +197,32 @@ function Boat({ blocks, vessel, canSeeMoney }) {
 
       {month.has && canSeeMoney && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>This month</h3>
+          <h3 style={{ marginTop: 0 }}>
+            This month
+            {/* WHICH DAYS, SAID PLAINLY. The comparison is the first N days
+                against the first N days, and a reader who assumed whole month
+                against whole month would read a half-finished month as a
+                collapse — which is exactly what the page did. */}
+            {month.through ? <span className="muted" style={{ fontWeight: 400 }}>
+              {' '}· to the {ordinal(month.through)}
+            </span> : null}
+          </h3>
           <div style={{ display: 'flex', gap: '1.4rem', flexWrap: 'wrap' }}>
             <Fig label="Gross" value={money0(month.gross)} />
             <Fig label="Trips" value={month.trips} />
             {/* NOTHING TO SOMETHING IS NOT A CHANGE. A boat in her first year
                 gets the figure and no percentage. */}
             {month.lastYear != null && (
-              <Fig label="Same month last year" value={money0(month.lastYear)}
+              <Fig label={`To the ${ordinal(month.through)} last year`} value={money0(month.lastYear)}
                    hint={`${month.lastYearTrips} trip${month.lastYearTrips === 1 ? '' : 's'} · `
                      + pct(month.gross, month.lastYear)} />
             )}
           </div>
+          {month.lastYear != null && (
+            <p className="muted" style={{ fontSize: '0.72rem', margin: '0.4rem 0 0' }}>
+              The same days of the month, not the whole of it — the month is not finished.
+            </p>
+          )}
         </div>
       )}
 
@@ -312,14 +342,14 @@ function Fig({ label, value, hint }) {
   )
 }
 
-/* How many days the average actually rests on, taken from the grades rather
-   than assumed: a thin species may have far fewer than the window allows, and
-   a header claiming 28 days over an average of three would be a quiet lie. */
-function avgDays(row) {
-  const ds = (row.grades || []).map((g) => g.days).filter((d) => d > 0)
-  if (!ds.length) return 'the average'
-  const most = Math.max(...ds)
-  return most + '-day average'
+
+/* "to the 8th", not "to day 8" — the card is read on a boat, not in a report. */
+function ordinal(n) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return ''
+  const t = v % 100
+  const suf = (t >= 11 && t <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[v % 10] || 'th')
+  return v + suf
 }
 
 const MONO = 'var(--mono, ui-monospace, monospace)'

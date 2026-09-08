@@ -77,7 +77,13 @@ export default function Dashboard() {
 
         const byId = new Map((land.data || []).map((l) => [l.id, l]))
         setLandings(land.data || [])
-        setRows((srows || []).map((r) => ({
+        /* `fetchAll` returns { data, error } — NOT an array. Treating it as one
+           threw "(x || []).map is not a function" on the front page, and
+           because it threw before anything was set, the whole of her own
+           record was missing: her top species were never picked, so the market
+           panel silently fell back to what most boats land. A crash that
+           degrades into a plausible-looking page is the worst shape. */
+        setRows((srows.data || []).map((r) => ({
           ...r, landing_date: byId.get(r.landing_id)?.landing_date || null,
         })))
 

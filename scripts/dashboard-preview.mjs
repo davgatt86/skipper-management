@@ -82,6 +82,10 @@ const rows = [
 const landings = [
   { landing_date: '2026-09-01', vessel: 'AUDACIOUS BF83', value: 136_656, weight_kg: 44_805, boxes: 1192, reconcile_ok: true },
   { landing_date: '2026-09-04', vessel: 'AUDACIOUS BF83', value: 98_400, weight_kg: 31_200, boxes: 840, reconcile_ok: false },
+  /* Last September: two trips inside the first eight days, one after — so the
+     part-month cut has something to cut. */
+  { landing_date: '2025-09-02', vessel: 'AUDACIOUS BF83', value: 121_000, weight_kg: 38_000, boxes: 1010, reconcile_ok: true },
+  { landing_date: '2025-09-06', vessel: 'AUDACIOUS BF83', value: 104_500, weight_kg: 33_400, boxes: 890, reconcile_ok: true },
   { landing_date: '2025-09-10', vessel: 'AUDACIOUS BF83', value: 180_000, weight_kg: 52_000, boxes: 1400, reconcile_ok: true },
 ]
 const quota = { snapshot: { last_landing_date: '2026-08-26' },
@@ -139,14 +143,11 @@ const has = (i, s, why) => {
   else { console.log(`  FAIL  ${why} — expected ${JSON.stringify(s)}`); bad++ }
 }
 /* Some things must appear a set number of times, not merely appear. */
-const ok1 = (needle, paneIx, why) => {
-  const inPane = p[paneIx - 1] || ''
-  /* One species block per label, and the labels appear once per block. */
-  const species = (inPane.match(/watched by everyone|one of yours|most boats land/g) || []).length
-  const found = inPane.split(needle).length - 1
-  if (found === species) console.log('  ok    ' + why + ' (' + found + ' of ' + species + ')')
+const times = (needle, paneIx, want, why) => {
+  const found = (p[paneIx - 1] || '').split(needle).length - 1
+  if (found === want) console.log('  ok    ' + why + ' (' + found + ')')
   else {
-    console.log('  FAIL  ' + why + ' — found ' + found + ', expected ' + species + ' (one per species)')
+    console.log('  FAIL  ' + why + ' — found ' + found + ', expected ' + want)
     bad++
   }
 }
@@ -168,11 +169,14 @@ for (const i of [1, 2, 3, 4, 5]) {
 has(1, 'one of yours', "a boat's own species are marked as hers")
 has(1, 'Monkfish', 'and her fourth by value is there')
 has(1, 'Lythe', 'as is her fifth — under the app name, not the board name')
-has(1, 'On the day', 'the two comparison columns are labelled')
-/* ONCE, not on every row. The labels used to repeat on all seventeen rows of
-   the pinned three, which only showed up on rendering it. */
-ok1('On the day', 1, 'and labelled exactly once per species table')
-has(1, 'day average', 'including how many days the average rests on')
+has(1, 'Grade', 'the columns are labelled')
+has(1, '4 wk', 'including the four-week column')
+/* SIX TABLES BECAME ONE, and that is the whole fix. David: "dashboard looks
+   horible" — it was six headers and about thirty rows of dashes, which is the
+   wall of numbers this panel exists to avoid. One header for the lot. */
+times('<thead>', 1, 1, 'and there is exactly one header for all six species')
+times('<table', 1, 1, 'in exactly one table')
+has(1, 'against the four weeks to', 'with the two comparisons explained once, at the foot')
 /* NO CHANGE IS NOT NO PRICE. Cod A3 is deliberately flat. */
 has(1, '0.00', 'a grade that did not move shows nought')
 has(1, 'did not sell', 'and one that did not sell says so instead')
@@ -180,7 +184,11 @@ has(1, 'did not sell', 'and one that did not sell says so instead')
 has(1, 'Last trip', 'her last trip is shown')
 has(1, 'did not add up to its own printed total', 'and a note that did not reconcile says so')
 has(1, 'This month', 'the month to date')
-has(1, 'Same month last year', 'against the same month last year, not last month')
+/* A PART MONTH IS NEVER COMPARED WITH A WHOLE ONE. On the live page this read
+   "4 trips · -98%" against a boat that had simply not finished the month. */
+has(1, 'To the 8th last year', 'against the same DAYS of the same month last year')
+has(1, 'to the 8th', 'and the card says which days it is counting')
+has(1, 'not the whole of it', 'saying plainly that the month is not finished')
 has(1, 'Quota', 'and quota, for the one fleet that has it')
 has(1, 'Running out', 'what is expiring')
 has(1, 'What to do next', 'and what is waiting on a decision')
@@ -211,7 +219,7 @@ has(4, 'watched by everyone', 'and the pinned three are still pinned')
 
 has(5, 'Not on this board', 'a species with no prices says so')
 has(5, 'it calls it Pollack', 'and names what the board calls it')
-hasnt(5, 'Lythe</b></div><table', 'rather than drawing an empty table')
+times('Not on this board', 5, 1, 'and says it once, for the one species missing')
 
 console.log(out)
 console.log(`  ${panes.length} states rendered`)
