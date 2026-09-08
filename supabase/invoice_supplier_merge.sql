@@ -99,3 +99,31 @@ grant execute on function public.su_merge_invoice_suppliers(uuid, uuid) to authe
 -- AND `Steven Clark Motor Body Repairs` IS A DIFFERENT FIRM. It matches a
 -- search for "steven" and is a man's name, not D. Steven & Son. Left alone --
 -- which is the whole reason a merge is a decision rather than a rule.
+
+
+-- "THESE TWO ARE NOT THE SAME FIRM" ----------------------------------------
+-- Applied Sep 2026 as migration `su_invoice_suppliers_not_same_as`.
+--
+-- The suggester finds five pairs on this boat, and two of them are deliberately
+-- NOT merges: Macduff Shipyards Ltd against Macduff Shipyards (Macduff Crane
+-- Hire), and The Don Fishing Company Ltd against its Macduff Branch. One firm,
+-- two trades, GBP 1.34m between them, and merging would fold a quota bill into
+-- the stores line.
+--
+-- Without somewhere to put that answer the panel would ask again every time the
+-- page was opened, which is the "warning that fires on the ordinary case"
+-- failure this codebase keeps writing down -- and then the one REAL pair hides
+-- among the refusals nobody reads.
+--
+-- Written on BOTH rows, so the pair is silenced whichever way round it is
+-- found: which side is reached first is an accident of ordering. A stale id
+-- left by a deleted supplier is harmless -- it names a row that no longer
+-- exists and can never match again.
+alter table public.su_invoice_suppliers
+  add column if not exists not_same_as uuid[] not null default '{}';
+
+-- NOT PRE-SEEDED, deliberately. Those two pairs were settled in conversation
+-- months ago and it would be easy to write the answers in here -- but that
+-- would put a reading of a note into the record as the skipper's own decision,
+-- and a decision and a default must not read alike. The panel asks; one tap
+-- answers; what is stored is then his.

@@ -8,7 +8,7 @@ import {
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead, clearRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
   setInvoiceVessels, setInvoicesWork, setInvoiceCategory,
-  deleteInvoice, editInvoice,
+  deleteInvoice, editInvoice, mergeSuppliers, markNotSame,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
 import { suggestCategory, resolveCategories } from '../lib/invoices/categories'
@@ -19,6 +19,7 @@ import { arrivalFromName, arrivalSubject } from '../lib/invoices/arrival'
 import YearDashboard from './invoices/YearDashboard'
 import AllYears from './invoices/AllYears'
 import FindInvoices from './invoices/FindInvoices'
+import MergeFirms from './invoices/MergeFirms'
 import { Segmented } from './invoices/shared'
 import Arrivals from './invoices/Arrivals'
 import Review from './invoices/Review'
@@ -514,6 +515,36 @@ export default function Invoices() {
     } catch (e) { setErr(e.message || String(e)) }
   }, [])
 
+  /* TWO SPELLINGS OF ONE FIRM. Both halves matter: the invoices move so
+     history is right, and the losing name is kept as a spelling so next
+     Monday's bundle does not re-create the firm it was just folded into. */
+  const foldFirm = useCallback(async (keep, drop) => {
+    setErr(''); setMsg('')
+    try {
+      const res = await mergeSuppliers(keep.id, drop.id)
+      await refresh()
+      setMsg(`${res?.kept || keep.name} now carries ${res?.merged || drop.name} — `
+        + `${res?.invoices_moved ?? drop.count} moved across, and that spelling is filed `
+        + 'so the next bundle lands on the same firm.')
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  /* ANSWERED ONCE. Without somewhere to put "these two are not the same firm",
+     the panel would ask about Macduff Shipyards against its crane hire arm
+     every time the page opened — and the one real pair would hide among the
+     refusals nobody reads. */
+  const notSameFirm = useCallback(async (a, b) => {
+    setErr('')
+    try {
+      await markNotSame(a, b)
+      setSuppliers((prev) => prev.map((s) => (
+        s.id === a.id ? { ...s, not_same_as: [...(s.not_same_as || []), b.id] }
+          : s.id === b.id ? { ...s, not_same_as: [...(s.not_same_as || []), a.id] }
+            : s)))
+      setMsg(`${a.name} and ${b.name} are kept apart. They will not be offered again.`)
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
   /* TAKING ONE OUT. The whole row is snapshotted into su_invoice_changes in
      the same statement, because `su_*` has no audit trail of its own and a
      delete here would otherwise leave no trace whatever that it happened —
@@ -593,6 +624,14 @@ export default function Invoices() {
                       onPlaceVessel={placeVessel} onSetCategory={setOneCategory}
                       onEdit={editOne} onDelete={removeOne} />
       ))}
+
+      {/* WHERE IT SITS. Under the search rather than on the dashboard: it is
+          housekeeping you do when you are already looking at one firm's
+          invoices and notice the other half of it, not a figure to read. */}
+      {shownTab === 'find' && !loading && (
+        <MergeFirms suppliers={suppliers} invoices={invoices}
+                    onMerge={foldFirm} onNotSame={notSameFirm} busy={!!stage} />
+      )}
 
       {/* ---- ADDING A BUNDLE, WHICH IS NOW ONE PDF ON A MONDAY --------------
           The drop, the unread bundles and the check-the-read are one flow in one

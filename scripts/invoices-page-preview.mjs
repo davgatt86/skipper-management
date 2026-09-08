@@ -116,6 +116,30 @@ const stage = {
   description: 'Stage payment due when hull is 100% completed - Yard 680',
 }
 
+/* THE TWO PAIRS THIS BOAT ACTUALLY STILL HAS, and they are opposites.
+   Baird's Pharmacy is one chemist spelled two ways. Macduff Shipyards against
+   its crane hire arm is one firm and two trades, £1.34m apart, and David
+   settled months ago that it must NOT be merged. Only what each side sold
+   tells them apart, which is why the panel prints that. */
+const mergeFirms = [
+  { id: 'm1', name: 'Macduff Shipyards Ltd', category: 'shipyard', aliases: [], not_same_as: [] },
+  { id: 'm2', name: 'Macduff Shipyards Limited (Macduff Crane Hire)', category: 'plant', aliases: [], not_same_as: [] },
+  { id: 'm3', name: "Baird's Pharmacy", category: 'medical', aliases: [], not_same_as: [] },
+  { id: 'm4', name: "Baird's Pharmacy (RMB Retail Limited)", category: 'medical', aliases: [], not_same_as: [] },
+  /* Already answered, so it must not appear at all. */
+  { id: 'm5', name: 'Ocean Blue Quota', category: 'quota', aliases: [], not_same_as: ['m6'] },
+  { id: 'm6', name: 'Ocean Blue Quota Company Holdings', category: 'quota', aliases: [], not_same_as: ['m5'] },
+]
+const mergeInvoices = [
+  { id: 'x1', supplier_id: 'm1', total: 1346921, invoice_date: '2019-03-04', description: 'Annual dry docking, hull blasting and paint' },
+  { id: 'x2', supplier_id: 'm1', total: 287874, invoice_date: '2017-10-31', description: 'Stage payment due when hull is 100% completed' },
+  { id: 'x3', supplier_id: 'm2', total: 4121, invoice_date: '2021-05-06', description: 'Crane hire, 40t mobile, lifting nets to quay' },
+  { id: 'x4', supplier_id: 'm3', total: 557, invoice_date: '2022-02-01', description: 'Ship medical stores, category A' },
+  { id: 'x5', supplier_id: 'm4', total: 687, invoice_date: '2024-06-11', description: 'Medical stores top-up and controlled drugs' },
+  { id: 'x6', supplier_id: 'm5', total: 7980, invoice_date: '2023-01-09', description: 'Lease 20tn North Sea cod' },
+  { id: 'x7', supplier_id: 'm6', total: 6000, invoice_date: '2024-01-09', description: 'Lease 15tn North Sea haddock' },
+]
+
 /* ---- bundle the real components ----------------------------------------- */
 const dir = 'node_modules/.cache'
 mkdirSync(dir, { recursive: true })
@@ -128,7 +152,7 @@ await esbuild.build({
   logLevel: 'warning',
 })
 
-const { YearDashboard, AllYears, FindInvoices, CorrectFigures, RemoveInvoice, Arrivals, Review, resolveCategories, resolveEras } =
+const { YearDashboard, AllYears, FindInvoices, CorrectFigures, RemoveInvoice, MergeFirms, Arrivals, Review, resolveCategories, resolveEras } =
   await import(pathToFileURL(bundle).href)
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { createElement: h } = await import('react')
@@ -250,6 +274,14 @@ const panes = [
      why: 'the same scan was loaded twice, this is the copy from the (1) file',
      setWhy: noop, onRemove: noop,
    })],
+  /* MERGING TWO SPELLINGS OF ONE FIRM. The fixture is the two real pairs this
+     boat still has: one that plainly should merge, and one that plainly should
+     NOT — same shipyard, different trade, and only what each side sold tells
+     them apart. */
+  ['Merge firms — a real pair and a pair that must stay apart',
+   h(MergeFirms, { suppliers: mergeFirms, invoices: mergeInvoices, onMerge: noop, onNotSame: noop })],
+  ['Merge firms — nothing to ask about',
+   h(MergeFirms, { suppliers: [mergeFirms[0]], invoices: mergeInvoices, onMerge: noop, onNotSame: noop })],
 ]
 
 const html = panes.map(([t, el]) => ({ t, m: renderToStaticMarkup(el) }))
@@ -383,6 +415,45 @@ has(9, 'check which copy carries the page number', 'and which copy of a pair to 
    trace whatever that it happened. */
 has(9, 'say why first', 'with no reason typed, it will not go')
 has(10, 'kept on record, so it can be put back', 'with one, it says the row survives the delete')
+
+/* ---- MERGING TWO SPELLINGS OF ONE FIRM ---------------------------------
+ * SUGGESTED, NEVER APPLIED. Two of the five pairs on this boat are
+ * deliberately not merges, and the panel cannot tell which is which — only
+ * what each side sold can, which is why it prints that.
+ */
+has(11, '2 pairs worth a look', 'it counts the pairs it can see')
+/* THE ALREADY-ANSWERED PAIR IS NOT AMONG THEM. Without `not_same_as` this
+   would ask about Macduff and Don Fishing every time the page opened, and the
+   one real pair would hide among refusals nobody reads. */
+hasnt(11, 'Ocean Blue', 'a pair already told apart is never offered again')
+has(11, 'Nothing is merged until you say so', 'and it says it decides nothing')
+
+has(11, 'Macduff Shipyards Ltd', 'the bigger side is offered as the keeper')
+has(11, 'keeps its name', 'and is labelled as such')
+has(11, 'folds into it', 'with the other side labelled too')
+has(11, '£1,634,795.00', 'each side carries its own money')
+has(11, 'Annual dry docking', 'and what it actually sold')
+/* WHAT TELLS A BRANCH FROM A BUSINESS is the trade, not the name. This is
+   exactly the pair David ruled must stay apart. */
+has(11, 'filed to different trades', 'a different trade is called out')
+has(11, 'shipyard against plant', 'and named on both sides')
+has(11, 'Crane hire, 40t mobile', 'so the reason they differ is visible')
+has(11, 'macduff crane hire', 'the words one name carries and the other does not')
+hasnt(11, 'limited macduff crane hire', 'without a company suffix left stranded in them')
+
+has(11, 'Not the same firm', 'refusing is offered beside merging')
+has(11, 'Other way round', 'and which name survives can be turned round')
+has(11, 'is kept as a spelling so next', 'the alias half is stated, not just the move')
+
+/* AND IT SAYS WHAT IT CANNOT SEE. Seaway Group against Seaway Net Company was
+   a real merge that shares only a first word, so this rule misses it — and a
+   suggester that implied it had found everything would be worse than one that
+   admits the eye is still needed. Measured before choosing the rule: prefix
+   gives 5 pairs on this boat, same-first-word gives 51, one of which matched
+   "The Don Fishing Company" against "The Garret Home Furnishings". */
+has(12, 'No two firms look like one', 'an empty list says so plainly')
+has(12, 'Seaway', 'and names the kind of merge it cannot find')
+has(12, 'spotted by eye', 'rather than implying it found everything')
 
 console.log(out)
 console.log(`  ${inv.length} invoices · ${suppliers.length} firms · ${panes.length} panes rendered`)
