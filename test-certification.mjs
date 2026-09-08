@@ -518,4 +518,219 @@ const {
   eq(openBook([]), null, 'and none at all is none')
 }
 
+/* ==== RISK ASSESSMENTS, AND LIFTING AND WORK EQUIPMENT ===================
+ * The first two certification records with NO PAPER TWIN. Reg 7 of the
+ * MS&FV (Health and Safety at Work) Regulations 1997 prescribes no form at
+ * all, and MGN 332 says a thorough examination report may be held
+ * "electronically or on computer disc". So unlike the ORB and the OLB, the
+ * app IS the record here.
+ */
+const safety = await import('./src/lib/certification/safety.js')
+const {
+  DEFAULT_REVIEW_MONTHS, REVIEW_TRIGGERS, KINDS, kindOf, reviewDue,
+  assessmentState, assessmentGaps, withLineage, rating,
+  intervalMonths, latestNext, equipmentState, equipmentOutstanding,
+} = safety
+
+/* ---- THE STATUTE'S TRIGGERS ARE EVENTS; THE CYCLE IS THE BOAT'S ---------
+ * Reg 7(3) reviews an assessment where "there is reason to suspect that it is
+ * no longer valid" or "there has been a significant change". Neither is a
+ * date. The annual cycle is David's, and presenting the two as one thing
+ * would be wrong about the law — the same distinction the Official Log Book
+ * draws between the Schedule and how often this boat holds a drill.
+ */
+{
+  eq(DEFAULT_REVIEW_MONTHS, 12, 'the boat reviews annually')
+  ok(REVIEW_TRIGGERS.length >= 2, 'and the statutory triggers are carried separately')
+  ok(REVIEW_TRIGGERS.some((t) => /no longer be valid/.test(t)), 'including "no longer valid"')
+
+  eq(reviewDue('2026-01-15'), '2027-01-15', 'a year on from the assessment')
+  eq(reviewDue('2026-01-15', 6), '2026-07-15', 'or whatever the boat sets')
+  eq(reviewDue(''), null, 'and no date in means no date out')
+  eq(reviewDue('rubbish'), null, 'and an unreadable one is not a date')
+}
+
+/* ---- WHERE AN ASSESSMENT STANDS ---------------------------------------- */
+{
+  const at = { asOf: '2026-09-08' }
+  eq(assessmentState({ review_due: '2027-01-01' }, at).state, 'current', 'in date is current')
+  eq(assessmentState({ review_due: '2026-09-20' }, at).state, 'due', 'and inside a month is due')
+  eq(assessmentState({ review_due: '2026-06-01' }, at).state, 'overdue', 'past it is overdue')
+  eq(assessmentState({ review_due: '2026-06-01' }, at).days, 99, 'by a stated number of days')
+
+  /* NO REVIEW DATE IS NOT "IN DATE". Calling it current would be the quiet
+     lie — nothing is chasing it and the page has to say so. */
+  eq(assessmentState({}, at).state, 'undated', 'no review date is its own state')
+  eq(assessmentState({ review_due: null }, at).state, 'undated', 'and not "current"')
+
+  eq(assessmentState({ review_due: '2026-06-01', withdrawn_on: '2026-07-01' }, at).state, 'withdrawn',
+     'a withdrawn assessment is not chased')
+  /* SUPERSEDED IS NOT OVERDUE. An assessment reviewed and replaced has done
+     its job; chasing it would put the whole history of the boat on the
+     outstanding list, and a list that is mostly noise stops being read. */
+  eq(assessmentState({ review_due: '2024-01-01', replaced_by: 'x' }, at).state, 'superseded',
+     'and neither is one that has been reviewed and replaced')
+}
+
+/* ---- A REVIEW MAKES A NEW ONE AND POINTS BACK -------------------------- */
+{
+  const rows = withLineage([
+    { id: 'old', title: 'Galley' },
+    { id: 'new', title: 'Galley', supersedes_id: 'old' },
+    { id: 'lone', title: 'Working aloft' },
+  ])
+  eq(rows.find((r) => r.id === 'old').replaced_by, 'new', 'the old one knows what replaced it')
+  eq(rows.find((r) => r.id === 'new').replaced_by, null, 'the new one is current')
+  eq(rows.find((r) => r.id === 'lone').replaced_by, null, 'and one never reviewed is untouched')
+  /* THE OLD ROW IS NOT REMOVED. It is what the crew were briefed on, and an
+     assessment rewritten in place cannot say afterwards what was in force at
+     the time of an accident — the only moment anybody will ever ask. */
+  eq(rows.length, 3, 'nothing is dropped by working out the lineage')
+}
+
+/* ---- THE RATING IS DERIVED, NEVER STORED ------------------------------- */
+{
+  eq(rating({ likelihood: 4, severity: 5 }), { score: 20, band: 'high' }, 'likelihood times severity')
+  eq(rating({ likelihood: 3, severity: 3 }), { score: 9, band: 'medium' }, 'and the band comes off the score')
+  eq(rating({ likelihood: 1, severity: 3 }), { score: 3, band: 'low' }, 'low is low')
+  /* A RATING OF NOTHING IS NOT A RATING OF NOUGHT, and `Number('') === 0` has
+     bitten this repo six times. An unrated hazard must read as unrated. */
+  eq(rating({ likelihood: 4 }), null, 'a hazard rated on one axis only is not rated')
+  eq(rating({}), null, 'nor is one rated on neither')
+  eq(rating({ likelihood: '', severity: '' }), null, 'and blank is not nought')
+  eq(rating(null), null, 'and nothing at all is nothing')
+}
+
+/* ---- WHAT IS OUTSTANDING ON AN ASSESSMENT ------------------------------ */
+{
+  const a = { id: 'a1', review_due: '2026-06-01' }
+  const hazards = [
+    { assessment_id: 'a1', hazard: 'Wire parting', likelihood: 4, severity: 5,
+      further_action: 'Renew the gilson wire', action_due: '2026-07-01' },
+    { assessment_id: 'a1', hazard: 'Slipping', likelihood: 3, severity: 3 },
+    { assessment_id: 'a1', hazard: 'Chemicals' },
+    { assessment_id: 'a1', hazard: 'Old one', further_action: 'Done already', done_on: '2026-02-01' },
+    { assessment_id: 'other', hazard: 'Not this one', likelihood: 1, severity: 1 },
+  ]
+  const g = assessmentGaps(a, hazards, [], { asOf: '2026-09-08' })
+  eq(g.state, 'overdue', 'the review state comes through')
+  eq(g.openActions.length, 1, 'one action is still open')
+  eq(g.lateActions.length, 1, 'and it is past its date')
+  eq(g.unrated.length, 2, 'two hazards are unrated')
+  /* "The significant findings ... shall be brought to the notice of workers."
+     A duty in its own right, and nothing else in this app records it. */
+  ok(g.neverBriefed, 'and nobody has been told')
+
+  const told = assessmentGaps(a, hazards, [{ assessment_id: 'a1' }], { asOf: '2026-09-08' })
+  eq(told.briefed, 1, 'a briefing is counted')
+  ok(!told.neverBriefed, 'and stops the never-briefed flag')
+  /* Another assessment's hazards must never be counted here. */
+  ok(!g.unrated.some((h) => h.assessment_id === 'other'), 'hazards belong to their own assessment')
+}
+
+/* ---- SIX AGAINST TWELVE, and it is a real failure to get backwards -----
+ * LOLER reg 12(2): at least every SIX months for lifting equipment used to
+ * lift PERSONS and for lifting ACCESSORIES; at least every TWELVE for other
+ * lifting equipment.
+ */
+{
+  eq(kindOf('loler_persons').months, 6, 'equipment lifting persons is six months')
+  eq(kindOf('loler_accessory').months, 6, 'a lifting ACCESSORY is six months too')
+  eq(kindOf('loler_other').months, 12, 'other lifting equipment is twelve')
+  /* PUWER PRESCRIBES NO INTERVAL. Reg 6 says "at suitable intervals", so
+     there is no statutory figure and defaulting to one would dress a guess as
+     a duty. */
+  eq(kindOf('puwer').months, null, 'and PUWER prescribes none at all')
+  eq(KINDS.length, 4, 'four kinds, and no fifth invented')
+
+  eq(intervalMonths({ kind: 'loler_accessory' }).months, 6, 'the statutory interval applies by default')
+  eq(intervalMonths({ kind: 'loler_accessory' }).from, 'statute', 'and says where it came from')
+  /* An examination scheme drawn up by a competent person may set another. */
+  eq(intervalMonths({ kind: 'loler_other', scheme_months: 6 }),
+     { months: 6, from: 'scheme' }, 'a scheme overrides the statutory interval')
+  eq(intervalMonths({ kind: 'puwer' }).months, null, 'PUWER with no scheme has no interval')
+  eq(intervalMonths({ kind: 'puwer', scheme_months: 12 }).months, 12, 'and with one, it has')
+  /* Null, never 0 — a scheme of nought months makes everything permanently
+     overdue, and `Number('') === 0` is how that happens. */
+  eq(intervalMonths({ kind: 'loler_other', scheme_months: 0 }).months, 12,
+     'a scheme of nought falls back to the statute rather than to nought')
+
+  eq(latestNext('2026-03-01', { kind: 'loler_accessory' }), '2026-09-01', 'six months on')
+  eq(latestNext('2026-03-01', { kind: 'loler_other' }), '2027-03-01', 'twelve months on')
+  eq(latestNext('2026-03-01', { kind: 'puwer' }), null, 'and nothing where nothing is prescribed')
+}
+
+/* ---- THE REPORT AND THE STATUTE CAN DISAGREE --------------------------
+ * The competent person states when the next examination is due; the statute
+ * states the latest it may be. A report giving a longer gap is REPORTED and
+ * never quietly shortened — the same rule as net + VAT against a printed
+ * total, and for the same reason: which one is wrong is not ours to decide.
+ */
+{
+  const at = { asOf: '2026-09-08' }
+  const acc = { id: 'q2', kind: 'loler_accessory' }
+  const ex = [{ equipment_id: 'q2', examined_on: '2026-03-01', next_due: '2027-03-01', result: 'satisfactory' }]
+  const st = equipmentState(acc, ex, at)
+  eq(st.overrun, { stated: '2027-03-01', latest: '2026-09-01' }, 'the disagreement is reported')
+  eq(st.due, '2026-09-01', 'and the EARLIER of the two governs')
+  eq(st.state, 'overdue', 'so it reads as overdue rather than in date')
+
+  /* Where they agree, nothing is said. */
+  const ok2 = equipmentState(acc, [{ equipment_id: 'q2', examined_on: '2026-08-01', next_due: '2027-02-01', result: 'satisfactory' }], at)
+  eq(ok2.overrun, null, 'a report inside the statutory interval raises nothing')
+  eq(ok2.state, 'current', 'and reads as current')
+
+  /* An examiner may examine MORE often than the statute demands. */
+  const early = equipmentState({ id: 'q1', kind: 'loler_other' },
+    [{ equipment_id: 'q1', examined_on: '2026-06-01', next_due: '2026-09-01', result: 'satisfactory' }], at)
+  eq(early.overrun, null, 'a shorter interval than the statute is not an overrun')
+  eq(early.due, '2026-09-01', 'and the examiner s earlier date is the one used')
+}
+
+/* ---- NEVER EXAMINED, AND UNSAFE --------------------------------------- */
+{
+  const at = { asOf: '2026-09-08' }
+  const never = equipmentState({ id: 'q9', kind: 'loler_other' }, [], at)
+  eq(never.state, 'never', 'equipment never examined says so')
+  /* NOT "overdue by N days" — there is no date to count from and a number
+     would be invented. */
+  eq(never.days, null, 'without inventing a number of days')
+
+  const unsafe = equipmentState({ id: 'q3', kind: 'loler_persons' },
+    [{ equipment_id: 'q3', examined_on: '2026-01-05', next_due: '2026-07-05', result: 'unsafe' }], at)
+  eq(unsafe.state, 'unsafe', 'a report saying unsafe outranks the dates')
+  ok(unsafe.unsafe, 'and is flagged as such')
+
+  eq(equipmentState({ id: 'q4', kind: 'puwer' }, [{ equipment_id: 'q4', examined_on: '2026-01-01', result: 'satisfactory' }], at).state,
+     'no-interval', 'a PUWER item with no scheme has no interval to be late against')
+  eq(equipmentState({ id: 'q5', kind: 'loler_other', out_of_service_on: '2026-02-01' }, [], at).state,
+     'out-of-service', 'and equipment taken out of service is not chased')
+}
+
+/* ---- UNSAFE SORTS ABOVE EVERYTHING ------------------------------------
+ * A report saying the gear is unsafe is not a paperwork gap; it is a thing
+ * that must not be used, and it must never sort below a sling whose
+ * certificate lapsed last week.
+ */
+{
+  const at = { asOf: '2026-09-08' }
+  const equipment = [
+    { id: 'late', kind: 'loler_accessory' },
+    { id: 'unsafe', kind: 'loler_persons' },
+    { id: 'never', kind: 'loler_other' },
+    { id: 'fine', kind: 'loler_other' },
+  ]
+  const exams = [
+    { equipment_id: 'late', examined_on: '2025-01-01', result: 'satisfactory' },
+    { equipment_id: 'unsafe', examined_on: '2026-08-01', result: 'unsafe' },
+    { equipment_id: 'fine', examined_on: '2026-08-01', result: 'satisfactory' },
+  ]
+  const list = equipmentOutstanding(equipment, exams, at)
+  eq(list[0].equipment.id, 'unsafe', 'unsafe comes first')
+  ok(list.map((x) => x.equipment.id).includes('late'), 'an overdue one is listed')
+  ok(list.map((x) => x.equipment.id).includes('never'), 'and one never examined')
+  ok(!list.map((x) => x.equipment.id).includes('fine'), 'while one in date is not')
+  eq(list.map((x) => x.state).indexOf('unsafe'), 0, 'and nothing sorts above it')
+}
+
 console.log('certification: ' + n + ' checks passed')

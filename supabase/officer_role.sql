@@ -81,6 +81,8 @@ declare
     -- alone -- without that, re-running this file shuts him out of them.
     'oil_record_book_pages', 'oil_record_book_entries', 'orb_items',
     'official_log_books', 'official_log_book_entries', 'olb_items',
+    'risk_assessments', 'risk_assessment_hazards', 'risk_assessment_briefings',
+    'work_equipment', 'equipment_examinations',
     'self_certifications', 'self_certification_items',
     -- reads: the papers he needs, and the rows the app shell needs to boot
     'vessel_certificates', 'vessel_details', 'vessels', 'fleets', 'settings', 'app_users'
@@ -121,6 +123,8 @@ declare
     'crew','crew_certificates','crew_lists','crew_list_members',
     'oil_record_book_pages','oil_record_book_entries','orb_items',
     'official_log_books','official_log_book_entries','olb_items',
+    'risk_assessments','risk_assessment_hazards','risk_assessment_briefings',
+    'work_equipment','equipment_examinations',
     'self_certifications','self_certification_items',
     'vessel_certificates','vessel_details','vessels','fleets','settings','app_users'
   ];

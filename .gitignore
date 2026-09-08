@@ -170,3 +170,6 @@ orb-preview.html
 
 # Rendered by scripts/olb-preview.mjs for checking the Official Log Book
 olb-preview.html
+
+# Rendered by scripts/safety-preview.mjs
+safety-preview.html

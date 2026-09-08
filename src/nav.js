@@ -153,6 +153,13 @@ export const NAV = [
       // inspections, provisions and water, and accidents.
       { to: '/official-log-book', label: 'Official Log Book', access: 'officer' },
       { to: '/oil-record-book', label: 'Oil Record Book', access: 'officer' },
+      // Reg 7 of the H&S at Work regs, and LOLER/PUWER. THE FIRST TWO
+      // CERTIFICATION RECORDS WITH NO PAPER TWIN: reg 7 prescribes no form,
+      // and MGN 332 says a thorough examination report may be kept
+      // electronically. The mate keeps both -- he is the man doing the job
+      // being assessed and the inspection being recorded.
+      { to: '/risk-assessments', label: 'Risk Assessments', access: 'officer' },
+      { to: '/lifting-equipment', label: 'Lifting & Work Equipment', access: 'officer' },
     ],
   },
   {
