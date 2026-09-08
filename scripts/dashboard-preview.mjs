@@ -88,23 +88,14 @@ const landings = [
   { landing_date: '2025-09-06', vessel: 'AUDACIOUS BF83', value: 104_500, weight_kg: 33_400, boxes: 890, reconcile_ok: true },
   { landing_date: '2025-09-10', vessel: 'AUDACIOUS BF83', value: 180_000, weight_kg: 52_000, boxes: 1400, reconcile_ok: true },
 ]
-/* THE REAL COLUMN SHAPE, off quota_lines — allocation, catch_total, balance,
-   all numeric tonnes. The old fixture invented a "remaining" column that does
-   not exist and pre-formatted it as "41 t", so the page's own formatting was
-   never exercised and it shipped printing "34.83933000000001". A fixture that
-   is not shaped like the table proves nothing about the page.
-   These are Audacious's own figures at the 23-04-2026 statement. */
-const quota = { snapshot: { last_landing_date: '2026-04-23' }, lines: [
-  { stock: 'NS Saithe',   allocation: 127.80, catch_total: 214.35, balance: -86.54504 },
-  { stock: 'NS Haddock',  allocation: 990.21, catch_total: 259.16, balance: 731.0510899999999 },
-  { stock: 'NS Cod',      allocation: 44.72,  catch_total: 9.88,   balance: 34.83933000000001 },
-  { stock: 'NS Whiting',  allocation: 1410.08, catch_total: 38.23, balance: 1371.85 },
-  { stock: 'NS Megrims',  allocation: 209.51, catch_total: 2.03,   balance: 207.48 },
-  { stock: 'WC Monkfish', allocation: 170.40, catch_total: 19.16,  balance: 151.23 },
-  /* A line the statement carries with nothing on it — scored as unknown, not
-     as nought, and it must not push a real line off the six shown. */
-  { stock: 'Hake VIII',   allocation: null,   catch_total: null,   balance: null },
-] }
+/* THE BOAT'S OWN STATEMENT of 23-04-2026 — all 45 lines that carry anything,
+   with their real sections and their real floats, straight out of quota_lines.
+   The six-line fixture this replaces had no `section` column at all, so it
+   could not have exercised the zone matching, the "Blue Ling is not Ling" trap,
+   the west-coast cod split across VIa and VIb, or the non-quota species — which
+   is every place the bugs actually were. */
+const quota = { snapshot: { last_landing_date: '2026-04-23' },
+                lines: JSON.parse(readFileSync('scripts/fixtures/quota-statement.json', 'utf8')) }
 const expiring = [
   { what: 'Inflatable Liferaft Service Certificate', who: 'LSA', expiry_date: '2026-08-20' },
   { what: 'ENG 1 medical', who: 'crew ticket', expiry_date: '2026-09-19' },
@@ -216,6 +207,16 @@ has(1, 'To the 8th last year', 'against the same DAYS of the same month last yea
 has(1, 'to the 8th', 'and the card says which days it is counting')
 has(1, 'not the whole of it', 'saying plainly that the month is not finished')
 has(1, 'Quota', 'and quota, for the one fleet that has it')
+/* HIS ORDER, NOT THE STATEMENT'S. NS cod, WC cod, NS saithe, WC saithe,
+   NS ling, WC ling — and the west-coast cod line is called "Cod Area VIa",
+   with the zone only in the section column. */
+const order = ['NS Cod', 'Cod Area VIa', 'NS Saithe', 'WC Saithe', 'NS Ling (UK)', 'WC Ling']
+;(() => {
+  const at = order.map((n) => p[0].indexOf('>' + n))
+  if (at.some((i) => i < 0)) { console.log('  FAIL  all six named stocks appear — ' + JSON.stringify(order.filter((n, i) => at[i] < 0))); bad++ }
+  else if (at.every((v, i) => i === 0 || v > at[i - 1])) console.log("  ok    the six he named, in his order")
+  else { console.log('  FAIL  the six he named are out of order'); bad++ }
+})()
 /* RAW FLOATS WERE GOING STRAIGHT ONTO THE FRONT PAGE — "34.83933000000001" —
    and the one line that mattered, a stock 86.5 t OVER, looked exactly like the
    five that were fine. */
@@ -224,6 +225,17 @@ has(1, 'qr over', 'and is marked as over')
 has(1, '% caught', 'each line says how much of its allocation is gone')
 hasnt(1, '86.54504', 'and no raw float reaches the page')
 hasnt(1, '731.0510899999999', 'nor any other')
+/* BLUE LING IS NOT LING. Ranked on percentage it leads the whole statement at
+   371%, on an allocation of 0.30 t. David: "it's not an issue as such." */
+hasnt(1, '371% caught', 'a 371% overshoot on 0.3 t is not given a row')
+has(1, 'WC Blue Ling 0.8 t', 'it is named at the foot with its real tonnage')
+has(1, 'Over, but by under 2 t', 'under a heading saying what that line is')
+/* NS Pollack is caught 8.24 t against a zero allocation, which is the biggest
+   negative balance on the statement after saithe — and NOT an overshoot.
+   David: "NS pollock, NS squid & NS cats are all non quota speices." */
+hasnt(1, '8.2 t over', 'a non-quota species is never called over')
+has(1, 'Caught with no allocation', 'it is reported for what it is')
+has(1, 'NS Pollack 8.2 t', 'with its tonnage, so nothing is hidden')
 has(1, 'Running out', 'what is expiring')
 has(1, 'What to do next', 'and what is waiting on a decision')
 has(1, 'certificate has expired', 'an expired certificate is called out')

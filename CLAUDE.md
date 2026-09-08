@@ -3311,6 +3311,81 @@ own number formatting was never executed once. The fixture now carries the real
 columns and the real floats, straight off the boat's 23-04-2026 statement.
 **Second fixture fault in one day** after the part-month one — a fixture that
 does not reach the code is a test that passes for the wrong reason.
+
+#### THREE ACROSS, TWO UP, AND THE QUOTA BLOCK IS HIS SIX
+
+David, Sep 2026: *"the prices table should be 3 along top then 3 along bottom.
+Then size text to suit"*, *"last trip and this month could be sized better to
+fit table. So have 2 tables side by side. With bigger text"*, and on quota:
+*"instead of being populated by % caught, focus on main ones. Cod, Saithe, ling.
+west and east. Then some others afterwards. Any other notable quota that we
+should be made aware of. Blue ling for instance is 371% caught, but only 0.8t.
+It's not an issue as such."*
+
+**`repeat(3, 1fr)`, not auto-fill.** An `auto-fill minmax(268px)` fitted four
+tiles on a wide laptop and left a ragged two underneath. Fixed at three, the six
+species are two clean rows and every tile is a third of the page rather than a
+quarter — which is what let the type go up.
+
+**`.dash-two` puts Last trip and This month side by side**, and inside a
+half-width card the stats are **two to a row, not auto-fit**. Auto-fit measured
+the container and gave three ~110px columns; `£235,056` at 1.6rem is 123px, so
+it overflowed its cell and rendered as **`£235,056 2`** — the gross running
+straight into the trip count. Last trip lost its fourth figure off the end the
+same way. Only rendering it showed that.
+
+### THE QUOTA BLOCK IS HIS SIX, THEN TONNES — NEVER PER CENT
+
+`src/lib/quotaBoard.js`. NS cod · WC cod · NS saithe · WC saithe · NS ling ·
+WC ling, in his order, then whatever else is genuinely worth knowing.
+
+**BLUE LING IS NOT LING, AND THAT IS WHY THE MATCH IS AN EQUALITY TEST.**
+`includes('Ling')` matches `WC Blue Ling` — a deepwater species with its own
+TAC, and the very line he named as not an issue — which would have put the wrong
+fish on the front page under his own heading. Same refusal as
+`normaliseSupplier` on a near miss.
+
+**AND THE ZONE IS NOT IN THE NAME.** The statement writes west-coast cod as
+`Cod Area VIa` and `Cod Area VIb` with no prefix at all, so the zone comes off
+`section` and only the species is read off the name. A rule reading the prefix
+would have found **no WC cod on a statement that carries two lines of it**. One
+slot can hold several lines; they are never summed, because two allocations
+added together is an allocation nobody holds.
+
+**A ZERO ALLOCATION IS NOT AN OVERSHOOT.** The first cut ranked by tonnage and
+put three lines at the top that percentage could not see — NS Pollack 8.24 t,
+NS Squid 6.20 t, NS Cats 4.75 t, all against an allocation of nought. David:
+*"NS pollock, NS squid & NS cats are all non quota speices."* They carry no
+allocation because none is REQUIRED, so that negative balance is the statement
+doing 0 − caught, not a debt. Three false alarms at the top of the page, ahead
+of the one line that is real.
+
+The app cannot tell a non-quota species from a quota species the boat simply
+holds none of — `Cod Area VIb` is the second kind on the same zero — so it
+**refuses to guess**: a line with no allocation is never called over, and is
+reported at the foot as caught with no allocation.
+
+**AND `used >= 0.85` LET THE PERCENTAGE BACK IN THROUGH THE SIDE DOOR.** The
+"running short" test on percentage alone promoted Blue Ling (371% of 0.30 t),
+NS Tusk (131% of 2.22 t) and WC Skates/Rays (160% of 0.60 t) — the exact three
+he said were not an issue. `MEANINGFUL_ALLOCATION_T = 20` is anchored on the
+boat: one good trip lands about 45 t, so an allocation under 20 t cannot
+constrain her fishing whatever percentage of it is gone.
+
+`SMALL_OVERSHOOT_T = 2` is **a judgement and David's to set**. He named 0.8 t
+as not an issue, and the statement has a clean gap between 4.75 t and 0.81 t
+with nothing in between, so 2 t sits in open water. Under it, an overshoot is one
+line at the foot rather than a row and a red bar — a warning that fires on 0.4 t
+of skate is a warning nobody reads.
+
+The result on his own statement: six named rows, **nothing else notable at all**,
+three token overshoots in one line, eight no-allocation catches in another.
+
+`scripts/fixtures/quota-statement.json` is the real thing — 45 lines with their
+real sections and floats. The fixture it replaced had six tidy lines and **no
+`section` column**, so it could not have exercised the zone matching, the Blue
+Ling trap, the cod split or the non-quota lines: every place the bugs were.
+`test-quota-board.mjs` — 42 checks.
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

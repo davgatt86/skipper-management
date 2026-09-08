@@ -732,23 +732,16 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
    THE DASHBOARD.
 
    David, Sep 2026: "visually it looks terrible ... i wouldn't expect
-   anyone to pay to use this service with a design like that."
+   anyone to pay to use this service with a design like that", then
+   "the prices table should be 3 along top then 3 along bottom. Then
+   size text to suit" and "last trip and this month could be sized
+   better ... 2 tables side by side. With bigger text".
 
-   Four faults, and all four came from drawing it with inline styles
-   instead of the design system:
-
-   1  A FULL-WIDTH TABLE WITH FOUR COLUMNS puts the grade name on the
-      far left and its price a thousand pixels away on the right, with
-      nothing in between. Species are a GRID OF TILES now, so a grade
-      and its price are two inches apart and the eye reads across.
-   2  THE TOGGLES WERE WHITE ON WHITE. `button` is a cobalt block with
-      `color: var(--on-navy)`, so an unselected button with a
-      transparent background inherited white text and vanished. `.seg`
-      states both colours explicitly.
-   3  QUOTA PRINTED RAW FLOATS — "34.83933000000001", "-86.54504" — and
-      the one line that mattered, a stock 86.5 t OVER, looked exactly
-      like the five that were fine.
-   4  No hierarchy: one type size, one weight, no rules, no colour.
+   Everything here is a class, deliberately. The first cut was inline
+   styles and every fault came out of that: a table left to size its
+   own columns put a grade name a foot from its price, and a
+   `background: transparent` button inherited `color: var(--on-navy)`
+   off the global cobalt button rule and turned white on white.
    ============================================================ */
 
 .dash-head {
@@ -757,100 +750,123 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 }
 .dash-head h3 {
   margin: 0; font-family: var(--font-display); font-weight: 600;
-  font-size: 1.6rem; line-height: 1.1; letter-spacing: 0.01em;
+  font-size: 1.75rem; line-height: 1.05; letter-spacing: 0.01em;
 }
 .dash-when {
-  font-family: var(--font-mono); font-size: 0.64rem; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--mute); margin: 4px 0 0;
+  font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--mute); margin: 5px 0 0;
 }
 .dash-foot {
-  font-size: 0.74rem; color: var(--mute); margin: 12px 0 0;
-  padding-top: 10px; border-top: 1px solid var(--line-2);
+  font-size: 0.78rem; color: var(--mute); margin: 14px 0 0;
+  padding-top: 11px; border-top: 1px solid var(--line-2);
 }
+.dash-foot.warn { color: var(--brass); }
+.dash-tools { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.dash-lead { font-size: 0.88rem; margin: 0 0 4px; }
 
-/* ---- segmented control ---- */
+/* ---- segmented control ----
+   The unselected half used to be `background: transparent` with no colour, so
+   it inherited the white off `button { color: var(--on-navy) }` and vanished.
+   Both states set both. */
 .seg {
   display: inline-flex; border: 1px solid var(--line); border-radius: 3px;
   overflow: hidden; background: var(--surface);
 }
 .seg button {
   background: var(--surface); color: var(--mute); border: 0; border-radius: 0;
-  padding: 0.34rem 0.72rem; font-size: 0.74rem; font-weight: 600;
-  letter-spacing: 0.01em;
+  padding: 0.38rem 0.8rem; font-size: 0.8rem; font-weight: 600;
 }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button:hover { background: var(--surface-2); color: var(--text); }
 .seg button.on, .seg button.on:hover { background: var(--hull); color: var(--on-navy); }
 
-/* ---- the market: a tile per species ---- */
-.dash-grid {
-  display: grid; gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
-}
+/* ---- the market: THREE ACROSS, so six species are two clean rows ----
+   Not auto-fill: at 268px minimum a wide laptop fitted four and left a ragged
+   two underneath. He asked for 3 and 3, and a fixed three also lets the type
+   go up, because each tile is now a third of the page rather than a quarter. */
+.dash-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 900px)  { .dash-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px)  { .dash-grid { grid-template-columns: 1fr; } }
+
 .sp {
   border: 1px solid var(--line); border-radius: 4px;
   background: var(--surface); overflow: hidden;
 }
 .sp-h {
-  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  padding: 7px 10px 5px; background: var(--surface-2);
+  display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+  padding: 9px 12px 7px; background: var(--surface-2);
   border-bottom: 1px solid var(--line);
 }
 .sp-h h4 {
   margin: 0; font-family: var(--font-display); font-weight: 600;
-  font-size: 1.15rem; line-height: 1; letter-spacing: 0.01em;
+  font-size: 1.4rem; line-height: 1; letter-spacing: 0.01em;
 }
 .chip {
-  font-family: var(--font-mono); font-size: 0.55rem; letter-spacing: 0.1em;
-  text-transform: uppercase; padding: 2px 5px; border-radius: 2px;
+  font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 2px;
   background: var(--hull-pale); color: var(--hull); white-space: nowrap;
 }
 .chip.guess { background: transparent; color: var(--mute); border: 1px solid var(--line); }
 
 .sp-r, .sp-cols {
-  display: grid; grid-template-columns: 1fr 3.6rem 3rem 3rem;
-  align-items: baseline; gap: 5px; padding: 3px 10px;
+  display: grid; grid-template-columns: 1fr 4.1rem 3.4rem 3.4rem;
+  align-items: baseline; gap: 6px; padding: 4px 12px;
 }
 .sp-cols {
-  font-family: var(--font-mono); font-size: 0.54rem; letter-spacing: 0.11em;
+  font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--mute);
-  padding-top: 6px; padding-bottom: 2px;
+  padding-top: 8px; padding-bottom: 3px;
 }
 .sp-cols span:not(:first-child), .sp-r .v, .sp-r .d { text-align: right; }
-.sp-r { font-size: 0.8rem; }
+.sp-r { font-size: 0.9rem; }
 .sp-r + .sp-r { border-top: 1px solid var(--line-2); }
 .sp-r .g { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-r .v { font-family: var(--font-mono); font-weight: 600; }
-.sp-r .d { font-family: var(--font-mono); font-size: 0.72rem; }
+.sp-r .v { font-family: var(--font-mono); font-weight: 600; font-size: 0.95rem; }
+.sp-r .d { font-family: var(--font-mono); font-size: 0.8rem; }
 .up { color: var(--kelp); }
 .dn { color: var(--rust); }
 .flat, .nil { color: var(--mute); }
 .sp-nil {
-  margin: 0; padding: 6px 10px 8px; font-size: 0.72rem; color: var(--mute);
+  margin: 0; padding: 7px 12px 9px; font-size: 0.78rem; color: var(--mute);
   border-top: 1px solid var(--line-2);
 }
+.sp-nil.sp-nil-top { border-top: 0; }
 
-/* ---- figure strip ---- */
-.stats { display: flex; flex-wrap: wrap; row-gap: 14px; }
-.stat { padding: 0 1.4rem; border-left: 1px solid var(--line-2); }
-.stat:first-child { padding-left: 0; border-left: 0; }
-.stat .k {
-  display: block; font-family: var(--font-mono); font-size: 0.58rem;
-  letter-spacing: 0.13em; text-transform: uppercase; color: var(--mute);
-  margin-bottom: 3px;
+/* ---- two cards side by side ----
+   Last trip and This month are both short strips of figures; one above the
+   other wasted the whole right half of the page and forced the type down. */
+.dash-two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.dash-two > .card { margin-bottom: 1rem; }
+@media (max-width: 820px) { .dash-two { grid-template-columns: 1fr; gap: 0; } }
+
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(6.8rem, 1fr));
+  gap: 1rem 1.2rem;
 }
-.stat .n { font-family: var(--font-mono); font-size: 1.4rem; font-weight: 600; line-height: 1.1; }
-.stat .n2 { display: block; font-size: 0.73rem; color: var(--mute); margin-top: 2px; }
+/* TWO TO A ROW INSIDE A HALF-WIDTH CARD, not auto-fit.
+   Auto-fit measured the container and gave three ~110px columns, and
+   "£235,056" at 1.6rem is 123px — so it overflowed its cell and sat directly
+   against the next figure, rendering as "£235,056 2". Last trip lost its
+   fourth figure off the end for the same reason. Two columns is 220px each,
+   which every figure on this page fits inside with room to spare. */
+.dash-two .stats { grid-template-columns: repeat(2, 1fr); }
+.stat .k {
+  display: block; font-family: var(--font-mono); font-size: 0.6rem;
+  letter-spacing: 0.13em; text-transform: uppercase; color: var(--mute);
+  margin-bottom: 4px;
+}
+.stat .n { font-family: var(--font-mono); font-size: 1.5rem; white-space: nowrap; font-weight: 600; line-height: 1.05; }
+.stat .n2 { display: block; font-size: 0.76rem; color: var(--mute); margin-top: 3px; }
 
 /* ---- quota ---- */
 .qr {
-  display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
-  align-items: baseline; padding: 8px 0;
+  display: grid; grid-template-columns: 1fr auto; gap: 5px 14px;
+  align-items: baseline; padding: 9px 0;
 }
 .qr + .qr { border-top: 1px solid var(--line-2); }
-.qr .qn { font-size: 0.88rem; }
-.qr .qp { font-family: var(--font-mono); font-size: 0.68rem; color: var(--mute); margin-left: 6px; }
-.qr .qv { font-family: var(--font-mono); font-size: 0.92rem; font-weight: 600; white-space: nowrap; }
+.qr .qn { font-size: 0.95rem; }
+.qr .qp { font-family: var(--font-mono); font-size: 0.7rem; color: var(--mute); margin-left: 7px; }
+.qr .qv { font-family: var(--font-mono); font-size: 1rem; font-weight: 600; white-space: nowrap; }
 .qr .qbar {
   grid-column: 1 / -1; height: 4px; border-radius: 2px;
   background: var(--line-2); overflow: hidden;
@@ -858,21 +874,22 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 .qr .qbar i { display: block; height: 100%; background: var(--hull); }
 .qr.over .qv { color: var(--rust); }
 .qr.over .qbar i { background: var(--rust); }
-.qr.tight .qbar i { background: var(--brass); }
 .qr.tight .qv { color: var(--brass); }
+.qr.tight .qbar i { background: var(--brass); }
+.qsub {
+  font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.13em;
+  text-transform: uppercase; color: var(--mute);
+  margin: 18px 0 2px; padding-top: 12px; border-top: 1px solid var(--line);
+}
 
 /* ---- lists ---- */
 .dlist { display: flex; flex-direction: column; }
 .dlist .di {
   display: flex; justify-content: space-between; align-items: baseline;
-  gap: 12px; padding: 8px 0; font-size: 0.88rem;
+  gap: 14px; padding: 9px 0; font-size: 0.92rem;
 }
 .dlist .di + .di { border-top: 1px solid var(--line-2); }
-.dlist .di .when { font-family: var(--font-mono); font-size: 0.78rem; white-space: nowrap; }
-.dlist .di .sub3 { color: var(--mute); font-size: 0.78rem; }
+.dlist .di .when { font-family: var(--font-mono); font-size: 0.82rem; white-space: nowrap; }
+.dlist .di .sub3 { color: var(--mute); font-size: 0.82rem; }
 .card.accent-brass { border-left: 3px solid var(--brass); }
 .card.accent-hull { border-left: 3px solid var(--hull); }
-.dash-tools { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.dash-lead { font-size: 0.86rem; margin: 0 0 4px; }
-.dash-foot.warn { color: var(--brass); }
-.sp-nil.sp-nil-top { border-top: 0; }

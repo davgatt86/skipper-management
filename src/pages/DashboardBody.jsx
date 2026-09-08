@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { speciesBasis, boatBlocks, isNewBoat, FIRST_STEPS } from '../lib/dashboard'
+import { quotaBoard, SMALL_OVERSHOOT_T } from '../lib/quotaBoard'
 
 /* THE FRONT PAGE, DRAWN — prices, your boat, what to do next.
  *
@@ -10,11 +11,10 @@ import { speciesBasis, boatBlocks, isNewBoat, FIRST_STEPS } from '../lib/dashboa
  * app on a blank page.
  *
  * EVERY STYLE IS A CLASS IN `index.css`, deliberately. The first cut was inline
- * styles, and all four faults David found came out of that: a table left to
- * size its own columns put a grade name a foot away from its price, and a
+ * styles, and every fault David found came out of that: a table left to size
+ * its own columns put a grade name a foot away from its price, and a
  * `background: transparent` button inherited `color: var(--on-navy)` off the
- * global cobalt button rule and turned white on white. Drawing it WITH the
- * design system rather than beside it is the fix.
+ * global cobalt button rule and turned white on white.
  */
 export default function DashboardBody({
   vessel, board, species = [], landed = [], basis = 'value', onBasis,
@@ -70,16 +70,15 @@ function Market({ board, species, landed, basis, onBasis, source, onSource }) {
       </div>
 
       {!board?.day ? (
-        <p className="muted" style={{ fontSize: '0.85rem', margin: 0 }}>
-          No prices on the {port} board yet.
-        </p>
+        <p className="muted dash-lead">No prices on the {port} board yet.</p>
       ) : (
         <>
-          {/* A TILE PER SPECIES, NOT ONE WIDE TABLE. Four columns across the
-              full width of a laptop left the grade name at the far left and its
-              price at the far right with a foot of nothing between them — which
-              is the "looks horrible" in one sentence. At 268px a grade and its
-              price are an inch apart and the eye reads across. */}
+          {/* THREE ACROSS, so the six species are two clean rows of three —
+              David's own layout. A four-across auto-fill left a ragged pair
+              underneath, and a full-width table before that put the grade name
+              at the far left and its price at the far right with a foot of
+              nothing between them. Three also lets the type go up, because a
+              tile is now a third of the page rather than a quarter. */}
           <div className="dash-grid">
             {board.rows.map((r) => (
               <SpeciesTile key={r.species} row={r} from={from[r.species]} />
@@ -113,9 +112,8 @@ function SpeciesTile({ row, from }) {
         {/* A BOAT'S OWN TOP SPECIES AND A GENERAL GUESS MUST NOT READ ALIKE.
             Telling a skipper these are "his biggest" when they are what most
             boats land is the quiet lie this codebase keeps refusing to tell.
-            The pinned three carry NO chip: three identical "watched by
-            everyone" labels stacked down the page is noise, and the footnote
-            says it once. */}
+            The pinned three carry NO chip: three identical labels stacked down
+            the page is noise, and the footnote says it once. */}
         {from === 'own' && <span className="chip">yours</span>}
         {from === 'typical' && <span className="chip guess">typical</span>}
       </div>
@@ -166,69 +164,16 @@ function Move({ v }) {
 
 function Boat({ blocks, canSeeMoney }) {
   const { lastTrip, month, quota, expiring, books } = blocks
+  const twoUp = lastTrip.has && month.has && canSeeMoney
+  const trip = lastTrip.has && canSeeMoney && <LastTrip t={lastTrip} />
+  const mth = month.has && canSeeMoney && <ThisMonth m={month} />
+
   return (
     <>
-      {lastTrip.has && canSeeMoney && (
-        <section className="card">
-          <div className="dash-head">
-            <div>
-              <h3>Last trip</h3>
-              <p className="dash-when">
-                {longDate(lastTrip.date)}{lastTrip.vessel ? ' · ' + lastTrip.vessel : ''}
-              </p>
-            </div>
-          </div>
-          <div className="stats">
-            <Stat k="Gross" n={money0(lastTrip.gross)} />
-            <Stat k="Boxes" n={lastTrip.boxes ?? '—'} />
-            <Stat k="Kilos" n={lastTrip.kg == null ? '—' : Math.round(lastTrip.kg).toLocaleString('en-GB')} />
-            <Stat k="A kilo" n={lastTrip.ppk == null ? '—' : money(lastTrip.ppk)} />
-          </div>
-          {/* A NOTE THAT DID NOT RECONCILE CANNOT BE TRUSTED FOR ITS FIGURES,
-              and the front page is the worst place to print them silently. */}
-          {lastTrip.reconciled === false && (
-            <p className="dash-foot warn">
-              This note did not add up to its own printed total, so these figures cannot be
-              trusted. <Link to="/sales">Fish Sales</Link> says by how much.
-            </p>
-          )}
-        </section>
-      )}
-
-      {month.has && canSeeMoney && (
-        <section className="card">
-          <div className="dash-head">
-            <div>
-              <h3>This month</h3>
-              {/* WHICH DAYS, SAID PLAINLY. The comparison is the first N days
-                  against the first N days, and a reader who assumed whole month
-                  against whole month would read a half-finished month as a
-                  collapse — which is exactly what the page did. */}
-              <p className="dash-when">
-                {monthName(month.month)} · to the {ordinal(month.through)}
-              </p>
-            </div>
-          </div>
-          <div className="stats">
-            <Stat k="Gross" n={money0(month.gross)} />
-            <Stat k="Trips" n={month.trips} />
-            {/* NOTHING TO SOMETHING IS NOT A CHANGE. A boat in her first year
-                gets the figure and no percentage. */}
-            {month.lastYear != null && (
-              <Stat k={'To the ' + ordinal(month.through) + ' last year'}
-                    n={money0(month.lastYear)}
-                    sub={month.lastYearTrips + ' trip' + (month.lastYearTrips === 1 ? '' : 's')}
-                    delta={pct(month.gross, month.lastYear)} />
-            )}
-          </div>
-          {month.lastYear != null && (
-            <p className="dash-foot">
-              The same days of the month either side, not the whole of it — the month is not
-              finished.
-            </p>
-          )}
-        </section>
-      )}
+      {/* SIDE BY SIDE. Both are short strips of figures; stacked, each wasted
+          the whole right half of the page and the type had to come down to
+          suit. Two up, and the figures can be read across a wheelhouse. */}
+      {twoUp ? <div className="dash-two">{trip}{mth}</div> : <>{trip}{mth}</>}
 
       {quota.has && canSeeMoney && <Quota quota={quota} />}
 
@@ -271,18 +216,85 @@ function Boat({ blocks, canSeeMoney }) {
   )
 }
 
-/* THE ONE LINE THAT MATTERS IS THE ONE THAT IS OVER, and it used to look
- * exactly like the five that were fine — a raw float, grey, at the far right:
+function LastTrip({ t }) {
+  return (
+    <section className="card">
+      <div className="dash-head">
+        <div>
+          <h3>Last trip</h3>
+          <p className="dash-when">
+            {longDate(t.date)}{t.vessel ? ' · ' + t.vessel : ''}
+          </p>
+        </div>
+      </div>
+      <div className="stats">
+        <Stat k="Gross" n={money0(t.gross)} />
+        <Stat k="Boxes" n={t.boxes ?? '—'} />
+        <Stat k="Kilos" n={t.kg == null ? '—' : Math.round(t.kg).toLocaleString('en-GB')} />
+        <Stat k="A kilo" n={t.ppk == null ? '—' : money(t.ppk)} />
+      </div>
+      {/* A NOTE THAT DID NOT RECONCILE CANNOT BE TRUSTED FOR ITS FIGURES, and
+          the front page is the worst place to print them silently. */}
+      {t.reconciled === false && (
+        <p className="dash-foot warn">
+          This note did not add up to its own printed total, so these figures cannot be
+          trusted. <Link to="/sales">Fish Sales</Link> says by how much.
+        </p>
+      )}
+    </section>
+  )
+}
+
+function ThisMonth({ m }) {
+  return (
+    <section className="card">
+      <div className="dash-head">
+        <div>
+          <h3>This month</h3>
+          {/* WHICH DAYS, SAID PLAINLY. The comparison is the first N days
+              against the first N days, and a reader who assumed whole month
+              against whole month would read a half-finished month as a
+              collapse — which is exactly what the page did. */}
+          <p className="dash-when">{monthName(m.month)} · to the {ordinal(m.through)}</p>
+        </div>
+      </div>
+      <div className="stats">
+        <Stat k="Gross" n={money0(m.gross)} />
+        <Stat k="Trips" n={m.trips} />
+        {/* NOTHING TO SOMETHING IS NOT A CHANGE. A boat in her first year gets
+            the figure and no percentage. */}
+        {m.lastYear != null && (
+          <Stat k={'To the ' + ordinal(m.through) + ' last year'} n={money0(m.lastYear)}
+                sub={m.lastYearTrips + ' trip' + (m.lastYearTrips === 1 ? '' : 's')}
+                delta={pct(m.gross, m.lastYear)} />
+        )}
+      </div>
+      {m.lastYear != null && (
+        <p className="dash-foot">
+          The same days of the month either side, not the whole of it — the month is not
+          finished.
+        </p>
+      )}
+    </section>
+  )
+}
+
+/* ==== QUOTA ===============================================================
  *
- *     NS Saithe    -86.54504
+ * David's own order — NS cod, WC cod, NS saithe, WC saithe, NS ling, WC ling —
+ * then whatever else is genuinely worth knowing, then the token overshoots in
+ * one line at the foot. All the deciding is in `lib/quotaBoard.js`; this only
+ * draws it.
  *
- * Audacious is 86.5 t over on North Sea saithe, having caught 214.35 t against
- * an allocation of 127.80. Sorted by how much of the allocation is GONE rather
- * than by whatever order the rows arrived in, because a block listing the six
- * with the most left is a block showing the six that do not matter.
+ * IT USED TO BE SORTED BY PERCENTAGE, which put WC Blue Ling top of the boat's
+ * statement at 371% — of an allocation of 0.30 t. David: *"it's not an issue as
+ * such."*
  */
 function Quota({ quota }) {
-  const lines = quotaRows(quota.lines).slice(0, 6)
+  const b = quotaBoard(quota.lines)
+  if (!b.named.length && !b.others.length) return null
+  const t = (n) => Number(n).toLocaleString('en-GB', { maximumFractionDigits: 1 }) + ' t'
+
   return (
     <section className="card">
       <div className="dash-head">
@@ -293,23 +305,34 @@ function Quota({ quota }) {
           </p>
         </div>
       </div>
-      {lines.map((l) => (
-        <div className={'qr ' + l.state} key={l.stock}>
-          <span className="qn">
-            {l.stock}
-            {l.used != null && <span className="qp">{Math.round(l.used * 100)}% caught</span>}
-          </span>
-          <b className="qv">
-            {l.balance == null ? '—'
-              : l.balance < 0 ? tonnes(-l.balance) + ' over'
-                : tonnes(l.balance) + ' left'}
-          </b>
-          {l.used != null && (
-            <span className="qbar"><i style={{ width: Math.round(Math.min(100, l.used * 100)) + '%' }} /></span>
-          )}
-        </div>
-      ))}
+
+      {b.named.map((l) => <QuotaRow key={l.stock} l={l} />)}
+
+      {b.others.length > 0 && (
+        <>
+          <p className="qsub">Also worth knowing</p>
+          {b.others.map((l) => <QuotaRow key={l.stock} l={l} />)}
+        </>
+      )}
+
       <p className="dash-foot">
+        {b.others.length === 0 && b.small.length === 0 && (
+          <>Nothing else on the statement is over or running short.{' '}</>
+        )}
+        {b.small.length > 0 && (
+          <>Over, but by under {SMALL_OVERSHOOT_T} t: {b.small.map((l) => l.stock + ' ' + t(l.over)).join(' · ')}
+            {b.smallTotal > b.small.length ? ` and ${b.smallTotal - b.small.length} more` : ''}.{' '}</>
+        )}
+        {/* NON-QUOTA SPECIES LIVE HERE, and calling them over would be wrong.
+            David: "NS pollock, NS squid & NS cats are all non quota speices."
+            The statement gives them a zero allocation and so a negative
+            balance, which is arithmetic rather than a debt. */}
+        {b.unallocated.length > 0 && (
+          <>Caught with no allocation, non-quota species among them:{' '}
+            {b.unallocated.map((l) => l.stock + ' ' + t(l.caught)).join(' · ')}
+            {b.unallocatedTotal > b.unallocated.length
+              ? ` and ${b.unallocatedTotal - b.unallocated.length} more` : ''}.{' '}</>
+        )}
         The statement position only — trips landed since are not in it.{' '}
         <Link to="/quota">Quota</Link> adds them.
       </p>
@@ -317,24 +340,29 @@ function Quota({ quota }) {
   )
 }
 
-/* `balance` is the column and `remaining` never existed, which is why the old
-   row fell through to the next thing it tried. A line with no allocation on it
-   is not scored at all — a blank is not a nought. */
-export function quotaRows(lines = []) {
-  return (Array.isArray(lines) ? lines : [])
-    .map((l) => {
-      const alloc = numOrNull(l.allocation)
-      const balance = numOrNull(l.balance ?? l.remaining)
-      const caught = numOrNull(l.catch_total)
-      const used = alloc > 0 && caught != null ? caught / alloc : null
-      return {
-        stock: l.stock || l.species || 'Unnamed', balance, used,
-        state: balance != null && balance < 0 ? 'over'
-          : used != null && used >= 0.85 ? 'tight' : '',
-      }
-    })
-    .filter((l) => l.balance != null || l.used != null)
-    .sort((a, b) => (b.used ?? -1) - (a.used ?? -1))
+function QuotaRow({ l }) {
+  const t = (n) => Number(n).toLocaleString('en-GB', { maximumFractionDigits: 1 }) + ' t'
+  return (
+    <div className={'qr ' + l.state}>
+      <span className="qn">
+        {l.stock}
+        {/* NO ALLOCATION IS NOT 0% CAUGHT. There is nothing to divide by, and
+            "0%" over 8.2 t of fish would be the opposite of the truth. */}
+        <span className="qp">
+          {l.used == null ? 'no allocation' : Math.round(l.used * 100) + '% caught'}
+        </span>
+      </span>
+      <b className="qv">
+        {l.over > 0 ? t(l.over) + ' over'
+          : l.balance == null ? '—'
+            : l.used == null ? t(l.caught) + ' caught'
+              : t(l.balance) + ' left'}
+      </b>
+      {l.used != null && (
+        <span className="qbar"><i style={{ width: Math.round(Math.min(100, l.used * 100)) + '%' }} /></span>
+      )}
+    </div>
+  )
 }
 
 /* ==== WHAT TO DO NEXT ===================================================== */
@@ -408,15 +436,6 @@ function Stat({ k, n, sub, delta }) {
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const money = (n) => (n == null ? '—' : '£' + Number(n).toFixed(2))
 const money0 = (n) => (n == null ? '—' : '£' + Math.round(Number(n)).toLocaleString('en-GB'))
-
-/* RAW FLOATS OFF A NUMERIC COLUMN — "34.83933000000001" — were being printed
-   straight onto the front page. One decimal is what the office works in. */
-const tonnes = (n) => Number(n).toLocaleString('en-GB', { maximumFractionDigits: 1 }) + ' t'
-function numOrNull(v) {
-  if (v === '' || v == null) return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
-}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December']
