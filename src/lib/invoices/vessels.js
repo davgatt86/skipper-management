@@ -49,6 +49,41 @@ export const DEFAULT_ERAS = [
     // No start: everything before the next one belongs here.
     to: '2018-08-31',
   },
+  /* BUILDING A BOAT IS NOT RUNNING ONE.
+   *
+   * David, Sep 2026: "add a new category of boats. new build costs. so would be
+   * pair trawler, new build costs, pair/single, twin trawler. i think some
+   * bopp, shipyard & woodsons bills should be in the new build costs."
+   *
+   * The stage payments make the case on their own. Macduff invoice 30543 is
+   * £287,874 for "stage payment due when hull is 100% completed", dated
+   * October 2017 — a year before the pair/single ever fished and while the old
+   * boat still was. Charged to either hull it is a lie about what she cost to
+   * run; £616,200 of BOPP winches does the same thing again.
+   *
+   * IT HAS NO DATES AND NOTHING EVER FALLS INTO IT. That is the whole design.
+   * A build overlaps the boat it replaces by definition, so no date range could
+   * separate them — and a word on an invoice cannot either, since a winch is a
+   * winch whether it goes on a new hull or an old one. Only the skipper knows
+   * that a particular order was a new boat, so only an explicit `vessel_era`
+   * puts an invoice here. Exactly the rule the Newbuild fit-out CATEGORY
+   * follows, arriving from the other side: that one says what was bought, this
+   * one says it belongs to no hull in service.
+   *
+   * `manualOnly` is what keeps `eraOf` away from it, and it is not optional —
+   * an era with neither `from` nor `to` matches EVERY date, so without the flag
+   * it would swallow every invoice after August 2018.
+   *
+   * ONE BUCKET, NOT ONE PER BUILD. Two boats were built (the pair/single in
+   * 2017-18 and the twin in 2022), and this holds both. If they ever need
+   * telling apart it is one more entry in this list and nothing else.
+   */
+  {
+    key: 'newbuild',
+    label: 'New build costs',
+    note: 'building a boat, not running one — assigned by hand, never by date',
+    manualOnly: true,
+  },
   {
     key: 'pair_single',
     label: 'Pair / single trawler',
@@ -98,14 +133,21 @@ export function eraOf(date, eras = DEFAULT_ERAS) {
   const d = String(date || '').slice(0, 10)
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return null
 
-  const inService = eras.find((e) =>
+  /* `manualOnly` buckets are skipped, and skipping them is load-bearing rather
+     than tidy: an era with neither `from` nor `to` satisfies this test for
+     EVERY date, so New build costs would otherwise catch every invoice after
+     the first boat was sold. A bucket nothing falls into by date has to be
+     taken out of the date logic entirely. */
+  const dated = eras.filter((e) => !e.manualOnly)
+
+  const inService = dated.find((e) =>
     (!e.from || d >= e.from) && (!e.to || d <= e.to))
   if (!inService) return null
 
   /* A LATER boat whose fit-out had started by this date is the other candidate.
      Only a later one: an invoice cannot belong to a boat already sold. */
-  const iAt = eras.indexOf(inService)
-  const fitting = eras.find((e, i) =>
+  const iAt = dated.indexOf(inService)
+  const fitting = dated.find((e, i) =>
     i > iAt && e.fitOutFrom && d >= e.fitOutFrom && (!e.from || d < e.from))
 
   return fitting
@@ -188,6 +230,11 @@ export function eraService(era, invoices = [], eras = DEFAULT_ERAS) {
 
   const e = eras.find((x) => x.key === era)
   if (!e) return null
+  /* A BUILD HAS NO SERVICE, so it has no cost PER YEAR of service either.
+     Null rather than a window: dividing build cost by the length of the record
+     would invent a rate, and the boats table would then rank a hull that never
+     fished alongside three that did. */
+  if (e.manualOnly) return null
 
   /* No start means "everything before the next one", so the window opens where
      the record does — a fact about the record rather than about the boat. No

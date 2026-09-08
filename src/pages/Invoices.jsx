@@ -8,6 +8,7 @@ import {
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead, clearRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
   setInvoiceVessels, setInvoicesWork, setInvoiceCategory,
+  deleteInvoice, editInvoice, mergeSuppliers, markNotSame,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
 import { suggestCategory, resolveCategories } from '../lib/invoices/categories'
@@ -18,6 +19,7 @@ import { arrivalFromName, arrivalSubject } from '../lib/invoices/arrival'
 import YearDashboard from './invoices/YearDashboard'
 import AllYears from './invoices/AllYears'
 import FindInvoices from './invoices/FindInvoices'
+import MergeFirms from './invoices/MergeFirms'
 import { Segmented } from './invoices/shared'
 import Arrivals from './invoices/Arrivals'
 import Review from './invoices/Review'
@@ -499,6 +501,65 @@ export default function Invoices() {
     } catch (e) { setErr(e.message || String(e)) }
   }, [])
 
+  /* CORRECTING WHAT THE READER GOT WRONG — the figures printed on the scan.
+     Kept apart from the boat, the trade and the work dates, which are answers
+     to questions the invoice cannot answer rather than corrections. */
+  const editOne = useCallback(async (id, patch, reason) => {
+    setErr(''); setMsg('')
+    try {
+      const after = await editInvoice(id, patch, reason)
+      if (after) {
+        setInvoices((prev) => prev.map((i) => (i.id === id ? { ...i, ...after } : i)))
+        setMsg('Corrected, and what it said before is kept.')
+      }
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  /* TWO SPELLINGS OF ONE FIRM. Both halves matter: the invoices move so
+     history is right, and the losing name is kept as a spelling so next
+     Monday's bundle does not re-create the firm it was just folded into. */
+  const foldFirm = useCallback(async (keep, drop) => {
+    setErr(''); setMsg('')
+    try {
+      const res = await mergeSuppliers(keep.id, drop.id)
+      await refresh()
+      setMsg(`${res?.kept || keep.name} now carries ${res?.merged || drop.name} — `
+        + `${res?.invoices_moved ?? drop.count} moved across, and that spelling is filed `
+        + 'so the next bundle lands on the same firm.')
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  /* ANSWERED ONCE. Without somewhere to put "these two are not the same firm",
+     the panel would ask about Macduff Shipyards against its crane hire arm
+     every time the page opened — and the one real pair would hide among the
+     refusals nobody reads. */
+  const notSameFirm = useCallback(async (a, b) => {
+    setErr('')
+    try {
+      await markNotSame(a, b)
+      setSuppliers((prev) => prev.map((s) => (
+        s.id === a.id ? { ...s, not_same_as: [...(s.not_same_as || []), b.id] }
+          : s.id === b.id ? { ...s, not_same_as: [...(s.not_same_as || []), a.id] }
+            : s)))
+      setMsg(`${a.name} and ${b.name} are kept apart. They will not be offered again.`)
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
+  /* TAKING ONE OUT. The whole row is snapshotted into su_invoice_changes in
+     the same statement, because `su_*` has no audit trail of its own and a
+     delete here would otherwise leave no trace whatever that it happened —
+     which is exactly the note CLAUDE.md has had to write by hand every time. */
+  const removeOne = useCallback(async (inv, reason) => {
+    setErr(''); setMsg('')
+    try {
+      await deleteInvoice(inv.id, reason)
+      setInvoices((prev) => prev.filter((i) => i.id !== inv.id))
+      setMsg(`Removed ${inv.supplier || 'that invoice'} ${inv.invoice_no || ''} — `
+        + `${money(inv.total)} is out of the totals. It is on record with the reason, `
+        + 'so it can be put back.')
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
   /* A TAB ID THAT MATCHES NO BRANCH MUST NOT RENDER AN EMPTY PAGE.
      `setTab('review')` survived the rebuild that replaced the review tab with a
      step inside "add", and the result was a page with a header, a tab strip and
@@ -560,8 +621,17 @@ export default function Invoices() {
         <FindInvoices invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
                       basis={basis} on={on} filter={filter} setFilter={setFilter}
                       onOpen={openInvoice} onSetWork={setWork}
-                      onPlaceVessel={placeVessel} onSetCategory={setOneCategory} />
+                      onPlaceVessel={placeVessel} onSetCategory={setOneCategory}
+                      onEdit={editOne} onDelete={removeOne} />
       ))}
+
+      {/* WHERE IT SITS. Under the search rather than on the dashboard: it is
+          housekeeping you do when you are already looking at one firm's
+          invoices and notice the other half of it, not a figure to read. */}
+      {shownTab === 'find' && !loading && (
+        <MergeFirms suppliers={suppliers} invoices={invoices}
+                    onMerge={foldFirm} onNotSame={notSameFirm} busy={!!stage} />
+      )}
 
       {/* ---- ADDING A BUNDLE, WHICH IS NOW ONE PDF ON A MONDAY --------------
           The drop, the unread bundles and the check-the-read are one flow in one

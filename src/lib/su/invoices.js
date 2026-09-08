@@ -66,7 +66,7 @@ export async function listSuppliers(fleetId) {
   if (!fleetId) return []
   const { data, error } = await supabase
     .from('su_invoice_suppliers')
-    .select('id, name, aliases, category, note')
+    .select('id, name, aliases, category, note, not_same_as')
     .eq('fleet_id', fleetId)
     .order('name')
   return error ? [] : (data || [])
@@ -80,7 +80,7 @@ export async function createSupplier(fleetId, name, { alias, category } = {}) {
   const { data, error } = await supabase
     .from('su_invoice_suppliers')
     .insert({ fleet_id: fleetId, name: clean, aliases, category: category || null })
-    .select('id, name, aliases, category, note')
+    .select('id, name, aliases, category, note, not_same_as')
     .single()
   if (error) throw error
   return data
@@ -96,7 +96,7 @@ export async function addAlias(supplier, raw) {
     .from('su_invoice_suppliers')
     .update({ aliases: next })
     .eq('id', supplier.id)
-    .select('id, name, aliases, category, note')
+    .select('id, name, aliases, category, note, not_same_as')
     .single()
   if (error) throw error
   return data
@@ -352,3 +352,118 @@ const dateOrNull = (v) => {
 
 /* The rule lives in src/lib/invoices/pages.js so it can be tested without a
    database — see the note there about page 0. */
+
+/* PUTTING AN INVOICE RIGHT, AND TAKING ONE OUT.
+ *
+ * Both go through a SECURITY DEFINER function rather than a plain update or
+ * delete, and that is not ceremony. `su_*` carries no audit trail by design --
+ * it is written by an edge function on the service-role key where `auth.uid()`
+ * is null, so the ordinary trigger would record that nobody did it. Every
+ * delete before this was done by hand with the reason typed onto the batch,
+ * and one of them was GBP 147,985.99. A button that can do the same thing and
+ * leave no trace is a hole, not a feature.
+ *
+ * `su_delete_invoice` snapshots the whole row into `su_invoice_changes` and
+ * removes it in ONE statement, so there is no window in which an invoice is
+ * gone and unrecorded. Nothing else in the app deletes an invoice.
+ */
+export async function deleteInvoice(id, reason) {
+  const { data, error } = await supabase.rpc('su_delete_invoice', {
+    p_id: id, p_reason: reason || null,
+  })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Correct the figures on one invoice.
+ *
+ * ONLY WHAT IS PRINTED ON THE SCAN. The boat, the trade and the work dates
+ * keep their own setters -- those are ANSWERS to questions the invoice cannot
+ * answer, not corrections to something misread, and folding them in here would
+ * put "I decided this" and "the reader got this wrong" in one record.
+ *
+ * The allow-list is enforced in the function as well; this copy is so the page
+ * cannot offer a field the database will refuse.
+ */
+export const EDITABLE = [
+  'supplier', 'invoice_no', 'invoice_date', 'net', 'vat', 'total',
+  'currency', 'description', 'page_from', 'page_to',
+]
+
+export async function editInvoice(id, patch, reason) {
+  const clean = {}
+  for (const k of EDITABLE) if (patch[k] !== undefined) clean[k] = patch[k] === '' ? null : patch[k]
+  if (!Object.keys(clean).length) return null
+  const { data, error } = await supabase.rpc('su_edit_invoice', {
+    p_id: id, p_patch: clean, p_reason: reason || null,
+  })
+  if (error) throw error
+  return data
+}
+
+/** What has been changed or removed, newest first. The only record there is. */
+export async function listInvoiceChanges(fleetId, limit = 100) {
+  if (!fleetId) return []
+  const { data, error } = await supabase
+    .from('su_invoice_changes')
+    .select('id, invoice_id, action, before, after, reason, changed_by, changed_at')
+    .eq('fleet_id', fleetId)
+    .order('changed_at', { ascending: false })
+    .limit(limit)
+  if (error) return []
+  return data || []
+}
+
+/**
+ * Fold one firm into another.
+ *
+ * Through a SECURITY DEFINER function rather than three client statements,
+ * because it moves invoices AND removes a row: half of it applied would leave
+ * the record pointing at a firm that no longer exists. See
+ * supabase/invoice_supplier_merge.sql.
+ *
+ * THE ALIAS IS THE HALF THAT LASTS. Moving the invoices fixes history;
+ * recording the losing name on the survivor is what stops next Monday's bundle
+ * re-creating the firm under the same spelling.
+ */
+export async function mergeSuppliers(keepId, dropId) {
+  const { data, error } = await supabase.rpc('su_merge_invoice_suppliers', {
+    p_keep: keepId, p_drop: dropId,
+  })
+  if (error) throw error
+  return data
+}
+
+/**
+ * Record that two firms are NOT the same, so the suggester stops asking.
+ *
+ * Written on BOTH rows, because which of a pair is found first is an accident
+ * of ordering — and a refusal that only half-took would put the question back
+ * in front of him the next time the list was read in the other order.
+ *
+ * Without this the page would ask about Macduff Shipyards against its crane
+ * hire arm, and Don Fishing against its Macduff branch, every single time it
+ * was opened. Both were settled months ago, and a panel that keeps asking
+ * answered questions is one nobody reads — which is how the real pair gets
+ * missed.
+ */
+export async function markNotSame(a, b) {
+  const add = (row, otherId) => {
+    const cur = Array.isArray(row.not_same_as) ? row.not_same_as : []
+    return cur.includes(otherId) ? null : [...cur, otherId]
+  }
+  const one = add(a, b.id)
+  const two = add(b, a.id)
+  if (one) {
+    const { error } = await supabase.from('su_invoice_suppliers')
+      .update({ not_same_as: one }).eq('id', a.id)
+    if (error) throw error
+  }
+  if (two) {
+    const { error } = await supabase.from('su_invoice_suppliers')
+      .update({ not_same_as: two }).eq('id', b.id)
+    if (error) throw error
+  }
+  return { a: one || a.not_same_as, b: two || b.not_same_as }
+}

@@ -299,7 +299,12 @@ export default function Sales() {
           knownBuyers: knownBuyers || undefined,
         }))
         setUploadSummary([...summary])
-        log.push(`✓ ${f.name}: ${res.meta.vessel} ${fmtDate(res.meta.isoDate)} — ${num(tot.boxes)} bx, ${gbp(tot.value)}${dupId ? ' ↻ re-parsed' : ''}${warn}${fed}`)
+        /* SAY THE WORD "SAVED", and say it BEFORE any note that follows.
+           The line used to end on whatever feedCrewLanding had to add, and a
+           tail reading "crew landing not created" was read as the note having
+           failed when it had saved perfectly. What happened to the note comes
+           first; anything about the crew-bonus landing is a footnote to it. */
+        log.push(`✓ ${f.name}: ${dupId ? 'replaced in place' : 'saved'} — ${res.meta.vessel} ${fmtDate(res.meta.isoDate)}, ${num(tot.boxes)} bx, ${gbp(tot.value)}${warn}${fed}`)
       } catch (err) {
         log.push(`✗ ${f.name}: ${err.message}`)
       }
@@ -345,8 +350,27 @@ export default function Sales() {
         .eq('id', l.id)
       return e ? ` (crew landing: ${e.message})` : ` → crew landing +${num(boxes)} bx${healed}${dupNote}`
     }
+    /* NOTHING HERE CAN STOP A SALE BEING SAVED, and it must stay that way:
+       this runs AFTER the landing and its rows are written, and every path
+       out of it returns a NOTE rather than throwing. The box-bonus landing is
+       a separate thing that happens to be fed from the same upload. */
     const aboard = await aboardOnDate(date)
-    if (!aboard.length) return ' — no crew marked on boat, crew landing not created'
+    if (!aboard.length) {
+      /* A FLEET THAT KEEPS NO CREW RECORDS IS NOT MISSING ANYTHING.
+         The box bonus is for contracted crew; a fleet running none has no
+         bonus landing to feed, so there is nothing to report and saying
+         "crew landing not created" on every single note reads as a failure.
+         Sandy read it as exactly that — the line begins with a tick and ends
+         with "not created", and he reported his notes were not saving when
+         all of them had. A warning that fires on the ordinary case stops
+         being read, and this one fired on every note he has ever uploaded.
+
+         NOT MARKED ABOARD is a different fact and still worth saying: that
+         fleet does run the bonus, and a landing with nobody on it costs
+         somebody money. */
+      const keepsCrew = await fleetKeepsCrew()
+      return keepsCrew ? ' — nobody marked on boat for this date, so no crew box-bonus landing was made' : ''
+    }
     const { data: ins, error: ie } = await supabase.from('landings')
       .insert({ fleet_id: appUser.fleet_id, landing_date: date, boxes: Number(boxes), notes: 'Auto from sales notes', locked: false, created_by: appUser.id, sales_keys: [key] })
       .select('id').single()
@@ -356,6 +380,22 @@ export default function Sales() {
               { onConflict: 'landing_id,crew_id', ignoreDuplicates: true })
     if (lce) return ` (crew aboard failed: ${lce.message} — edit the landing)`
     return ` → crew landing created (${num(boxes)} bx, ${aboard.length} crew aboard)`
+  }
+
+  /* Does this fleet keep crew records at all?
+   *
+   * Told apart from "keeps them, and nobody is aboard today" because those are
+   * two different facts and only the second is worth mentioning. Counted
+   * rather than fetched, and archived crew still count — a fleet that has ever
+   * had a man on the books runs the scheme, even if everyone is ashore.
+   *
+   * On error it answers TRUE, which keeps the old message. A note that cannot
+   * be checked is better over-reported than silently dropped. */
+  async function fleetKeepsCrew() {
+    const { count, error } = await supabase
+      .from('crew').select('id', { count: 'exact', head: true })
+    if (error) return true
+    return (count || 0) > 0
   }
 
   // Crew aboard for a landing date = crew with an agency contract covering

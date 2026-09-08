@@ -6,6 +6,7 @@ import AppShell from './AppShell'
 import { canSee, accessForPath } from './nav'
 import { isOfficer, isCook } from './lib/roles'
 import Login from './pages/Login'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import Crew from './pages/Crew'
 import ContractedCrew from './pages/ContractedCrew'
@@ -140,6 +141,19 @@ export default function App() {
             <Login />
           </PublicOnly>
         } />
+        {/* THE RESET LINK LANDS HERE, AND THIS ROUTE IS GUARDED BY NEITHER
+            WRAPPER ON PURPOSE.
+
+            Following a recovery link puts a REAL SESSION in the browser --
+            auth-js reads the token out of the URL and signs the user in. So
+            PublicOnly would bounce him to the dashboard with his password
+            still unchanged, which is the one thing he came here to fix.
+            ProtectedRoute would work by luck and stop working the moment a
+            link is opened after that session has gone, sending a man who
+            cannot sign in to the page that tells him to sign in.
+
+            The page copes with both states and says which it is in. */}
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/" element={
           <ProtectedRoute>
             <RoleHome />
