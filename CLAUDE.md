@@ -3661,6 +3661,74 @@ behind a login and drags the supabase client in behind it, so it cannot be
 server-rendered the way `SheetBody` and `DashboardBody` are. Say that rather
 than letting a green preview read as proof the page works.
 
+### THE SAFETY PAGES SHIPPED READ-ONLY — the library was written and never called
+
+David, Sep 2026: *"there's no way of adding a risk assesment ... there's no way
+of starting a LOLER & PUWER check too?"*
+
+**`safetyDb.js` HAS EXPORTED `saveAssessment`, `saveHazard`, `removeHazard`
+AND `saveEquipment` SINCE THE DAY IT WAS WRITTEN.** `RiskBody` even
+destructured `onSave` — and used it nowhere. Neither page passed it. So both
+pages read perfectly and could not be written to, and the empty state was a dead
+end with no button on it.
+
+**Third instance in one codebase**, after `VesselProvider` imported and never
+rendered and `loadLatestWorksheet` exported and called by nothing at all.
+**Writing the function is not the job.** All three shipped green: the build
+passes, nothing throws, the page renders.
+
+**And it happened AGAIN while fixing it.** The new `onSaveEquipment` handler
+called `saveEquipment` and the import was never added — `npm run build` passed
+anyway, because an undefined identifier is valid JavaScript right up until it
+runs. Sixth of that shape in this repo. Caught by reading the diff, not by any
+tool.
+
+What was added: `NewAssessment`, `HazardForm` and `NewEquipment` in
+`SafetyBody.jsx`, a remove on each hazard, and both pages wired to the four
+functions that already existed.
+
+**THE DATE DRIVES THE REVIEW DATE, but only while it still matches.** A review
+date typed by hand is never quietly overwritten; left fully independent, an
+assessment ends up with no review date at all, which `assessmentGaps` reports as
+*"nothing is chasing it"* — true, and not a thing anybody sets out to create.
+
+**A SUPERSEDED OR WITHDRAWN ASSESSMENT TAKES NO NEW HAZARDS.** It is the record
+of what the crew were briefed on and must not move; reviewing makes a new one.
+
+**Blank stays blank on likelihood and severity.** `rating()` gives no rating at
+all where either is missing, which is right — a rating of nothing is not a
+rating of nought, and `Number('') === 0` has bitten this repo six times.
+
+**The kind sets the interval and the form says which**, because it is the thing
+most often got wrong: a sling is six months, the same as anything that lifts a
+person, and it is the crane at twelve that is the exception. PUWER says so
+plainly — *"nothing will chase this item unless you give it scheme months"* —
+rather than defaulting to a number the regulation does not give.
+
+`scripts/safety-preview.mjs` now passes the handlers, so the buttons render, and
+renders the three forms OPEN in a pane of their own. **The forms only appear on
+a click, and a form nobody has rendered is exactly where an undefined identifier
+hides** — which is the fault this whole section exists because of. They are
+exported for that reason. Known gap: `HazardForm` renders as its button in the
+preview, so its opened body is covered only by sharing `Row` and `FORM_GRID`
+with the two that are.
+
+#### Still open
+
+**The twelve existing assessments.** David has them in Aegir — Shooting and
+Hauling, Engine Room, Trawling/Seining, Landing Operations, Vessel Safety,
+General Working Onboard, Guard Boat Duty, Young Persons, Maintenance Work,
+Handling the Catch, Shore-side Activities, Boarding and Leaving. They are **real
+text PDFs** (16 fonts, no images), so they can be read rather than retyped:
+`scripts/read-ra.mjs` extracts one, and the columns line up with the schema
+already — risk id, date, hazard, risk, controls in place, outcomes, risk level.
+An importer is NOT built.
+
+**The inspection pack** is on the explicitly-not-wanted list further up this
+file. David showed Aegir's, which exports one surveyor-ready PDF over a date
+range. Not started, and not to be started without him saying the earlier
+decision has changed.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

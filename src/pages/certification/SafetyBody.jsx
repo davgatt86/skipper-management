@@ -22,7 +22,9 @@ export function RiskBody({
   vessel, assessments = [], hazards = [], briefings = [], canWrite = false, busy = false,
   today = new Date().toISOString().slice(0, 10), reviewMonths = DEFAULT_REVIEW_MONTHS,
   onSave, onReview, onBrief, onOpen, selected,
+  onSaveHazard, onRemoveHazard,
 }) {
+  const [adding, setAdding] = useState(false)
   const rows = useMemo(() => withLineage(assessments), [assessments])
   const live = rows.filter((a) => !a.replaced_by && !a.withdrawn_on)
   const late = live
@@ -51,6 +53,18 @@ export function RiskBody({
 
       <Outstanding late={late} onOpen={onOpen} />
 
+      {/* THE PAGE HAD NO WAY IN. The library could save an assessment from the
+          day it was written and nothing ever called it, so the empty state was
+          a dead end. */}
+      {canWrite && onSave && (adding
+        ? <NewAssessment today={today} reviewMonths={reviewMonths} busy={busy}
+                         vessel={vessel}
+                         onCancel={() => setAdding(false)}
+                         onSave={async (a) => { await onSave(a); setAdding(false) }} />
+        : <p style={{ margin: '0 0 1rem' }}>
+            <button onClick={() => setAdding(true)} disabled={busy}>New assessment</button>
+          </p>)}
+
       {rows.length === 0 ? (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>No risk assessments yet</h3>
@@ -63,7 +77,8 @@ export function RiskBody({
         <Assessment key={a.id} a={a} hazards={hazards} briefings={briefings} today={today}
                     open={selected === a.id} canWrite={canWrite} busy={busy}
                     reviewMonths={reviewMonths}
-                    onOpen={onOpen} onReview={onReview} onBrief={onBrief} />
+                    onOpen={onOpen} onReview={onReview} onBrief={onBrief}
+                    onSaveHazard={onSaveHazard} onRemoveHazard={onRemoveHazard} />
       ))}
     </div>
   )
@@ -94,7 +109,8 @@ function Outstanding({ late, onOpen }) {
   )
 }
 
-function Assessment({ a, hazards, briefings, today, open, canWrite, busy, reviewMonths, onOpen, onReview, onBrief }) {
+function Assessment({ a, hazards, briefings, today, open, canWrite, busy, reviewMonths,
+                     onOpen, onReview, onBrief, onSaveHazard, onRemoveHazard }) {
   const mine = hazards.filter((h) => h.assessment_id === a.id)
   const told = briefings.filter((b) => b.assessment_id === a.id)
   const st = assessmentState(a, { asOf: today })
@@ -130,7 +146,20 @@ function Assessment({ a, hazards, briefings, today, open, canWrite, busy, review
         <>
           {mine.length === 0
             ? <p className="muted" style={{ fontSize: '0.82rem' }}>No hazards written down yet.</p>
-            : mine.map((h) => <Hazard key={h.id} h={h} today={today} />)}
+            : mine.map((h) => (
+                <Hazard key={h.id} h={h} today={today}
+                        canWrite={canWrite && st.state !== 'superseded' && !a.withdrawn_on}
+                        busy={busy} onRemove={onRemoveHazard} />
+              ))}
+
+          {/* AN ASSESSMENT WITH NO HAZARDS IN IT IS NOT AN ASSESSMENT, so the
+              way to add one lives here rather than behind another click. A
+              superseded or withdrawn assessment takes none: it is the record of
+              what the crew were briefed on and must not move. */}
+          {canWrite && onSaveHazard && st.state !== 'superseded' && !a.withdrawn_on && (
+            <HazardForm busy={busy} nextSort={mine.length}
+                        onSave={(h) => onSaveHazard(a.id, h)} />
+          )}
 
           {canWrite && st.state !== 'superseded' && !a.withdrawn_on && (
             <div style={{ marginTop: '0.6rem', paddingTop: '0.5rem', borderTop: '1px solid var(--line)',
@@ -152,7 +181,7 @@ function Assessment({ a, hazards, briefings, today, open, canWrite, busy, review
   )
 }
 
-function Hazard({ h, today }) {
+function Hazard({ h, today, canWrite, busy, onRemove }) {
   const r = rating(h)
   const openAction = String(h.further_action || '').trim() && !h.done_on
   const lateAction = openAction && h.action_due && String(h.action_due).slice(0, 10) < today
@@ -164,6 +193,13 @@ function Hazard({ h, today }) {
             factors cannot drift apart — the same reason the parts ledger has no
             on_hand column. No rating where either factor is missing: a rating
             of nothing is not a rating of nought. */}
+        {canWrite && onRemove && (
+          <button className="secondary" disabled={busy}
+                  style={{ fontSize: '0.7rem', padding: '0 0.35rem' }}
+                  onClick={() => { if (window.confirm('Take this hazard off the assessment?')) onRemove(h.id) }}>
+            remove
+          </button>
+        )}
         {r
           ? <span style={{ fontFamily: 'var(--mono, monospace)', fontSize: '0.78rem',
                            color: r.band === 'high' ? 'var(--rust)' : r.band === 'medium' ? 'var(--brass)' : 'var(--kelp)' }}>
@@ -193,7 +229,9 @@ function Hazard({ h, today }) {
 export function LiftingBody({
   vessel, equipment = [], examinations = [], canWrite = false, busy = false,
   today = new Date().toISOString().slice(0, 10), onExamine, onOpen, selected,
+  onSaveEquipment,
 }) {
+  const [addingEq, setAddingEq] = useState(false)
   const late = useMemo(() => equipmentOutstanding(equipment, examinations, { asOf: today }),
     [equipment, examinations, today])
 
@@ -238,6 +276,17 @@ export function LiftingBody({
           </ul>
         </div>
       )}
+
+      {/* THE REGISTER HAD NO WAY IN EITHER — `saveEquipment` was exported and
+          never called, so a boat with nothing on the register could do nothing
+          about it. */}
+      {canWrite && onSaveEquipment && (addingEq
+        ? <NewEquipment busy={busy} vessel={vessel} today={today}
+                        onCancel={() => setAddingEq(false)}
+                        onSave={async (e) => { await onSaveEquipment(e); setAddingEq(false) }} />
+        : <p style={{ margin: '0 0 0.8rem' }}>
+            <button onClick={() => setAddingEq(true)} disabled={busy}>Add an item</button>
+          </p>)}
 
       {equipment.length === 0 ? (
         <div className="card">
@@ -343,6 +392,233 @@ function Equipment({ e, examinations, today, open, canWrite, busy, onOpen, onExa
     </div>
   )
 }
+
+/* Exported so scripts/safety-preview.mjs can render them OPEN. They only appear
+   on a click otherwise, and a form nobody has rendered is where an undefined
+   identifier hides — the fault this whole section exists because of.
+ */
+
+/* ==== THE FORMS ==========================================================
+ *
+ * These are why both pages existed and could not be used. `safetyDb.js` has
+ * exported `saveAssessment`, `saveHazard`, `removeHazard` and `saveEquipment`
+ * since the day it was written; `RiskBody` even destructured `onSave` and used
+ * it nowhere, and neither page ever passed it. So the whole feature shipped
+ * read-only, with an empty state and no button on it.
+ *
+ * Same shape as `VesselProvider` imported and never rendered, and as
+ * `loadLatestWorksheet` exported and called by nothing at all. Three in one
+ * codebase: WRITING THE FUNCTION IS NOT THE JOB.
+ */
+
+function Row({ label, children, wide }) {
+  return (
+    <label style={{ display: 'block', gridColumn: wide ? '1 / -1' : undefined }}>
+      <span className="muted" style={{ display: 'block', fontSize: '0.68rem',
+                                       textTransform: 'uppercase', letterSpacing: '0.08em',
+                                       marginBottom: 2 }}>{label}</span>
+      {children}
+    </label>
+  )
+}
+
+const FORM_GRID = {
+  display: 'grid', gap: '0.6rem',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(11rem, 1fr))', alignItems: 'end',
+}
+
+export function NewAssessment({ today, reviewMonths, busy, vessel, onSave, onCancel }) {
+  const [f, setF] = useState({
+    title: '', area: '', ref: '', assessedOn: today, assessedBy: '',
+    reviewDue: reviewDue(today, reviewMonths), notes: '',
+  })
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  /* THE DATE DRIVES THE REVIEW DATE until somebody types over it — and only
+     while it still matches, so a review date entered by hand is never quietly
+     overwritten. Left independent, an assessment ends up with no review date
+     at all, which `assessmentGaps` correctly reports as "nothing is chasing
+     it" but which nobody sets out to create. */
+  const setAssessed = (e) => setF((p) => ({
+    ...p,
+    assessedOn: e.target.value,
+    reviewDue: p.reviewDue === reviewDue(p.assessedOn, reviewMonths)
+      ? reviewDue(e.target.value, reviewMonths)
+      : p.reviewDue,
+  }))
+
+  const ready = f.title.trim() && f.assessedOn && f.assessedBy.trim()
+
+  return (
+    <div className="card" style={{ borderLeft: '3px solid var(--hull)' }}>
+      <h3 style={{ marginTop: 0 }}>New assessment</h3>
+      <p className="muted" style={{ fontSize: '0.8rem', marginTop: 0 }}>
+        An assessment is about a JOB, not a boat — shooting and hauling, the engine room,
+        handling the catch.{vessel?.label ? ' It will be filed against ' + vessel.label + '.' : ''}
+      </p>
+      <div style={FORM_GRID}>
+        <Row label="What is being assessed">
+          <input value={f.title} onChange={set('title')} placeholder="Shooting and hauling" />
+        </Row>
+        <Row label="Area or activity">
+          <input value={f.area} onChange={set('area')} placeholder="Deck" />
+        </Row>
+        <Row label="Your own reference">
+          <input value={f.ref} onChange={set('ref')} placeholder="optional" />
+        </Row>
+        <Row label="Assessed on">
+          <input type="date" value={f.assessedOn} onChange={setAssessed} />
+        </Row>
+        <Row label="Assessed by">
+          <input value={f.assessedBy} onChange={set('assessedBy')} placeholder="name" />
+        </Row>
+        <Row label="Review due">
+          <input type="date" value={f.reviewDue} onChange={set('reviewDue')} />
+        </Row>
+        <Row label="Notes" wide>
+          <input value={f.notes} onChange={set('notes')} />
+        </Row>
+      </div>
+      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.8rem' }}>
+        <button disabled={!ready || busy}
+                onClick={() => onSave({ ...f, vesselId: vessel?.id || null })}>
+          Save it
+        </button>
+        <button className="secondary" disabled={busy} onClick={onCancel}>Cancel</button>
+      </div>
+      {!ready && (
+        <p className="muted" style={{ fontSize: '0.76rem', margin: '0.5rem 0 0' }}>
+          It needs what is being assessed, the date, and who did it — an assessment
+          nobody signed is not evidence of anything.
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function HazardForm({ busy, nextSort, onSave }) {
+  const blank = {
+    hazard: '', whoAtRisk: '', controls: '', likelihood: '', severity: '',
+    furtherAction: '', actionBy: '', actionDue: '',
+  }
+  const [f, setF] = useState(blank)
+  const [open, setOpen] = useState(false)
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+
+  if (!open) {
+    return (
+      <p style={{ margin: '0.6rem 0 0' }}>
+        <button className="secondary" style={{ fontSize: '0.78rem' }}
+                onClick={() => setOpen(true)} disabled={busy}>Add a hazard</button>
+      </p>
+    )
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--line)', marginTop: '0.6rem', paddingTop: '0.6rem' }}>
+      <div style={FORM_GRID}>
+        <Row label="The hazard" wide>
+          <input value={f.hazard} onChange={set('hazard')}
+                 placeholder="Crew caught in gear and pulled onto the net drum" />
+        </Row>
+        <Row label="Who is at risk">
+          <input value={f.whoAtRisk} onChange={set('whoAtRisk')} />
+        </Row>
+        <Row label="Controls in place" wide>
+          <input value={f.controls} onChange={set('controls')} />
+        </Row>
+        {/* BLANK STAYS BLANK. `Number('') === 0` has bitten this repo six times,
+            and `rating()` gives no rating at all where either factor is missing —
+            which is right, because a rating of nothing is not a rating of nought. */}
+        <Row label="Likelihood 1-5">
+          <input type="number" min="1" max="5" value={f.likelihood} onChange={set('likelihood')} />
+        </Row>
+        <Row label="Severity 1-5">
+          <input type="number" min="1" max="5" value={f.severity} onChange={set('severity')} />
+        </Row>
+        <Row label="Further action" wide>
+          <input value={f.furtherAction} onChange={set('furtherAction')}
+                 placeholder="only where the controls are not enough yet" />
+        </Row>
+        <Row label="Action by">
+          <input value={f.actionBy} onChange={set('actionBy')} />
+        </Row>
+        <Row label="Action due">
+          <input type="date" value={f.actionDue} onChange={set('actionDue')} />
+        </Row>
+      </div>
+      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.7rem' }}>
+        <button disabled={!f.hazard.trim() || busy}
+                onClick={async () => { await onSave({ ...f, sort: nextSort }); setF(blank) }}>
+          Add it
+        </button>
+        <button className="secondary" disabled={busy}
+                onClick={() => { setF(blank); setOpen(false) }}>Done</button>
+      </div>
+    </div>
+  )
+}
+
+export function NewEquipment({ busy, vessel, today, onSave, onCancel }) {
+  const [f, setF] = useState({
+    name: '', kind: 'loler_accessory', identifier: '', swl: '', location: '',
+    inServiceOn: today, schemeMonths: '', schemeBy: '', notes: '',
+  })
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
+  const k = kindOf(f.kind)
+
+  return (
+    <div className="card" style={{ borderLeft: '3px solid var(--hull)' }}>
+      <h3 style={{ marginTop: 0 }}>Add an item</h3>
+      <div style={FORM_GRID}>
+        <Row label="What it is">
+          <input value={f.name} onChange={set('name')} placeholder="Gilson block" />
+        </Row>
+        {/* THE KIND SETS THE INTERVAL, and it is the thing most often got wrong:
+            a sling is six months, the same as anything that lifts a person, and
+            it is the crane at twelve that is the exception. */}
+        <Row label="Kind">
+          <select value={f.kind} onChange={set('kind')}>
+            {KINDS.map((x) => <option key={x.key} value={x.key}>{x.label}</option>)}
+          </select>
+        </Row>
+        <Row label="Serial or mark">
+          <input value={f.identifier} onChange={set('identifier')} />
+        </Row>
+        <Row label="Safe working load">
+          <input value={f.swl} onChange={set('swl')} placeholder="2 t" />
+        </Row>
+        <Row label="Where it is">
+          <input value={f.location} onChange={set('location')} />
+        </Row>
+        <Row label="In service from">
+          <input type="date" value={f.inServiceOn} onChange={set('inServiceOn')} />
+        </Row>
+        <Row label="Scheme months">
+          <input type="number" min="1" value={f.schemeMonths} onChange={set('schemeMonths')}
+                 placeholder="only if a scheme is drawn up" />
+        </Row>
+        <Row label="Scheme drawn by">
+          <input value={f.schemeBy} onChange={set('schemeBy')} />
+        </Row>
+        <Row label="Notes" wide>
+          <input value={f.notes} onChange={set('notes')} />
+        </Row>
+      </div>
+      <p className="muted" style={{ fontSize: '0.78rem', margin: '0.6rem 0 0' }}>
+        {k && k.months
+          ? 'Examined every ' + k.months + ' months — ' + k.reg + ' — unless the scheme above says otherwise.'
+          : 'PUWER sets no interval at all. Nothing will chase this item unless you give it scheme months.'}
+      </p>
+      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.7rem' }}>
+        <button disabled={!f.name.trim() || busy}
+                onClick={() => onSave({ ...f, vesselId: vessel?.id || null })}>Save it</button>
+        <button className="secondary" disabled={busy} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  )
+}
+
 
 function Fig({ label, value }) {
   return (

@@ -23,7 +23,11 @@ await esbuild.build({
   jsx: 'automatic', external: ['react', 'react-dom', 'react-dom/*', 'react/*'],
   logLevel: 'warning',
 })
-const { RiskBody, LiftingBody } = await import(pathToFileURL(bundle).href)
+/* The forms only render when a handler is given — that IS the wiring, and it
+   is what was missing. */
+const NOOP = () => {}
+const { RiskBody, LiftingBody, NewAssessment, HazardForm, NewEquipment } =
+  await import(pathToFileURL(bundle).href)
 const { renderToStaticMarkup } = await import('react-dom/server')
 const React = await import('react')
 const { KINDS } = await import(pathToFileURL('src/lib/certification/safety.js').href)
@@ -91,13 +95,19 @@ const examinations = [
 
 const panes = [
   ['Risk assessments — one overdue, one undated, one never briefed',
-   React.createElement(RiskBody, { vessel, assessments, hazards, briefings, canWrite: true, today, selected: 'a1' })],
+   React.createElement(RiskBody, { vessel, assessments, hazards, briefings, canWrite: true, today, selected: 'a1', onSave: NOOP, onSaveHazard: NOOP, onRemoveHazard: NOOP })],
   ['Risk assessments — nothing yet',
-   React.createElement(RiskBody, { vessel, assessments: [], hazards: [], briefings: [], canWrite: true, today })],
+   React.createElement(RiskBody, { vessel, assessments: [], hazards: [], briefings: [], canWrite: true, today, onSave: NOOP, onSaveHazard: NOOP })],
   ['Lifting equipment — unsafe, overdue, and a report the statute disagrees with',
-   React.createElement(LiftingBody, { vessel, equipment, examinations, canWrite: true, today, selected: 'q2' })],
+   React.createElement(LiftingBody, { vessel, equipment, examinations, canWrite: true, today, selected: 'q2', onSaveEquipment: NOOP })],
   ['Lifting equipment — nothing on the register',
-   React.createElement(LiftingBody, { vessel, equipment: [], examinations: [], canWrite: true, today })],
+   React.createElement(LiftingBody, { vessel, equipment: [], examinations: [], canWrite: true, today, onSaveEquipment: NOOP })],
+  ['The forms, open — where an undefined identifier would hide',
+   React.createElement('div', null,
+     React.createElement(NewAssessment, { today, reviewMonths: 12, vessel, onSave: NOOP, onCancel: NOOP }),
+     React.createElement(NewEquipment, { today, vessel, onSave: NOOP, onCancel: NOOP }),
+     React.createElement('div', { className: 'card' },
+       React.createElement(HazardForm, { nextSort: 0, onSave: NOOP })))],
 ]
 
 const html = panes.map(([title, el]) =>

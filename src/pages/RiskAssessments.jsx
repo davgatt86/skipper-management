@@ -8,6 +8,7 @@ import { RiskBody } from './certification/SafetyBody'
 import { DEFAULT_REVIEW_MONTHS } from '../lib/certification/safety'
 import {
   listAssessments, listHazards, listBriefings, reviewAssessment, recordBriefing,
+  saveAssessment, saveHazard, removeHazard,
 } from '../lib/certification/safetyDb'
 
 /* RISK ASSESSMENTS — reg 7, MS&FV (Health and Safety at Work) Regs 1997.
@@ -61,6 +62,14 @@ export default function RiskAssessments() {
         vessel={current} assessments={assessments} hazards={hazards} briefings={briefings}
         canWrite={canWrite} busy={busy} selected={selected} reviewMonths={DEFAULT_REVIEW_MONTHS}
         onOpen={setSelected}
+        /* THESE THREE EXISTED IN safetyDb.js FROM THE START and were never
+           passed, so the page could read an assessment and never write one. */
+        onSave={(a) => run(
+          () => saveAssessment({ ...a, vesselId: current?.id || null }),
+          'Assessment saved. Open it and write the hazards in — an assessment with '
+          + 'no hazards on it is a heading, not an assessment.')}
+        onSaveHazard={(id, h) => run(() => saveHazard(id, h))}
+        onRemoveHazard={(id) => run(() => removeHazard(id), 'Hazard removed.')}
         onReview={(a, when) => run(
           () => reviewAssessment(a, hazards, { ...when, assessedBy: appUser?.display_name || appUser?.email }),
           'Reviewed. A new assessment carries the hazards over; the old one stays exactly as it was, '

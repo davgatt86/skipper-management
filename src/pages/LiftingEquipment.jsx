@@ -5,7 +5,9 @@ import { useAuth } from '../AuthContext'
 import { useCurrentVessel } from '../VesselContext'
 import { keepsLogs } from '../lib/roles'
 import { LiftingBody } from './certification/SafetyBody'
-import { listEquipment, listExaminations, recordExamination } from '../lib/certification/safetyDb'
+import {
+  listEquipment, listExaminations, recordExamination, saveEquipment,
+} from '../lib/certification/safetyDb'
 
 /* LIFTING AND WORK EQUIPMENT — LOLER (SI 2006/2184) and PUWER (SI 2006/2183).
  *
@@ -55,6 +57,12 @@ export default function LiftingEquipment() {
       <LiftingBody
         vessel={current} equipment={equipment} examinations={examinations}
         canWrite={canWrite} busy={busy} selected={selected} onOpen={setSelected}
+        /* `saveEquipment` was exported and never called: the register could be
+           read and nothing could be put on it. */
+        onSaveEquipment={(x) => run(
+          () => saveEquipment({ ...x, vesselId: current?.id || null }),
+          'On the register. Record its first thorough examination when it is done '
+          + '— nothing is in date until one is.')}
         onExamine={(e) => {
           const who = window.prompt('Who made the examination? The competent person, by name.')
           if (!who) return
