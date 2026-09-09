@@ -139,6 +139,12 @@ function PublicOnly({ children }) {
 export default function App() {
   return (
     <AuthProvider>
+      {/* VesselProvider was imported here and never put in the tree, so every
+          useCurrentVessel() in fifteen pages read the module default —
+          { current: null, vessels: [], hasVessels: false } — and the whole app
+          behaved as though the fleet had no boat. INSIDE AuthProvider, because
+          it reads appUser.fleet_id to know whose boats to fetch. */}
+      <VesselProvider>
       <Routes>
         <Route path="/login" element={
           <PublicOnly>
@@ -500,6 +506,7 @@ export default function App() {
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </VesselProvider>
     </AuthProvider>
   )
 }
