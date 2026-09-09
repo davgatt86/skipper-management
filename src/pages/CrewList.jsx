@@ -99,7 +99,46 @@ export default function CrewList() {
   }
   useEffect(() => { loadAll() }, [])
 
-  const toggle = (id) => setSel((p) => ({ ...p, [id]: { ...p[id], on: !p[id]?.on } }))
+  /* TICKING A MAN ON SETS HIS STATUS, AND UNTICKING SETS HIM ASHORE.
+   *
+   * David, Sep 2026: "if any adjustments are done, it should auto update crew
+   * status. as if a crewman is on crew list, obviosuly hes on the boat. and if
+   * hes not on the crew list, he must be on leave."
+   *
+   * This REVERSES the one-off framing this page shipped with, deliberately.
+   * The old design let a voyage differ from Crew status and warned about it,
+   * which meant the two could drift and the man had to go and fix the other
+   * page by hand — so the crew list, the one document a border officer reads,
+   * was the thing most likely to disagree with the app.
+   *
+   * SAFE BECAUSE THE PICKER ONLY EVER EDITS THE DRAFT FOR A NEW VOYAGE. Saved
+   * lists are history and are not editable here, so this can never set today's
+   * crew from a trip in March. And `crew` is loaded with `archived_at is null`
+   * and `status <> former`, so a man who has left cannot be brought back by a
+   * tick.
+   *
+   * Optimistic, and PUT BACK on failure: the tick and the chip are the same
+   * fact, so they must never disagree — a tick that stuck while the write
+   * failed would be the page lying about what the database holds.
+   */
+  const [statusBusy, setStatusBusy] = useState({})
+  async function toggle(id) {
+    const next = !sel[id]?.on
+    const before = crew.find((c) => c.id === id)?.status
+    const status = next ? 'on_boat' : 'on_leave'
+
+    setSel((p) => ({ ...p, [id]: { ...p[id], on: next } }))
+    setCrew((p) => p.map((c) => (c.id === id ? { ...c, status } : c)))
+    setStatusBusy((p) => ({ ...p, [id]: true }))
+
+    const { error } = await supabase.from('crew').update({ status }).eq('id', id)
+    setStatusBusy((p) => ({ ...p, [id]: false }))
+    if (error) {
+      setSel((p) => ({ ...p, [id]: { ...p[id], on: !next } }))
+      setCrew((p) => p.map((c) => (c.id === id ? { ...c, status: before } : c)))
+      setError(error.message)
+    }
+  }
   const setRank = (id, rank) => setSel((p) => ({ ...p, [id]: { ...p[id], rank } }))
   const setV = (k, val) => setVoyage((p) => ({ ...p, [k]: val }))
 
@@ -113,10 +152,8 @@ export default function CrewList() {
     expired: isExpired(c.passport_expiry),
   })).filter((g) => g.missing.length || g.expired), [aboard])
 
-  // Status disagreements are worth surfacing but are NOT fixed here — status
-  // is set in section 1 and nowhere else.
-  const offBoatIncluded = crew.filter((c) => sel[c.id]?.on && c.status !== 'on_boat')
-  const onBoatExcluded = crew.filter((c) => !sel[c.id]?.on && c.status === 'on_boat')
+  // The two lists that used to measure crew-list-against-status drift are gone:
+  // the tick writes the status, so there is nothing left that can disagree.
 
   function addManual() {
     if (!draftPerson.full_name.trim()) return
@@ -258,7 +295,6 @@ export default function CrewList() {
                               <td style={th}>{manual.length + i + 1}</td>
                               <td style={{ ...th, fontWeight: 600 }}>
                                 {c.full_name}
-                                {c.status !== 'on_boat' && <span style={{ marginLeft: 6, fontSize: '0.7rem', color: 'var(--brass)', fontWeight: 700 }}>NOT MARKED ON BOAT</span>}
                               </td>
                               <td style={th}>
                                 <select value={sel[c.id]?.rank || 'Deckhand'} onChange={(e) => setRank(c.id, e.target.value)} style={{ width: '100%', padding: '0.25rem 0.4rem', fontSize: '0.85rem' }}>
@@ -295,25 +331,38 @@ export default function CrewList() {
                   </button>
                 </div>
 
-                {(offBoatIncluded.length > 0 || onBoatExcluded.length > 0) && (
-                  <p className="muted" style={{ fontSize: '0.8rem', marginBottom: 0, marginTop: '0.6rem' }}>
-                    This voyage differs from Crew status. That is fine for a one-off, but if it is the real
-                    picture, change it on <Link to="/crew">Crew status</Link> so everything else agrees.
-                  </p>
-                )}
+                {/* THE "THIS VOYAGE DIFFERS FROM CREW STATUS" WARNING IS GONE, because
+                    it can no longer be true: the tick IS the status now. A warning that
+                    cannot fire is worse than none — it reads as a check being made. */}
 
                 {adjusting && (
                   <div style={{ marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid var(--border)' }}>
                     <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
-                      Only for a one-off — a man who sailed this trip but is not normally aboard. Status itself is set on Crew status.
+                      Ticking a man puts him on this voyage <b>and marks him on board</b> on
+                      Crew status. Unticking puts him on leave. The two are the same fact, so
+                      they are kept as one.
                     </p>
-                    {crew.map((c) => (
-                      <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.9rem' }}>
-                        <input type="checkbox" checked={!!sel[c.id]?.on} onChange={() => toggle(c.id)} />
-                        <span style={{ fontWeight: 600 }}>{c.full_name}</span>
-                        {c.status === 'on_boat' && <span style={{ fontSize: '0.7rem', color: 'var(--kelp)', fontWeight: 700 }}>● ON BOAT</span>}
-                      </label>
-                    ))}
+                    <div className="pickgrid">
+                      {crew.map((c) => {
+                        const on = !!sel[c.id]?.on
+                        return (
+                          <label key={c.id}
+                                 className={'pickrow' + (on ? ' on' : '') + (statusBusy[c.id] ? ' busy' : '')}>
+                            <input type="checkbox" checked={on} onChange={() => toggle(c.id)} />
+                            <span className="nm" title={c.full_name}>{c.full_name}</span>
+                            {/* THE STATE IS SAID FOR EVERY MAN, not only the ones aboard.
+                                A chip on some rows and nothing on others is what made the
+                                column ragged, and "no chip" is not a state anybody can read. */}
+                            <span className={'st ' + (c.status === 'on_boat' ? 'aboard' : 'ashore')}>
+                              {c.status === 'on_boat' ? 'on board' : 'on leave'}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <p className="pickcount">
+                      {aboard.length} on board · {crew.length - aboard.length} on leave
+                    </p>
                   </div>
                 )}
 

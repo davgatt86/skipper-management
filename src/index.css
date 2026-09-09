@@ -893,3 +893,39 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 .dlist .di .sub3 { color: var(--mute); font-size: 0.82rem; }
 .card.accent-brass { border-left: 3px solid var(--brass); }
 .card.accent-hull { border-left: 3px solid var(--hull); }
+
+/* ---- the crew picker on the crew list ----
+   David, Sep 2026: "the box that appears to adjust crew is very poor. names
+   appear on the right of the page but theyre not aligned because if someone is
+   on boat, their name is further left. also the select boxes arent aligned due
+   to names being differnet lengths."
+
+   It was one flex row per man — checkbox, name, then the ON BOAT chip butted
+   straight up against the name — so with nineteen names of different lengths
+   nothing lined up with anything. Three fixed columns instead: the box, the
+   name, and the state right-aligned in a column of its own. Nineteen men also
+   made a very long single column, so the rows flow into two or three. */
+.pickgrid {
+  display: grid; gap: 2px 18px; margin-top: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+.pickrow {
+  display: grid; grid-template-columns: 1.1rem 1fr auto;
+  align-items: center; gap: 0.55rem;
+  padding: 5px 6px; border-radius: 3px; cursor: pointer; font-size: 0.9rem;
+}
+.pickrow:hover { background: var(--surface-2); }
+.pickrow input { width: 1.1rem; height: 1.1rem; margin: 0; }
+.pickrow .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pickrow.on .nm { font-weight: 600; }
+.pickrow .st {
+  font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.08em;
+  text-transform: uppercase; white-space: nowrap; text-align: right;
+}
+.pickrow .st.aboard { color: var(--kelp); }
+.pickrow .st.ashore { color: var(--mute); }
+.pickrow.busy { opacity: 0.45; }
+.pickcount {
+  font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--mute); margin: 0.7rem 0 0;
+}

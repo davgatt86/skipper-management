@@ -3600,6 +3600,67 @@ runtime, and a guard that cries wolf is one nobody keeps.
 OneOffs, `Legend` in Sales, `Trash2` in two Square Up files. Dead weight, no
 behaviour, nobody's bug. Worth a pass with ESLint rather than by hand.
 
+### THE TICK IS THE STATUS — the crew list stopped being a separate opinion (Sep 2026)
+
+David: *"when adjusting for the trip, it doesn't change the crew status too ...
+if any adjustments are done, it should auto update crew status. as if a crewman
+is on crew list, obviosuly hes on the boat. and if hes not on the crew list, he
+must be on leave."*
+
+**THIS REVERSES WHAT THIS PAGE SHIPPED WITH, and the reversal is right.** The
+old design generated the list from status, let a voyage differ from it, and
+warned when it did — *"fine for a one-off ... change it on Crew status so
+everything else agrees"*. So the two could drift, and fixing the drift was a
+second job on a second page that nobody was going to do. **The crew list is the
+one document a border officer reads**, and it was the thing most likely to
+disagree with the app.
+
+Ticking a man now sets `on_boat`; unticking sets `on_leave`.
+
+**SAFE BECAUSE THE PICKER ONLY EVER EDITS THE DRAFT FOR A NEW VOYAGE.** Saved
+lists are history and are not editable here, so this can never set today's crew
+off a trip in March. And `crew` is loaded `archived_at is null` and
+`status <> 'former'`, so a man who has left cannot be brought back by a tick.
+
+**Optimistic, and PUT BACK on failure.** The tick and the chip beside it are the
+same fact, so they must never disagree — a tick that stuck while the write
+failed would be the page lying about what the database holds.
+
+**WHAT WENT WITH IT.** The drift warning and the per-row *NOT MARKED ON BOAT*
+badge are both deleted, because neither can fire any more. **A check that cannot
+fire is worse than no check** — it reads as something being watched.
+
+**And a genuine one-off is no longer expressible**, deliberately: a man on the
+voyage is on the boat. Somebody who sailed once and is not crew at all still
+goes in through *Add someone not in the crew*, which writes no status because he
+has no crew record to carry one.
+
+#### The picker itself was the other half
+
+David: *"the box that appears to adjust crew is very poor. names appear on the
+right of the page but theyre not aligned because if someone is on boat, their
+name is further left. also the select boxes arent aligned due to names being
+differnet lengths."*
+
+It was **one flex row per man** — checkbox, name, then an `● ON BOAT` chip butted
+straight against the name — so with nineteen names of different lengths nothing
+lined up with anything, and the chip appeared on some rows and not others.
+
+Three fixed columns now (`1.1rem 1fr auto`): the box, the name, and the state
+right-aligned in a column of its own. **Every man says his state**, on board or
+on leave — "no chip" is not a state anybody can read, and it was half of why the
+column looked ragged. Nineteen men also made a very long single column, so the
+rows flow into two or three (`auto-fill, minmax(15rem, 1fr)`) and collapse to
+one when narrow. A long name is clipped with an ellipsis rather than breaking
+the grid.
+
+`scripts/crew-picker-preview.mjs` renders it with the boat's real nineteen and
+asserts the three columns, the right-alignment, a state on every row and the
+clipping. **It checks the CSS and the row shape, not the wiring** — the page is
+behind a login and drags the supabase client in behind it, so it cannot be
+server-rendered the way `SheetBody` and `DashboardBody` are. Say that rather
+than letting a green preview read as proof the page works.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
