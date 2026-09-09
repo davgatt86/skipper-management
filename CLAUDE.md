@@ -3386,6 +3386,72 @@ real sections and floats. The fixture it replaced had six tidy lines and **no
 `section` column**, so it could not have exercised the zone matching, the Blue
 Ling trap, the cod split or the non-quota lines: every place the bugs were.
 `test-quota-board.mjs` — 42 checks.
+### THE LAST TABLE IN `public` WITH RLS OFF — `crew_ranks` (Sep 2026)
+
+Supabase's security advisor, 06-09-2026. One table, and this file had recorded
+it as deliberate for a month: *"`crew_ranks` has RLS off entirely, so no policy
+can cover it. Deliberate."*
+
+**HALF OF THAT WAS RIGHT.** The global READ is deliberate — ten rank codes, no
+`fleet_id`, nothing tenant-specific, read by Crew, Crew Details and Crew List so
+a man's rank comes off a pick-list instead of a text box. That is the whole
+point of the table: Aegir keys off a typed name and carries "Captain" and
+"Master" for one rank.
+
+**THE WRITE WAS NEVER DELIBERATE, AND NOBODY GRANTED IT.** Supabase's default
+ACL hands `arwdDxtm` to `authenticated` on every new table in `public`, so the
+table shipped with INSERT, UPDATE and DELETE open, no RLS, and no policy to stop
+them. **Every signed-in user of every fleet could write it** — the demo login, a
+cook, a deckhand, another business's skipper.
+
+**THE ADVISOR'S WORDING OVERSTATES IT AND THE REAL HOLE IS STILL REAL.** It says
+*"anyone with your project URL"*; measured, `anon` holds no privilege on the
+table at all, so the publishable key alone gets nothing. Read the advisor, then
+MEASURE — the generic wording assumes default grants this project does not have.
+
+**UPDATE WAS THE DANGEROUS HALF, NOT DELETE.** `crew.rank_code` references the
+table, so the seven codes in use are held by the foreign key — but **bosun,
+other and trainee are unused and could simply be deleted**, and nothing stopped
+any signed-in user relabelling `master`. There is one row per rank for the whole
+database, so one edit changes every fleet's pick-list at once, and that label
+prints on the **IMO FAL 5 crew list** — a border document.
+
+Brought onto the shape `orb_items` and `olb_items` already use: RLS on, one
+SELECT policy, writes revoked at the grant so it takes two mistakes rather than
+one. `supabase/crew_ranks_rls.sql`. Nothing in the app writes it — three
+`.select()` calls and no insert, update or delete anywhere in `src/` or
+`netlify/`.
+
+#### AND ENABLING RLS WOULD HAVE LOCKED THE MATE OUT — the officer trap, third time
+
+**Both deny loops select `where c.relrowsecurity`.** `crew_ranks` sat outside
+them ONLY because its RLS was off. Turn RLS on and the loop takes it, a
+RESTRICTIVE deny ANDs, and the next run of `officer_role.sql` silently takes the
+rank pick-list off all three crew pages — with `CrewList.jsx` falling back to its
+hard-coded free-text list, which is the exact drift the lookup exists to
+prevent. Nothing would have errored.
+
+So the table is now in the officer allow-list in **both** places that carry it —
+the deny loop and the 2b cleanup — and deliberately **not** in `officer_works`
+(which grants ALL) nor section 3's read-only loop, because the writes are
+already revoked at the grant. Same treatment as the ORB and OLB item lookups.
+
+**The cook is denied it and that is right**: his only page is /stores and he
+never reads a rank. The note in `cook_role.sql` saying no policy there could
+cover the table is corrected.
+
+**Probed rather than inspected**, as five separate facts: a signed-in skipper
+still reads 10 rows; UPDATE, DELETE and INSERT are each refused *permission
+denied*; `anon` is refused outright; and an officer still reads his 20 crew and
+his 10 ranks while being refused the write. Contents unchanged, and `public` now
+has **no table with RLS off**.
+
+**The role files are NOT re-run.** They do not need to be — the database has no
+deny policy on the table today, so officer and cook both read it, and the
+allow-list edit is what stops the next run breaking it. Re-running rewrites
+policies across ~74 tables on a live multi-tenant database and is a deliberate
+act, not a tidy-up.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
@@ -5226,8 +5292,8 @@ table added afterwards, which is the exact shape of the bug it fixes. **Re-run
 role rather than null, so **no existing role's access changed**.
 
 Two things to know:
-- **`crew_ranks` has RLS off entirely**, so no policy can cover it. It is a
-  global lookup of rank codes and is readable by anyone signed in. Deliberate.
+- **`crew_ranks` HAD RLS off entirely** — corrected Sep 2026, see below. The
+  global read is still deliberate; the writes were not, and are revoked.
 - **`vessel_details` was skipper-only for reading**, and `EngineLogs.jsx` reads
   it — an engineer would have got a blank page. The new read is scoped to
   engineers rather than opened to all fleet members, so viewers are unaffected.

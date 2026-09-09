@@ -159,9 +159,12 @@ create policy cook_no_storage on storage.objects as restrictive for all
 -- even though the man himself is on the crew list. manage-users.js validates
 -- this in words before the insert.
 --
--- `crew_ranks` has RLS disabled entirely, so no policy here can cover it. It
--- is a global lookup of rank codes readable by anyone signed in. Deliberate,
--- and unchanged.
+-- `crew_ranks` HAD RLS disabled entirely, which is why this file could not
+-- cover it. `crew_ranks_rls.sql` (Sep 2026) turned it on after the Supabase
+-- advisor flagged it as the last open table in `public`, so section 2's loop
+-- now picks it up and the cook is denied it like anything else outside his
+-- list. That is right: his only page is /stores and he never reads a rank.
+-- The officer IS in the allow-list for it — he keeps the crew paperwork.
 --
 -- The gear log (Aug 2026) is denied to the cook automatically: it is not in
 -- his allow-list, so section 2's loop picks all four tables up on the next run.

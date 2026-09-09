@@ -80,6 +80,13 @@ declare
     -- what he may do. They are listed HERE only so this deny loop leaves them
     -- alone -- without that, re-running this file shuts him out of them.
     'oil_record_book_pages', 'oil_record_book_entries', 'orb_items',
+    -- A shipped lookup, like orb_items and olb_items: read-only for everyone,
+    -- writes revoked at the grant in crew_ranks_rls.sql. Listed HERE so the
+    -- deny loop leaves it alone -- without it, enabling RLS on that table (Sep
+    -- 2026) would silently take the rank pick-list off Crew, Crew Details and
+    -- Crew List, and CrewList.jsx would fall back to free text, which is the
+    -- exact drift the lookup exists to prevent.
+    'crew_ranks',
     'official_log_books', 'official_log_book_entries', 'olb_items',
     'risk_assessments', 'risk_assessment_hazards', 'risk_assessment_briefings',
     'radio_log_entries', 'radio_log_days',
@@ -122,7 +129,7 @@ declare
     'maintenance_tasks','maintenance_events','engine_limits','parts','parts_movements',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
-    'oil_record_book_pages','oil_record_book_entries','orb_items',
+    'oil_record_book_pages','oil_record_book_entries','orb_items','crew_ranks',
     'official_log_books','official_log_book_entries','olb_items',
     'risk_assessments','risk_assessment_hazards','risk_assessment_briefings',
     'radio_log_entries','radio_log_days',
