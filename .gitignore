@@ -176,3 +176,7 @@ olb-preview.html
 safety-preview.html
 radio-preview.html
 crew-picker-preview.html
+_sight/
+ra-import.json
+ra-compact.json
+ra-part*.json

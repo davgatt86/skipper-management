@@ -3729,6 +3729,100 @@ file. David showed Aegir's, which exports one surveyor-ready PDF over a date
 range. Not started, and not to be started without him saying the earlier
 decision has changed.
 
+### THE TWELVE ASSESSMENTS ARE IN — 80 hazards, read off their own PDFs (Sep 2026)
+
+David: *"import 12 risk assesments, leave unrated and i can do that in the app."*
+
+    12 assessments · 80 hazards · 80 with controls · 80 with the original
+    worded level · 0 rated
+
+**READ, NOT RETYPED.** They export from Aegir as real text PDFs — 16 fonts, no
+images — so `src/lib/certification/importRa.js` reads them.
+
+**THE COLUMNS ARE POSITIONAL, NOT DELIMITED**, and that is the whole parser.
+Grouped by line the columns interleave into nonsense, because a wrapped cell
+puts the tail of column two beside the tail of column four:
+
+    9 Gear coming stuck on sea bed Falling into the water leading to lifejackets
+    18/07/2023 hypothermia or drowning trained on man overboard injury
+
+Each item is placed by its x instead, the same way the P&J sales note is read.
+The six bands were **measured off the real documents** — 45, 125, 283, 456, 621,
+734 on an 842pt landscape page — not guessed.
+
+**AEGIR'S "RISK ID" REPEATS.** Nine hazards on the Engine Room sheet share id 6;
+it is a category number, not a key. It opens a hazard and identifies nothing.
+
+**TWO COLUMNS THE APP DID NOT HAVE.** Aegir carries *Risk* and *Risk Outcomes*,
+and between them they are the half of the document that says why the hazard
+matters. Dropping them would have thrown away most of the text.
+`risk_assessment_hazards.consequence` holds them folded into one.
+
+**AND HIS WORDED LEVEL IS KEPT AS TEXT AND NEVER CONVERTED.** `source_level`
+carries the Low/Medium/High off the original. Turning that into a likelihood and
+a severity would be **an invention wearing his judgement's clothes**, and
+`rating()` would then report it as though somebody had scored it. He asked for
+them unrated; this is what he rates them FROM. The page shows it only while the
+hazard is unrated — once it has a likelihood and a severity, two levels side by
+side would be two answers to one question.
+
+**NO REVIEW DATE IS INVENTED EITHER.** Reg 7 gives no calendar, the boat's cycle
+is 12 months, and the newest of these was touched in Dec 2024 — so a computed
+date would be either long past or made up. They import with none, and
+`assessmentGaps` reports *"no review date set, so nothing is chasing it"*, which
+is exactly true and is the prompt to set one.
+
+**The assessment's date is the OLDEST hazard on it.** The sheet carries a date
+per hazard and none of its own; the newest would claim the whole thing was
+written the day one line was last touched.
+
+**A SECOND IMPORT OF THE SAME FILE WRITES NOTHING.**
+`risk_assessments.source_file` records where a row came from, and the insert
+skips a file already on record — eighty duplicate hazards on a legal record is
+not a thing to leave to whoever remembers.
+
+**Reading and writing are two scripts on purpose.** `scripts/import-ra.mjs`
+reads and reports; the write is separate and refuses to run without being asked
+by name. Same discipline as a settling sheet being filed and never saved
+straight off the wire. `.env.local` holds only the publishable key, so the
+write went through the same SQL channel as every other migration in this file.
+
+Hazards can now be **edited in place** — that is what makes the import usable:
+the eighty came in unrated and the row carries *rate it* until it has both
+factors. `test-import-ra.mjs` — 20 checks.
+
+#### The Oil Record Book and the fuel/oil log are NOT the same thing
+
+David asked. They overlap and are different records, and the difference matters:
+
+- **The fuel & oil log** (`vessel_fuel_log`) is the boat's own working record —
+  litres, grade, supplier, location, four kinds: fuel and lube oil aboard, dirty
+  oil and oil waste ashore. No prescribed form. It is where the fuel loop and
+  the derived price per litre live.
+- **The Oil Record Book Part I** (`oil_record_book_*`) is statutory: reg 20 of
+  the MS (Prevention of Oil Pollution) Regs 2019, required because Audacious is
+  **498 GT**. Prescribed codes A–I and 41 numbered items out of MARPOL Annex I
+  Appendix III, the officer signs each operation and the master signs each page,
+  nothing is ever edited or deleted, kept three years after the last entry.
+
+**The same events appear in both.** A bunkering is fuel log *fuel* and ORB
+**code H item 26** (26.1 place, 26.2 start and stop, 26.3 fuel type and quantity,
+26.4 lubricating oil); dirty oil and waste ashore are fuel log *dirty_oil* /
+*waste* and ORB **code C**.
+
+**Nothing links them today**, and that is a real gap rather than a design: a
+bunkering entered in the fuel log does not raise the code H entry the regulation
+wants, so the two records can disagree with no warning. Deriving one from the
+other — or at least offering it — is the obvious next piece of work.
+
+#### The inspection pack
+
+David: *"let's keep the inspection pack in mind. we can build towards it."* It
+was on the explicitly-not-wanted list; it is now a direction, not a decision.
+Nothing built. What it would need is already accumulating: crew and vessel
+certificates with their files, maintenance and safety task history, drills,
+risk assessments and hazards, LOLER and PUWER examinations, and a report period.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

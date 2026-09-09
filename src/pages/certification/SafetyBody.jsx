@@ -149,7 +149,8 @@ function Assessment({ a, hazards, briefings, today, open, canWrite, busy, review
             : mine.map((h) => (
                 <Hazard key={h.id} h={h} today={today}
                         canWrite={canWrite && st.state !== 'superseded' && !a.withdrawn_on}
-                        busy={busy} onRemove={onRemoveHazard} />
+                        busy={busy} onRemove={onRemoveHazard}
+                        onSave={(x) => onSaveHazard(a.id, x)} />
               ))}
 
           {/* AN ASSESSMENT WITH NO HAZARDS IN IT IS NOT AN ASSESSMENT, so the
@@ -181,7 +182,22 @@ function Assessment({ a, hazards, briefings, today, open, canWrite, busy, review
   )
 }
 
-function Hazard({ h, today, canWrite, busy, onRemove }) {
+function Hazard({ h, today, canWrite, busy, onRemove, onSave }) {
+  const [editing, setEditing] = useState(false)
+
+  /* AN IMPORTED HAZARD IS EDITED IN PLACE, not added again. The eighty read
+     off the vessel safety folder came in deliberately unrated, and this is
+     where they get their likelihood and severity — so the form has to open
+     with what is already there rather than blank. */
+  if (editing) {
+    return (
+      <div style={{ borderTop: '1px solid var(--line)', padding: '0.4rem 0 0.45rem' }}>
+        <HazardForm busy={busy} initial={h} startOpen
+                    onCancel={() => setEditing(false)}
+                    onSave={async (x) => { await onSave({ ...x, id: h.id }); setEditing(false) }} />
+      </div>
+    )
+  }
   const r = rating(h)
   const openAction = String(h.further_action || '').trim() && !h.done_on
   const lateAction = openAction && h.action_due && String(h.action_due).slice(0, 10) < today
@@ -193,6 +209,13 @@ function Hazard({ h, today, canWrite, busy, onRemove }) {
             factors cannot drift apart — the same reason the parts ledger has no
             on_hand column. No rating where either factor is missing: a rating
             of nothing is not a rating of nought. */}
+        {canWrite && onSave && (
+          <button className="secondary" disabled={busy}
+                  style={{ fontSize: '0.7rem', padding: '0 0.35rem' }}
+                  onClick={() => setEditing(true)}>
+            {h.likelihood == null || h.severity == null ? 'rate it' : 'edit'}
+          </button>
+        )}
         {canWrite && onRemove && (
           <button className="secondary" disabled={busy}
                   style={{ fontSize: '0.7rem', padding: '0 0.35rem' }}
@@ -208,6 +231,20 @@ function Hazard({ h, today, canWrite, busy, onRemove }) {
           : <span className="muted" style={{ fontSize: '0.76rem' }}>not rated</span>}
       </div>
       {h.who_at_risk && <p className="muted" style={{ margin: 0, fontSize: '0.76rem' }}>Who: {h.who_at_risk}</p>}
+      {/* WHAT HAPPENS IF IT IS REALISED. The imported assessments carry this in
+          their own words and the app had nowhere to put it — half the document
+          would have been dropped on the way in. */}
+      {h.consequence && (
+        <p className="muted" style={{ margin: 0, fontSize: '0.76rem' }}>What happens: {h.consequence}</p>
+      )}
+      {/* HIS OWN WORDED LEVEL, shown only while the hazard is unrated — once it
+          carries a likelihood and a severity the derived rating is the answer,
+          and two levels side by side would be two answers to one question. */}
+      {h.source_level && (h.likelihood == null || h.severity == null) && (
+        <p className="muted" style={{ margin: 0, fontSize: '0.74rem' }}>
+          On the original: <b>{h.source_level}</b> — rate it to replace this.
+        </p>
+      )}
       {h.controls && <p style={{ margin: 0, fontSize: '0.78rem' }}>{h.controls}</p>}
       {openAction && (
         <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem',
@@ -496,13 +533,22 @@ export function NewAssessment({ today, reviewMonths, busy, vessel, onSave, onCan
   )
 }
 
-export function HazardForm({ busy, nextSort, onSave }) {
+export function HazardForm({ busy, nextSort, onSave, initial, startOpen, onCancel }) {
   const blank = {
     hazard: '', whoAtRisk: '', controls: '', likelihood: '', severity: '',
     furtherAction: '', actionBy: '', actionDue: '',
   }
-  const [f, setF] = useState(blank)
-  const [open, setOpen] = useState(false)
+  /* `?? ''` and not `|| ''`: a likelihood of 0 is not a thing, but the habit
+     of reaching for `||` is how a real 0 becomes blank elsewhere. */
+  const from = (h) => ({
+    hazard: h.hazard ?? '', whoAtRisk: h.who_at_risk ?? '', controls: h.controls ?? '',
+    consequence: h.consequence ?? '', sourceLevel: h.source_level ?? '',
+    likelihood: h.likelihood ?? '', severity: h.severity ?? '',
+    furtherAction: h.further_action ?? '', actionBy: h.action_by ?? '',
+    actionDue: h.action_due ? String(h.action_due).slice(0, 10) : '',
+  })
+  const [f, setF] = useState(initial ? from(initial) : blank)
+  const [open, setOpen] = useState(!!startOpen)
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }))
 
   if (!open) {
@@ -549,11 +595,16 @@ export function HazardForm({ busy, nextSort, onSave }) {
       </div>
       <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.7rem' }}>
         <button disabled={!f.hazard.trim() || busy}
-                onClick={async () => { await onSave({ ...f, sort: nextSort }); setF(blank) }}>
-          Add it
+                onClick={async () => {
+                  await onSave(initial ? f : { ...f, sort: nextSort })
+                  if (!initial) setF(blank)
+                }}>
+          {initial ? 'Save it' : 'Add it'}
         </button>
         <button className="secondary" disabled={busy}
-                onClick={() => { setF(blank); setOpen(false) }}>Done</button>
+                onClick={() => { if (onCancel) { onCancel() } else { setF(blank); setOpen(false) } }}>
+          {onCancel ? 'Cancel' : 'Done'}
+        </button>
       </div>
     </div>
   )

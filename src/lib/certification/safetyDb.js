@@ -12,9 +12,11 @@
 import { supabase } from '../../supabaseClient'
 
 const RA = 'id, fleet_id, vessel_id, ref, title, area, assessed_on, assessed_by,'
-  + ' review_due, supersedes_id, withdrawn_on, withdrawn_why, notes, created_at'
+  + ' review_due, supersedes_id, withdrawn_on, withdrawn_why, notes, created_at,'
+  + ' source_file'
 const HAZ = 'id, fleet_id, assessment_id, hazard, who_at_risk, controls, likelihood,'
-  + ' severity, further_action, action_by, action_due, done_on, sort'
+  + ' severity, further_action, action_by, action_due, done_on, sort,'
+  + ' consequence, source_level'
 const BRIEF = 'id, fleet_id, assessment_id, briefed_on, crew_name, briefed_by'
 const EQ = 'id, fleet_id, vessel_id, name, kind, identifier, swl, location,'
   + ' in_service_on, out_of_service_on, scheme_months, scheme_by, notes, created_at'
@@ -57,6 +59,7 @@ export async function saveAssessment(a) {
     assessed_by: String(a.assessedBy || '').trim(),
     review_due: a.reviewDue || null,
     notes: text(a.notes),
+    source_file: text(a.sourceFile),
   }
   const q = a.id
     ? supabase.from('risk_assessments').update(row).eq('id', a.id)
@@ -117,6 +120,11 @@ export async function saveHazard(assessmentId, h) {
     controls: text(h.controls),
     likelihood: intOrNull(h.likelihood),
     severity: intOrNull(h.severity),
+    /* Aegir's two consequence columns folded into one, and its worded level
+       kept as text so an imported hazard can be rated FROM it. Never converted:
+       see risk_hazard_consequence_and_source_level.sql. */
+    consequence: text(h.consequence),
+    source_level: text(h.sourceLevel),
     further_action: text(h.furtherAction),
     action_by: text(h.actionBy),
     action_due: h.actionDue || null,

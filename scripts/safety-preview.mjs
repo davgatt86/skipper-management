@@ -59,6 +59,13 @@ const hazards = [
   /* Never rated — must say so rather than score nought. On a1 so it renders
      in the assessment that is open; the same hazard on a closed one taught me
      that a fixture can pass an assertion by never being drawn at all. */
+  /* AS AN IMPORTED HAZARD ARRIVES: the original wording and its worded level,
+     and deliberately no likelihood or severity. Eighty of these came off the
+     vessel safety folder and this is the state he rates them from. */
+  { id: 'h5', assessment_id: 'a1', hazard: 'Sea inlet valves', who_at_risk: null,
+    controls: 'visualy inspected every week. when vessel is out of the water valves cleaned and checked',
+    consequence: 'Poorly maintained sea inlet valves causing flooding leading to vessel loss, death or serious injury. Death.',
+    source_level: 'Medium', likelihood: null, severity: null, sort: 9 },
   { id: 'h4', assessment_id: 'a1', hazard: 'Chemical cleaners in the fish room', who_at_risk: 'All hands',
     controls: 'Gloves and eye protection, data sheets in the mess', sort: 2 },
   { id: 'h3', assessment_id: 'a3', hazard: 'Oil on the plates', who_at_risk: 'Engineer',
