@@ -3452,6 +3452,77 @@ allow-list edit is what stops the next run breaking it. Re-running rewrites
 policies across ~74 tables on a live multi-tenant database and is a deliberate
 act, not a tidy-up.
 
+#### THE ROLE FILES WERE RE-RUN — and the cook had 18 tables he should not have
+
+09-09-2026, both files, on David's word. The re-run was the point; what it found
+was not.
+
+**`cook_role.sql` HAD NOT BEEN RE-RUN SINCE THE CERTIFICATION WORK LANDED**, so
+its generated deny-list was eighteen tables out of date and the cook could read
+**every record book on the boat**:
+
+    the Oil Record Book, pages and entries      risk assessments, hazards, briefings
+    the Official Log Book, pages and entries    work equipment and its examinations
+    the radio log, days and entries             the annual self-certifications
+    orb_items, olb_items, crew_ranks            password_reset_requests
+                                                su_invoice_changes
+
+The officer was over-exposed on two: `password_reset_requests` and
+`su_invoice_changes`. He is denied every money table, and an invoice change is
+money.
+
+**THIS IS THE RULE IN THIS FILE NOT BEING FOLLOWED, NOT A FAULT IN THE FILES.**
+"Re-run `officer_role.sql` AND `cook_role.sql` after adding any table" is
+written down in three places; the certification work added eighteen tables and
+re-ran neither. **The generated deny-list only denies what it is run against**,
+so an un-run file is an allow-list that grows by itself.
+
+**THE DIFF WAS PREDICTED BEFORE ANYTHING RAN, and that is the technique worth
+keeping.** A snapshot of `pg_policies` plus the two allow-lists said exactly
+which tables would newly be denied and which denials would be lifted, so the
+re-run was checked against a prediction rather than inspected afterwards and
+hoped over. Predicted 18 + 2 and 0 removed; got 18 + 2 and 0 removed.
+
+**AND THE LIVE DATABASE WAS BEHIND THE FILES ON THREE POLICIES.** Eight rows
+changed body, all of them the file being AHEAD, and both differences are
+semantically identical rather than a behaviour change:
+
+- `officer_read_only_upd` on six tables gained an explicit `with check`.
+  Postgres uses the `USING` expression as the check when `WITH CHECK` is
+  omitted on an UPDATE policy, so the old form was equivalent.
+- `officer_reads_certs` and `officer_reads_vessel` moved from `is_officer()`
+  to `(select is_officer())` — the InitPlan form, evaluated once rather than
+  per row. Same semantics, and the measurement behind it is in the RLS speed
+  section.
+
+**Probed as all three roles afterwards, side by side, and the skipper column is
+the one that mattered.** Officer: crew 20, ranks 10, certs 113, engine logs 23,
+vessel certs 17, orb_items 41 — and sales, payments, settlements, quota,
+contracts, audit and su_invoice_changes all **0**. Cook: stores 17/80/2 and his
+own app_users row, and **0 on every one of the eighteen**. Skipper unchanged:
+123 landings, 198 payments, 126 quota lines, 1,513 audit rows, and writes his
+engine log.
+
+**A ZERO IS NOT ALWAYS A DENIAL, and `orb_items` is what proves it.** The ORB,
+OLB, radio log, risk assessments, work equipment and self-certifications read 0
+for the SKIPPER too — those books are built and not yet written in. The lookup
+beside them reads 41 for officer and skipper alike, which is what separates an
+empty table from a shut one. Read a 0 against another role before believing it.
+
+**`password_reset_requests` is blocked at the GRANT for every role including the
+skipper**, not by policy — the reset flow runs on the service-role key inside a
+Netlify function, which bypasses RLS. Do not "fix" that by granting it.
+
+Counts are now exact, which they were not before: **109 tables with RLS, officer
+denied 70 (109 − 39 allowed), cook denied 103 (109 − 6)**. No legacy
+`engineer_no_access` policy, no `is_engineer()`, no login on the legacy role.
+
+**AND THE SNAPSHOT TABLE WAS ITSELF THE BUG IT WAS CHECKING FOR.** The
+before/after comparison was held in `public._policy_snapshot_20260909` — a table
+in `public` with RLS off, which is precisely what the advisor had just been
+cleared of. Dropped in the same breath. A scratch table in `public` is not
+scratch.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
