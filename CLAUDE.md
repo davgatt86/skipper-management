@@ -3994,7 +3994,7 @@ than a page that nags about books it does not own.
 **BUILT.** `/pre-departure` — "Before she sails" — first in the Certification
 group, because it is the way IN to the rest of it. `PreDeparture.jsx` does the
 IO, `PreDepartureBody.jsx` the drawing, and the page **reads seven tables and
-writes none**. `scripts/predeparture-preview.mjs` renders five states.
+writes none**. `scripts/predeparture-preview.mjs` renders seven states.
 
 **AND THE FIELD NAMES WERE WRONG ON TWO OF THE SEVEN.** The first cut read
 `entry_date` off the Official Log Book and the radio log; they are
@@ -4119,6 +4119,24 @@ inspect the water.**
 
 `test-predeparture.mjs` 75 → **89**.
 
+#### SIX MIGRATIONS EXISTED ONLY IN THE SUPABASE CONSOLE
+
+Found while committing this. Every schema change of the certification run was
+applied through the MCP and **five of them were never written to `supabase/`** —
+`risk_assessments_and_lifting_equipment`, `risk_hazard_consequence_and_source_level`,
+`orb_entry_fuel_log_link`, `vessel_departures_unstamp_other_boats`,
+`logbook_settings` and `predeparture_skips`.
+
+**IT IS THE EDGE-FUNCTION FAILURE AGAIN, committed by the person who wrote the
+warning about it.** `su-parse-document` lived only in the console for months, so
+the prompts deciding how every invoice is read could not be diffed, reviewed or
+rolled back. These are RLS policies on five new tables and a backfill that moved
+1,570 rows — the same class of thing, and `predeparture_skips` is a tenant
+boundary.
+
+Recovered verbatim from `supabase_migrations.schema_migrations.statements`,
+which is the only reason nothing was lost. **A schema cannot be branched, so
+applying first is right; not writing the file afterwards is the bug.**
 #### The departure list comes off the logbook
 
 The dropdown is `quota_trips.departure_at`, which is filled by uploading the
@@ -4127,6 +4145,67 @@ Audacious that is **169 trips, every one with a departure date, back to
 28-10-2022 and most recently 20-08-2026**, so the page works today. A fleet
 that has never uploaded one gets *"No sailing to check against"*, which is
 honest rather than an all-clear.
+
+#### QUARTERLY STEERING, AND "IT DID NOT HAPPEN" IS AN ANSWER
+
+David, Sep 2026: *"steering gear can be quarterly. page can request a log to
+anything, user should be able skip if it didn't happen."*
+
+**ENTRY 21 IS CONFIRMED AT 90 DAYS ON HIS WORD.** It was the one figure left
+`basis: 'unchecked'` — he had said "most are monthly" and not named steering
+gear, so reading "most" as "all" would have put a number in his mouth. He has
+now named it, so it is `basis: 'skipper'` like 7, 17 and 18, and the ⚑ comes off
+the row. The ORB items stay `transcribed`; **the app must not let one kind of
+authority pass for the other.**
+
+**AN EMPTY BOOK IS NOT PROOF THAT NOTHING HAPPENED.** This is the part that
+changed the model rather than a setting. `ifHappened` used to resolve to
+*nothing to record* whenever the fuel log and the garbage log were quiet — but a
+quiet book means either that nothing happened **or that it was never written
+up**, and those are opposite conclusions. The page was picking the flattering
+one and printing it as a finding.
+
+So bunkering and garbage now **ask**:
+
+    ask       did this happen?        cobalt   — the books cannot say
+    skipped   did not happen          mute     — somebody said so, and is named
+
+**ANY ROW CAN BE SKIPPED, and a `done` one cannot.** The book already says it
+happened, and a claim that it did not must never overwrite a record that it
+did. Everything else — a drill, a radio check, even the crew list — can be
+answered *"didn't happen"*, which is what he asked for: the page requests a log
+for anything and the man says no where the answer is no.
+
+**SKIPPING A DRILL IS NOT NOTHING, AND THE ROW SAYS WHERE IT GOES.** SI 1981/570
+entry 8 is *the reason a muster, drill or inspection was not held* — a real
+entry in a real book. `SKIP_NOTE` sends him there rather than quietly closing
+the question, so the skip records the decision **and** points at the record of
+it. That is the only item with such a note, because it is the only one where
+not doing it is itself an entry.
+
+**The reason is asked for and may be left blank.** *"It did not happen"* is the
+answer; why is a courtesy to whoever reads it in a year. Demanding one would
+make skipping cost more than writing the entry, and then nobody skips and the
+list goes back to crying wolf.
+
+`predeparture_skips` — one row per (fleet, vessel, departure, item), so a skip
+is scoped to the VOYAGE and never leaks into the next one. Restrictive
+`fleet_isolation`, written by skipper, officer and engineer.
+
+**THREE COUNTS NOW, NOT TWO** — *N not done · N past her own interval · N still
+to answer* — because they are three different things to do about it. An
+unanswered question is not a failure and must not be counted as one.
+
+**AND THE PREVIEW WAS RENDERING A PAGE NOBODY SEES.** It passed no `onSkip`, and
+the *"didn't happen"* button only exists when there is one — so the control the
+whole model rests on was never in the markup being read back, and the assertion
+for it failed the moment it was written. The real page always passes the
+handlers; the preview does now too. **Rendering with fewer props than the page
+supplies is checking a different component.**
+
+`scripts/predeparture-preview.mjs` renders **seven** states, including a drill
+marked as not held with the reason, the man who marked it, and the entry-8 note.
+`test-predeparture.mjs` 89 → **100**.
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

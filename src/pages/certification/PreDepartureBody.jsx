@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { guidesFor } from '../../lib/certification/predeparture'
+import { guidesFor, SKIP_NOTE } from '../../lib/certification/predeparture'
 
 /* THE PRE-DEPARTURE CHECK, DRAWN.
  *
@@ -27,11 +27,15 @@ const TONE = {
   overdue: { colour: 'var(--rust)', word: 'overdue' },
   watch: { colour: 'var(--brass)', word: 'past her own' },
   never: { colour: 'var(--rust)', word: 'never recorded' },
+  /* A QUESTION, NOT A VERDICT. The books cannot say whether nothing happened
+     or nothing was written up, so the row asks and waits. */
+  ask: { colour: 'var(--hull)', word: 'did this happen?' },
+  skipped: { colour: 'var(--mute)', word: 'did not happen' },
   nothing: { colour: 'var(--mute)', word: 'nothing to record' },
 }
 
 export default function PreDepartureBody({
-  vessel, check, onPick, departures = [], busy = false, onGuide,
+  vessel, check, onPick, departures = [], busy = false, onGuide, onSkip, onUnskip,
 }) {
   if (!check?.known) {
     return (
@@ -48,7 +52,7 @@ export default function PreDepartureBody({
     )
   }
 
-  const { items, outstanding, watch = [], departure, from } = check
+  const { items, outstanding, watch = [], asking = [], departure, from } = check
   const byClass = (c) => items.filter((i) => i.cls === c)
 
   return (
@@ -89,12 +93,20 @@ export default function PreDepartureBody({
               {watch.length} {watch.length === 1 ? 'is' : 'are'} past her own interval.
             </b>
           )}
-          {outstanding.length === 0 && watch.length === 0 && (
+          {asking.length > 0 && (
+            <>
+              {(outstanding.length > 0 || watch.length > 0) && ' '}
+              <b style={{ color: 'var(--hull)' }}>
+                {asking.length} still to answer.
+              </b>
+            </>
+          )}
+          {outstanding.length === 0 && watch.length === 0 && asking.length === 0 && (
             <b style={{ color: 'var(--kelp)' }}>Nothing outstanding in the books.</b>
           )}
           {' '}
           <span className="muted">
-            {outstanding.length || watch.length
+            {outstanding.length || watch.length || asking.length
               ? 'Each one is made in its own book.'
               : 'That is what the records say — it is not a statement that the vessel is fit to sail.'}
           </span>
@@ -103,37 +115,39 @@ export default function PreDepartureBody({
 
       <Band title="Every voyage"
             note="Done before she sails, whatever was done last trip."
-            rows={byClass('every')} />
+            rows={byClass('every')} onSkip={onSkip} onUnskip={onUnskip} />
 
       <Band title="On a repeating interval"
             note="Two clocks. The statutory interval is a maximum and going past it is a
                   breach; the boat may keep to a shorter one of her own — weekly,
                   fortnightly or monthly — and going past that alone is her standard, not
                   the law’s."
-            rows={byClass('due')} onGuide={onGuide} />
+            rows={byClass('due')} onGuide={onGuide} onSkip={onSkip} onUnskip={onUnskip} />
 
       <Band title="Only if it happened"
-            note="There is no missing garbage entry when nothing went ashore. What makes one
-                  of these outstanding is the event having happened and the book not saying so."
-            rows={byClass('ifHappened')} />
+            note="An empty book is not proof that nothing happened — it means either that
+                  nothing did, or that it was never written up. So these ASK, and “it did
+                  not happen” is an answer worth recording."
+            rows={byClass('ifHappened')} onSkip={onSkip} onUnskip={onUnskip} />
     </div>
   )
 }
 
-function Band({ title, note, rows, onGuide }) {
+function Band({ title, note, rows, onGuide, onSkip, onUnskip }) {
   if (!rows.length) return null
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       <p className="muted" style={{ fontSize: '0.8rem', marginTop: 0 }}>{note}</p>
       <div className="dlist">
-        {rows.map((r) => <Row key={r.key} r={r} onGuide={onGuide} />)}
+        {rows.map((r) => <Row key={r.key} r={r} onGuide={onGuide}
+                                  onSkip={onSkip} onUnskip={onUnskip} />)}
       </div>
     </div>
   )
 }
 
-function Row({ r, onGuide }) {
+function Row({ r, onGuide, onSkip, onUnskip }) {
   const t = TONE[r.state] || TONE.nothing
   return (
     <div className="di">
@@ -182,6 +196,21 @@ function Row({ r, onGuide }) {
         {r.key === 'garbage' && r.n > 0 && (
           <span className="sub3"> {r.n} entr{r.n === 1 ? 'y' : 'ies'} made.</span>
         )}
+        {r.state === 'skipped' && (
+          <span className="sub3">
+            {' '}Marked as not happening this trip
+            {r.skip?.skipped_name ? ' by ' + r.skip.skipped_name : ''}
+            {r.skip?.reason ? ' — ' + r.skip.reason : ''}.
+          </span>
+        )}
+        {/* SKIPPING A DRILL IS NOT NOTHING. SI 1981/570 entry 8 is the reason
+            one was not held, so the row sends him there rather than quietly
+            closing the question. */}
+        {r.state === 'skipped' && SKIP_NOTE[r.key] && (
+          <span className="sub3" style={{ color: 'var(--brass)' }}>
+            {' '}{SKIP_NOTE[r.key]}
+          </span>
+        )}
       </span>
       <span style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
         {onGuide && r.cls === 'due' && (
@@ -196,6 +225,19 @@ function Row({ r, onGuide }) {
           </select>
         )}
         <span className="when" style={{ color: t.colour }}>{t.word}</span>
+        {/* ANY ROW CAN BE SKIPPED, and a done one cannot — the book already
+            says it happened, and the record wins over a claim that it did
+            not. */}
+        {onSkip && r.state !== 'done' && r.state !== 'skipped' && (
+          <button className="secondary" disabled={r.busy}
+                  style={{ fontSize: '0.72rem', padding: '0 0.4rem' }}
+                  onClick={() => onSkip(r)}>didn’t happen</button>
+        )}
+        {onUnskip && r.state === 'skipped' && (
+          <button className="secondary" disabled={r.busy}
+                  style={{ fontSize: '0.72rem', padding: '0 0.4rem' }}
+                  onClick={() => onUnskip(r)}>undo</button>
+        )}
         <Link to={r.to} className="when">open</Link>
       </span>
     </div>

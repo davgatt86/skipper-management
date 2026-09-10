@@ -127,6 +127,16 @@ export const ITEMS = [
   },
 ]
 
+/* WHAT SKIPPING A DRILL MEANS IN THE BOOK, which is not nothing.
+
+   SI 1981/570 entry 8 is "The reason a muster, drill or inspection was NOT
+   held when it should have been" — so the Official Log Book already has a
+   place for a drill that did not happen, and skipping one here should send a
+   man to it rather than quietly closing the question. */
+export const SKIP_NOTE = {
+  olb_drills: 'Official Log Book entry 8 records why a drill was not held.',
+}
+
 export const itemOf = (key) => ITEMS.find((i) => i.key === key) || null
 
 /* TWO CLOCKS, AND THE FIRST IS THE LAW.
@@ -160,11 +170,9 @@ export const STATUTORY = {
     source: 'Monthly — the skipper’s reading. Not transcribed from the instrument.' },
   18: { days: 30, basis: 'skipper',
     source: 'Monthly — the skipper’s reading. Not transcribed from the instrument.' },
-  /* NOT CONFIRMED. David said "most are monthly" and did not name this one, so
-     it keeps the quarterly it had and keeps saying it is unchecked. Reading
-     "most" as "all" would be putting a figure in his mouth. */
-  21: { days: 90, basis: 'unchecked',
-    source: 'Steering gear — believed quarterly where SOLAS V/26 applies. Still to be confirmed.' },
+  /* David, Sep 2026: "steering gear can be quarterly." */
+  21: { days: 90, basis: 'skipper',
+    source: 'Quarterly — the skipper’s reading. Not transcribed from the instrument.' },
 }
 
 export const statutoryFor = (olbN) => STATUTORY[olbN] || null
@@ -228,6 +236,7 @@ export function predeparture({
   garbageRows = [],
   guides = DEFAULT_GUIDES,
   crewChange = null,
+  skips = [],
   asOf,
 } = {}) {
   const dep = day(departureAt)
@@ -308,11 +317,15 @@ export function predeparture({
        outstanding is the event having happened and the book not saying so. */
     if (it.key === 'garbage') {
       const rows = garbageRows.filter((g) => inWindow(g.entry_date))
-      return { ...it, state: rows.length ? 'done' : 'nothing', n: rows.length }
+      /* AN EMPTY BOOK IS NOT PROOF NOTHING HAPPENED. It means either that
+         nothing went ashore or that it was never written up, and those are
+         opposite conclusions — so it ASKS rather than closing the question
+         with an all-clear it cannot support. */
+      return { ...it, state: rows.length ? 'done' : 'ask', n: rows.length }
     }
 
     const moved = fuelRows.filter((f) => inWindow(f.entry_date))
-    if (!moved.length) return { ...it, state: 'nothing', n: 0 }
+    if (!moved.length) return { ...it, state: 'ask', n: 0 }
     const linked = new Set(orbEntries.map((e) => e.fuel_log_id).filter(Boolean))
     const unrecorded = moved.filter((f) => !linked.has(f.id))
     return {
@@ -323,10 +336,29 @@ export function predeparture({
     }
   })
 
+  /* A SKIP ANSWERS ANY ROW, not just the two that ask. David: "page can
+     request a log to anything, user should be able skip if it didn't happen."
+     A drill genuinely not held is a real answer — and the Official Log Book
+     has entry 8 for exactly that, which `SKIP_NOTE` sends him to.
+
+     IT NEVER OVERRIDES A DONE. Saying a thing did not happen when the book
+     already says it did would make the checklist disagree with the record it
+     is reading, and the record wins. */
+  const skipped = new Map(
+    (Array.isArray(skips) ? skips : [])
+      .filter((k) => k && day(k.departure_on) === dep)
+      .map((k) => [k.item_key, k]))
+
+  const withSkips = items.map((i) => {
+    const sk = skipped.get(i.key)
+    if (!sk || i.state === 'done') return i
+    return { ...i, state: 'skipped', skip: sk }
+  })
+
   return {
     departure: dep,
     from,
-    items,
+    items: withSkips,
     /* NOT DONE AND PAST THE GUIDE ARE TWO DIFFERENT FACTS, and rolling them
        together is how a checklist starts crying wolf. A crew list that has not
        been lodged is not done; a drill held 34 days ago against a 30-day guide
@@ -336,8 +368,11 @@ export function predeparture({
        `never` counts as not done, because there is no record that it has ever
        been held — and so does `overdue`, which is past the STATUTORY interval
        and is a breach rather than a matter of the boat's own standard. */
-    outstanding: items.filter((i) => ['outstanding', 'never', 'overdue'].includes(i.state)),
-    watch: items.filter((i) => i.state === 'watch'),
+    outstanding: withSkips.filter((i) => ['outstanding', 'never', 'overdue'].includes(i.state)),
+    watch: withSkips.filter((i) => i.state === 'watch'),
+    /* STILL TO ANSWER is its own list. It is not a gap and not a breach — it
+       is a question the app cannot answer from the books. */
+    asking: withSkips.filter((i) => i.state === 'ask'),
     known: true,
   }
 }

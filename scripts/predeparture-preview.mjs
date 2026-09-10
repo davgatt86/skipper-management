@@ -73,6 +73,9 @@ const states = [
     olbEntries: [olb(7, '2026-09-05'), olb(17, '2026-09-05'), olb(18, '2026-09-05'), olb(21, '2026-09-05')],
     fuelRows: [{ id: 'f1', kind: 'fuel', entry_date: '2026-09-08' }],
     orbEntries: [{ id: 'e1', fuel_log_id: 'f1' }],
+    /* Garbage answered by SKIPPING it — nothing went ashore. An empty book is
+       not proof of that on its own, which is why it has to be said. */
+    skips: [{ departure_on: DEP, item_key: 'garbage', skipped_name: 'B Reid' }],
   })],
 
   /* EVERY VOYAGE, AND A MAN WHO WAS NOT ON THE LAST ONE. David: "it's good
@@ -87,6 +90,22 @@ const states = [
     olbEntries: [olb(7, PREV), olb(17, '2026-09-04'), olb(18, '2026-08-20'), olb(21, '2026-08-25')],
   })],
 
+  /* A DRILL THAT DID NOT HAPPEN IS NOT NOTHING. SI 1981/570 entry 8 is the
+     reason one was not held, so skipping it sends him to the Official Log Book
+     rather than quietly closing the question. */
+  ['A drill that did not happen — and where that gets written', predeparture({
+    departureAt: DEP, previousDepartureAt: PREV, asOf: DEP,
+    crewLists: [{ departure_date: DEP }],
+    radioEntries: [{ kind: 'test', log_date: DEP }],
+    olbEntries: [olb(17, '2026-09-05'), olb(18, '2026-09-05'), olb(21, '2026-09-05')],
+    skips: [
+      { departure_on: DEP, item_key: 'olb_drills', skipped_name: 'D Gatt',
+        reason: 'Weather — alongside all day, crew ashore' },
+      { departure_on: DEP, item_key: 'bunkering', skipped_name: 'D Gatt' },
+      { departure_on: DEP, item_key: 'garbage', skipped_name: 'D Gatt' },
+    ],
+  })],
+
   /* NO DEPARTURE, NO CHECK. Saying nothing is outstanding here would read as an
      all-clear, which is worse than saying nothing at all. */
   ['No sailing on record', predeparture({})],
@@ -94,10 +113,16 @@ const states = [
 
 const partWay = states[1][1]
 
+/* THE HANDLERS ARE PASSED because the real page passes them, and the buttons
+   only exist when they are. Rendering without them checked a page nobody
+   sees — and it is the "didn’t happen" button that the whole ask/skip model
+   rests on. */
+const handlers = { onSkip: () => {}, onUnskip: () => {}, onGuide: () => {} }
+
 const html = states.map(([title, check]) =>
   `<h2 class="pv">${title}</h2>`
   + renderToStaticMarkup(React.createElement(MemoryRouter, null,
-      React.createElement(Body, { vessel, check, departures: trips })))).join('\n')
+      React.createElement(Body, { vessel, check, departures: trips, ...handlers })))).join('\n')
   + `<h2 class="pv">What the Crew List says after saving</h2>`
   + '<div class="card">Crew list saved ✓'
   + renderToStaticMarkup(React.createElement(MemoryRouter, null,
@@ -138,11 +163,13 @@ for (const i of [1, 2, 3]) {
 }
 
 /* IT NEVER SAYS SHE IS READY TO SAIL. */
-for (const i of [1, 2, 3, 4, 5]) {
+for (const i of [1, 2, 3, 4, 5, 6]) {
   hasnt(i, 'ready to sail', `pane ${i} never says she is ready to sail`)
 }
 has(3, 'not a statement that the vessel is fit to sail',
     'and with nothing outstanding it says so in as many words')
+has(3, 'did not happen', 'a skipped item says so')
+has(3, 'Marked as not happening this trip by B Reid', 'and who said it')
 
 /* A DRILL INSIDE ITS INTERVAL IS NOT OUTSTANDING. */
 /* THE NUMBER OF DAYS IS THE FACT, and the guide is what it is read against.
@@ -162,7 +189,11 @@ has(2, 'Steering gear', 'the quarterly steering test is listed')
  
 
 /* THE ABSENCE OF AN EVENT IS NOT A GAP. */
-has(1, 'nothing to record', 'no oil moved and no rubbish ashore reads as nothing to record')
+/* AN EMPTY BOOK IS NOT PROOF NOTHING HAPPENED — it means either that nothing
+   did or that it was never written up, and those are opposite conclusions. */
+has(1, 'did this happen?', 'an empty book asks rather than declaring an all-clear')
+hasnt(1, 'nothing to record', 'and never assumes nothing happened')
+has(1, 'didn’t happen', 'with a way to answer that it did not')
 
 /* FRESH WATER AND PROVISIONS ARE ONE ENTRY. */
 has(1, 'provisions and fresh water', 'provisions and water are one line')
@@ -174,12 +205,24 @@ has(4, 'New aboard since the last voyage', 'a change of crew is given as its own
 has(4, 'Edgel Bigno', 'and it names the man rather than counting him')
 has(4, 'past her own', 'a drill held last voyage is not this voyage’s')
 
-has(5, 'No sailing to check against', 'with no departure it says so')
-hasnt(5, 'Nothing outstanding', 'and never reads as an all-clear')
+/* A DRILL THAT DID NOT HAPPEN. The row says so, names who said it, gives the
+   reason, and — because a drill is not merely nothing — points at the entry
+   in the Official Log Book that records why it was not held. */
+has(5, 'did not happen', 'a skipped drill says it did not happen')
+has(5, 'Marked as not happening this trip by D Gatt', 'and who marked it')
+has(5, 'Weather — alongside all day', 'and the reason he gave')
+has(5, 'entry 8 records why a drill was not held', 'and it sends him to OLB entry 8')
+has(5, 'undo', 'with a way back')
+hasnt(5, 'still to answer', 'a skipped item is answered, not still asking')
+has(5, 'Nothing outstanding', 'and an answered book reads as clear')
+hasnt(5, 'didn’t happen', 'and an already-skipped row is not offered the skip again')
+
+has(6, 'No sailing to check against', 'with no departure it says so')
+hasnt(6, 'Nothing outstanding', 'and never reads as an all-clear')
 
 /* AND THE LINE THE CREW LIST SHOWS. */
-has(6, 'Next before she sails', 'the crew list points at the next thing')
-hasnt(6, 'Crew list</b>', 'and never at the thing just done')
+has(7, 'Next before she sails', 'the crew list points at the next thing')
+hasnt(7, 'Crew list</b>', 'and never at the thing just done')
 
 console.log(out)
 console.log(`  ${states.length + 1} states rendered`)

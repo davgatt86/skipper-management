@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient'
 import { useCurrentVessel } from '../VesselContext'
 import { predeparture, DEFAULT_GUIDES, crewChangeBetween } from '../lib/certification/predeparture'
 import { loadGuides, saveGuides } from '../lib/certification/logbookSettingsDb'
+import { listSkips, skipItem, unskipItem } from '../lib/certification/skipsDb'
 import { useAuth } from '../AuthContext'
 import PreDepartureBody from './certification/PreDepartureBody'
 
@@ -25,6 +26,7 @@ export default function PreDeparture() {
   const [trips, setTrips] = useState([])
   const [picked, setPicked] = useState(null)
   const [books, setBooks] = useState({})
+  const [skips, setSkips] = useState([])
   const [err, setErr] = useState('')
 
   const refresh = useCallback(async () => {
@@ -51,6 +53,7 @@ export default function PreDeparture() {
       /* The boat’s own guides. A fleet with no row is the ordinary case — it
          means the shipped ones, unchanged. */
       const g = await loadGuides()
+      setSkips(await listSkips(current.id))
       setGuides(g.guides)
       setStored(g.stored)
       const list = (t.data || []).map((x) => String(x.departure_at).slice(0, 10))
@@ -99,9 +102,9 @@ export default function PreDeparture() {
 
   const check = useMemo(
     () => predeparture({
-      departureAt: departure, previousDepartureAt: previous, guides, crewChange, ...books,
+      departureAt: departure, previousDepartureAt: previous, guides, crewChange, skips, ...books,
     }),
-    [departure, previous, books, guides, crewChange])
+    [departure, previous, books, guides, crewChange, skips])
 
   return (
     <AppShell>
@@ -122,6 +125,23 @@ export default function PreDeparture() {
           else next[olbN] = days
           setStored(next)
           setGuides(await saveGuides(next, { fleetId: appUser?.fleet_id, userId: appUser?.id }))
+        }}
+        onSkip={async (row) => {
+          /* THE REASON IS ASKED FOR AND MAY BE LEFT BLANK. "It did not
+             happen" is the answer; why is a courtesy to whoever reads it
+             later, and demanding one would make the skip cost more than
+             writing the entry. */
+          const reason = window.prompt('Why did it not happen this trip? (optional)') ?? ''
+          await skipItem({
+            fleetId: appUser?.fleet_id, vesselId: current?.id, departureOn: departure,
+            itemKey: row.key, reason,
+            userId: appUser?.id, name: appUser?.name || appUser?.email,
+          })
+          setSkips(await listSkips(current?.id))
+        }}
+        onUnskip={async (row) => {
+          await unskipItem({ vesselId: current?.id, departureOn: departure, itemKey: row.key })
+          setSkips(await listSkips(current?.id))
         }} />
     </AppShell>
   )

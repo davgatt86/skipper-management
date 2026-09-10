@@ -1,7 +1,7 @@
 import assert from 'node:assert'
 import {
   ITEMS, itemOf, predeparture, nextAfterCrewList,
-  GUIDES, DEFAULT_GUIDES, resolveGuides, statutoryFor, guidesFor, crewChangeBetween,
+  GUIDES, DEFAULT_GUIDES, resolveGuides, statutoryFor, guidesFor, crewChangeBetween, SKIP_NOTE,
 } from './src/lib/certification/predeparture.js'
 
 let n = 0
@@ -98,15 +98,70 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
   ok(none.outstanding.some((i) => i.key === 'olb_drills'), 'it is still something to act on')
 }
 
-/* ---- THE ABSENCE OF THE EVENT IS NOT A GAP -----------------------------
- * There is no missing garbage entry when nothing went ashore.
+/* ---- AN EMPTY BOOK IS NOT PROOF NOTHING HAPPENED -----------------------
+ * The check used to resolve these to "nothing to record" whenever it found no
+ * rows in the window. That is an assumption wearing a fact's clothes: an empty
+ * fuel log means either that nothing was bunkered, or that the bunkering was
+ * never written up, and those are opposite conclusions. The app cannot tell
+ * them apart, so it ASKS.
  */
 {
   const quiet = predeparture(base)
-  eq(quiet.items.find((i) => i.key === 'garbage').state, 'nothing', 'no garbage, no entry wanted')
-  eq(quiet.items.find((i) => i.key === 'bunkering').state, 'nothing', 'no oil moved, nothing to record')
+  eq(quiet.items.find((i) => i.key === 'garbage').state, 'ask',
+     'no garbage entries is a question, not an all-clear')
+  eq(quiet.items.find((i) => i.key === 'bunkering').state, 'ask',
+     'and so is no oil movement')
+  eq(quiet.asking.map((i) => i.key), ['bunkering', 'garbage'],
+     'both are on the list of things still to answer')
+  /* STILL TO ANSWER IS NOT A GAP AND NOT A BREACH. */
   ok(!quiet.outstanding.some((i) => ['garbage', 'bunkering'].includes(i.key)),
-     'and neither is outstanding')
+     'and neither is counted as not done')
+  ok(!quiet.watch.some((i) => ['garbage', 'bunkering'].includes(i.key)),
+     'nor as past an interval')
+}
+
+/* ---- SKIPPING SAYS IT DID NOT HAPPEN, FOR ONE DEPARTURE ----------------
+ * David: "page can request a log to anything, user should be able skip if it
+ * didn't happen."
+ */
+{
+  const skip = (key, on = DEP) => ({ departure_on: on, item_key: key, skipped_name: 'B Reid' })
+
+  const done = predeparture({ ...base, skips: [skip('garbage')] })
+  const g = done.items.find((i) => i.key === 'garbage')
+  eq(g.state, 'skipped', 'a skipped item says so')
+  eq(g.skip.skipped_name, 'B Reid', 'and carries who said it')
+  ok(!done.asking.some((i) => i.key === 'garbage'), 'and is no longer being asked')
+
+  /* ANY ROW, not just the two that ask. A drill genuinely not held is a real
+     answer. */
+  const noDrill = predeparture({ ...base, skips: [skip('olb_drills')] })
+  eq(noDrill.items.find((i) => i.key === 'olb_drills').state, 'skipped',
+     'a drill can be skipped too')
+  ok(!noDrill.outstanding.some((i) => i.key === 'olb_drills'),
+     'and stops counting as not done')
+  /* AND THE BOOK HAS A PLACE FOR IT. SI 1981/570 entry 8 is "the reason a
+     muster, drill or inspection was NOT held when it should have been", so
+     skipping one sends a man there rather than quietly closing the question. */
+  ok(/entry 8/.test(SKIP_NOTE.olb_drills), 'and the book wants the reason at entry 8')
+
+  /* PER DEPARTURE, NEVER STANDING. */
+  const other = predeparture({ ...base, skips: [skip('garbage', '2026-08-22')] })
+  eq(other.items.find((i) => i.key === 'garbage').state, 'ask',
+     'a skip on another departure does not answer this one')
+
+  /* IT NEVER OVERRIDES A DONE. Saying a thing did not happen when the book says
+     it did would make the checklist disagree with the record it is reading, and
+     the record wins. */
+  const both = predeparture({
+    ...base,
+    garbageRows: [{ id: 'g1', entry_date: '2026-09-06' }],
+    skips: [skip('garbage')],
+  })
+  eq(both.items.find((i) => i.key === 'garbage').state, 'done',
+     'an entry in the book beats a claim that nothing happened')
+
+  eq(predeparture({ ...base, skips: null }).asking.length, 2, 'no skips is handled')
 }
 
 /* ---- BUT AN EVENT WITH NO ENTRY IS ------------------------------------- */
@@ -258,8 +313,9 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
   /* HE SAID "MOST", AND DID NOT NAME THIS ONE. Reading "most" as "all" would be
      putting a figure in his mouth, so steering keeps its quarterly AND keeps
      saying it is unchecked. */
-  eq(statutoryFor(21).days, 90, 'steering keeps the quarterly it had')
-  eq(statutoryFor(21).basis, 'unchecked', 'and still says it is unchecked')
+  eq(statutoryFor(21).days, 90, 'steering is quarterly')
+  /* David: "steering gear can be quarterly." */
+  eq(statutoryFor(21).basis, 'skipper', 'and steering is on his word too now')
   eq(statutoryFor(99), null, 'an entry with no statutory interval has none')
 }
 
