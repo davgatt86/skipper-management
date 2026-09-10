@@ -4068,6 +4068,57 @@ it at all. It now carries **one of each state**, so every word on the page is
 exercised. **An assertion that passes on a fixture which cannot reach the
 state is not testing the state.**
 
+#### EVERY VOYAGE IS A CADENCE, AND A CHANGE OF CREW IS ITS OWN REASON
+
+David, Sep 2026: *"i believe most are monthly. crew lists every voyage.
+bunkering when bunkered, garbage when put garbage ashore. this is generally
+every time the vessel is in port so it's good practice to do every time we
+depart, and it's good practice to do drills and tests every time a voyage
+starts esp when there has been a change in the crew."*
+
+**MONTHLY, ON HIS WORD — and `basis` records that it is his word.** Entries 7,
+17 and 18 are `basis: 'skipper'` with the source saying so on the row. The ORB
+items were TRANSCRIBED from Appendix III and the OLB entries from SI 1981/570;
+this is a different kind of authority and the app must not let one pass for
+the other. **Entry 21 keeps `basis: 'unchecked'`** — he said "most", and did
+not name steering gear, so reading "most" as "all" would be putting a figure
+in his mouth.
+
+**"EVERY VOYAGE" IS NOT A NUMBER OF DAYS**, and that is the whole point of it.
+A boat in port every trip can hold the drill every trip — and a day count
+would call a drill held LAST voyage "done" on this one. `'voyage'` asks the
+same question the crew list gets: was one held in THIS departure's window.
+The statutory month still fires over the top of it.
+
+**AND THE APP KNOWS WHO IS NEW.** It holds the crew of every list, so
+`crewChangeBetween()` compares this voyage's against the last one's and the
+drill row says:
+
+    Musters, drills and appliance inspections — Official Log Book entry 7.
+    9 days since — last 01-09-2026, her own every voyage, statutory monthly
+    New aboard since the last voyage: Edgel Bigno, Lorenzo Rusiana.
+                                                          past her own
+
+**IT NAMES THE MAN, NOT A COUNT.** "Two changed" tells nobody who to walk round
+the boat.
+
+Four rules it keeps:
+
+- **A man who LEFT is not a joiner.** The drill is for the man who has not had
+  it, and nobody who has gone needs one.
+- **No previous list is not "everybody is new."** There is nothing to compare
+  with, and it would fire on the first voyage the app ever sees.
+- **Matched on `crew_id` where there is one**, and on the name only where there
+  is not — a man added by hand for one trip has no crew record, so a name typed
+  twice is the least bad key left.
+- **It never turns a done into a not-done.** It is a reason the drill is worth
+  holding, added to the row. A drill already held this voyage stays done.
+
+Only the drill is `crewSensitive`. **A change of crew is not a reason to
+inspect the water.**
+
+`test-predeparture.mjs` 75 → **89**.
+
 #### The departure list comes off the logbook
 
 The dropdown is `quota_trips.departure_at`, which is filled by uploading the

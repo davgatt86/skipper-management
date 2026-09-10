@@ -1,7 +1,7 @@
 import assert from 'node:assert'
 import {
   ITEMS, itemOf, predeparture, nextAfterCrewList,
-  GUIDES, DEFAULT_GUIDES, resolveGuides, statutoryFor, guidesFor,
+  GUIDES, DEFAULT_GUIDES, resolveGuides, statutoryFor, guidesFor, crewChangeBetween,
 } from './src/lib/certification/predeparture.js'
 
 let n = 0
@@ -242,29 +242,125 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
   eq(fine.items.find((i) => i.key === 'olb_drills').state, 'done', 'inside both is done')
 }
 
-/* ---- THE STATUTORY FIGURES ARE NOT CONFIRMED, AND SAY SO ---------------
- * This codebase does not put a regulation in a skipper's mouth on my say-so.
- * The ORB items were transcribed from Appendix III and the OLB entries from
- * SI 1981/570; these four want the same treatment before they are relied on.
+/* ---- WHERE THE STATUTORY FIGURES COME FROM IS RECORDED -----------------
+ * They are not all the same kind of thing. The ORB items were TRANSCRIBED from
+ * Appendix III and the OLB entries from SI 1981/570; these are the skipper's
+ * own reading — David: "i believe most are monthly" — which is the best
+ * authority available and is not a citation.
  */
 {
-  for (const n of [7, 17, 18, 21]) {
-    const st = statutoryFor(n)
-    ok(st, 'entry ' + n + ' has a statutory interval on file')
-    ok(st.days > 0, 'with a number of days')
-    ok(st.source, 'and the source it came from')
-    eq(st.confirmed, false, 'and it is marked UNCONFIRMED until somebody checks it')
+  for (const nn of [7, 17, 18]) {
+    const st = statutoryFor(nn)
+    eq(st.days, 30, 'entry ' + nn + ' is monthly, on the skipper’s word')
+    eq(st.basis, 'skipper', 'and the basis says whose word it is')
+    ok(st.source, 'with the source written out')
   }
+  /* HE SAID "MOST", AND DID NOT NAME THIS ONE. Reading "most" as "all" would be
+     putting a figure in his mouth, so steering keeps its quarterly AND keeps
+     saying it is unchecked. */
+  eq(statutoryFor(21).days, 90, 'steering keeps the quarterly it had')
+  eq(statutoryFor(21).basis, 'unchecked', 'and still says it is unchecked')
   eq(statutoryFor(99), null, 'an entry with no statutory interval has none')
+}
+
+/* ---- EVERY VOYAGE IS NOT A NUMBER OF DAYS ------------------------------
+ * David: "it's good practice to do drills and tests every time a voyage starts."
+ * A boat in port every trip can hold them every trip, and counting days would
+ * call a drill held LAST voyage "done" on this one.
+ */
+{
+  const perVoyage = resolveGuides({ 7: 'voyage' })
+  eq(perVoyage[7], 'voyage', 'every voyage survives the merge as itself')
+
+  /* Held on the previous voyage: inside the statutory month, and NOT done for
+     this departure. A day count would have called this done. */
+  const lastTrip = predeparture({
+    ...base, guides: perVoyage, olbEntries: [olb(7, PREV)],
+  })
+  const a = lastTrip.items.find((i) => i.key === 'olb_drills')
+  eq(a.state, 'watch', 'a drill held last voyage is not this voyage’s')
+  eq(a.perVoyage, true, 'the row knows it is a per-voyage cadence')
+  eq(a.thisVoyage, false, 'and that nothing was held in this window')
+
+  const held = predeparture({
+    ...base, guides: perVoyage, olbEntries: [olb(7, '2026-09-08')],
+  })
+  eq(held.items.find((i) => i.key === 'olb_drills').state, 'done',
+     'one held since she last sailed is done')
+
+  /* AND THE STATUTORY STILL FIRES OVER THE TOP. */
+  const old = predeparture({
+    ...base, guides: perVoyage, olbEntries: [olb(7, '2026-07-01')],
+  })
+  eq(old.items.find((i) => i.key === 'olb_drills').state, 'overdue',
+     'per-voyage does not switch the statutory month off')
+
+  eq(guidesFor(7).map((g) => g.key).includes('voyage'), true,
+     'every voyage is offered even on a monthly entry')
+}
+
+/* ---- A CHANGE OF CREW IS ITS OWN REASON --------------------------------
+ * David: "esp when there has been a change in the crew." The app knows who was
+ * on the last list and who is on this one, so it can say so.
+ */
+{
+  const was = [{ crew_id: 'a', full_name: 'Barry Reid' }, { crew_id: 'b', full_name: 'Alfie Reid' }]
+  const now = [{ crew_id: 'a', full_name: 'Barry Reid' }, { crew_id: 'c', full_name: 'Edgel Bigno' }]
+
+  const ch = crewChangeBetween(was, now)
+  eq(ch.changed, true, 'a new man is a change')
+  /* IT REPORTS WHO JOINED, NOT A COUNT. "Two changed" tells nobody which drill
+     to hold or who to walk round the boat. */
+  eq(ch.joined, ['Edgel Bigno'], 'and it says who, by name')
+  eq(crewChangeBetween(was, was).changed, false, 'the same crew is no change')
+
+  /* A MAN WHO LEFT IS NOT A JOINER. The drill is for the man who has not had
+     it, and nobody who has gone needs one. */
+  eq(crewChangeBetween(was, [{ crew_id: 'a', full_name: 'Barry Reid' }]).changed, false,
+     'somebody leaving is not a reason to hold a drill')
+
+  /* NO PREVIOUS LIST IS NOT "EVERYBODY IS NEW" — there is nothing to compare
+     with, and it would fire on the first voyage the app ever sees. */
+  const first = crewChangeBetween([], now)
+  eq(first.changed, false, 'with no earlier list nothing is claimed')
+  eq(first.known, false, 'and it says the comparison could not be made')
+
+  /* Matched on crew_id where there is one, and on the name only where there is
+     not — a man added by hand for one trip has no crew record. */
+  eq(crewChangeBetween([{ full_name: 'Lorenzo  RUSIANA' }], [{ full_name: 'lorenzo rusiana' }]).changed,
+     false, 'a hand-added man is matched on his name, spacing and case aside')
+
+  /* IT NEVER TURNS A DONE INTO A NOT-DONE. It is a reason the drill is worth
+     holding, added to the row — not a state of its own. */
+  const withChange = predeparture({
+    ...base, guides: resolveGuides({ 7: 'voyage' }),
+    olbEntries: [olb(7, PREV)], crewChange: ch,
+  })
+  const d = withChange.items.find((i) => i.key === 'olb_drills')
+  eq(d.forNewCrew, true, 'the drill row carries the crew change')
+  eq(d.crewChange.joined, ['Edgel Bigno'], 'with the man who joined')
+
+  const alreadyHeld = predeparture({
+    ...base, guides: resolveGuides({ 7: 'voyage' }),
+    olbEntries: [olb(7, '2026-09-08')], crewChange: ch,
+  })
+  eq(alreadyHeld.items.find((i) => i.key === 'olb_drills').state, 'done',
+     'a drill already held this voyage stays done')
+  eq(alreadyHeld.items.find((i) => i.key === 'olb_drills').forNewCrew, false,
+     'and the crew change is not raised against it')
+
+  /* ONLY THE CREW-SENSITIVE ROW. Provisions and water do not care who joined. */
+  eq(withChange.items.find((i) => i.key === 'olb_provisions_water').forNewCrew, false,
+     'a change of crew is not a reason to inspect the water')
 }
 
 /* ---- SHE MAY LOG OFTENER, NEVER LESS OFTEN ----------------------------- */
 {
-  eq(GUIDES.map((g) => g.days), [7, 14, 30, 90, null], 'the cadences on offer')
+  eq(GUIDES.map((g) => g.days), [7, 14, 30, 90, 'voyage', null], 'the cadences on offer')
   /* OFFERING A LONGER ONE WOULD BE OFFERING TO BREACH. */
-  eq(guidesFor(7).map((g) => g.days), [7, 14, 30, null],
-     'a monthly entry offers weekly, fortnightly, monthly — never quarterly')
-  eq(guidesFor(21).map((g) => g.days), [7, 14, 30, 90, null],
+  eq(guidesFor(7).map((g) => g.days), [7, 14, 30, 'voyage', null],
+     'a monthly entry offers weekly, fortnightly, monthly and every voyage — never quarterly')
+  eq(guidesFor(21).map((g) => g.days), [7, 14, 30, 90, 'voyage', null],
      'and a quarterly one offers all of them')
   ok(guidesFor(7).some((g) => g.days == null), 'keeping to the statutory is always on offer')
 

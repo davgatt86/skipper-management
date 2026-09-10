@@ -75,6 +75,18 @@ const states = [
     orbEntries: [{ id: 'e1', fuel_log_id: 'f1' }],
   })],
 
+  /* EVERY VOYAGE, AND A MAN WHO WAS NOT ON THE LAST ONE. David: "it's good
+     practice to do drills and tests every time a voyage starts esp when there
+     has been a change in the crew." */
+  ['Drills every voyage, and a new man aboard', predeparture({
+    departureAt: DEP, previousDepartureAt: PREV, asOf: DEP,
+    guides: resolveGuides({ 7: 'voyage' }),
+    crewChange: { changed: true, joined: ['Edgel Bigno', 'Lorenzo Rusiana'], known: true },
+    crewLists: [{ departure_date: DEP }],
+    radioEntries: [{ kind: 'test', log_date: DEP }],
+    olbEntries: [olb(7, PREV), olb(17, '2026-09-04'), olb(18, '2026-08-20'), olb(21, '2026-08-25')],
+  })],
+
   /* NO DEPARTURE, NO CHECK. Saying nothing is outstanding here would read as an
      all-clear, which is worse than saying nothing at all. */
   ['No sailing on record', predeparture({})],
@@ -126,7 +138,7 @@ for (const i of [1, 2, 3]) {
 }
 
 /* IT NEVER SAYS SHE IS READY TO SAIL. */
-for (const i of [1, 2, 3, 4]) {
+for (const i of [1, 2, 3, 4, 5]) {
   hasnt(i, 'ready to sail', `pane ${i} never says she is ready to sail`)
 }
 has(3, 'not a statement that the vessel is fit to sail',
@@ -157,12 +169,17 @@ has(1, 'provisions and fresh water', 'provisions and water are one line')
 has(1, 'the book treats them as one inspection', 'and it says why')
 
 /* NO DEPARTURE, NO CHECK. */
-has(4, 'No sailing to check against', 'with no departure it says so')
-hasnt(4, 'Nothing outstanding', 'and never reads as an all-clear')
+has(4, 'every voyage', 'a per-voyage cadence is worded, not counted in days')
+has(4, 'New aboard since the last voyage', 'a change of crew is given as its own reason')
+has(4, 'Edgel Bigno', 'and it names the man rather than counting him')
+has(4, 'past her own', 'a drill held last voyage is not this voyage’s')
+
+has(5, 'No sailing to check against', 'with no departure it says so')
+hasnt(5, 'Nothing outstanding', 'and never reads as an all-clear')
 
 /* AND THE LINE THE CREW LIST SHOWS. */
-has(5, 'Next before she sails', 'the crew list points at the next thing')
-hasnt(5, 'Crew list</b>', 'and never at the thing just done')
+has(6, 'Next before she sails', 'the crew list points at the next thing')
+hasnt(6, 'Crew list</b>', 'and never at the thing just done')
 
 console.log(out)
 console.log(`  ${states.length + 1} states rendered`)

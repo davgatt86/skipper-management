@@ -80,6 +80,9 @@ export const ITEMS = [
     key: 'olb_drills',
     label: 'Musters, drills and appliance inspections',
     why: 'Official Log Book entry 7.',
+    /* A NEW MAN HAS NOT DONE THE BOAT’S DRILL. This is the one where a change
+       of crew is a reason in itself, not just the calendar. */
+    crewSensitive: true,
     cls: 'due',
     olb: 7,
     to: '/official-log-book',
@@ -144,20 +147,24 @@ export const itemOf = (key) => ITEMS.find((i) => i.key === key) || null
    The two are compared independently, so a cadence longer than the statutory
    cannot hide a breach: the statutory check fires regardless of what is set.
 
-   AND THE FIGURES ARE NOT CONFIRMED. `confirmed: false` on all four, with the
-   source written out beside each. This codebase does not put a regulation in
-   a skipper's mouth on my say-so — the ORB items were transcribed from
-   Appendix III and the OLB entries from SI 1981/570, and these want the same
-   treatment before they are relied on. The page says so on the row. */
+   WHERE THE FIGURES COME FROM IS RECORDED, because they are not all the same
+   kind of thing. The ORB items were TRANSCRIBED from Appendix III and the OLB
+   entries from SI 1981/570; these are the SKIPPER'S OWN READING of what his
+   boat is held to — David, Sep 2026: *"i believe most are monthly"* — which is
+   the best authority available and is not a citation. `basis` says which, so
+   nobody later mistakes one for the other. */
 export const STATUTORY = {
-  7: { days: 30, confirmed: false,
-    source: 'Musters, drills and appliance inspections. Interval to be confirmed against MSN 1872 for a 15-24m vessel.' },
-  17: { days: 30, confirmed: false,
-    source: 'Crew accommodation inspection — believed at intervals not exceeding one month. To be confirmed.' },
-  18: { days: 30, confirmed: false,
-    source: 'Provisions and water inspection — believed at intervals not exceeding one month. To be confirmed.' },
-  21: { days: 90, confirmed: false,
-    source: 'Steering gear drills — believed quarterly where SOLAS V/26 applies. To be confirmed.' },
+  7: { days: 30, basis: 'skipper',
+    source: 'Monthly — the skipper’s reading. Not transcribed from the instrument.' },
+  17: { days: 30, basis: 'skipper',
+    source: 'Monthly — the skipper’s reading. Not transcribed from the instrument.' },
+  18: { days: 30, basis: 'skipper',
+    source: 'Monthly — the skipper’s reading. Not transcribed from the instrument.' },
+  /* NOT CONFIRMED. David said "most are monthly" and did not name this one, so
+     it keeps the quarterly it had and keeps saying it is unchecked. Reading
+     "most" as "all" would be putting a figure in his mouth. */
+  21: { days: 90, basis: 'unchecked',
+    source: 'Steering gear — believed quarterly where SOLAS V/26 applies. Still to be confirmed.' },
 }
 
 export const statutoryFor = (olbN) => STATUTORY[olbN] || null
@@ -169,6 +176,11 @@ export const GUIDES = [
   { key: 'fortnightly', label: 'Fortnightly', days: 14 },
   { key: 'monthly', label: 'Monthly', days: 30 },
   { key: 'quarterly', label: 'Quarterly', days: 90 },
+  /* NOT A NUMBER OF DAYS. David: "it's good practice to do drills and tests
+     every time a voyage starts esp when there has been a change in the crew."
+     A boat in port every trip can hold them every trip, and counting days
+     would call a drill held last voyage "done" on this one. */
+  { key: 'voyage', label: 'Every voyage', days: 'voyage' },
   { key: 'statutory', label: 'The statutory interval', days: null },
 ]
 
@@ -178,7 +190,7 @@ export function guidesFor(olbN) {
   if (!st) return GUIDES
   /* OFFERING A LONGER ONE WOULD BE OFFERING TO BREACH. `null` is "keep to the
      statutory", which is always available. */
-  return GUIDES.filter((g) => g.days == null || g.days <= st.days)
+  return GUIDES.filter((g) => g.days == null || g.days === 'voyage' || g.days <= st.days)
 }
 
 /* Shipped defaults. A fleet stores only what DIFFERS, so a later correction
@@ -192,6 +204,7 @@ export function resolveGuides(stored) {
     /* null is a real answer here — "no guide" — so it is kept, and only a
        value that is neither a number nor an explicit null is ignored. */
     if (v === null) out[k] = null
+    else if (v === 'voyage') out[k] = 'voyage'
     else if (Number.isFinite(Number(v)) && Number(v) > 0) out[k] = Number(v)
   }
   return out
@@ -214,6 +227,7 @@ export function predeparture({
   orbEntries = [],
   garbageRows = [],
   guides = DEFAULT_GUIDES,
+  crewChange = null,
   asOf,
 } = {}) {
   const dep = day(departureAt)
@@ -255,16 +269,38 @@ export function predeparture({
       const every = guides[it.olb] ?? null
       /* NEVER DONE IS NOT PAST AN INTERVAL BY A NUMBER OF DAYS. There is no
          date to count from, and reporting one would invent it. */
-      if (!last) return { ...it, state: 'never', every, statutory: st, last: null, n: mine.length }
+      /* A DRILL NEVER HELD, WITH A NEW MAN ABOARD, is doubly worth doing — so
+         this is worked out BEFORE the early return, and every row in this band
+         carries the same shape whatever state it is in. */
+      const heldThisVoyage = every === 'voyage' && mine.some((e) => inWindow(e.occurred_on))
+      const newCrew = !!(it.crewSensitive && crewChange?.changed && !heldThisVoyage)
+      if (!last) {
+        return { ...it, state: 'never', every, statutory: st, last: null, n: mine.length,
+                 perVoyage: every === 'voyage', thisVoyage: heldThisVoyage,
+                 forNewCrew: newCrew, crewChange: newCrew ? crewChange : null }
+      }
       const age = daysBetween(last, today)
       /* THE STATUTORY CHECK FIRES FIRST AND INDEPENDENTLY, so a cadence set
          longer than the law — or none at all — cannot hide a breach. */
       const overStatutory = st ? age > st.days : false
-      const overOwn = every != null && age > every
+      /* EVERY VOYAGE IS NOT A NUMBER OF DAYS. It asks whether one was held in
+         THIS departure's window, the same test the crew list gets — counting
+         days would call a drill held last voyage "done" on this one. */
+      const perVoyage = every === 'voyage'
+      const thisVoyage = heldThisVoyage
+      const overOwn = perVoyage ? !thisVoyage : (every != null && age > every)
+      /* AND A CHANGE OF CREW IS ITS OWN REASON. David: "esp when there has
+         been a change in the crew". The app knows who was on the last list
+         and who is on this one, so it can say so rather than leaving it to
+         somebody to remember. Only ever an ADDITION to why it is worth doing
+         — it never turns a done into a not-done on its own. */
+      const forNewCrew = newCrew
       return {
         ...it,
         state: overStatutory ? 'overdue' : overOwn ? 'watch' : 'done',
         every, statutory: st, last, age, n: mine.length,
+        perVoyage, thisVoyage, forNewCrew: !!forNewCrew,
+        crewChange: forNewCrew ? crewChange : null,
       }
     }
 
@@ -322,6 +358,40 @@ export function nextAfterCrewList(check) {
   if (!left.length) return null
   return { next: left[0], remaining: left.length }
 }
+
+/**
+ * Who is on this voyage that was not on the last one.
+ *
+ * David: "it's good practice to do drills and tests every time a voyage starts
+ * esp when there has been a change in the crew."
+ *
+ * COMPARED BY CREW ID WHERE THERE IS ONE, and by name only where there is not —
+ * a man added by hand for one trip has no crew record, and matching him on a
+ * name that was typed twice is the least bad option left. Names are compared
+ * case- and space-insensitively for the same reason.
+ *
+ * IT REPORTS WHO JOINED, NOT A COUNT. "Two changed" tells nobody which drill
+ * to hold or who to walk round the boat.
+ */
+export function crewChangeBetween(previousMembers = [], currentMembers = []) {
+  const key = (m) => (m?.crew_id ? 'id:' + m.crew_id : 'nm:' + norm(m?.full_name))
+  const before = new Set((previousMembers || []).map(key).filter((k) => k !== 'nm:'))
+  const now = (currentMembers || []).filter((m) => key(m) !== 'nm:')
+
+  /* NO PREVIOUS LIST IS NOT "EVERYBODY IS NEW". There is nothing to compare
+     with, and reporting the whole crew as joiners would fire on the first
+     voyage the app ever sees. */
+  if (!before.size) return { changed: false, joined: [], known: false }
+
+  const joined = now.filter((m) => !before.has(key(m)))
+  return {
+    changed: joined.length > 0,
+    joined: joined.map((m) => m.full_name).filter(Boolean),
+    known: true,
+  }
+}
+
+const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim()
 
 /* ---- helpers ------------------------------------------------------------ */
 const day = (d) => {

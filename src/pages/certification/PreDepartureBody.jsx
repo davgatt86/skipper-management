@@ -156,9 +156,21 @@ function Row({ r, onGuide }) {
         )}
         {/* THE STATUTORY FIGURE IS NOT CONFIRMED, and the row says so rather
             than letting the app put a regulation in a skipper’s mouth. */}
-        {r.statutory && !r.statutory.confirmed && (
+        {/* A CHANGE OF CREW IS ITS OWN REASON, and it names the man. David:
+            "esp when there has been a change in the crew". A count would tell
+            nobody who to walk round the boat. It is added to the row and never
+            turns a done into a not-done. */}
+        {r.forNewCrew && r.crewChange?.joined?.length > 0 && (
           <span className="sub3" style={{ color: 'var(--brass)' }}>
-            {' '}⚑ {r.statutory.source}
+            {' '}New aboard since the last voyage: <b>{r.crewChange.joined.join(', ')}</b>.
+          </span>
+        )}
+        {/* WHERE THE INTERVAL CAME FROM. The skipper’s own reading is not a
+            citation, and the row says which it is rather than letting the app
+            put a regulation in his mouth. */}
+        {r.statutory && r.statutory.basis !== 'transcribed' && (
+          <span className="sub3" style={{ color: r.statutory.basis === 'unchecked' ? 'var(--brass)' : 'var(--mute)' }}>
+            {' '}{r.statutory.basis === 'unchecked' ? '⚑ ' : ''}{r.statutory.source}
           </span>
         )}
         {r.key === 'bunkering' && r.n > 0 && (
@@ -208,6 +220,8 @@ export function NextAfterSaving({ next, remaining }) {
 }
 
 const WORDS = { 7: 'weekly', 14: 'fortnightly', 30: 'monthly', 90: 'quarterly' }
-const everyWord = (days) => WORDS[days] || 'every ' + days + ' days'
+/* "every voyage" is a cadence and not a number of days, so it is worded and
+   never arithmetic. */
+const everyWord = (days) => (days === 'voyage' ? 'every voyage' : WORDS[days] || 'every ' + days + ' days')
 
 const fmt = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('-') : '—')
