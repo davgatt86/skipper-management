@@ -34,6 +34,7 @@ const Familiarisation = lazy(() => import('./pages/Familiarisation'))
 const GarbageLog = lazy(() => import('./pages/GarbageLog'))
 const SelfCertification = lazy(() => import('./pages/SelfCertification'))
 const OilRecordBook = lazy(() => import('./pages/OilRecordBook'))
+const PreDeparture = lazy(() => import('./pages/PreDeparture'))
 const OfficialLogBook = lazy(() => import('./pages/OfficialLogBook'))
 const RadioLog = lazy(() => import('./pages/RadioLog'))
 const RiskAssessments = lazy(() => import('./pages/RiskAssessments'))
@@ -347,6 +348,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <OilRecordBook />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/pre-departure" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <PreDeparture />
             </Suspense>
           </ProtectedRoute>
         } />

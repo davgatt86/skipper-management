@@ -151,6 +151,10 @@ export const NAV = [
       // SI 1981/570. Five of the records the boat keeps by hand are numbered
       // entries in this ONE book: drills, steering gear tests, accommodation
       // inspections, provisions and water, and accidents.
+      // FIRST IN THE GROUP, because it is the way IN to the rest of it: it says
+      // which of the books wants an entry before she sails, and every row links
+      // to the book that owns it. It writes nothing itself.
+      { to: '/pre-departure', label: 'Before she sails', access: 'officer' },
       { to: '/official-log-book', label: 'Official Log Book', access: 'officer' },
       { to: '/oil-record-book', label: 'Oil Record Book', access: 'officer' },
       // SI 1999/3210. The mate keeps it; the SKIPPER inspects and signs each

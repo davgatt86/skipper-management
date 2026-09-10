@@ -6,6 +6,8 @@ import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { predeparture, nextAfterCrewList } from '../lib/certification/predeparture'
+import { NextAfterSaving } from './certification/PreDepartureBody'
 import { useCurrentVessel } from '../VesselContext'
 import { pickDetails } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
@@ -73,6 +75,12 @@ export default function CrewList() {
   const [addingPerson, setAddingPerson] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
+  /* WHAT TO SAY AFTER A LIST IS LODGED. David: "when a crew list is
+     lodged/saved, should the page direct the person to do the rest of the
+     entries?" — yes, and to the NEXT one. A list of everything outstanding
+     after saving one item is a wall; the next single thing is an
+     instruction. */
+  const [next, setNext] = useState(null)
 
   async function loadAll() {
     setLoading(true); setError('')
@@ -201,6 +209,36 @@ export default function CrewList() {
     setSaving(false)
     if (e2) { setMsg(`Saved voyage but members failed: ${e2.message}`); return }
     setMsg('Crew list saved ✓')
+
+    /* Read the other books and say what this departure still wants. It is a
+       READ — the entries are made in the books that own them, and this page
+       does not write any of them. A failure here must never look like the
+       crew list having failed, so it is swallowed. */
+    try {
+      const [radio, olb, fuel, orb, garb, trips] = await Promise.all([
+        supabase.from('radio_log_entries').select('id, kind, log_date'),
+        supabase.from('official_log_book_entries').select('id, entry_n, occurred_on'),
+        supabase.from('vessel_fuel_log').select('id, kind, entry_date'),
+        supabase.from('oil_record_book_entries').select('id, fuel_log_id'),
+        supabase.from('garbage_log').select('id, entry_date'),
+        supabase.from('quota_trips').select('departure_at')
+          .not('departure_at', 'is', null)
+          .order('departure_at', { ascending: false }).limit(4),
+      ])
+      const sailings = (trips.data || []).map((t) => String(t.departure_at).slice(0, 10))
+      const check = predeparture({
+        departureAt: voyage.departure_date,
+        /* The sailing before this one bounds the window. Where the departure
+           being lodged is not itself on the logbook yet, the newest sailing
+           on record IS the previous one. */
+        previousDepartureAt: sailings.find((d) => d < voyage.departure_date) || null,
+        crewLists: [{ departure_date: voyage.departure_date }],
+        radioEntries: radio.data || [], olbEntries: olb.data || [],
+        fuelRows: fuel.data || [], orbEntries: orb.data || [],
+        garbageRows: garb.data || [],
+      })
+      setNext(nextAfterCrewList(check))
+    } catch { setNext(null) }
     setManual([])
     setLists((p) => [list, ...p])
     setTimeout(() => setMsg(''), 2500)
@@ -418,6 +456,8 @@ export default function CrewList() {
                   </button>
                   {msg && <span style={{ color: msg.includes('✓') ? 'var(--kelp)' : 'var(--rust)', fontWeight: 600 }}>{msg}</span>}
                 </div>
+                {/* AND THEN THE NEXT THING. One item, not the remaining seven. */}
+                <NextAfterSaving next={next?.next} remaining={next?.remaining} />
               </div>
             </>
           )}

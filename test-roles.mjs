@@ -73,6 +73,11 @@ eq('officer menu', offNav, [
   // opens and closes the OLB, and both refusals are in RLS rather than in this
   // menu — his update carrying a master signature is denied by policy.
   '/official-log-book', '/oil-record-book', '/parts',
+  // "Before she sails" is the way IN to the certification group rather than a
+  // book of its own: it reads the seven books and says which of them wants an
+  // entry before this departure, and writes nothing. The mate gets it because
+  // he is the man making most of those entries.
+  '/pre-departure',
   // The radio log: the mate keeps it, the SKIPPER signs each day's entries.
   // That refusal is in RLS too — his insert into radio_log_days is denied.
   '/radio-log', '/risk-assessments',

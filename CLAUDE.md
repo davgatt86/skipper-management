@@ -3991,8 +3991,24 @@ than a page that nags about books it does not own.
 
 `src/lib/certification/predeparture.js` · `test-predeparture.mjs` 39 checks.
 
-**NOT BUILT YET: the page itself**, and the two hooks into Crew List and the
-dashboard. The deciding is done and tested; the drawing is not.
+**BUILT.** `/pre-departure` — "Before she sails" — first in the Certification
+group, because it is the way IN to the rest of it. `PreDeparture.jsx` does the
+IO, `PreDepartureBody.jsx` the drawing, and the page **reads seven tables and
+writes none**. `scripts/predeparture-preview.mjs` renders five states.
+
+**AND THE FIELD NAMES WERE WRONG ON TWO OF THE SEVEN.** The first cut read
+`entry_date` off the Official Log Book and the radio log; they are
+`occurred_on` and `log_date`. A missing column reads as `undefined` rather than
+throwing, so **every OLB item would have come out "never" and the radio check
+"outstanding" for ever** — and a checklist that says everything is outstanding
+is exactly as useless as one that says nothing is.
+
+**The 39 tests did not catch it, because the fixtures were written from the
+module rather than from the tables.** Third instance of that shape after the
+quota fixture that invented a `remaining` column and the part-month fixture
+that could not reach the code: **a fixture shaped like the code proves the
+logic and nothing about the columns.** They are shaped like the real rows now,
+and the preview says so at the top of the file.
 
 **Open, and David's to answer:** the radio checks are `every` because he put
 them on a pre-departure list, but Schedule 3 requires no test log at all — the

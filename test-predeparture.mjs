@@ -8,7 +8,11 @@ const eq = (a, b, why) => { assert.deepStrictEqual(a, b, why); n++ }
 const DEP = '2026-09-10'
 const PREV = '2026-09-01'
 const base = { departureAt: DEP, previousDepartureAt: PREV, asOf: DEP }
-const olb = (nn, date) => ({ entry_n: nn, entry_date: date })
+/* Shaped like the real rows: the Official Log Book dates its entries
+   `occurred_on` and the radio log uses `log_date`. Written from the tables
+   rather than from the module, because a fixture invented to match the code
+   proves the logic and not the column names. */
+const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
 
 /* ---- THE THREE CLASSES ARE THE WHOLE THING -----------------------------
  * A checklist demanding all eight every trip would fire on the ordinary case
@@ -127,7 +131,7 @@ const olb = (nn, date) => ({ entry_n: nn, entry_date: date })
   const all = predeparture({
     ...base,
     crewLists: [{ departure_date: DEP }],
-    radioEntries: [{ kind: 'test', entry_date: DEP }],
+    radioEntries: [{ kind: 'test', log_date: DEP }],
     olbEntries: [olb(7, '2026-09-05'), olb(17, '2026-09-05'), olb(18, '2026-09-05'), olb(21, '2026-09-05')],
   })
   eq(all.outstanding, [], 'everything done leaves nothing outstanding')
@@ -164,7 +168,7 @@ const olb = (nn, date) => ({ entry_n: nn, entry_date: date })
   const done = predeparture({
     ...base,
     crewLists: [{ departure_date: DEP }],
-    radioEntries: [{ kind: 'test', entry_date: DEP }],
+    radioEntries: [{ kind: 'test', log_date: DEP }],
     olbEntries: [olb(7, DEP), olb(17, DEP), olb(18, DEP), olb(21, DEP)],
   })
   eq(nextAfterCrewList(done), null, 'and nothing to say when there is nothing left')

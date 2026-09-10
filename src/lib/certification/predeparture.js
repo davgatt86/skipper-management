@@ -39,6 +39,19 @@
  * an inquiry.
  */
 
+/* THE COLUMN NAMES ARE THE TABLES', NOT ONES THAT READ WELL.
+   The first cut of this read `entry_date` off the Official Log Book and the
+   radio log. Both are wrong — they are `occurred_on` and `log_date` — and
+   because a missing column reads as undefined rather than throwing, every OLB
+   item would have come out 'never' and the radio check 'outstanding' for ever.
+   A checklist that says everything is outstanding is exactly as useless as one
+   that says nothing is.
+
+   The tests did not catch it because the fixtures were written from this file
+   rather than from the tables. Same shape as the quota fixture that invented a
+   `remaining` column: A FIXTURE THAT IS NOT SHAPED LIKE THE TABLE PROVES
+   NOTHING ABOUT THE PAGE. They are shaped like the real rows now. */
+
 /* Fresh water and provisions are ONE entry, not two. David listed them
    separately and SI 1981/570 puts them together at 18: "Inspection of
    provisions and water, and the result of it". Splitting them here would make
@@ -155,18 +168,18 @@ export function predeparture({
     if (it.cls === 'every') {
       const rows = it.key === 'crew_list'
         ? crewLists.filter((c) => inWindow(c.departure_date || c.created_at))
-        : radioEntries.filter((e) => e.kind === 'test' && inWindow(e.entry_date || e.logged_at))
+        : radioEntries.filter((e) => e.kind === 'test' && inWindow(e.log_date))
       return {
         ...it,
         state: rows.length ? 'done' : 'outstanding',
         n: rows.length,
-        last: lastDate(rows.map((r) => r.departure_date || r.entry_date || r.created_at)),
+        last: lastDate(rows.map((r) => r.departure_date || r.log_date || r.created_at)),
       }
     }
 
     if (it.cls === 'due') {
       const mine = olbEntries.filter((e) => Number(e.entry_n) === it.olb)
-      const last = lastDate(mine.map((e) => e.entry_date))
+      const last = lastDate(mine.map((e) => e.occurred_on))
       const every = intervals[it.olb]
       /* NEVER DONE IS NOT OVERDUE BY A NUMBER OF DAYS. There is no date to
          count from, and reporting one would invent it. */
