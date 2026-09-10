@@ -3924,6 +3924,81 @@ checklist and asking what `vessel_departures` actually held. A migration that
 loops over every table is only as good as its assumption about what the tables
 mean.
 
+### THE PRE-DEPARTURE CHECK — a view over the books, not a book (Sep 2026)
+
+David: *"to keep up with this book keeping we should have a pre departure check
+list which gets all the entries done and logs into their own separate pages ...
+when a crew list is lodged/saved, should the page direct the person to do the
+rest of the entries?"*
+
+**EVERY ONE OF THE EIGHT ALREADY HAS A BOOK.** That is the finding that makes
+this small: nothing new is stored, and the checklist reads the books rather than
+keeping its own copy. A copy would be a second version of a legal record, which
+is the parse-core failure and the two-buyer-leagues failure over again.
+
+    crew list                  crew_lists
+    radio checks               radio_log_entries, kind 'test'
+    drills                     OLB entry 7
+    accommodation              OLB entry 17
+    provisions AND fresh water OLB entry 18
+    steering gear              OLB entry 21
+    bunkering / dirty oil      vessel_fuel_log + the ORB entry
+    garbage                    garbage_log
+
+**AND NO DEPARTURE TABLE EITHER.** `quota_trips.departure_at` is already the
+record of when she sailed, straight off the logbook. `vessel_departures` is NOT
+it — that is an AIS feed of 225 other boats, which is how the backfill bug above
+came to light.
+
+#### THE THREE CLASSES, AND WHY THEY ARE NOT ONE
+
+The whole design turns on this. A list demanding all eight every trip would fire
+on the ordinary case and stop being read inside a fortnight.
+
+- **every** — the crew list and the radio checks. Who is aboard changes every
+  trip.
+- **due** — OLB 7, 17, 18 and 21 on their own clocks, 30/30/30/90 days. **A
+  drill done last week is not outstanding because she happens to be sailing
+  today.**
+- **ifHappened** — bunkering and garbage. **There is no missing garbage entry
+  when nothing went ashore.** What makes one outstanding is the EVENT having
+  happened and the book not saying so, which for bunkering is exactly the
+  reconciliation `orbLink` already does.
+
+**AN ENTRY FOR THE LAST TRIP DOES NOT COUNT FOR THIS ONE.** The window runs from
+the previous sailing to this one — without it the check asks "is there an entry
+at all", which is true forever after the first one.
+
+**FRESH WATER AND PROVISIONS ARE ONE ENTRY, NOT TWO.** David listed them
+separately; SI 1981/570 puts them together at 18, *"Inspection of provisions and
+water, and the result of it"*. Asking twice would be asking for an entry the
+book does not have. Asserted by test so nobody re-splits it.
+
+**NEVER DONE IS NOT OVERDUE BY A NUMBER OF DAYS** — there is no date to count
+from, and reporting one would invent it. Its own state.
+
+**AND IT NEVER SAYS SHE IS READY TO SAIL.** It reports what is done and what is
+not. *Ready* is a claim about a vessel and her crew that no software can make
+out of four tables, and a green tick against a departure is the sort of thing
+read back at an inquiry. No score, no percentage — asserted by test.
+
+#### What the crew list says afterwards — yes, and to the NEXT thing
+
+`nextAfterCrewList()` names **one** item, not the remaining seven. A list of
+seven after saving one is a wall; the next single thing is an instruction. And
+the direction is into the same check, so the crew list is one STEP of it rather
+than a page that nags about books it does not own.
+
+`src/lib/certification/predeparture.js` · `test-predeparture.mjs` 39 checks.
+
+**NOT BUILT YET: the page itself**, and the two hooks into Crew List and the
+dashboard. The deciding is done and tested; the drawing is not.
+
+**Open, and David's to answer:** the radio checks are `every` because he put
+them on a pre-departure list, but Schedule 3 requires no test log at all — the
+cadence is the boat's, and if she tests weekly rather than per trip it belongs
+in `due` with an interval instead.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
