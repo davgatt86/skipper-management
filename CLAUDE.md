@@ -4206,6 +4206,126 @@ supplies is checking a different component.**
 `scripts/predeparture-preview.mjs` renders **seven** states, including a drill
 marked as not held with the reason, the man who marked it, and the entry-8 note.
 `test-predeparture.mjs` 89 → **100**.
+### THE INSPECTION PACK — one document, and the first section is the holes (Sep 2026)
+
+David: *"build inspection pack."* It was on the explicitly-not-wanted list, then
+*"let's keep the inspection pack in mind. we can build towards it"*, and now it
+is asked for outright — so the earlier decision has changed and this is built.
+
+`/inspection-pack`. `src/lib/certification/inspectionPack.js` decides,
+`exportPack.js` prints, `InspectionPackBody.jsx` draws, `InspectionPack.jsx`
+does the IO. **Twelve tables read, none written.**
+
+**IT REPORTS THE RECORDS. IT NEVER CERTIFIES THE VESSEL.** Same rule as the
+pre-departure check refusing to say she is ready to sail and the
+self-certification refusing to pre-tick. No score, no percentage, and the word
+*compliant* appears nowhere — asserted by test on both the PDF and the screen.
+What a surveyor is handed is a statement about records, which is a different
+thing from a statement about a boat, and that difference is the whole document.
+
+#### THE RECORD DECIDED THE DESIGN, and it is lopsided
+
+Measured the day it was built, not assumed:
+
+    vessel certificates 17    risk assessments 12, 80 hazards
+    crew 20, tickets 113      fuel log 45 · engine 23 · garbage 8
+
+    Official Log Book          0        risk assessment briefings   0
+    Oil Record Book            0        lifting equipment           0
+    radio log                  1        thorough examinations       0
+
+**A PACK THAT PRINTED THE FULL HALF AND OMITTED THE EMPTY HALF WOULD READ AS A
+COMPLETE RECORD OF A COMPLIANT VESSEL**, and it would be the most damaging
+document this app has ever produced. So *what this pack does not cover* is
+section 1, before anything that looks like evidence. Put the other way round it
+is a disclaimer; put this way round it is the summary. The preview asserts the
+ordering by page number, not merely that both are present.
+
+**THREE KINDS OF HOLE, AND THEY MUST NOT READ ALIKE:**
+
+- **empty** — the book is here and nothing has ever been written in it. A real
+  gap, in rust, with the regulation beside it.
+- **paper** — the ORB and the OLB are kept on paper because no MIN 644
+  declaration exists. **This is not a failing at all**, and it gets its own
+  heading and its own words; rolling it in with the holes would turn a correct
+  state of affairs into an accusation, and an accusation into background noise.
+- **nofile** — the certificate is listed but its scan is held elsewhere. 11 of
+  17 are, so the dates come off the record rather than off a document this app
+  can show.
+
+**A BOOK THAT IS BOTH EMPTY AND PAPER IS REPORTED AS EMPTY, ONCE.** Saying "kept
+on paper" about a book nobody has ever opened would excuse the hole. Asserted
+both ways, and it is why the PDF preview renders **two** packs — the boat as she
+stands, where every paper book is empty and the MIN 644 note must NOT fire, and
+the same boat with the books kept, which is the only place it can.
+
+#### TWO KINDS OF CONTENT, FILTERED TWO DIFFERENT WAYS
+
+**A certificate is a STATE; a log entry is an EVENT.** Filtering a certificate
+into the window would drop every one issued before it, which is most of them;
+filtering an event as at a date is meaningless. They are kept apart throughout
+and the pack labels which it is showing.
+
+**AND `certStatus` COULD NOT BE REUSED, which is the subtle one.** It reads
+`new Date()` internally, so a pack run for a period that closed in June would
+score every certificate against today and quietly answer a different question
+from the one printed at its own head. `stateAsOf()` is the same 60-day lead and
+the same three words, against the closing date. The boundary is pinned both
+sides by test — 60 days is due, 61 is not.
+
+**A LAPSE INSIDE THE WINDOW IS ITS OWN SECTION.** It vanishes from an as-at list
+the moment it is renewed, and it is exactly what gets asked about.
+
+#### Four field names that would have been wrong, caught by reading the helpers
+
+None of them would have thrown. `withLineage` marks a replacement `replaced_by`,
+not `supersededBy` — reading the wrong name would have listed **every superseded
+risk assessment as though it were still in force**, silently, because an absent
+field is `undefined` rather than an error. `equipmentState` returns `last` (the
+whole examination row) and `due`, not `lastExamined`/`nextDue`. Same shape as
+the ORB reading `entry_date` off two books that call it something else.
+
+**THE COLUMN NAME IS PER BOOK and the test says so** — `occurred_on` on the OLB,
+`log_date` on the radio and engine logs, `entry_date` on the rest. Asserting
+that `entry_date` on the OLB finds **nothing** is the regression for the bug
+that made every book read "never".
+
+#### A FAILED READ AND AN EMPTY TABLE MUST NOT LOOK ALIKE
+
+This matters more here than anywhere else in the app, because an empty table is
+reported as a HOLE and a surveyor is handed that. A permission error read as
+`[]` would print *"no entries at all"* against a book that is being kept. Every
+one of the nineteen reads is checked for `.error` and the pack **refuses to
+build** if any failed, naming the tables — rather than producing a document that
+accuses the boat of a gap that is really a login.
+
+#### Skipper only, and NOT because the mate should not see it
+
+He can read every page it draws from. **`crew_familiarisation` is the one table
+it reads that is absent from the officer allow-list**, so an officer opening it
+would be refused the whole pack rather than shown part of one. Handing it to him
+means adding that table to `officer_role.sql` and re-running it, which rewrites
+policies across ~100 tables on a live multi-tenant database — a deliberate act,
+not a side effect of adding a page.
+
+**Last in the Certification group**, because it is the way OUT of it: *Before she
+sails* says what wants an entry before a voyage, and this says what the whole
+record adds up to when somebody official asks.
+
+#### What it does not do yet
+
+**It does not embed the certificates themselves.** 11 of 17 have no scan in the
+app at all, and the six that do are in a private bucket behind signed URLs. The
+pack lists which documents are held here and which are not, so the surveyor
+knows what he can be shown on the spot — but assembling the actual PDFs into one
+bundle is a separate piece of work.
+
+`test-inspection-pack.mjs` 70 checks ·
+`scripts/inspection-pack-preview.mjs` renders both real PDFs and reads them back
+with pdf.js · `scripts/inspection-pack-page-preview.mjs` server-renders the real
+component in three states, because a build passing proves nothing when an
+undefined identifier is valid JavaScript and this repo has shipped eight.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
@@ -4354,7 +4474,8 @@ Aegir (`aegirfleet.com`) is a paid vessel-management subscription David uses.
 It was explored Aug 2026 to decide what to copy. **Wanted**: crew page rebuild,
 familiarisation, rota planner, log page, vessel certs, days-at-sea repair.
 **Not wanted**: hours of rest, PLB tracking, crew schedule (same as rota
-planner), inspection pack, AI audit.
+planner), AI audit. **The inspection pack was on this list and came OFF it
+Sep 2026 on David's word; it is built.**
 
 ### Crew — one page, five sections
 Replaces the crew-hub tile wall (a second menu duplicating the sidebar).
@@ -5806,7 +5927,8 @@ Also agreed, not yet scheduled:
   certificates and 4 of 111 crew certificates have a file.
 
 Explicitly NOT wanted: hours of rest, PLB tracking, crew schedule (the rota
-planner covers it), inspection pack, AI audit, and Aegir's own landings page.
+planner covers it), AI audit, and Aegir's own landings page. **The inspection
+pack came OFF this list Sep 2026 and IS BUILT** — see its own section below.
 
 ## Trip rates — `Trips.jsx`, `src/lib/tripAgg.js`
 

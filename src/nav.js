@@ -167,6 +167,19 @@ export const NAV = [
       // being assessed and the inspection being recorded.
       { to: '/risk-assessments', label: 'Risk Assessments', access: 'officer' },
       { to: '/lifting-equipment', label: 'Lifting & Work Equipment', access: 'officer' },
+      // LAST IN THE GROUP, because it is the way OUT of it: "Before she sails"
+      // says what wants an entry before a voyage, and this says what the whole
+      // record adds up to when somebody official asks.
+      //
+      // SKIPPER ONLY, and NOT because the mate should not see it — he can read
+      // every page it draws from. `crew_familiarisation` is the one table it
+      // reads that is absent from the officer allow-list, so an officer opening
+      // it would be refused the whole pack rather than shown part of one.
+      // Handing it to him means adding that table to `officer_role.sql` and
+      // re-running it, which rewrites policies across ~100 tables on a live
+      // multi-tenant database and is a deliberate act, not a side effect of
+      // adding a page.
+      { to: '/inspection-pack', label: 'Inspection Pack', access: 'skipper' },
     ],
   },
   {
