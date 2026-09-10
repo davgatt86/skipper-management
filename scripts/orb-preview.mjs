@@ -71,6 +71,28 @@ const corrected = [
 const tidyPages = [{ id: 'q1', page_no: 40, closed_at: '2026-08-31T10:00:00Z', master_signed_at: '2026-08-31T12:00:00Z', master_signed_name: 'David Gatt' }]
 const tidyEntries = ['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31']
   .map((d, i) => e({ id: `q${i}`, page_id: 'q1', entry_date: d, recorded_at: `${d}T09:00:00Z`, code: 'C', item_n: '11.3', quantity: 2 + i * 0.2, unit: 'm3', tank: 'Sludge tank' }))
+
+/* THE FUEL LOG SIDE. Shaped like `vessel_fuel_log` — the same four kinds the
+   page carries — with one movement already in the book, so the panel has both
+   a gap and a thing that is not a gap to tell apart. */
+const fuelRows = [
+  { id: 'fl1', kind: 'fuel', entry_date: '2026-08-14', litres: 18400, grade: 'MGO',
+    location: 'Peterhead', counterparty: 'John A Smith & Sons', vessel_id: vessel.id },
+  { id: 'fl2', kind: 'lube_oil', entry_date: '2026-08-14', litres: 400, grade: 'Meropa 150',
+    location: 'Peterhead', counterparty: 'John A Smith & Sons', vessel_id: vessel.id },
+  { id: 'fl3', kind: 'dirty_oil', entry_date: '2026-08-20', litres: 1200,
+    location: 'Peterhead', counterparty: 'Reception facility', vessel_id: vessel.id },
+  /* Not an oil movement the book wants — it must not appear as a gap. */
+  { id: 'fl4', kind: 'consumption', entry_date: '2026-08-21', litres: 5800, vessel_id: vessel.id },
+]
+
+/* fl1 is already in the book; the other two are not. */
+const entriesWithLink = entries.concat([{
+  id: 'linked-1', page_id: pages[0].id, entry_date: '2026-08-14', code: 'H', item_n: '26.3',
+  quantity: 18400, unit: 'L', port: 'Peterhead', tank: 'No.2 DB',
+  narrative: 'Bunkering of fuel oil. grade MGO. Raised from the fuel log.',
+  officer_name: 'N Wood', recorded_at: '2026-08-14T10:00:00Z', fuel_log_id: 'fl1',
+}])
 
 const panes = [
   ['An empty book', { vessel, required, pages: [], entries: [], canSign: true, today }],
@@ -80,6 +102,12 @@ const panes = [
   ['The mate keeps it and cannot sign', { vessel, required, pages, entries, canSign: false, today }],
   ['Under 400 GT — none required', { vessel: { label: 'A SMALLER BOAT PD100' }, required: { required: false, gt: 320 }, pages: [], entries: [], canSign: true, today }],
   ['No tonnage on file — unknown, not "no"', { vessel: { label: 'A THIRD BOAT' }, required: { required: null, why: 'no gross tonnage on file' }, pages: [], entries: [], canSign: true, today }],
+  ['The fuel log against the book — two movements with no entry',
+   { vessel, required, pages, entries: entriesWithLink, canSign: true, today,
+     fuelRows, onAddEntry: () => {} }],
+  ['Nothing outstanding against the fuel log',
+   { vessel, required, pages, entries: entriesWithLink, canSign: true, today,
+     fuelRows: fuelRows.filter((r) => r.id === 'fl1' || r.kind === 'consumption'), onAddEntry: () => {} }],
 ]
 
 const html = panes.map(([title, props]) =>

@@ -19,7 +19,7 @@ const PAGE = 'id, fleet_id, vessel_id, page_no, opened_at, closed_at,'
 
 const ENTRY = 'id, fleet_id, vessel_id, page_id, entry_date, code, item_n, narrative,'
   + ' quantity, unit, tank, position_text, port, started_at, stopped_at,'
-  + ' officer_name, recorded_by, recorded_at, corrects_entry_id'
+  + ' officer_name, recorded_by, recorded_at, corrects_entry_id, fuel_log_id'
 
 /** Every page, newest first. NULL VESSEL MEANS ALL, as everywhere else. */
 export async function listPages(vesselId) {
@@ -113,6 +113,9 @@ export async function addEntry(entry) {
     officer_name: String(entry.officerName || '').trim(),
     recorded_by: entry.userId || null,
     corrects_entry_id: entry.correctsEntryId || null,
+    /* Where it was raised from a fuel log movement. Null for one written
+       straight into the book, and never used to edit the entry afterwards. */
+    fuel_log_id: entry.fuelLogId || null,
   }).select(ENTRY).single()
   if (error) throw error
   return data

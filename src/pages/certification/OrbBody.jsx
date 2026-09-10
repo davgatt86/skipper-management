@@ -3,6 +3,7 @@ import {
   CODES, codeFor, entriesByPage, correctionsOf, describeEntry, entryRef, itemText,
   keepUntil, unsigned, weeklyGaps, openPageOf, nextPageNo,
 } from '../../lib/certification/orb'
+import { reconcile, mappingFor, draftFromFuel } from '../../lib/certification/orbLink'
 
 /* THE OIL RECORD BOOK PART I, drawn.
  *
@@ -19,7 +20,10 @@ export default function OrbBody({
   vessel, required, pages = [], entries = [], canSign = false, busy = false,
   declared = null, today = new Date().toISOString().slice(0, 10),
   onOpenPage, onClosePage, onSignPage, onAddEntry, onCorrect,
+  fuelRows = [],
 }) {
+  /* The movement a draft was raised from, so EntryForm can seed from it. */
+  const [prefill, setPrefill] = useState(null)
   /* NOT REQUIRED IS NOT THE SAME AS UNKNOWN, and neither is a reason to hide
      the book -- a boat under 400 GT may keep one voluntarily. What changes is
      what the page claims about her. */
@@ -87,7 +91,24 @@ export default function OrbBody({
         </div>
       )}
 
-      {open && <EntryForm page={open} busy={busy} onAdd={onAddEntry} today={today} />}
+      {/* WHAT THE FUEL LOG HAS AND THE BOOK DOES NOT. Shown whether or not a
+          page is open, because a gap in this book is what an inspector counts
+          and it should not be hidden behind having opened a page first. */}
+      <FuelGap rows={fuelRows} entries={entries} vesselId={vessel?.id} today={today}
+               /* An entry may only be made on an OPEN page, and only where the
+                  page was given a way to make one.  is not a prop of
+                  this body — the write gate here is onAddEntry itself. */
+               canRaise={!!open && !!onAddEntry}
+               onRaise={(row) => setPrefill(draftFromFuel(row, { pageId: open?.id, vesselId: vessel?.id }))} />
+
+      {open && (
+        <EntryForm
+          /* Remounted when a different movement is raised, so the form seeds
+             from it rather than needing an effect to push values in. */
+          key={prefill ? prefill.fuelLogId : 'blank'}
+          page={open} busy={busy} onAdd={onAddEntry} today={today} prefill={prefill}
+          onClearPrefill={() => setPrefill(null)} />
+      )}
 
       {pages.filter((p) => p.id !== open?.id).map((p) => (
         <Page key={p.id} page={p} entries={byPage.get(p.id) || []} corrections={corrections}
@@ -266,10 +287,92 @@ function Entry({ entry, superseded, locked, onCorrect }) {
  * else. FREE TEXT BELONGS IN CODE (I) AND NOWHERE ELSE, so the narrative box
  * is offered everywhere but the item is what identifies the entry.
  */
-function EntryForm({ page, busy, onAdd, today }) {
-  const [code, setCode] = useState('C')
-  const [itemN, setItemN] = useState('11.3')
-  const [f, setF] = useState({ entryDate: today, officerName: '' })
+/* WHAT THE FUEL LOG HAS AND THE BOOK DOES NOT.
+ *
+ * David: "can we link the fuel/oil and ORB? so entry into 1 puts entry into
+ * other?" — and the answer is that it OFFERS rather than writes, for reasons
+ * set out in `orbLink.js`: the entry needs an officer's signature the fuel log
+ * cannot give, it can never be edited once made, and it wants a tank the fuel
+ * log does not record.
+ *
+ * THE LIST IS THE HALF THAT MATTERS MOST. It shows the gap whether or not
+ * anybody presses the button, and a gap in this book is what a port state
+ * inspector counts first.
+ */
+function FuelGap({ rows, entries, vesselId, today, canRaise, onRaise }) {
+  const r = useMemo(
+    () => reconcile(rows, entries, { vesselId, asOf: today }),
+    [rows, entries, vesselId, today])
+
+  if (!r.total) return null
+
+  if (!r.missing.length) {
+    return (
+      <div className="card" style={{ borderLeft: '3px solid var(--kelp)' }}>
+        <h3 style={{ marginTop: 0 }}>The fuel log agrees with the book</h3>
+        <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
+          All {r.total} oil movements on the fuel log have an entry against them.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card" style={{ borderLeft: '3px solid var(--brass)' }}>
+      <h3 style={{ marginTop: 0 }}>On the fuel log, not in the book</h3>
+      <p className="muted" style={{ fontSize: '0.82rem', marginTop: 0 }}>
+        {/* A COUNT IS NOT A RECONCILIATION, so it says which movements and how
+            much oil, not a percentage — each one is its own entry and its own
+            signature, so two of three is not two thirds of a duty done. */}
+        {r.missing.length} of {r.total} movements have no entry against them:{' '}
+        {r.kinds.map((k) => k.n + ' × ' + k.what.toLowerCase()
+          + (k.litres ? ' (' + Math.round(k.litres).toLocaleString('en-GB') + ' L)' : '')).join(' · ')}.
+      </p>
+      <div className="dlist">
+        {r.missing.slice(0, 12).map((row) => {
+          const m = mappingFor(row.kind)
+          return (
+            <div className="di" key={row.id}>
+              <span>
+                <b>{fmtDate(row.entry_date)}</b> · {m.what}
+                {row.litres != null && <> · {Math.round(row.litres).toLocaleString('en-GB')} L</>}
+                {row.location ? ' · ' + row.location : ''}
+                <span className="sub3"> — would be {m.code} {m.itemN}</span>
+              </span>
+              {canRaise
+                ? <button className="secondary" style={{ fontSize: '0.74rem' }}
+                          onClick={() => onRaise(row)}>raise the entry</button>
+                /* NO BUTTON WITHOUT AN OPEN PAGE, because an entry may only be
+                   made on one — offering it and then refusing at save time is
+                   a worse way to find out. */
+                : <span className="sub3">open a page to enter it</span>}
+            </div>
+          )
+        })}
+      </div>
+      {r.missing.length > 12 && (
+        <p className="muted" style={{ fontSize: '0.76rem', margin: '0.5rem 0 0' }}>
+          and {r.missing.length - 12} older ones.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function EntryForm({ page, busy, onAdd, today, prefill, onClearPrefill }) {
+  const [code, setCode] = useState(prefill?.code || 'C')
+  const [itemN, setItemN] = useState(prefill?.itemN || '11.3')
+  /* THE OFFICER NAME IS NEVER SEEDED. It is the one field reg 20 is most
+     particular about and the one thing a fuel log cannot know — the schema
+     refuses a blank one, and that refusal is the rule working. */
+  const [f, setF] = useState(prefill
+    ? {
+        entryDate: prefill.entryDate || today, officerName: '',
+        quantity: prefill.quantity ?? '', unit: prefill.unit || '',
+        port: prefill.port || '', narrative: prefill.narrative || '',
+        tank: '', fuelLogId: prefill.fuelLogId,
+      }
+    : { entryDate: today, officerName: '' })
   const c = codeFor(code)
 
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }))
@@ -288,6 +391,15 @@ function EntryForm({ page, busy, onAdd, today }) {
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Make an entry on page {page.page_no}</h3>
+      {prefill && (
+        <p className="muted" style={{ fontSize: '0.8rem', marginTop: 0,
+                                      borderLeft: '3px solid var(--hull)', paddingLeft: '0.6rem' }}>
+          Raised from the fuel log. <b>It is not an entry until you sign it</b>, and
+          {prefill.needs?.length ? ' it still needs ' + prefill.needs.join('; ') + '.' : '.'}
+          {' '}<button className="secondary" style={{ fontSize: '0.72rem', padding: '0 0.35rem' }}
+                       onClick={onClearPrefill}>start blank instead</button>
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
         <Field label="Date">
@@ -336,7 +448,8 @@ function EntryForm({ page, busy, onAdd, today }) {
         A mistake is put right by making a further entry that says so.
       </p>
       <button disabled={!ready || busy}
-              onClick={() => onAdd?.({ ...f, code, itemN: c?.freeText ? null : itemN, pageId: page.id })}>
+              onClick={() => onAdd?.({ ...f, code, itemN: c?.freeText ? null : itemN,
+                                        pageId: page.id, fuelLogId: f.fuelLogId || null })}>
         {ready ? 'Make the entry' : 'Date, code and officer are needed'}
       </button>
     </div>

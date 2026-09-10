@@ -30,6 +30,9 @@ export default function OilRecordBook() {
   const [details, setDetails] = useState(null)
   const [pages, setPages] = useState([])
   const [entries, setEntries] = useState([])
+  /* The fuel log side of the reconciliation. Read here rather than in the
+     body so the body stays prop-driven and can be server-rendered. */
+  const [fuelRows, setFuelRows] = useState([])
   const [correcting, setCorrecting] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -39,16 +42,24 @@ export default function OilRecordBook() {
 
   const refresh = useCallback(async () => {
     setErr('')
-    if (!current?.id) { setPages([]); setEntries([]); return }
+    if (!current?.id) { setPages([]); setEntries([]); setFuelRows([]); return }
     try {
-      const [{ data: vd }, p, e] = await Promise.all([
+      const [{ data: vd }, p, e, fl] = await Promise.all([
         supabase.from('vessel_details').select('*'),
         listPages(current.id),
         listEntries(current.id),
+        /* WHOLE, and filtered in `orbLink`. The kinds the book wants are a
+           minority of the log and the rows that predate `vessel_id` belong to
+           the fleet's only boat, so the scoping is a decision rather than a
+           where clause. */
+        supabase.from('vessel_fuel_log')
+          .select('id, kind, entry_date, litres, grade, location, counterparty, vessel_id')
+          .order('entry_date', { ascending: false }),
       ])
       setDetails(pickDetails(vd || [], current))
       setPages(p)
       setEntries(e)
+      setFuelRows(fl.data || [])
     } catch (x) { setErr(x.message || String(x)) }
   }, [current?.id])
 
@@ -85,6 +96,7 @@ export default function OilRecordBook() {
       ) : (
         <OrbBody
           vessel={current} required={required} pages={pages} entries={entries}
+          fuelRows={fuelRows}
           canSign={canSign} busy={busy}
           onOpenPage={(n) => run(() => openPage(current.id, n), `Page ${n} opened.`)}
           onClosePage={(id) => run(() => closePage(id), 'Page closed. It still needs the master.')}

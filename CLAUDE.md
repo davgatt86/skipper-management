@@ -3823,6 +3823,73 @@ Nothing built. What it would need is already accumulating: crew and vessel
 certificates with their files, maintenance and safety task history, drills,
 risk assessments and hazards, LOLER and PUWER examinations, and a report period.
 
+### THE FUEL LOG AND THE ORB ARE LINKED — one way, and it OFFERS (Sep 2026)
+
+David: *"can we link the fuel/oil and ORB? so entry into 1 puts entry into
+other?"*
+
+Yes, and not by writing. `src/lib/certification/orbLink.js`.
+
+**ONE DIRECTION: fuel log -> ORB.** The reverse would have to invent the
+supplier, the grade and the price the fuel loop is built on, none of which the
+regulation asks the book to carry.
+
+**AND IT OFFERS A DRAFT RATHER THAN MAKING THE ENTRY. Three reasons, and the
+first is already in the schema:**
+
+1. **`officer_name` is NOT NULL.** Reg 20 requires each operation to be signed
+   by the officer in charge of it, and the column enforces it — so the book
+   cannot hold an unsigned entry, and filling that box automatically is the app
+   **signing a statutory record for a man who never saw it**.
+2. **An entry can never be edited or deleted.** Correct a litres typo in the
+   working log an hour later and an automatic entry is already in the book,
+   needing a formal correcting entry — a permanent paper trail of a mistake the
+   fuel log never really made.
+3. **Item 26.3 wants the tank and its total content after bunkering.** The fuel
+   log has no tank column, so a derived entry would be incomplete on exactly the
+   part that makes it compliant. The draft says so instead of looking finished.
+
+    fuel      -> H 26.3   bunkering of fuel oil
+    lube_oil  -> H 26.4   bunkering of bulk lubricating oil
+    dirty_oil -> C 12.1   disposal of oil residues to a reception facility
+    waste     -> C 12.1
+
+**ONE OPERATION IS ONE ENTRY, NOT THREE.** 26.1 place and 26.2 start/stop ride
+on the same row in the `port`, `started_at` and `stopped_at` columns.
+
+**THE RECONCILIATION IS THE HALF THAT MATTERS MOST.** *"On the fuel log, not in
+the book"* lists the movements with no entry against them, so the gap is visible
+whether or not anybody presses the button — and a gap in this book is what a
+port state inspector counts first. **It reports movements and litres, never a
+percentage**: each one is its own entry and its own signature, so two of three
+is not two thirds of a duty done.
+
+**No button without an open page.** An entry may only be made on one, and
+offering it then refusing at save time is a worse way to find out.
+
+`oil_record_book_entries.fuel_log_id`, **ON DELETE SET NULL** — deleting a
+working log row must never reach into the Oil Record Book.
+
+`test-orb-link.mjs` — 45 checks.
+
+**AND THE PREVIEW EARNED ITS KEEP TWICE IN ONE SITTING.** `npm run build` passed
+clean on two undefined identifiers that `orb-preview.mjs` threw on immediately:
+`canWrite`, which is not a prop of `OrbBody` (the write gate there is
+`onAddEntry` itself), and `fmt`, where the file's formatter is `fmtDate`.
+Seventh and eighth of that shape. **An undefined identifier is valid JavaScript
+right up until it runs**, and rendering is the only thing in this repo that runs
+it.
+
+**A third one was mine, in a guard:** the script that adds the `orbLink` import
+skipped it because it tested `s.includes('orbLink')` and the word already
+appeared in a COMMENT. Check for the import, not for the substring.
+
+**OPEN, AND WORTH SETTLING: litres or cubic metres.** The draft states the
+quantity in litres with the unit beside it, because that is what was logged and
+a converted figure that looks like a read one cannot be checked against the
+delivery note. But the ORB is conventionally kept in **m³**, the conversion is
+exact rather than estimated, and the form defaults to m3. David's call.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
