@@ -3890,6 +3890,40 @@ a converted figure that looks like a read one cannot be checked against the
 delivery note. But the ORB is conventionally kept in **m³**, the conversion is
 exact rather than estimated, and the form defaults to m3. David's call.
 
+#### AND THE BACKFILL GOT ONE TABLE WRONG — `vessel_departures` (Sep 2026)
+
+`vessel_id_backfill_after_provider.sql` stamped the fleet's only boat onto
+every unstamped row in every table. **That rule is right for a boat's own
+records and wrong for a FEED.**
+
+`vessel_departures` is 1,606 rows and **225 distinct boats** — HOPEFUL PD12,
+XIAMARA and 222 others leaving Peterhead, `source: 'ais'`. It sits on
+Audacious's `fleet_id` because that is **who reads the feed**, not whose
+departures they are. Seven rows are hers.
+
+713 were already wrongly stamped before that migration; it took the number to
+**1,577 rows claiming to be Audacious's sailings**.
+
+**THE TEST FOR "THE ONLY POSSIBLE ANSWER" HAS TO BE ABOUT THE ROW, NOT THE
+FLEET.** A fleet with one boat does not make every row it can see about that
+boat, and `vessel_name` was sitting on every row saying which boat it really
+was. Put right by matching on the name and nulling the rest: **7 stamped, 0
+wrong, 0 missed**, and those nulls are permanent — the other 218 boats are not
+in `vessels` and never will be.
+
+**The blast radius was checked rather than assumed.** Every table carrying both
+a `vessel_id` and a free-text boat name was compared: `sales_landings`,
+`stowage_plans` and `vessel_details` all agree, and the 171 apparent
+disagreements in `quota_trips` and `quota_snapshots` are the documented naming
+variants — `Audacious`, `BF83 Audacious`, `AUDACIOUS` all stamped
+`AUDACIOUS BF83`, which is what `VESSEL_CANON` exists for. One table wrong,
+and it is fixed.
+
+**It was found by accident**, looking for somewhere to hang a pre-departure
+checklist and asking what `vessel_departures` actually held. A migration that
+loops over every table is only as good as its assumption about what the tables
+mean.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
