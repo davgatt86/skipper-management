@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { GUIDES } from '../../lib/certification/predeparture'
+import { guidesFor } from '../../lib/certification/predeparture'
 
 /* THE PRE-DEPARTURE CHECK, DRAWN.
  *
@@ -13,18 +13,19 @@ import { GUIDES } from '../../lib/certification/predeparture'
  * deciding is in `lib/certification/predeparture.js`.
  */
 
-/* NOTHING IS "OVERDUE". David: "intervals are guide not targets." The word
-   asserts a breach of a calendar SI 1981/570 does not set — it says WHAT to
-   enter, not how often to hold a drill. Past the guide is a WATCH, in brass
-   rather than rust, and what the row leads with is the number of days.
+/* TWO CLOCKS, AND THE WORDS ARE NOT INTERCHANGEABLE.
 
-   `never` keeps the red: no record at all is a different thing from a record
-   that is older than the boat meant. */
+   `overdue` means past the STATUTORY interval — a breach, and it is rust.
+   `past her own` means past the cadence the boat set for herself while still
+   inside the law: her standard, not the law's, so brass.
+
+   Saying "overdue" for the second would cry wolf; saying "past her own" for
+   the first would let a breach read as a preference. */
 const TONE = {
   done: { colour: 'var(--kelp)', word: 'done' },
-  logged: { colour: 'var(--mute)', word: 'logged' },
   outstanding: { colour: 'var(--rust)', word: 'not done' },
-  watch: { colour: 'var(--brass)', word: 'past the guide' },
+  overdue: { colour: 'var(--rust)', word: 'overdue' },
+  watch: { colour: 'var(--brass)', word: 'past her own' },
   never: { colour: 'var(--rust)', word: 'never recorded' },
   nothing: { colour: 'var(--mute)', word: 'nothing to record' },
 }
@@ -85,7 +86,7 @@ export default function PreDepartureBody({
           {outstanding.length > 0 && watch.length > 0 && ' '}
           {watch.length > 0 && (
             <b style={{ color: 'var(--brass)' }}>
-              {watch.length} {watch.length === 1 ? 'is' : 'are'} past the guide.
+              {watch.length} {watch.length === 1 ? 'is' : 'are'} past her own interval.
             </b>
           )}
           {outstanding.length === 0 && watch.length === 0 && (
@@ -104,10 +105,11 @@ export default function PreDepartureBody({
             note="Done before she sails, whatever was done last trip."
             rows={byClass('every')} />
 
-      <Band title="How often the boat holds them"
-            note="A GUIDE, not a target — the regulation says what to enter, not how often to
-                  hold a drill. Weekly, fortnightly or monthly is the boat’s own call, and
-                  the number of days since is the fact."
+      <Band title="On a repeating interval"
+            note="Two clocks. The statutory interval is a maximum and going past it is a
+                  breach; the boat may keep to a shorter one of her own — weekly,
+                  fortnightly or monthly — and going past that alone is her standard, not
+                  the law’s."
             rows={byClass('due')} onGuide={onGuide} />
 
       <Band title="Only if it happened"
@@ -140,15 +142,23 @@ function Row({ r, onGuide }) {
         <span className="sub3"> — {r.why}</span>
         {/* WHAT IT RESTS ON, so a state can be argued with rather than believed.
             An interval, a last date, or the number of movements it found. */}
-        {/* THE NUMBER OF DAYS IS THE FACT and leads; the guide is what it is
-            being read against, and it is the boat’s own. */}
+        {/* THE NUMBER OF DAYS LEADS, because it is the fact. Then BOTH clocks,
+            so a reader can see which one a state is against. */}
         {r.cls === 'due' && (
           <span className="sub3">
             {' '}
             {r.last
               ? r.age + ' days since — last ' + fmt(r.last)
-                + (r.every ? ', the boat’s guide is ' + guideWord(r.every) : ', no guide set')
+                + (r.every ? ', her own ' + everyWord(r.every) : '')
+                + (r.statutory ? ', statutory ' + everyWord(r.statutory.days) : '')
               : 'no entry on record'}
+          </span>
+        )}
+        {/* THE STATUTORY FIGURE IS NOT CONFIRMED, and the row says so rather
+            than letting the app put a regulation in a skipper’s mouth. */}
+        {r.statutory && !r.statutory.confirmed && (
+          <span className="sub3" style={{ color: 'var(--brass)' }}>
+            {' '}⚑ {r.statutory.source}
           </span>
         )}
         {r.key === 'bunkering' && r.n > 0 && (
@@ -163,10 +173,12 @@ function Row({ r, onGuide }) {
       </span>
       <span style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
         {onGuide && r.cls === 'due' && (
+          /* OFFERING A LONGER CADENCE THAN THE LAW WOULD BE OFFERING TO BREACH,
+             so the list is cut at the statutory interval for that entry. */
           <select value={r.every == null ? '' : String(r.every)}
                   onChange={(e) => onGuide(r.olb, e.target.value === '' ? null : Number(e.target.value))}
                   style={{ fontSize: '0.74rem', padding: '1px 4px', width: 'auto' }}>
-            {GUIDES.map((g) => (
+            {guidesFor(r.olb).map((g) => (
               <option key={g.key} value={g.days == null ? '' : String(g.days)}>{g.label}</option>
             ))}
           </select>
@@ -195,7 +207,7 @@ export function NextAfterSaving({ next, remaining }) {
   )
 }
 
-const guideWord = (days) =>
-  (GUIDES.find((g) => g.days === days)?.label || 'every ' + days + ' days').toLowerCase()
+const WORDS = { 7: 'weekly', 14: 'fortnightly', 30: 'monthly', 90: 'quarterly' }
+const everyWord = (days) => WORDS[days] || 'every ' + days + ' days'
 
 const fmt = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('-') : '—')

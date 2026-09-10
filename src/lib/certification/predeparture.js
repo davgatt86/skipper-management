@@ -126,21 +126,60 @@ export const ITEMS = [
 
 export const itemOf = (key) => ITEMS.find((i) => i.key === key) || null
 
-/* HOW OFTEN THE BOAT MEANS TO DO THEM. David: "intervals are guide not
-   targets. we can do and log drills and tests weekly, fortnightlly or
-   monthly."
+/* TWO CLOCKS, AND THE FIRST IS THE LAW.
 
-   SI 1981/570 says WHAT to enter, not HOW OFTEN to hold a drill — the entry
-   is required when one is held. So these are the boat's own practice, the
-   same footing as the 12-month risk assessment cycle, and the page must not
-   report a breach of a calendar nobody set. */
+   David, Sep 2026: *"i didn't mean to put the reporting periods as guides. i
+   was just pointing out that we can log in periods less than the minimum
+   stautuary recquirement."*
+
+   I had over-read him and thrown the statutory interval away, leaving only a
+   cadence the boat set for itself — which would have let a genuine breach
+   pass as a matter of preference. It is the other way round:
+
+     THE STATUTORY INTERVAL IS A MAXIMUM. Going past it is a breach, and the
+     page says overdue and means it.
+     THE BOAT'S OWN CADENCE IS SHORTER, if she wants one. Going past that and
+     not the statutory is a watch — her own standard, not the law's.
+
+   The two are compared independently, so a cadence longer than the statutory
+   cannot hide a breach: the statutory check fires regardless of what is set.
+
+   AND THE FIGURES ARE NOT CONFIRMED. `confirmed: false` on all four, with the
+   source written out beside each. This codebase does not put a regulation in
+   a skipper's mouth on my say-so — the ORB items were transcribed from
+   Appendix III and the OLB entries from SI 1981/570, and these want the same
+   treatment before they are relied on. The page says so on the row. */
+export const STATUTORY = {
+  7: { days: 30, confirmed: false,
+    source: 'Musters, drills and appliance inspections. Interval to be confirmed against MSN 1872 for a 15-24m vessel.' },
+  17: { days: 30, confirmed: false,
+    source: 'Crew accommodation inspection — believed at intervals not exceeding one month. To be confirmed.' },
+  18: { days: 30, confirmed: false,
+    source: 'Provisions and water inspection — believed at intervals not exceeding one month. To be confirmed.' },
+  21: { days: 90, confirmed: false,
+    source: 'Steering gear drills — believed quarterly where SOLAS V/26 applies. To be confirmed.' },
+}
+
+export const statutoryFor = (olbN) => STATUTORY[olbN] || null
+
+/* HOW OFTEN THE BOAT CHOOSES TO DO THEM, which may be oftener than the law
+   asks and never less often. */
 export const GUIDES = [
   { key: 'weekly', label: 'Weekly', days: 7 },
   { key: 'fortnightly', label: 'Fortnightly', days: 14 },
   { key: 'monthly', label: 'Monthly', days: 30 },
   { key: 'quarterly', label: 'Quarterly', days: 90 },
-  { key: 'none', label: 'No guide — just tell me when it was last done', days: null },
+  { key: 'statutory', label: 'The statutory interval', days: null },
 ]
+
+/** The guides worth offering for an entry: never one LONGER than the law. */
+export function guidesFor(olbN) {
+  const st = statutoryFor(olbN)
+  if (!st) return GUIDES
+  /* OFFERING A LONGER ONE WOULD BE OFFERING TO BREACH. `null` is "keep to the
+     statutory", which is always available. */
+  return GUIDES.filter((g) => g.days == null || g.days <= st.days)
+}
 
 /* Shipped defaults. A fleet stores only what DIFFERS, so a later correction
    here reaches every boat that has not deliberately changed it — the same
@@ -212,20 +251,20 @@ export function predeparture({
     if (it.cls === 'due') {
       const mine = olbEntries.filter((e) => Number(e.entry_n) === it.olb)
       const last = lastDate(mine.map((e) => e.occurred_on))
+      const st = statutoryFor(it.olb)
       const every = guides[it.olb] ?? null
-      /* NEVER DONE IS NOT PAST A GUIDE BY A NUMBER OF DAYS. There is no date
-         to count from, and reporting one would invent it. It is the one state
-         here that IS worth a red mark: no record at all. */
-      if (!last) return { ...it, state: 'never', every, last: null, n: mine.length }
+      /* NEVER DONE IS NOT PAST AN INTERVAL BY A NUMBER OF DAYS. There is no
+         date to count from, and reporting one would invent it. */
+      if (!last) return { ...it, state: 'never', every, statutory: st, last: null, n: mine.length }
       const age = daysBetween(last, today)
-      /* A GUIDE IS NOT A TARGET, so nothing here is ever "overdue" — that word
-         asserts a breach of a calendar the regulation does not set. Past the
-         guide is `watch`, and what the page leads with is the NUMBER OF DAYS,
-         which is the fact. The skipper judges it. */
+      /* THE STATUTORY CHECK FIRES FIRST AND INDEPENDENTLY, so a cadence set
+         longer than the law — or none at all — cannot hide a breach. */
+      const overStatutory = st ? age > st.days : false
+      const overOwn = every != null && age > every
       return {
         ...it,
-        state: every == null ? 'logged' : age > every ? 'watch' : 'done',
-        every, last, age, n: mine.length,
+        state: overStatutory ? 'overdue' : overOwn ? 'watch' : 'done',
+        every, statutory: st, last, age, n: mine.length,
       }
     }
 
@@ -259,8 +298,9 @@ export function predeparture({
        ordinary case.
 
        `never` counts as not done, because there is no record that it has ever
-       been held. */
-    outstanding: items.filter((i) => ['outstanding', 'never'].includes(i.state)),
+       been held — and so does `overdue`, which is past the STATUTORY interval
+       and is a breach rather than a matter of the boat's own standard. */
+    outstanding: items.filter((i) => ['outstanding', 'never', 'overdue'].includes(i.state)),
     watch: items.filter((i) => i.state === 'watch'),
     known: true,
   }

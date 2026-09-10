@@ -1,7 +1,7 @@
 import assert from 'node:assert'
 import {
   ITEMS, itemOf, predeparture, nextAfterCrewList,
-  GUIDES, DEFAULT_GUIDES, resolveGuides,
+  GUIDES, DEFAULT_GUIDES, resolveGuides, statutoryFor, guidesFor,
 } from './src/lib/certification/predeparture.js'
 
 let n = 0
@@ -79,7 +79,7 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
      do and log drills and tests weekly, fortnightlly or monthly." SI 1981/570
      says WHAT to enter, not how often to hold a drill — so nothing here is
      'overdue', which asserts a breach of a calendar nobody set. */
-  eq(stale.items.find((i) => i.key === 'olb_drills').state, 'watch', 'one from July is past the guide')
+  eq(stale.items.find((i) => i.key === 'olb_drills').state, 'overdue', 'one from July is past the statutory month')
   eq(stale.items.find((i) => i.key === 'olb_drills').age, 71, 'and it says how long it has been')
 
   /* Steering gear is quarterly, so the same date is fine for it and not for the
@@ -182,64 +182,100 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
   eq(nextAfterCrewList({ known: false }), null, 'nor without a departure')
 }
 
-/* ---- A GUIDE IS NOT A TARGET, AND PAST IT IS NOT NOT-DONE -------------
- * David: "intervals are guide not targets. we can do and log drills and tests
- * weekly, fortnightlly or monthly." SI 1981/570 says WHAT to enter, not how
- * often to hold a drill.
+/* ---- TWO CLOCKS: THE LAW'S, AND THE BOAT'S OWN ------------------------
+ * David: "i didn't mean to put the reporting periods as guides. i was just
+ * pointing out that we can log in periods less than the minimum stautuary
+ * recquirement."
  *
- * Rolling "past the guide" together with "not done" is how a checklist starts
- * crying wolf. A crew list that was never lodged is not done; a drill held 40
- * days ago against a 30-day guide is a judgement for the skipper.
+ * So the statutory interval is a MAXIMUM and going past it is a breach; the
+ * boat's own cadence is shorter, and going past that alone is her own standard
+ * rather than the law's.
  */
 {
-  const past = predeparture({ ...base, olbEntries: [olb(7, '2026-08-01')] })
-  const d = past.items.find((i) => i.key === 'olb_drills')
-  eq(d.state, 'watch', 'past the guide is its own state, and it is not "overdue"')
-  ok(!past.outstanding.some((i) => i.key === 'olb_drills'), 'it is NOT counted as not done')
-  ok(past.watch.some((i) => i.key === 'olb_drills'), 'it is on the watch list instead')
-  eq(d.age, 40, 'and the number of days is the fact the page leads with')
-
-  /* NO RECORD AT ALL is the one that does count as not done. */
-  const never = predeparture(base)
-  ok(never.outstanding.some((i) => i.key === 'olb_drills'), 'never held is not done')
-}
-
-/* ---- WEEKLY, FORTNIGHTLY OR MONTHLY, AND THE BOAT CHOOSES -------------- */
-{
-  eq(GUIDES.map((g) => g.days), [7, 14, 30, 90, null], 'the offered guides, and no guide at all')
-  eq(resolveGuides(null), DEFAULT_GUIDES, 'nothing stored keeps the shipped guides')
-  eq(resolveGuides({ 7: 7 })[7], 7, 'a weekly drill is honoured')
-  /* ONLY THE DIFFERENCE IS STORED, so a later correction to a shipped guide
-     reaches every boat that has not deliberately changed it. */
-  eq(resolveGuides({ 7: 7 })[21], 90, 'and the rest are untouched')
-
-  /* NULL IS A REAL ANSWER here — no guide, just tell me when it was last done —
-     so it must not fall back to the default the way rubbish does. */
-  eq(resolveGuides({ 7: null })[7], null, 'no guide is kept as no guide')
-  eq(resolveGuides({ 7: 0 })[7], 30, 'while nought is not a guide and falls back')
-  eq(resolveGuides({ 7: 'soon' })[7], 30, 'and neither is rubbish')
-
-  const weekly = predeparture({
+  /* Past the boat's weekly cadence, well inside the statutory month. */
+  const own = predeparture({
     ...base,
     guides: resolveGuides({ 7: 7 }),
-    olbEntries: [olb(7, '2026-09-01'), olb(21, '2026-09-01')],
+    olbEntries: [olb(7, '2026-08-31')],
   })
-  eq(weekly.items.find((i) => i.key === 'olb_drills').state, 'watch',
-     'nine days against a weekly guide is past it')
-  eq(weekly.items.find((i) => i.key === 'olb_steering').state, 'done',
-     'and the same date is well inside the quarterly one')
+  const d = own.items.find((i) => i.key === 'olb_drills')
+  eq(d.state, 'watch', 'past her own cadence but inside the statutory is a watch')
+  eq(d.age, 10, 'ten days')
+  ok(!own.outstanding.some((i) => i.key === 'olb_drills'), 'and NOT counted as not done')
+  ok(own.watch.some((i) => i.key === 'olb_drills'), 'it is on the watch list')
 
-  /* WITH NO GUIDE IT STILL SAYS WHEN, and never nags. */
-  const quiet = predeparture({
+  /* Past the statutory month. That IS a breach, whatever she set for herself. */
+  const breach = predeparture({
+    ...base,
+    guides: resolveGuides({ 7: 7 }),
+    olbEntries: [olb(7, '2026-07-01')],
+  })
+  const b = breach.items.find((i) => i.key === 'olb_drills')
+  eq(b.state, 'overdue', 'past the statutory interval is overdue and says so')
+  ok(breach.outstanding.some((i) => i.key === 'olb_drills'),
+     'and it counts as not done, not as a matter of preference')
+
+  /* THE STATUTORY CHECK FIRES INDEPENDENTLY, so a cadence set longer than the
+     law — or none at all — cannot hide a breach. */
+  const noGuide = predeparture({
     ...base,
     guides: resolveGuides({ 7: null }),
-    olbEntries: [olb(7, '2025-01-01')],
+    olbEntries: [olb(7, '2026-07-01')],
   })
-  const g = quiet.items.find((i) => i.key === 'olb_drills')
-  eq(g.state, 'logged', 'no guide means no verdict')
-  ok(g.age > 300, 'but the days since are still reported')
-  ok(!quiet.outstanding.concat(quiet.watch).some((i) => i.key === 'olb_drills'),
-     'and it is on neither list')
+  eq(noGuide.items.find((i) => i.key === 'olb_drills').state, 'overdue',
+     'setting no cadence of her own does not switch the statutory off')
+
+  const tooLong = predeparture({
+    ...base,
+    guides: { ...DEFAULT_GUIDES, 7: 365 },
+    olbEntries: [olb(7, '2026-07-01')],
+  })
+  eq(tooLong.items.find((i) => i.key === 'olb_drills').state, 'overdue',
+     'nor does setting a cadence longer than the law allows')
+
+  /* And inside both, it is simply done. */
+  const fine = predeparture({
+    ...base,
+    guides: resolveGuides({ 7: 7 }),
+    olbEntries: [olb(7, '2026-09-08')],
+  })
+  eq(fine.items.find((i) => i.key === 'olb_drills').state, 'done', 'inside both is done')
+}
+
+/* ---- THE STATUTORY FIGURES ARE NOT CONFIRMED, AND SAY SO ---------------
+ * This codebase does not put a regulation in a skipper's mouth on my say-so.
+ * The ORB items were transcribed from Appendix III and the OLB entries from
+ * SI 1981/570; these four want the same treatment before they are relied on.
+ */
+{
+  for (const n of [7, 17, 18, 21]) {
+    const st = statutoryFor(n)
+    ok(st, 'entry ' + n + ' has a statutory interval on file')
+    ok(st.days > 0, 'with a number of days')
+    ok(st.source, 'and the source it came from')
+    eq(st.confirmed, false, 'and it is marked UNCONFIRMED until somebody checks it')
+  }
+  eq(statutoryFor(99), null, 'an entry with no statutory interval has none')
+}
+
+/* ---- SHE MAY LOG OFTENER, NEVER LESS OFTEN ----------------------------- */
+{
+  eq(GUIDES.map((g) => g.days), [7, 14, 30, 90, null], 'the cadences on offer')
+  /* OFFERING A LONGER ONE WOULD BE OFFERING TO BREACH. */
+  eq(guidesFor(7).map((g) => g.days), [7, 14, 30, null],
+     'a monthly entry offers weekly, fortnightly, monthly — never quarterly')
+  eq(guidesFor(21).map((g) => g.days), [7, 14, 30, 90, null],
+     'and a quarterly one offers all of them')
+  ok(guidesFor(7).some((g) => g.days == null), 'keeping to the statutory is always on offer')
+
+  eq(resolveGuides(null), DEFAULT_GUIDES, 'nothing stored keeps the shipped cadences')
+  eq(resolveGuides({ 7: 7 })[7], 7, 'a weekly drill is honoured')
+  /* ONLY THE DIFFERENCE IS STORED, so a later correction reaches every boat
+     that has not deliberately changed it. */
+  eq(resolveGuides({ 7: 7 })[21], 90, 'and the rest are untouched')
+  eq(resolveGuides({ 7: null })[7], null, 'no cadence of her own is kept as none')
+  eq(resolveGuides({ 7: 0 })[7], 30, 'while nought is not a cadence and falls back')
+  eq(resolveGuides({ 7: 'soon' })[7], 30, 'and neither is rubbish')
 }
 
 /* ---- the lookup --------------------------------------------------------- */

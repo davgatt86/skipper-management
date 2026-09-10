@@ -35,7 +35,7 @@ const { NextAfterSaving } = mod
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { MemoryRouter } = await import('react-router-dom')
 const React = await import('react')
-const { predeparture, nextAfterCrewList } =
+const { predeparture, nextAfterCrewList, resolveGuides } =
   await import(pathToFileURL('src/lib/certification/predeparture.js').href)
 
 const vessel = { id: 'v1', label: 'AUDACIOUS BF83' }
@@ -55,10 +55,12 @@ const states = [
   ['Part way — the crew list lodged, a bunkering with no ORB entry', predeparture({
     departureAt: DEP, previousDepartureAt: PREV, asOf: DEP,
     crewLists: [{ departure_date: DEP }],
-    /* Drills and accommodation inside the guide, provisions inside it, and the
-       quarterly steering test PAST it — so the pane carries a watch as well as
-       the two that are not done. */
-    olbEntries: [olb(7, '2026-09-05'), olb(17, '2026-09-04'), olb(18, '2026-08-20'), olb(21, '2026-05-01')],
+    /* ONE OF EACH STATE, so every word on the page is exercised: the drill is
+       past her own WEEKLY cadence but inside the statutory month (a watch); the
+       steering test is past the statutory quarter (a breach); the other two are
+       inside both. */
+    guides: resolveGuides({ 7: 7 }),
+    olbEntries: [olb(7, '2026-08-31'), olb(17, '2026-09-04'), olb(18, '2026-08-20'), olb(21, '2026-05-01')],
     fuelRows: [{ id: 'f1', kind: 'fuel', entry_date: '2026-09-08', litres: 18400 }],
     orbEntries: [],
     garbageRows: [{ id: 'g1', entry_date: '2026-09-06' }],
@@ -119,7 +121,7 @@ const hasnt = (i, s, why) => {
 /* THE THREE BANDS, on every state that has a departure. */
 for (const i of [1, 2, 3]) {
   has(i, 'Every voyage', `pane ${i} separates what is done every voyage`)
-  has(i, 'How often the boat holds them', `pane ${i} from what runs to a guide`)
+  has(i, 'On a repeating interval', `pane ${i} from what runs to an interval`)
   has(i, 'Only if it happened', `pane ${i} and from what depends on an event`)
 }
 
@@ -134,16 +136,18 @@ has(3, 'not a statement that the vessel is fit to sail',
 /* THE NUMBER OF DAYS IS THE FACT, and the guide is what it is read against.
    Nothing is 'overdue': the regulation says WHAT to enter, not how often. */
 has(2, 'days since', 'the days since are stated, which is the fact')
-has(2, 'the boat’s guide is', 'with the boat’s own guide beside it')
-hasnt(2, 'overdue', 'and nothing is called overdue')
-has(2, 'past the guide', 'a drill older than the guide is a watch, not a breach')
+has(2, 'statutory', 'with the statutory interval beside it')
+/* OVERDUE MEANS THE STATUTORY, and is a breach. Past her own shorter cadence
+   while still inside the law is a different word. */
+has(2, 'past her own', 'past her own cadence is worded apart from a breach')
+has(2, '1 is past her own interval', 'and counted apart from the two not done')
 has(2, 'Musters, drills', 'the drill is listed')
-has(2, '2 things are not done', 'and only the two real gaps are counted')
+has(2, '3 things are not done', 'the radio checks, the bunkering entry and the statutory breach')
 
 /* AN EVENT WITH NO ENTRY IS. */
 has(2, 'with no entry', 'a bunkering with no Oil Record Book entry is called out')
 has(2, 'Steering gear', 'the quarterly steering test is listed')
- has(2, '1 is past the guide', 'and counted apart from the two that are not done')
+ 
 
 /* THE ABSENCE OF AN EVENT IS NOT A GAP. */
 has(1, 'nothing to record', 'no oil moved and no rubbish ashore reads as nothing to record')

@@ -4013,49 +4013,69 @@ and the preview says so at the top of the file.
 **Answered:** *"every voyage tests should be done"* — so the radio checks stay in
 the every-voyage band.
 
-#### A GUIDE, NOT A TARGET
+#### TWO CLOCKS: THE LAW’S, AND THE BOAT’S OWN
 
 David: *"intervals are guide not targets. we can do and log drills and tests
-weekly, fortnightlly or monthly."*
+weekly, fortnightlly or monthly."* — and then, when I over-read that: *"i
+didn't mean to put the reporting periods as guides. i was just pointing out
+that we can log in periods less than the minimum stautuary recquirement."*
 
-**SO NOTHING IS EVER "OVERDUE" HERE.** That word asserts a breach of a calendar
-SI 1981/570 does not set — it says WHAT to enter, not how often to hold a drill;
-the entry is required when one IS held. The 30/30/30/90 are the boat's own
-practice, the same footing as the 12-month risk assessment cycle.
+**I HAD THROWN THE STATUTORY INTERVAL AWAY**, leaving only a cadence the boat
+set for herself — which would have let a genuine breach pass as a matter of
+preference. It is the other way round:
 
-Past the guide is **`watch`**, in brass rather than rust, and the row leads with
-**the number of days**, which is the fact:
+- **The statutory interval is a MAXIMUM.** Past it is a breach, the word is
+  **overdue**, it is rust, and it counts as not done.
+- **The boat’s own cadence is SHORTER**, if she keeps one. Past that alone is
+  **past her own** — brass, on the watch list: her standard, not the law’s.
 
-    Steering gear drills, checks and tests — Official Log Book entry 21.
-    132 days since — last 01-05-2026, the boat's guide is quarterly
-                                                        past the guide  open
+      10 days since — last 31-08-2026, her own weekly, statutory monthly
+                                                          past her own
+      132 days since — last 01-05-2026, her own quarterly, statutory quarterly
+                                                          overdue
 
-**NOT DONE AND PAST THE GUIDE ARE COUNTED SEPARATELY** — *"2 things are not
-done. 1 is past the guide."* Rolling them together is how a checklist starts
-crying wolf: a crew list never lodged is not done; a drill held 34 days ago
-against a 30-day guide is a judgement for the skipper. **`never` keeps the
-red**, because no record at all is a different thing from a record older than
-the boat meant.
+**THE TWO ARE COMPARED INDEPENDENTLY**, so a cadence set longer than the law —
+or none at all — cannot hide a breach. Asserted both ways by test.
 
-**Weekly, fortnightly, monthly, quarterly — or no guide at all**, set on the row
-where it is read. `logbook_settings`, one jsonb per fleet in the shape
-`market_layout_settings` and `alert_settings` already use, holding **only what
-DIFFERS** from the shipped guides: setting one back to the default REMOVES it
-rather than writing today's value in, so a later correction still reaches this
-boat. **`null` is a real answer** — "no guide, just tell me when it was last
-done" — and is kept, where a nought or rubbish falls back.
+**AND THE PICKER NEVER OFFERS A CADENCE LONGER THAN THE LAW.** `guidesFor()`
+cuts the list at the statutory interval for that entry: a monthly entry offers
+weekly, fortnightly and monthly, never quarterly. Offering a longer one would
+be offering to breach.
 
-**With no guide it still says when, and never nags**: state `logged`, on neither
-the not-done list nor the watch list.
+**THE FOUR STATUTORY FIGURES ARE MARKED `confirmed: false` AND SAY SO ON THE
+ROW**, with the source beside them. This codebase does not put a regulation in
+a skipper’s mouth on my say-so — the ORB items were transcribed from Appendix
+III and the OLB entries from SI 1981/570, and these want the same treatment
+before they are relied on:
 
-`test-predeparture.mjs` 39 → **56**.
+      7   30 days   to be confirmed against MSN 1872 for a 15-24m vessel
+      17  30 days   crew accommodation — believed not exceeding one month
+      18  30 days   provisions and water — believed not exceeding one month
+      21  90 days   steering gear — believed quarterly where SOLAS V/26 applies
 
-**And the preview fixture was not exercising the state it asserted.** The old
-one had the steering test 52 days old against a 90-day guide — inside it — while
-the assertion only checked that the words *"Steering gear"* appeared. **An
-assertion that passes on a fixture which cannot reach the state is not testing
-the state.** The fixture now carries one of each.
+`logbook_settings` holds the boat’s own cadences, one jsonb per fleet in the
+shape `market_layout_settings` already uses, keeping **only what DIFFERS**
+from the shipped ones.
 
+`test-predeparture.mjs` 39 → **75**.
+
+**And the preview fixture had to be rebuilt twice, both times for the same
+reason.** First it asserted a state it could not reach — the steering test 52
+days old against a 90-day interval, while the assertion only checked that the
+words *"Steering gear"* appeared. Then, once the statutory floor came back,
+132 days became a breach rather than a watch and the pane had no watch left in
+it at all. It now carries **one of each state**, so every word on the page is
+exercised. **An assertion that passes on a fixture which cannot reach the
+state is not testing the state.**
+
+#### The departure list comes off the logbook
+
+The dropdown is `quota_trips.departure_at`, which is filled by uploading the
+logbook trip export on the Quota page — not by anything the app observes. For
+Audacious that is **169 trips, every one with a departure date, back to
+28-10-2022 and most recently 20-08-2026**, so the page works today. A fleet
+that has never uploaded one gets *"No sailing to check against"*, which is
+honest rather than an all-clear.
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
