@@ -81,11 +81,18 @@ const fuel = (id, kind, date, litres, extra = {}) =>
   eq(d.officerName, '', 'no officer name is invented')
   eq(d.code, 'H', 'the code comes off the mapping')
   eq(d.itemN, '26.3', 'and the item')
-  eq(d.quantity, 12000, 'the quantity is the litres as logged')
-  /* THE BOOK WORKS IN CUBIC METRES AND THE LOG IN LITRES. Stated as litres with
-     the unit beside it rather than divided by a thousand — a converted figure
-     that looks like a read one cannot be checked against the delivery note. */
-  eq(d.unit, 'L', 'stated in the unit it was logged in')
+  /* THE BOOK IS KEPT IN CUBIC METRES and the receipt is printed in litres.
+     1 m3 = 1000 L is exact and is not a rate, which is why this is the one
+     conversion this codebase does silently. */
+  eq(d.quantity, 12, 'the quantity is converted to cubic metres')
+  eq(d.unit, 'm3', 'in the unit the book is kept in')
+  /* AND THE LITRES ARE STILL SAID. The quantity FIELD carries one number and one
+     unit, because two numbers in a prescribed column is an ambiguity somebody
+     has to resolve; the receipt figure goes in the remarks, where it ties the
+     entry to the delivery note without muddling the field. */
+  ok(/12,000 L as bunkered/.test(d.narrative), 'and the litres off the receipt are in the narrative')
+  eq(d.converted.litres, 12000, 'the draft says what it converted from')
+  eq(d.converted.cubic, 12, 'and to')
   eq(d.tank, null, 'the tank is left empty, because the fuel log has none')
   eq(d.port, 'Peterhead', 'the place carries over')
   eq(d.fuelLogId, 'f1', 'and the entry remembers what raised it')
@@ -103,10 +110,11 @@ const fuel = (id, kind, date, litres, extra = {}) =>
 {
   const d = draftFromFuel(fuel('f', 'fuel', '2026-08-01', null), { vesselId: V })
   eq(d.quantity, null, 'a movement with no litres has no quantity')
-  eq(d.unit, null, 'and no unit either, rather than litres of nothing')
+  eq(d.unit, null, 'and no unit either, rather than a volume of nothing')
+  eq(d.converted, null, 'and nothing to say it converted')
   const e = draftFromFuel(fuel('f', 'fuel', '2026-08-01', 0), { vesselId: V })
   eq(e.quantity, 0, 'while a real nought is kept')
-  eq(e.unit, 'L', 'and still carries its unit')
+  eq(e.unit, 'm3', 'and still carries its unit')
 }
 
 /* ---- THE RECONCILIATION REPORTS MOVEMENTS, NOT A SCORE ---------------- */

@@ -315,11 +315,23 @@ const {
 
 /* ---- IT NEVER INVENTS A FIGURE ------------------------------------------ */
 {
-  eq(describeEntry({ tank: 'Sludge tank', quantity: 3.4, unit: 'm3' }), 'Sludge tank · 3.4 m3', 'what was written')
+  /* BOTH UNITS ON AN m³ ENTRY (Sep 2026). David asked whether it would be
+     wrong to carry litres in the book as well; it is not. What would be wrong
+     is two numbers in the prescribed QUANTITY COLUMN — the column keeps one
+     figure in one unit, and the second sits beside it in words, tying the
+     entry to the delivery note the fuel came off. 1 m³ = 1000 L is exact. */
+  eq(describeEntry({ tank: 'Sludge tank', quantity: 3.4, unit: 'm3' }),
+     'Sludge tank · 3.4 m³ (3,400 L)', 'an m³ entry says both')
+  /* AND ONLY FOR m³. A unit nobody declared is not converted — that would be
+     inventing one — and an entry in litres is shown exactly as written. */
+  eq(describeEntry({ tank: 'Day tank', quantity: 500, unit: 'L' }),
+     'Day tank · 500 L', 'any other unit is shown as it was written')
+  eq(describeEntry({ tank: 'Day tank', quantity: 12 }),
+     'Day tank · 12', 'and a figure with no unit gains none')
   eq(describeEntry({ tank: 'Sludge tank' }), 'Sludge tank', 'a missing quantity shows nothing at all')
   /* A QUANTITY OF NOUGHT IS A REAL READING, and Number('') === 0 has bitten
      this repo five times. Nought must print; blank must not. */
-  eq(describeEntry({ quantity: 0, unit: 'm3' }), '0 m3', 'nought is a reading and is printed')
+  eq(describeEntry({ quantity: 0, unit: 'm3' }), '0 m³ (0 L)', 'nought is a reading and is printed')
   eq(describeEntry({ quantity: '' }), '', 'a blank is not nought')
   eq(describeEntry(null), '', 'and nothing at all is nothing at all')
 

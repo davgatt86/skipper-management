@@ -35,8 +35,11 @@
  * counts.
  */
 
+import { toCubic, fmtCubic, fmtLitres } from '../units.js'
+
 /* Which code and item a movement belongs under. Measured against the ORB item
    list in `orb.js`, which is itself Appendix III to MARPOL Annex I. */
+
 export const MAPPING = {
   fuel: {
     code: 'H',
@@ -115,24 +118,41 @@ export function draftFromFuel(row, { pageId, vesselId } = {}) {
     entryDate: day(row.entry_date),
     code: m.code,
     itemN: m.itemN,
-    quantity: litres,
-    /* THE BOOK WORKS IN CUBIC METRES and the fuel log in litres. Stated as
-       litres with the unit beside it rather than divided by a thousand: a
-       converted figure that looks like a read one cannot be checked against the
-       delivery note afterwards, which is the settling-sheet rule. */
-    unit: litres == null ? null : 'L',
+    /* THE BOOK IS KEPT IN CUBIC METRES and the receipt is printed in litres,
+       so the draft converts. David: "litres in fuel/oil log as thats what we
+       get on our fuel reciept. but auto convert it so the draft in ORB has
+       m3."
+
+       THIS IS THE ONE CONVERSION THIS CODEBASE DOES SILENTLY, and it is the
+       exception that shows the rule. A currency conversion rests on a rate
+       nobody printed, so the original is kept beside it. 1 m³ = 1000 L is not
+       a rate — it is exact, it does not move, and it needs no source.
+
+       AND THE LITRES ARE STILL SAID, in the narrative below. The quantity
+       FIELD carries one number and one unit, because two numbers in a
+       prescribed column is an ambiguity an inspector has to resolve; the
+       figure off the delivery note belongs in the remarks, where it ties the
+       book to the receipt without muddling the field. */
+    quantity: toCubic(litres),
+    unit: litres == null ? null : 'm3',
     tank: null,
     port: where,
     narrative: [
       m.what,
       text(row.grade) ? 'grade ' + row.grade : '',
       who ? 'from ' + who : '',
+      /* The receipt figure, so the entry can be checked against the delivery
+         note without anybody doing the arithmetic back. */
+      litres == null ? '' : fmtLitres(litres) + ' as bunkered',
       'Raised from the fuel log.',
     ].filter(Boolean).join('. '),
     startedAt: null,
     stoppedAt: null,
     officerName: '',
     fuelLogId: row.id,
+    /* For the form to say so plainly rather than the number simply changing
+       under him between one page and the other. */
+    converted: litres == null ? null : { litres, cubic: toCubic(litres), said: fmtCubic(toCubic(litres)) },
     /* What a person still has to add before this is a compliant entry. */
     needs: m.needs,
   }

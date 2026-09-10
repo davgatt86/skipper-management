@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { toCubic, fmtCubic } from '../lib/units'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
@@ -32,7 +33,17 @@ const KINDS = [
 ]
 
 const fmtDate = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
-const L = (n) => (n == null ? '—' : Number(n).toLocaleString('en-GB') + ' L')
+/* LITRES LEAD HERE, because that is what the delivery note says and this is
+   the book that gets checked against it. The cubic metres ride behind, so
+   the figure that goes in the Oil Record Book is visible without anybody
+   doing the arithmetic. 1 m³ = 1000 L is exact — see src/lib/units.js for
+   why this is the one conversion this codebase does silently. */
+const L = (n) => {
+  if (n == null) return '—'
+  const l = Number(n).toLocaleString('en-GB') + ' L'
+  const m = fmtCubic(toCubic(n))
+  return m ? l + ' (' + m + ')' : l
+}
 const n0 = (n) => (n == null ? '—' : Math.round(Number(n)).toLocaleString('en-GB'))
 const blank = (kind) => ({ kind, entry_date: new Date().toISOString().slice(0, 10), litres: '', grade: '', location: '', counterparty: '', method: '', running_hours: '', consumption_l: '', recorded_by: '', notes: '', price_per_litre: '', total_cost: '', currency: 'GBP' })
 

@@ -89,8 +89,10 @@ const fuelRows = [
 /* fl1 is already in the book; the other two are not. */
 const entriesWithLink = entries.concat([{
   id: 'linked-1', page_id: pages[0].id, entry_date: '2026-08-14', code: 'H', item_n: '26.3',
-  quantity: 18400, unit: 'L', port: 'Peterhead', tank: 'No.2 DB',
-  narrative: 'Bunkering of fuel oil. grade MGO. Raised from the fuel log.',
+  /* As the draft makes it: the book is kept in cubic metres and the receipt
+     figure rides in the narrative. */
+  quantity: 18.4, unit: 'm3', port: 'Peterhead', tank: 'No.2 DB',
+  narrative: 'Bunkering of fuel oil. grade MGO. 18,400 L as bunkered. Raised from the fuel log.',
   officer_name: 'N Wood', recorded_at: '2026-08-14T10:00:00Z', fuel_log_id: 'fl1',
 }])
 
@@ -181,7 +183,7 @@ has(3, 'Superseded by the entry of', 'a corrected entry says it was superseded')
 has(3, 'nothing in an oil record book is erased', 'and says why it is still there')
 has(3, 'Made to correct an earlier entry', 'and the correction says what it is')
 has(3, 'Retention on 13-07 read 3.4', 'the correction carries its own reading')
-has(3, '2.6 m3', 'and the original figure is STILL in the book')
+has(3, '2.6 m³ (2,600 L)', 'and the original figure is STILL in the book')
 
 has(4, 'Every completed page signed by the master', 'a tidy book says so')
 has(4, 'no week without a sludge reading', 'and that the weekly reading is unbroken')

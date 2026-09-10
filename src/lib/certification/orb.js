@@ -1,3 +1,5 @@
+import { toLitres, fmtCubic, fmtLitres } from '../units.js'
+
 /* THE OIL RECORD BOOK PART I — machinery space operations.
  *
  * David, Sep 2026: "do ORB."
@@ -317,7 +319,26 @@ export function describeEntry(entry) {
   const bits = []
   if (entry.tank) bits.push(entry.tank)
   if (entry.quantity != null && entry.quantity !== '') {
-    bits.push(`${entry.quantity}${entry.unit ? ` ${entry.unit}` : ''}`)
+    /* BOTH UNITS, AND WHY THAT IS NOT WRONG.
+ *
+       David: "would it be wrong to have both in the ORB too?" — no. What
+       WOULD be wrong is two numbers in the prescribed QUANTITY COLUMN, which
+       is an ambiguity a surveyor has to resolve. The column carries one
+       figure in one unit; the second sits beside it in words, where it ties
+       the entry to the delivery note the fuel came off.
+
+       Cubic metres lead, because that is the unit this book is kept in. The
+       fuel log does it the other way round, because that is the unit its own
+       reader works in.
+
+       ONLY FOR m³. An entry written in any other unit is shown exactly as it
+       was written — converting a unit nobody declared would be inventing one.
+       1 m³ = 1000 L is exact and needs no source; see src/lib/units.js. */
+    const isCubic = String(entry.unit || '').toLowerCase() === 'm3'
+    const litres = isCubic ? toLitres(entry.quantity) : null
+    bits.push(isCubic && litres != null
+      ? `${fmtCubic(entry.quantity)} (${fmtLitres(litres)})`
+      : `${entry.quantity}${entry.unit ? ` ${entry.unit}` : ''}`)
   }
   if (entry.port) bits.push(entry.port)
   if (entry.position_text) bits.push(entry.position_text)
