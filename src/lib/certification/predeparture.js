@@ -126,6 +126,38 @@ export const ITEMS = [
 
 export const itemOf = (key) => ITEMS.find((i) => i.key === key) || null
 
+/* HOW OFTEN THE BOAT MEANS TO DO THEM. David: "intervals are guide not
+   targets. we can do and log drills and tests weekly, fortnightlly or
+   monthly."
+
+   SI 1981/570 says WHAT to enter, not HOW OFTEN to hold a drill — the entry
+   is required when one is held. So these are the boat's own practice, the
+   same footing as the 12-month risk assessment cycle, and the page must not
+   report a breach of a calendar nobody set. */
+export const GUIDES = [
+  { key: 'weekly', label: 'Weekly', days: 7 },
+  { key: 'fortnightly', label: 'Fortnightly', days: 14 },
+  { key: 'monthly', label: 'Monthly', days: 30 },
+  { key: 'quarterly', label: 'Quarterly', days: 90 },
+  { key: 'none', label: 'No guide — just tell me when it was last done', days: null },
+]
+
+/* Shipped defaults. A fleet stores only what DIFFERS, so a later correction
+   here reaches every boat that has not deliberately changed it — the same
+   reasoning as the market rules and the stores catalogue. */
+export const DEFAULT_GUIDES = { 7: 30, 17: 30, 18: 30, 21: 90 }
+
+export function resolveGuides(stored) {
+  const out = { ...DEFAULT_GUIDES }
+  for (const [k, v] of Object.entries(stored || {})) {
+    /* null is a real answer here — "no guide" — so it is kept, and only a
+       value that is neither a number nor an explicit null is ignored. */
+    if (v === null) out[k] = null
+    else if (Number.isFinite(Number(v)) && Number(v) > 0) out[k] = Number(v)
+  }
+  return out
+}
+
 /**
  * The check for a departure.
  *
@@ -142,7 +174,7 @@ export function predeparture({
   fuelRows = [],
   orbEntries = [],
   garbageRows = [],
-  intervals = { 7: 30, 17: 30, 18: 30, 21: 90 },
+  guides = DEFAULT_GUIDES,
   asOf,
 } = {}) {
   const dep = day(departureAt)
@@ -180,14 +212,19 @@ export function predeparture({
     if (it.cls === 'due') {
       const mine = olbEntries.filter((e) => Number(e.entry_n) === it.olb)
       const last = lastDate(mine.map((e) => e.occurred_on))
-      const every = intervals[it.olb]
-      /* NEVER DONE IS NOT OVERDUE BY A NUMBER OF DAYS. There is no date to
-         count from, and reporting one would invent it. */
+      const every = guides[it.olb] ?? null
+      /* NEVER DONE IS NOT PAST A GUIDE BY A NUMBER OF DAYS. There is no date
+         to count from, and reporting one would invent it. It is the one state
+         here that IS worth a red mark: no record at all. */
       if (!last) return { ...it, state: 'never', every, last: null, n: mine.length }
       const age = daysBetween(last, today)
+      /* A GUIDE IS NOT A TARGET, so nothing here is ever "overdue" — that word
+         asserts a breach of a calendar the regulation does not set. Past the
+         guide is `watch`, and what the page leads with is the NUMBER OF DAYS,
+         which is the fact. The skipper judges it. */
       return {
         ...it,
-        state: age > every ? 'overdue' : age > every - 7 ? 'due' : 'done',
+        state: every == null ? 'logged' : age > every ? 'watch' : 'done',
         every, last, age, n: mine.length,
       }
     }
@@ -215,9 +252,16 @@ export function predeparture({
     departure: dep,
     from,
     items,
-    /* WHAT A PERSON CAN ACT ON. `nothing` is not outstanding — it is the
-       ordinary case — and neither is a drill inside its interval. */
-    outstanding: items.filter((i) => ['outstanding', 'overdue', 'never'].includes(i.state)),
+    /* NOT DONE AND PAST THE GUIDE ARE TWO DIFFERENT FACTS, and rolling them
+       together is how a checklist starts crying wolf. A crew list that has not
+       been lodged is not done; a drill held 34 days ago against a 30-day guide
+       is a judgement for the skipper. `nothing` is neither — it is the
+       ordinary case.
+
+       `never` counts as not done, because there is no record that it has ever
+       been held. */
+    outstanding: items.filter((i) => ['outstanding', 'never'].includes(i.state)),
+    watch: items.filter((i) => i.state === 'watch'),
     known: true,
   }
 }

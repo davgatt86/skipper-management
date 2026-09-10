@@ -1,5 +1,8 @@
 import assert from 'node:assert'
-import { ITEMS, itemOf, predeparture, nextAfterCrewList } from './src/lib/certification/predeparture.js'
+import {
+  ITEMS, itemOf, predeparture, nextAfterCrewList,
+  GUIDES, DEFAULT_GUIDES, resolveGuides,
+} from './src/lib/certification/predeparture.js'
 
 let n = 0
 const ok = (c, why) => { assert.ok(c, why); n++ }
@@ -72,7 +75,11 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
 
   /* The SAME date for both, so the only difference is the interval. */
   const stale = predeparture({ ...base, olbEntries: [olb(7, '2026-07-01'), olb(21, '2026-07-01')] })
-  eq(stale.items.find((i) => i.key === 'olb_drills').state, 'overdue', 'one from July is')
+  /* A GUIDE IS NOT A TARGET. David: "intervals are guide not targets. we can
+     do and log drills and tests weekly, fortnightlly or monthly." SI 1981/570
+     says WHAT to enter, not how often to hold a drill — so nothing here is
+     'overdue', which asserts a breach of a calendar nobody set. */
+  eq(stale.items.find((i) => i.key === 'olb_drills').state, 'watch', 'one from July is past the guide')
   eq(stale.items.find((i) => i.key === 'olb_drills').age, 71, 'and it says how long it has been')
 
   /* Steering gear is quarterly, so the same date is fine for it and not for the
@@ -173,6 +180,66 @@ const olb = (nn, date) => ({ entry_n: nn, occurred_on: date })
   })
   eq(nextAfterCrewList(done), null, 'and nothing to say when there is nothing left')
   eq(nextAfterCrewList({ known: false }), null, 'nor without a departure')
+}
+
+/* ---- A GUIDE IS NOT A TARGET, AND PAST IT IS NOT NOT-DONE -------------
+ * David: "intervals are guide not targets. we can do and log drills and tests
+ * weekly, fortnightlly or monthly." SI 1981/570 says WHAT to enter, not how
+ * often to hold a drill.
+ *
+ * Rolling "past the guide" together with "not done" is how a checklist starts
+ * crying wolf. A crew list that was never lodged is not done; a drill held 40
+ * days ago against a 30-day guide is a judgement for the skipper.
+ */
+{
+  const past = predeparture({ ...base, olbEntries: [olb(7, '2026-08-01')] })
+  const d = past.items.find((i) => i.key === 'olb_drills')
+  eq(d.state, 'watch', 'past the guide is its own state, and it is not "overdue"')
+  ok(!past.outstanding.some((i) => i.key === 'olb_drills'), 'it is NOT counted as not done')
+  ok(past.watch.some((i) => i.key === 'olb_drills'), 'it is on the watch list instead')
+  eq(d.age, 40, 'and the number of days is the fact the page leads with')
+
+  /* NO RECORD AT ALL is the one that does count as not done. */
+  const never = predeparture(base)
+  ok(never.outstanding.some((i) => i.key === 'olb_drills'), 'never held is not done')
+}
+
+/* ---- WEEKLY, FORTNIGHTLY OR MONTHLY, AND THE BOAT CHOOSES -------------- */
+{
+  eq(GUIDES.map((g) => g.days), [7, 14, 30, 90, null], 'the offered guides, and no guide at all')
+  eq(resolveGuides(null), DEFAULT_GUIDES, 'nothing stored keeps the shipped guides')
+  eq(resolveGuides({ 7: 7 })[7], 7, 'a weekly drill is honoured')
+  /* ONLY THE DIFFERENCE IS STORED, so a later correction to a shipped guide
+     reaches every boat that has not deliberately changed it. */
+  eq(resolveGuides({ 7: 7 })[21], 90, 'and the rest are untouched')
+
+  /* NULL IS A REAL ANSWER here — no guide, just tell me when it was last done —
+     so it must not fall back to the default the way rubbish does. */
+  eq(resolveGuides({ 7: null })[7], null, 'no guide is kept as no guide')
+  eq(resolveGuides({ 7: 0 })[7], 30, 'while nought is not a guide and falls back')
+  eq(resolveGuides({ 7: 'soon' })[7], 30, 'and neither is rubbish')
+
+  const weekly = predeparture({
+    ...base,
+    guides: resolveGuides({ 7: 7 }),
+    olbEntries: [olb(7, '2026-09-01'), olb(21, '2026-09-01')],
+  })
+  eq(weekly.items.find((i) => i.key === 'olb_drills').state, 'watch',
+     'nine days against a weekly guide is past it')
+  eq(weekly.items.find((i) => i.key === 'olb_steering').state, 'done',
+     'and the same date is well inside the quarterly one')
+
+  /* WITH NO GUIDE IT STILL SAYS WHEN, and never nags. */
+  const quiet = predeparture({
+    ...base,
+    guides: resolveGuides({ 7: null }),
+    olbEntries: [olb(7, '2025-01-01')],
+  })
+  const g = quiet.items.find((i) => i.key === 'olb_drills')
+  eq(g.state, 'logged', 'no guide means no verdict')
+  ok(g.age > 300, 'but the days since are still reported')
+  ok(!quiet.outstanding.concat(quiet.watch).some((i) => i.key === 'olb_drills'),
+     'and it is on neither list')
 }
 
 /* ---- the lookup --------------------------------------------------------- */

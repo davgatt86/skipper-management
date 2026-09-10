@@ -4010,10 +4010,51 @@ that could not reach the code: **a fixture shaped like the code proves the
 logic and nothing about the columns.** They are shaped like the real rows now,
 and the preview says so at the top of the file.
 
-**Open, and David's to answer:** the radio checks are `every` because he put
-them on a pre-departure list, but Schedule 3 requires no test log at all — the
-cadence is the boat's, and if she tests weekly rather than per trip it belongs
-in `due` with an interval instead.
+**Answered:** *"every voyage tests should be done"* — so the radio checks stay in
+the every-voyage band.
+
+#### A GUIDE, NOT A TARGET
+
+David: *"intervals are guide not targets. we can do and log drills and tests
+weekly, fortnightlly or monthly."*
+
+**SO NOTHING IS EVER "OVERDUE" HERE.** That word asserts a breach of a calendar
+SI 1981/570 does not set — it says WHAT to enter, not how often to hold a drill;
+the entry is required when one IS held. The 30/30/30/90 are the boat's own
+practice, the same footing as the 12-month risk assessment cycle.
+
+Past the guide is **`watch`**, in brass rather than rust, and the row leads with
+**the number of days**, which is the fact:
+
+    Steering gear drills, checks and tests — Official Log Book entry 21.
+    132 days since — last 01-05-2026, the boat's guide is quarterly
+                                                        past the guide  open
+
+**NOT DONE AND PAST THE GUIDE ARE COUNTED SEPARATELY** — *"2 things are not
+done. 1 is past the guide."* Rolling them together is how a checklist starts
+crying wolf: a crew list never lodged is not done; a drill held 34 days ago
+against a 30-day guide is a judgement for the skipper. **`never` keeps the
+red**, because no record at all is a different thing from a record older than
+the boat meant.
+
+**Weekly, fortnightly, monthly, quarterly — or no guide at all**, set on the row
+where it is read. `logbook_settings`, one jsonb per fleet in the shape
+`market_layout_settings` and `alert_settings` already use, holding **only what
+DIFFERS** from the shipped guides: setting one back to the default REMOVES it
+rather than writing today's value in, so a later correction still reaches this
+boat. **`null` is a real answer** — "no guide, just tell me when it was last
+done" — and is kept, where a nought or rubbish falls back.
+
+**With no guide it still says when, and never nags**: state `logged`, on neither
+the not-done list nor the watch list.
+
+`test-predeparture.mjs` 39 → **56**.
+
+**And the preview fixture was not exercising the state it asserted.** The old
+one had the steering test 52 days old against a 90-day guide — inside it — while
+the assertion only checked that the words *"Steering gear"* appeared. **An
+assertion that passes on a fixture which cannot reach the state is not testing
+the state.** The fixture now carries one of each.
 
 ## Pair teams
 

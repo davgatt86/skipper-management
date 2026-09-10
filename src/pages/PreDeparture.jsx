@@ -3,7 +3,9 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useCurrentVessel } from '../VesselContext'
-import { predeparture } from '../lib/certification/predeparture'
+import { predeparture, DEFAULT_GUIDES } from '../lib/certification/predeparture'
+import { loadGuides, saveGuides } from '../lib/certification/logbookSettingsDb'
+import { useAuth } from '../AuthContext'
 import PreDepartureBody from './certification/PreDepartureBody'
 
 /* BEFORE SHE SAILS — the eight entries, each in its own book.
@@ -17,6 +19,9 @@ import PreDepartureBody from './certification/PreDepartureBody'
  */
 export default function PreDeparture() {
   const { current } = useCurrentVessel()
+  const { appUser } = useAuth()
+  const [guides, setGuides] = useState(DEFAULT_GUIDES)
+  const [stored, setStored] = useState({})
   const [trips, setTrips] = useState([])
   const [picked, setPicked] = useState(null)
   const [books, setBooks] = useState({})
@@ -42,6 +47,11 @@ export default function PreDeparture() {
         supabase.from('oil_record_book_entries').select('id, fuel_log_id'),
         supabase.from('garbage_log').select('id, entry_date'),
       ])
+      /* The boat’s own guides. A fleet with no row is the ordinary case — it
+         means the shipped ones, unchanged. */
+      const g = await loadGuides()
+      setGuides(g.guides)
+      setStored(g.stored)
       const list = (t.data || []).map((x) => String(x.departure_at).slice(0, 10))
       setTrips(list)
       setBooks({
@@ -63,8 +73,8 @@ export default function PreDeparture() {
   }, [trips, departure])
 
   const check = useMemo(
-    () => predeparture({ departureAt: departure, previousDepartureAt: previous, ...books }),
-    [departure, previous, books])
+    () => predeparture({ departureAt: departure, previousDepartureAt: previous, guides, ...books }),
+    [departure, previous, books, guides])
 
   return (
     <AppShell>
@@ -75,7 +85,17 @@ export default function PreDeparture() {
       />
       {err && <div className="card" style={{ borderLeft: '3px solid var(--rust)' }}>{err}</div>}
       <PreDepartureBody
-        vessel={current} check={check} departures={trips} onPick={setPicked} />
+        vessel={current} check={check} departures={trips} onPick={setPicked}
+        onGuide={async (olbN, days) => {
+          /* ONLY THE DIFFERENCE IS STORED. Setting one back to the shipped
+             guide REMOVES it rather than writing today’s default in, so a
+             later correction still reaches this boat. */
+          const next = { ...stored }
+          if (days === DEFAULT_GUIDES[olbN]) delete next[olbN]
+          else next[olbN] = days
+          setStored(next)
+          setGuides(await saveGuides(next, { fleetId: appUser?.fleet_id, userId: appUser?.id }))
+        }} />
     </AppShell>
   )
 }

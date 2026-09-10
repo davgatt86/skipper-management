@@ -1,5 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { GUIDES } from '../../lib/certification/predeparture'
 
 /* THE PRE-DEPARTURE CHECK, DRAWN.
  *
@@ -12,17 +13,24 @@ import { Link } from 'react-router-dom'
  * deciding is in `lib/certification/predeparture.js`.
  */
 
+/* NOTHING IS "OVERDUE". David: "intervals are guide not targets." The word
+   asserts a breach of a calendar SI 1981/570 does not set — it says WHAT to
+   enter, not how often to hold a drill. Past the guide is a WATCH, in brass
+   rather than rust, and what the row leads with is the number of days.
+
+   `never` keeps the red: no record at all is a different thing from a record
+   that is older than the boat meant. */
 const TONE = {
   done: { colour: 'var(--kelp)', word: 'done' },
+  logged: { colour: 'var(--mute)', word: 'logged' },
   outstanding: { colour: 'var(--rust)', word: 'not done' },
-  overdue: { colour: 'var(--rust)', word: 'overdue' },
-  due: { colour: 'var(--brass)', word: 'due' },
+  watch: { colour: 'var(--brass)', word: 'past the guide' },
   never: { colour: 'var(--rust)', word: 'never recorded' },
   nothing: { colour: 'var(--mute)', word: 'nothing to record' },
 }
 
 export default function PreDepartureBody({
-  vessel, check, onPick, departures = [], busy = false,
+  vessel, check, onPick, departures = [], busy = false, onGuide,
 }) {
   if (!check?.known) {
     return (
@@ -39,7 +47,7 @@ export default function PreDepartureBody({
     )
   }
 
-  const { items, outstanding, departure, from } = check
+  const { items, outstanding, watch = [], departure, from } = check
   const byClass = (c) => items.filter((i) => i.cls === c)
 
   return (
@@ -64,36 +72,43 @@ export default function PreDepartureBody({
           )}
         </div>
 
-        {/* IT NEVER SAYS SHE IS READY TO SAIL. It says what is not done. Ready is
-            a claim about a vessel and her crew that no software can make out of
-            four tables, and a green tick against a departure is the sort of
-            thing read back at an inquiry. */}
-        {outstanding.length === 0 ? (
-          <p style={{ margin: 0, fontSize: '0.9rem' }}>
-            <b style={{ color: 'var(--kelp)' }}>Nothing outstanding in the books.</b>{' '}
-            <span className="muted">
-              That is what the records say — it is not a statement that the vessel is fit
-              to sail.
-            </span>
-          </p>
-        ) : (
-          <p style={{ margin: 0, fontSize: '0.9rem' }}>
+        {/* NOT DONE AND PAST THE GUIDE ARE COUNTED SEPARATELY. Rolling them
+            together is how a checklist starts crying wolf: a crew list that was
+            never lodged is not done, and a drill held 34 days ago against a
+            30-day guide is a judgement for the skipper. */}
+        <p style={{ margin: 0, fontSize: '0.9rem' }}>
+          {outstanding.length > 0 && (
             <b style={{ color: 'var(--rust)' }}>
               {outstanding.length} {outstanding.length === 1 ? 'thing is' : 'things are'} not done.
-            </b>{' '}
-            <span className="muted">Each one is made in its own book.</span>
-          </p>
-        )}
+            </b>
+          )}
+          {outstanding.length > 0 && watch.length > 0 && ' '}
+          {watch.length > 0 && (
+            <b style={{ color: 'var(--brass)' }}>
+              {watch.length} {watch.length === 1 ? 'is' : 'are'} past the guide.
+            </b>
+          )}
+          {outstanding.length === 0 && watch.length === 0 && (
+            <b style={{ color: 'var(--kelp)' }}>Nothing outstanding in the books.</b>
+          )}
+          {' '}
+          <span className="muted">
+            {outstanding.length || watch.length
+              ? 'Each one is made in its own book.'
+              : 'That is what the records say — it is not a statement that the vessel is fit to sail.'}
+          </span>
+        </p>
       </div>
 
       <Band title="Every voyage"
             note="Done before she sails, whatever was done last trip."
             rows={byClass('every')} />
 
-      <Band title="On their own clock"
-            note="Official Log Book entries with an interval. A drill done last week is not
-                  wanted again because she happens to be sailing today."
-            rows={byClass('due')} />
+      <Band title="How often the boat holds them"
+            note="A GUIDE, not a target — the regulation says what to enter, not how often to
+                  hold a drill. Weekly, fortnightly or monthly is the boat’s own call, and
+                  the number of days since is the fact."
+            rows={byClass('due')} onGuide={onGuide} />
 
       <Band title="Only if it happened"
             note="There is no missing garbage entry when nothing went ashore. What makes one
@@ -103,20 +118,20 @@ export default function PreDepartureBody({
   )
 }
 
-function Band({ title, note, rows }) {
+function Band({ title, note, rows, onGuide }) {
   if (!rows.length) return null
   return (
     <div className="card">
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       <p className="muted" style={{ fontSize: '0.8rem', marginTop: 0 }}>{note}</p>
       <div className="dlist">
-        {rows.map((r) => <Row key={r.key} r={r} />)}
+        {rows.map((r) => <Row key={r.key} r={r} onGuide={onGuide} />)}
       </div>
     </div>
   )
 }
 
-function Row({ r }) {
+function Row({ r, onGuide }) {
   const t = TONE[r.state] || TONE.nothing
   return (
     <div className="di">
@@ -125,10 +140,15 @@ function Row({ r }) {
         <span className="sub3"> — {r.why}</span>
         {/* WHAT IT RESTS ON, so a state can be argued with rather than believed.
             An interval, a last date, or the number of movements it found. */}
+        {/* THE NUMBER OF DAYS IS THE FACT and leads; the guide is what it is
+            being read against, and it is the boat’s own. */}
         {r.cls === 'due' && (
           <span className="sub3">
-            {' '}Every {r.every} days.{' '}
-            {r.last ? 'Last ' + fmt(r.last) + (r.age != null ? ', ' + r.age + ' days ago' : '') : ''}
+            {' '}
+            {r.last
+              ? r.age + ' days since — last ' + fmt(r.last)
+                + (r.every ? ', the boat’s guide is ' + guideWord(r.every) : ', no guide set')
+              : 'no entry on record'}
           </span>
         )}
         {r.key === 'bunkering' && r.n > 0 && (
@@ -142,6 +162,15 @@ function Row({ r }) {
         )}
       </span>
       <span style={{ display: 'flex', gap: '0.6rem', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
+        {onGuide && r.cls === 'due' && (
+          <select value={r.every == null ? '' : String(r.every)}
+                  onChange={(e) => onGuide(r.olb, e.target.value === '' ? null : Number(e.target.value))}
+                  style={{ fontSize: '0.74rem', padding: '1px 4px', width: 'auto' }}>
+            {GUIDES.map((g) => (
+              <option key={g.key} value={g.days == null ? '' : String(g.days)}>{g.label}</option>
+            ))}
+          </select>
+        )}
         <span className="when" style={{ color: t.colour }}>{t.word}</span>
         <Link to={r.to} className="when">open</Link>
       </span>
@@ -165,5 +194,8 @@ export function NextAfterSaving({ next, remaining }) {
     </p>
   )
 }
+
+const guideWord = (days) =>
+  (GUIDES.find((g) => g.days === days)?.label || 'every ' + days + ' days').toLowerCase()
 
 const fmt = (d) => (d ? String(d).slice(0, 10).split('-').reverse().join('-') : '—')
