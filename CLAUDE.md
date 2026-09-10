@@ -4311,6 +4311,43 @@ boats regardless, since comparing a boat with itself is meaningless:
   screen, so `--hull` lifts to `#6FA3EE` and the signal colours are dimmed so
   red/green don't wreck night vision.
 
+### THE MENU BUTTON WAS UNDER THE STATUS BAR — a fixed element and a body inset
+
+David, Sep 2026: *"the menu button top left is just a tad too high on an iPhone
+screen for it to work in portrait mode, works in landscape mode though."*
+
+**LANDSCAPE WORKING IS THE WHOLE DIAGNOSIS**, and it named the bug before the
+CSS was opened. `body` carries `padding-top: env(safe-area-inset-top)` — but
+`.shell-burger` is **`position: fixed`**, so it is placed against the VIEWPORT
+and the body's padding never reaches it. At `top: 10px` it sat under the status
+bar. In landscape the top inset is zero and the notch moves to the side, so the
+same 10px was fine.
+
+**ANYTHING `position: fixed` HAS TO CARRY ITS OWN INSET.** The body rule looks
+like it covers the page and covers only what is in the flow.
+
+    top:  calc(10px + env(safe-area-inset-top))
+    left: calc(10px + env(safe-area-inset-left))
+
+`.shell-side` is fixed on mobile too and had the same hole — the wordmark at the
+top of the open drawer sat under the notch. Same fix.
+
+**AND IT WAS TOO SMALL EVEN WHERE IT WAS REACHABLE.** `padding: 7px 11px` on a
+glyph gave about **30px**, against Apple's 44px minimum, on a control pressed
+with a wet thumb on a moving boat. It is 44 square now, which meant
+`display: block` becoming `flex` to keep the glyph centred, and `.shell-main`'s
+mobile `padding-top` going 56 → 64 — at 56 the page heading cleared the taller
+button by 2px.
+
+**Verified by rendering, not by eye.** The page is behind a login, so a harness
+inlines the REAL `src/index.css` against the real markup at 375×812: measured
+`display: flex`, **44×44**, and `elementFromPoint` at the button's own centre
+returning the button — nothing covering it. A desktop browser reports every
+inset as **0**, so the portrait case cannot be reproduced directly; a clone
+carrying the same calc with the iPhone's real 59px substituted lands at
+**top 69, bottom 113**, clear of the bar. The web path is unchanged at top 10,
+which is what makes this safe to ship.
+
 ## Agreed next build (Aug 2026) — crew, logs and vessel certs
 
 Aegir (`aegirfleet.com`) is a paid vessel-management subscription David uses.

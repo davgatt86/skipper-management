@@ -385,15 +385,30 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 }
 @media (min-width: 900px) { .shell-main { padding: 1.6rem 1.8rem 3rem; } }
 
+/* THE INSET ON `body` DOES NOTHING FOR THIS BUTTON, and that is the whole bug.
+   It is `position: fixed`, so it is placed against the VIEWPORT and the body's
+   `padding-top: env(safe-area-inset-top)` never reaches it — at `top: 10px` it
+   sat under the iPhone status bar in portrait and could not be tapped. It
+   worked in landscape because the top inset is zero there and the notch moves
+   to the side, which is exactly how the fault was spotted.
+
+   Anything `position: fixed` has to carry its own inset. */
 .shell-burger {
   display: none;
   position: fixed;
-  top: 10px; left: 10px;
+  top: calc(10px + env(safe-area-inset-top));
+  left: calc(10px + env(safe-area-inset-left));
   z-index: 60;
   background: var(--hull);
   color: #fff;
   border-radius: 3px;
-  padding: 7px 11px;
+  /* 44px square is Apple's minimum target, and this is pressed with a wet
+     thumb on a moving boat. It was about 30px. */
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 11px;
   line-height: 1;
 }
 .shell-scrim {
@@ -405,18 +420,25 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 }
 
 @media (max-width: 899px) {
-  .shell-burger { display: block; }
+  .shell-burger { display: flex; }
   .shell-scrim { display: block; }
   .shell-side {
     position: fixed;
     top: 0; bottom: 0; left: 0;
+    /* Fixed, so the same rule applies: the body inset does not reach it and
+       the wordmark would sit under the notch. */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    box-sizing: border-box;
     z-index: 80;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
     box-shadow: 0 0 30px rgba(6, 20, 27, 0.3);
   }
   .shell-side.is-open { transform: none; }
-  .shell-main { padding-top: 56px; }
+  /* Clears the burger, which is 44px tall now rather than 30 — at 56 the
+     heading sat 2px under it. */
+  .shell-main { padding-top: 64px; }
 }
 
 /* ============================================================
