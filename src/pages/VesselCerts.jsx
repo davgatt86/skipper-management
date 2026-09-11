@@ -13,6 +13,9 @@ import { parseVesselCertFile } from '../lib/certs/parseCert'
 import { explainReadError } from '../lib/invoices/periods'
 import { downscaleImage } from '../lib/downscale'
 import UnattachedFiles from '../components/UnattachedFiles'
+import CertBundleReview from '../components/CertBundleReview'
+import { mapBundle, matchBundle, defaultPick, attachFor, draftFor, fileStillUsed, pageLabel } from '../lib/certs/bundle'
+import { pageCountOf, readCertBundle, openCertAt } from '../lib/certs/bundleRead'
 
 const BUCKET = 'vessel-certs'
 const safeName = (s) => String(s || 'file').replace(/[^\w.\-]+/g, '_').slice(-80)
@@ -95,6 +98,9 @@ export default function VesselCerts() {
   const [editing, setEditing] = useState(null)
   const [busy, setBusy] = useState(false)
   const [reading, setReading] = useState('')
+  // A scanned bundle being checked before anything is filed:
+  // { path, fileName, pageCount, match, picks }
+  const [bundle, setBundle] = useState(null)
 
   async function load() {
     setLoading(true); setError('')
@@ -177,9 +183,85 @@ export default function VesselCerts() {
 
   async function viewFile(r) {
     if (!r.file_path) return
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(r.file_path, 3600)
-    if (error) { setError(error.message); return }
-    window.open(data.signedUrl, '_blank', 'noopener')
+    /* AT ITS OWN PAGE where the file is a bundle of several certificates — and
+       at the top otherwise, which is what it always did. */
+    try { await openCertAt(r.file_path, r.page_from) }
+    catch (err) { setError(err.message || String(err)) }
+  }
+
+  /* A SCANNED BUNDLE — several certificates in one PDF, and which page is which.
+   *
+   * Nothing is filed by reading it. The certificates read are put against the
+   * ones already on file and shown for checking, because the real bundle is half
+   * last year's certificates: filed as read, three lapsed services would have
+   * gone back into the record as current. See lib/certs/bundle.js. */
+  async function onBundle(e) {
+    const picked = e.target.files?.[0]
+    e.target.value = ''
+    if (!picked || !appUser?.fleet_id) return
+    if (picked.type !== 'application/pdf' && !/\.pdf$/i.test(picked.name)) {
+      setError('A bundle is a PDF holding several certificates. For a single photo use “Photo or PDF”.')
+      return
+    }
+    setError(''); setReading('uploading')
+    const path = `${appUser.fleet_id}/${Date.now()}-${safeName(picked.name)}`
+    const up = await supabase.storage.from(BUCKET).upload(path, picked, { upsert: false, contentType: 'application/pdf' })
+    if (up.error) { setError('Upload failed: ' + up.error.message); setReading(''); return }
+    const pageCount = await pageCountOf(picked)
+    setReading('reading')
+    try {
+      const data = await readCertBundle(path, pageCount)
+      const match = matchBundle(mapBundle(data, pageCount), rows)
+      setBundle({
+        path, fileName: picked.name, pageCount, match,
+        picks: new Set(match.rows.filter(defaultPick).map((r) => r.idx)),
+      })
+    } catch (err) {
+      /* The upload goes with a failed read. Unlike a single photo there is no
+         form to fill in against it, and a 10 MB scan with no certificate on it
+         is only something to clear up later — the PDF is still on the device. */
+      await supabase.storage.from(BUCKET).remove([path])
+      /* explainReadError passes a message it does not recognise straight
+         through, so the reader's own words — "not in this boat's certificate
+         folder", "not on the settlements reading list" — reach the skipper
+         untouched, while an API's raw wording is put into plain English. */
+      setError('Couldn’t read the bundle — ' + explainReadError(err.message).what + ' Nothing was kept.')
+    }
+    setReading('')
+  }
+
+  async function saveBundle() {
+    if (!bundle) return
+    setBusy(true); setError('')
+    const file = { filePath: bundle.path, fileName: bundle.fileName }
+    const chosen = bundle.match.rows.filter((r) => bundle.picks.has(r.idx))
+    let linked = 0, added = 0
+    for (const r of chosen) {
+      /* LINKING WRITES ONLY THE DOCUMENT. The certificate's dates, number and
+         title are the skipper's filing and a bundle does not get to overwrite
+         them — if the scan disagrees with the record, that is for him to see
+         and put right, not for a read to settle. */
+      const { error } = r.kind === 'attach'
+        ? await supabase.from('vessel_certificates')
+          .update({ ...attachFor(r, file), updated_at: new Date().toISOString() }).eq('id', r.target.id)
+        : await supabase.from('vessel_certificates').insert(draftFor(r, file))
+      if (error) {
+        setBusy(false)
+        setError(`Stopped at “${r.cert_type}”: ${error.message}. ${linked} linked and ${added} added before it.`)
+        load()
+        return
+      }
+      if (r.kind === 'attach') linked++; else added++
+    }
+    setBusy(false); setBundle(null)
+    load()
+  }
+
+  async function discardBundle() {
+    if (!bundle) return
+    /* Nothing points at the upload yet, so it goes with the review. */
+    if (!fileStillUsed(bundle.path, rows)) await supabase.storage.from(BUCKET).remove([bundle.path])
+    setBundle(null)
   }
 
   async function save(e) {
@@ -221,9 +303,14 @@ export default function VesselCerts() {
     if (!confirm(`Delete "${r.cert_type}"? This can't be undone.`)) return
     const { error } = await supabase.from('vessel_certificates').delete().eq('id', r.id)
     if (error) { setError(error.message); return }
-    // Take the stored document with it, or the bucket fills with files nothing
-    // points at.
-    if (r.file_path) await supabase.storage.from(BUCKET).remove([r.file_path])
+    /* Take the stored document with it, or the bucket fills with files nothing
+       points at — UNLESS ANOTHER CERTIFICATE IS ON THE SAME FILE. A bundle is
+       several certificates in one scan, and deleting one of them used to take
+       the scan away from all the rest, discovered only when somebody next
+       opened one. */
+    if (r.file_path && !fileStillUsed(r.file_path, rows, r.id)) {
+      await supabase.storage.from(BUCKET).remove([r.file_path])
+    }
     load()
   }
 
@@ -233,11 +320,19 @@ export default function VesselCerts() {
   return (
     <AppShell>
       <PageHeader title="Vessel Certificates" sub={title || 'The vessel’s own papers'}>
-        {canEdit && !adding && (
+        {canEdit && !adding && !bundle && (
           <>
             <label className="secondary" style={{ padding: '0.45rem 0.9rem', borderRadius: 7, cursor: reading ? 'wait' : 'pointer', border: '1px solid var(--border)', marginRight: '0.4rem', display: 'inline-block' }}>
               {reading === 'uploading' ? 'Uploading…' : reading === 'reading' ? 'Reading…' : '📷 Photo or PDF'}
               <input type="file" accept="image/*,application/pdf" onChange={onFile} disabled={!!reading} style={{ display: 'none' }} />
+            </label>
+            {/* SEVERAL CERTIFICATES IN ONE PDF — L.S.A Certs.pdf is six. Kept
+                apart from the single photo because it is read differently: out
+                of storage by the edge function, and matched against the record
+                before anything is filed. */}
+            <label className="secondary" title="A PDF holding several certificates — each is linked to its own page" style={{ padding: '0.45rem 0.9rem', borderRadius: 7, cursor: reading ? 'wait' : 'pointer', border: '1px solid var(--border)', marginRight: '0.4rem', display: 'inline-block' }}>
+              📚 Read a bundle
+              <input type="file" accept="application/pdf" onChange={onBundle} disabled={!!reading} style={{ display: 'none' }} />
             </label>
             <button onClick={() => { setDraft(blank()); setEditing(null); setAdding(true) }}>+ Add by hand</button>
           </>
@@ -246,12 +341,32 @@ export default function VesselCerts() {
 
       {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
 
+      {bundle && canEdit && (
+        <CertBundleReview
+          fileName={bundle.fileName}
+          pageCount={bundle.pageCount}
+          match={bundle.match}
+          picks={bundle.picks}
+          busy={busy}
+          onToggle={(idx) => setBundle((b) => {
+            const picks = new Set(b.picks)
+            if (picks.has(idx)) picks.delete(idx); else picks.add(idx)
+            return { ...b, picks }
+          })}
+          onOpenPage={(page) => openCertAt(bundle.path, page).catch((err) => setError(err.message || String(err)))}
+          onSave={saveBundle}
+          onDiscard={discardBundle}
+        />
+      )}
+
       {/* Photos uploaded but never attached to a certificate — see the note in
           the component. Renders nothing when there are none. */}
       <UnattachedFiles
         bucket={BUCKET}
         fleetId={appUser?.fleet_id}
-        referenced={rows.map((r) => r.file_path).filter(Boolean)}
+        /* The bundle under review counts as referenced, or the panel would
+           offer to delete the very scan being checked. */
+        referenced={[...rows.map((r) => r.file_path), bundle?.path].filter(Boolean)}
         canDelete={canEdit}
         onChange={load}
       />
@@ -359,7 +474,7 @@ export default function VesselCerts() {
                             {r.notes && <div className="muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>{r.notes}</div>}
                             {r.file_path ? (
                               <button onClick={() => viewFile(r)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: 'var(--hull)', fontWeight: 400, fontSize: '0.75rem', textDecoration: 'underline' }}>
-                                📄 {r.file_name || 'view document'}
+                                📄 {r.file_name || 'view document'}{r.page_from ? ` · ${pageLabel(r.page_from, r.page_to)}` : ''}
                               </button>
                             ) : r.file_name ? (
                               <div className="muted" style={{ fontWeight: 400, fontSize: '0.72rem' }} title="Recorded in Aegir; the file itself was never carried over">

@@ -2134,9 +2134,9 @@ and cannot open a page on this boat.
 - **MSN 1873** — the document tracking for ITC69, stability books and gear
   certificates. `vessel_certificates` already files against a chosen TYPE rather
   than a typed name, which is the half that matters; what is missing is the
-  category work and the bundles (`L.S.A Certs.pdf` is 98 pages of many
-  certificates in one file, which the one-file-one-certificate model does not
-  fit).
+  category work. The bundles are handled — `L.S.A Certs.pdf` is six
+  certificates in one scan (recorded here as 98 pages, which was wrong), and
+  each is linked to its own page; see the bundle section below.
 - **MGN 690** is the SOLAS V electronic-record-book route and is a much longer
   road than MIN 644's. Neither is started, and neither should be claimed.
 - Nothing here makes the app "MCA certified", and no page says it does. What it
@@ -4326,6 +4326,111 @@ with pdf.js · `scripts/inspection-pack-page-preview.mjs` server-renders the rea
 component in three states, because a build passing proves nothing when an
 undefined identifier is valid JavaScript and this repo has shipped eight.
 
+### A BUNDLE OF CERTIFICATES IS READ LIKE THE INVOICES — and matched before anything is filed (Sep 2026)
+
+David, on `L.S.A Certs.pdf`: *"is it possible to read that like we do with the
+invoices and direct the user to the page number of the cert?"* Yes — and opening
+the scan first changed what "read" had to mean.
+
+**IT IS SIX PAGES, NOT 98 — AND `UKFVC.pdf` IS SIX, NOT 66.** The byte scan and
+pdf.js agree: six page objects, `/Count 6`, one xref, zero fonts, six DCTDecode
+photographs, `Creator: iScanner` on iOS — a recent re-scan. The 98 and 66 this
+file carried were an older copy or simply wrong, and a page count quoted from
+here would have been checked against the wrong document. Corrected in all three
+places they appeared.
+
+**HALF THE BUNDLE IS LAST YEAR'S.** Read off the scan by eye before any code:
+
+    p1  ships medical stores           2026   on file, NO scan held
+    p2  lifejacket service             2026   on file, NO scan held
+    p3  liferaft service (Seago)       2025   renewed — 2026 on file
+    p4  liferaft service (Marasafe)    2025   renewed — 2026 on file
+    p5  gas suppression no. 3134       2024   on file WITH its own scan
+    p6  portable extinguishers         2025   renewed — 2026 on file
+
+A read that added what it found would have put three lapsed services back into
+the record as current and duplicated the other three. So **nothing is added by
+reading.** `src/lib/certs/bundle.js` puts every certificate read against the
+record, and each comes out as one of five outcomes that must not look alike:
+
+    attach      on file with no scan         link this page to it
+    hasFile     on file with its own scan    leave it be
+    superseded  an older copy of one held    not added
+    duplicate   read twice                   ignored
+    new         nothing like it on file      offered, never added unasked
+
+**WHAT IS CURRENT IS DECIDED AGAINST THE RECORD, NEVER BY THE READER.** The
+prompt says in as many words to return every certificate, *including ones that
+look out of date* — a superseded certificate can only be recognised if it is
+handed over.
+
+**THE TITLE DRIFTS, SO THE KIND IS READ OFF IT.** One raft service arrives as
+"Inflatable Liferaft Service Certificate" and "Liferaft Inspection & Service
+Schedule"; the lifejacket record reads "SERVICE CERTIFICATE - LIFEJACKET". The
+CATEGORY is no use either — the 2026 raft certificates on file sit under legacy
+`Safety` while the reader files them LSA. `familyOf()` maps titles to kinds,
+wreck removal before insurance because both wreck certificates on file say
+"insurance". Every one of the seventeen titles on file resolves, asserted by test.
+
+**A NUMBER MATCHES ONLY WITHIN ONE KIND** — the lesson of the Fraserburgh bill
+re-priced in euros because a Dutch firm used the same invoice number. Without a
+number: the same kind on the same date, never taking a record another page has
+already claimed, because two rafts serviced the same morning are two
+certificates. An older copy pairs with a DISTINCT later one where it can, and is
+flagged `shared` where one renewal is the only later certificate for several —
+three years of one raft and two rafts with only one renewed look identical from
+the page, and which it is is the skipper's to say.
+
+**TICKED BY DEFAULT: the links, and only a clean add.** `attachFor()` writes the
+file and its pages and nothing else — never the dates or number the skipper
+filed. An add is ticked only for a titled, dated, unexpired certificate of a
+recognised kind. **The first cut ticked the undated and the unrecognised, and
+the preview caught it**: saved with no dates a certificate reads as never
+expiring, and an unrecognised kind could not be checked for an older copy.
+
+**A PAGE MEANS NOTHING WITHOUT ITS FILE, and the constraint says so.**
+`vessel_certificates.page_from` / `page_to`, check `vessel_cert_pages_sane`:
+both or neither, in order, and only with a `file_path`
+(`supabase/vessel_cert_pages.sql`, applied). Opening goes to `#page=N`; a viewer
+that ignores the fragment opens at the top, which is what it did before.
+
+**DELETING ONE CERTIFICATE USED TO DELETE ITS FILE** — right while one file was
+one certificate. With a bundle it would take the scan away from every other
+certificate on it, found only when somebody next opened one. `fileStillUsed()`
+guards `remove()`, and the bundle under review counts as referenced, or the
+unattached-files panel would offer to delete the scan being checked.
+
+**NOT THE SINGLE-CERTIFICATE PATH.** That posts the whole file to the `parse`
+Netlify function, which refuses a request over about 6 MB; this bundle is 9.9 MB
+of photographs before base64. It goes the invoices' way instead: uploaded to
+`vessel-certs`, read out of storage by the edge function
+(`doc_type: 'vessel_cert_bundle'`), polled. The start-and-poll is now ONE
+function, `runReader()` in `src/lib/su/parse.js`, shared by settlements, invoices
+and certificates.
+
+**THE READER HOLDS THE SERVICE-ROLE KEY, SO IT READS ANY PATH IT IS HANDED.** For
+certificates the folder IS the fleet, so the function resolves the caller's JWT
+to `app_users` and refuses a path outside that fleet's folder, and any role but
+skipper, before a job is made. **The same gap exists for `su-documents` and is
+NOT closed here** — settlements and invoices accept any path from any signed-in
+caller. Worth closing deliberately; it has to respect the Beryl agent grant.
+
+**AND A LOGIN OFF THE SETTLEMENTS ALLOW-LIST WAITED SIX MINUTES FOR NOTHING.**
+`su_parse_jobs` reads through `su_is_allowed()`, which holds **three** skipper
+logins out of fifteen — Audacious, Beryl and the demo. For anyone else the job
+row is invisible, the poll found nothing every three seconds, and after six
+minutes the page said the read had taken too long. The job is written before its
+id is returned, so a poll finding no row at all now fails at once with the real
+reason — which fixes invoices as well. **It does not make the reader work for the
+other boats**: that is scoping `su_parse_jobs` by fleet, the documented TODO.
+
+**Proven against the scan read by eye, NOT yet on a real read.**
+`test-cert-bundle.mjs` — 90 checks on the real seventeen certificates and the
+real six pages, from `scripts/fixtures/lsa-bundle.json`, one copy shared with
+`scripts/cert-bundle-preview.mjs`, which renders three states. The function
+refuses any caller but a skipper's own login, so it cannot be driven from here —
+**one press of *Read a bundle* on the real file settles it.**
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
@@ -5918,9 +6023,9 @@ Also agreed, not yet scheduled:
     is unfalsifiable. Logging the parse beside the saved row is the single most
     useful next change, and it needs no new examples to build.
   - **The bundles are a DESIGN question, not a parsing one.**
-    `L.S.A Certs.pdf` (98 pages) and `UKFVC.pdf` (66) each hold many
-    certificates in one file, which the one-file-one-certificate model does not
-    fit at all.
+    **Answered Sep 2026**: several rows may share one file, each carrying the
+    page that is its own. `L.S.A Certs.pdf` and `UKFVC.pdf` are six pages each —
+    not 98 and 66, as this note used to say.
 
   Storing the original photo/PDF is already built on both pages with
   downscaling; what is outstanding THERE is data entry — 6 of 16 vessel
@@ -7274,9 +7379,10 @@ reading that as an image.
 
 Check first with a byte scan for `/Font` and `/DCTDecode`: no fonts plus one
 `DCTDecode` means it is a photo and the JPEG trick applies. `L.S.A Certs.pdf`
-(98 pages) and `UKFVC.pdf` (66) are **bundles** of many certificates in one
-file, which the one-file-per-certificate model in `crew_certificates` and
-`vessel_certificates` does not fit. Decide that before building cert upload.
+and `UKFVC.pdf` are **bundles** — six certificates each in one file, re-scanned
+with iScanner in 2026; the 98 and 66 pages once recorded here were wrong.
+*Read a bundle* on Vessel Certificates reads one and links each certificate to
+its own page.
 
 ## Working style
 

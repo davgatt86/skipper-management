@@ -129,6 +129,41 @@ Rules:
 - If a page carries a heading such as REVISED, COPY, DUPLICATE, CREDIT NOTE or PROFORMA, put that word in as the FIRST line of that invoice, exactly as printed. It is the one thing on the page that says an invoice is not what it appears to be.
 Respond ONLY with the JSON object, no markdown fences, no commentary.`;
 
+/* A BUNDLE OF VESSEL CERTIFICATES — several in one scanned file, and which page
+ * each one is on.
+ *
+ * David, Sep 2026, on `L.S.A Certs.pdf`: "is it possible to read that like we do
+ * with the invoices and direct the user to the page number of the cert?"
+ *
+ * THE BUNDLE MIXES OLD AND CURRENT, and that is the thing the prompt has to say.
+ * The real one holds six certificates and three of them are LAST YEAR'S — the
+ * 2025 liferaft and extinguisher services, since renewed. A reader told to find
+ * "the certificates" is liable to decide a lapsed one is not worth returning,
+ * and the client can only recognise a superseded certificate if it is given it.
+ * Deciding what is current is done against the record, never by the reader.
+ *
+ * A LIFERAFT SERIAL IS NOT A CERTIFICATE NUMBER. Every raft page carries both,
+ * and the client matches certificates on their number — a serial in that field
+ * would match nothing, or worse, match the wrong raft's paperwork.
+ *
+ * MONTH-ONLY DATES take the FIRST of the month. "Next Service: 07/2026" leaves
+ * no day, and a certificate with no expiry reads on the page as one that never
+ * runs out — which is a far worse misreading than a chase that starts early. The
+ * note says it was month-only, so it can be put right from the paper. */
+const CERT_BUNDLE_PROMPT = `You are reading a document holding one or more certificates belonging to a FISHING VESSEL - for example liferaft and lifejacket service certificates, liferaft inspection schedules, portable fire extinguisher and fixed fire-suppression certificates, ships medical stores certificates, registry, insurance, measurement and ILO 188 documents. A scanned bundle usually holds several of these one after another. It may also hold OLD certificates that have since been renewed: read every certificate that is in the document, exactly as printed, and do not leave one out because it looks out of date.
+Extract as JSON:
+{ "certificates": [ { "cert_type": string, "cert_number": string|null, "issuer": string|null, "issue_date": "YYYY-MM-DD"|null, "expiry_date": "YYYY-MM-DD"|null, "category": "Statutory"|"LSA"|"FFA"|"Radio"|"Pollution"|"Medical"|"Machinery"|"Insurance"|"Equipment"|"Other", "vessel_name": string|null, "item_serial": string|null, "notes": string|null, "page_from": number|null, "page_to": number|null } ] }
+Rules:
+- One entry per certificate. A certificate that runs over several pages is ONE entry whose page_from and page_to span them. A page that is a continuation, schedule or attachment of the certificate before it belongs to that certificate and is not a new entry.
+- cert_type is the document's own title as printed.
+- cert_number is the number printed as the CERTIFICATE or report number. A liferaft, cylinder or equipment SERIAL number is not a certificate number - put an equipment serial in item_serial. An invoice number is not a certificate number either. If no certificate number is printed, return null.
+- issuer is the service station, company, authority or surveyor that issued it.
+- issue_date is the date of issue, service or examination. expiry_date is the expiry, valid-until or NEXT SERVICE DUE date. If the certificate prints no expiry but states a validity period ("valid for 12 months from date of issue"), compute the expiry from the issue date. If only a month and year are printed ("Next Service: 07/2026"), use the FIRST day of that month and say "month only printed" in notes.
+- vessel_name is the vessel the certificate names, as printed.
+- category: Statutory (registry, tonnage, measurement, builder's, ILO 188, fishing vessel certificate); LSA (liferafts, lifejackets, immersion suits, EPIRB, flares); FFA (portable extinguishers, fixed fire suppression, fire detection); Radio (GMDSS, radio licence); Pollution (MARPOL, antifouling); Medical (medical stores, first aid); Machinery (engine, gearbox, lifting gear); Insurance (insurance and financial security, including wreck removal); Equipment (anything else serviced); Other. Prefer the specific category over the general one.
+- page_from and page_to are the pages this certificate occupies in the document AS SUPPLIED: count from 1 at the very first page and count EVERY page. A certificate on one page has page_from equal to page_to. Work through the document in order, so the certificates you return are in page order. If you are not certain which page a certificate is on, return null for both rather than guessing - a wrong page number sends the skipper to the wrong certificate, which is worse than no page number at all.
+Respond ONLY with the JSON object, no markdown fences, no commentary.`;
+
 // Canonicalise a crew name to one stable identity, merging company/spelling variants.
 function canonCrew(nm: string): string {
   const s = (nm || "").toUpperCase();
@@ -253,8 +288,11 @@ function fixWorkDates(rows: Record<string, unknown>[]): Record<string, unknown>[
 async function runParse(admin: ReturnType<typeof createClient>, jobId: string, paths: string[], docType: string, apiKey: string, pageCount: number | null, only: string[] = []) {
   try {
     const content: unknown[] = [];
+    /* Certificates live in their own bucket, one folder per fleet; everything
+     * else this reader has ever been given lives in su-documents. */
+    const bucket = docType === "vessel_cert_bundle" ? "vessel-certs" : "su-documents";
     for (const path of paths) {
-      const { data: blob, error } = await admin.storage.from("su-documents").download(path);
+      const { data: blob, error } = await admin.storage.from(bucket).download(path);
       if (error || !blob) {
         await admin.from("su_parse_jobs").update({ status: "error", error: `Could not read the uploaded file (${path}): ${error?.message ?? "not found"}` }).eq("id", jobId);
         return;
@@ -264,7 +302,8 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
       if (media === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } });
       else content.push({ type: "image", source: { type: "base64", media_type: media, data: b64 } });
     }
-    const prompt = docType === "invoice_lines" ? LINES_PROMPT(only)
+    const prompt = docType === "vessel_cert_bundle" ? CERT_BUNDLE_PROMPT
+      : docType === "invoice_lines" ? LINES_PROMPT(only)
       : docType === "invoice" ? INVOICE_PROMPT
       : docType === "settlement_beryl" ? BERYL_PROMPT : SETTLEMENT_PROMPT;
     content.push({ type: "text", text: prompt });
@@ -299,6 +338,15 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
       if (Array.isArray(parsed.invoices)) {
         parsed.invoices = fixCurrency(fixWorkDates(fixPages(parsed.invoices as Record<string, unknown>[], pageCount)));
       }
+    } else if (docType === "vessel_cert_bundle") {
+      /* The same page check as the invoices, against the page count the client
+       * read off the PDF. Nothing else is corrected here: which certificates
+       * are current is decided against the record on the client, and a reader
+       * that quietly dropped an old one would hide the very thing that says a
+       * renewal happened. */
+      if (Array.isArray(parsed.certificates)) {
+        parsed.certificates = fixPages(parsed.certificates as Record<string, unknown>[], pageCount);
+      }
     } else if (Array.isArray(parsed.crew_payments)) {
       // normalise crew names on the way out (Audacious settlements only)
       parsed.crew_payments = (parsed.crew_payments as Record<string, unknown>[]).map((c) => ({ ...c, crew_name: canonCrew(String(c.crew_name || "")) }));
@@ -320,6 +368,26 @@ Deno.serve(async (req: Request) => {
     const { paths, doc_type, page_count, only } = await req.json();
     if (!Array.isArray(paths) || paths.length === 0) return json({ error: "No files provided" }, 400);
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    /* THE READER HOLDS THE SERVICE-ROLE KEY, SO IT WILL READ ANY PATH IT IS
+     * HANDED — storage RLS never sees this download. For certificates the folder
+     * IS the fleet (`vessel-certs/{fleet_id}/...`), so the caller's own fleet is
+     * checked against it here, and only a skipper files vessel certificates, the
+     * same rule the page applies. A path in another boat's folder is refused
+     * before a job is even made, rather than read and handed back. */
+    if (doc_type === "vessel_cert_bundle") {
+      const auth = req.headers.get("Authorization") || "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      const { data: who } = await admin.auth.getUser(token);
+      const uid = who?.user?.id;
+      if (!uid) return json({ error: "Signed out - sign in again and retry." }, 401);
+      const { data: me } = await admin.from("app_users").select("fleet_id, role").eq("id", uid).maybeSingle();
+      if (!me?.fleet_id) return json({ error: "This login is not attached to a boat." }, 403);
+      if (me.role !== "skipper") return json({ error: "Only the skipper files vessel certificates." }, 403);
+      if (paths.some((p: unknown) => String(p).split("/")[0] !== me.fleet_id)) {
+        return json({ error: "That document is not in this boat's certificate folder." }, 403);
+      }
+    }
     await admin.from("su_parse_jobs").delete().lt("created_at", new Date(Date.now() - 86400000).toISOString());
     const { data: job, error } = await admin.from("su_parse_jobs").insert({ doc_type: doc_type || "settlement" }).select().single();
     if (error || !job) return json({ error: `Could not start the read: ${error?.message}` }, 500);

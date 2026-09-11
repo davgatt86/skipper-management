@@ -115,6 +115,22 @@ export async function parseDocuments(files, docType, boatId, { onStage, existing
   }
 
   onStage?.('reading')
+  /* THE PAGE COUNT IS THE ONE FACT ABOUT THE DOCUMENT THAT IS NOT THE
+     MODEL'S OPINION — it was read off the PDF with pdf.js on upload. The
+     function uses it to throw away a page number that could not be true. */
+  const data = await runReader({ paths, doc_type: docType, page_count: Number.isInteger(pageCount) ? pageCount : null })
+  return { data, paths }
+}
+
+/**
+ * Start a read on the edge function and wait for the result.
+ *
+ * ONE COPY OF THIS, for every kind of document. It was written inline for the
+ * settling sheets and invoices; the vessel certificate bundle needs exactly the
+ * same start-and-poll, and a second copy of a poll loop is a second place for
+ * the deadline or the error handling to drift.
+ */
+export async function runReader(body, { tooLong = 'Reading took too long. The file is stored — try again, or enter the figures by hand.' } = {}) {
   const { data: sess } = await supabase.auth.getSession()
   const token = sess?.session?.access_token
   if (!token) throw new Error('Signed out — sign in again and retry.')
@@ -126,10 +142,7 @@ export async function parseDocuments(files, docType, boatId, { onStage, existing
       Authorization: `Bearer ${token}`,
       apikey: SUPABASE_KEY,
     },
-    /* THE PAGE COUNT IS THE ONE FACT ABOUT THE DOCUMENT THAT IS NOT THE
-       MODEL'S OPINION — it was read off the PDF with pdf.js on upload. The
-       function uses it to throw away a page number that could not be true. */
-    body: JSON.stringify({ paths, doc_type: docType, page_count: Number.isInteger(pageCount) ? pageCount : null }),
+    body: JSON.stringify(body),
   })
   const json = await resp.json().catch(() => ({}))
   if (!resp.ok) throw new Error(json.error || `Could not start the read (${resp.status}).`)
@@ -143,10 +156,16 @@ export async function parseDocuments(files, docType, boatId, { onStage, existing
     const { data: job, error } = await supabase
       .from('su_parse_jobs').select('status, result, error').eq('id', jobId).maybeSingle()
     if (error) throw new Error(error.message)
-    if (job?.status === 'done') return { data: job.result, paths }
+    /* THE JOB IS WRITTEN BEFORE ITS ID COMES BACK, so a poll that finds no row
+       at all is not "still reading" — it is a login that cannot see the result.
+       `su_parse_jobs` is read through the settlements allow-list, and without
+       this a skipper off that list sat through the whole six minutes to be told
+       the read had taken too long, which was never the problem. */
+    if (!job) throw new Error('This login cannot collect the reader’s result — it is not on the settlements reading list. Ask for it to be added, or enter the details by hand.')
+    if (job?.status === 'done') return job.result
     if (job?.status === 'error') throw new Error(job.error || 'Reading failed.')
   }
-  throw new Error('Reading took too long. The file is stored — try again, or enter the figures by hand.')
+  throw new Error(tooLong)
 }
 
 // ---- mapping the reader's JSON onto editable review state ----------------
