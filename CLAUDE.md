@@ -75,12 +75,14 @@ sits at the top level of the policy, not inside a subquery.
 managing boat access it will appear to work and change nothing; visibility
 comes from `fleet_id` and `su_fleet_agents`.
 
-`su_parse_jobs` is deliberately still unscoped — the AI reader edge function
-inserts with the service-role key, so `current_fleet_id()` is null there, and
-the **client polls that table with its own session** to collect the result.
-Scoping it would hang every read until the six-minute deadline; it needs the
-edge function changed to set `fleet_id` from the caller's JWT first. See the
-notes in `supabase/su_fleet_isolation.sql` and `src/lib/su/parse.js`.
+**`su_parse_jobs` IS SCOPED NOW (Sep 2026).** It was left out of that
+migration because the AI reader inserts with the service-role key, where
+`current_fleet_id()` is null, and the **client polls that table with its own
+session** — so a fleet check would have hidden every job from the page waiting
+on it. The function stamps `fleet_id` from the caller's own JWT (v14) and
+`supabase/su_parse_jobs_fleet_scope.sql` scopes the read on that column. What it
+replaced was `su_is_allowed()`: an email allow-list of three logins, one of them
+another business's. See **THE READER'S OWN TENANT BOUNDARY** below.
 
 ### Settling sheets arrive by email (Aug 2026)
 
@@ -4411,9 +4413,9 @@ and certificates.
 **THE READER HOLDS THE SERVICE-ROLE KEY, SO IT READS ANY PATH IT IS HANDED.** For
 certificates the folder IS the fleet, so the function resolves the caller's JWT
 to `app_users` and refuses a path outside that fleet's folder, and any role but
-skipper, before a job is made. **The same gap exists for `su-documents` and is
-NOT closed here** — settlements and invoices accept any path from any signed-in
-caller. Worth closing deliberately; it has to respect the Beryl agent grant.
+skipper, before a job is made. **The same gap was open on `su-documents` and was
+closed the next day** — settlements and invoices accepted any path from any
+signed-in caller. See **THE READER'S OWN TENANT BOUNDARY** below.
 
 **AND A LOGIN OFF THE SETTLEMENTS ALLOW-LIST WAITED SIX MINUTES FOR NOTHING.**
 `su_parse_jobs` reads through `su_is_allowed()`, which holds **three** skipper
@@ -4421,8 +4423,9 @@ logins out of fifteen — Audacious, Beryl and the demo. For anyone else the job
 row is invisible, the poll found nothing every three seconds, and after six
 minutes the page said the read had taken too long. The job is written before its
 id is returned, so a poll finding no row at all now fails at once with the real
-reason — which fixes invoices as well. **It does not make the reader work for the
-other boats**: that is scoping `su_parse_jobs` by fleet, the documented TODO.
+reason — which fixes invoices as well. **Scoping `su_parse_jobs` by fleet was the
+documented TODO and it is now done**, so the reader works for every boat with a
+login; see the section below.
 
 **Proven against the scan read by eye, NOT yet on a real read.**
 `test-cert-bundle.mjs` — 90 checks on the real seventeen certificates and the
@@ -4430,6 +4433,94 @@ real six pages, from `scripts/fixtures/lsa-bundle.json`, one copy shared with
 `scripts/cert-bundle-preview.mjs`, which renders three states. The function
 refuses any caller but a skipper's own login, so it cannot be driven from here —
 **one press of *Read a bundle* on the real file settles it.**
+
+### THE READER'S OWN TENANT BOUNDARY — closed both ways (Sep 2026)
+
+David: *"one security gap is still open, what is this and what is the fix?"*,
+then *"do it. don't break anything in page while fixing."*
+
+**THE FUNCTION HOLDS THE SERVICE-ROLE KEY, SO STORAGE RLS NEVER SEES ITS
+DOWNLOAD**, which makes `su-parse-document` the one place in this app where the
+tenant boundary has to be written out by hand rather than inherited from a
+policy. The certificate work wrote it for certificates and for nothing else, so
+every other document type **took whatever path it was handed**: any signed-in
+login could post a path out of another boat's folder as `doc_type: 'invoice'`
+and have the reader extract what was in it.
+
+**WHAT LIMITED IT WAS LUCK, NOT A BOUNDARY.** The result lands in
+`su_parse_jobs`, read through `su_is_allowed()` — three logins out of fifteen —
+so the exposure was real and pointed the wrong way: **Beryl's skipper could have
+read Audacious's settling sheets and invoice bundles**, where the agent grant
+runs one way, Audacious over Beryl. An officer or cook could not see a result
+but could still make the reader spend on a read. Storage RLS does stop another
+fleet LISTING the folder, so a path had to be known already — protection by
+unguessable filename, which is not protection.
+
+**THE TWO BUCKETS ARE FOLDERED DIFFERENTLY, and that is why this is not one
+comparison.** A certificate sits under its FLEET (`vessel-certs/{fleet_id}/…`);
+a settling sheet or an invoice bundle sits under its BOAT
+(`su-documents/{su_boats.id}/…`). Testing a boat id against a fleet id would
+refuse every legitimate read — **the fix that looks like a copy of the
+certificate guard is the fix that breaks the page.**
+
+**AND THE BOAT IS NOT ALWAYS THE CALLER'S OWN.** `su_fleet_agents` grants
+Audacious a read over Beryl until the settlements integration is finished, so
+the test is exactly the one `su_visible_boat()` makes: own fleet OR granted.
+**That function cannot be called from the reader** — it resolves the fleet
+through `auth.uid()`, which is null on the service-role key — so the rule is
+mirrored explicitly and the two have to be kept in step.
+
+    AUDACIOUS asks for   Audacious ✓ own · Beryl ✓ granted · North Wind ✗
+    BERYL asks for       Beryl ✓ own · Audacious ✗ · North Wind ✗
+
+**A FOLDER THAT IS NOT A UUID IS REFUSED BEFORE IT IS ASKED ABOUT.** PostgREST's
+`.in()` on a malformed uuid ERRORS rather than matching nothing, and an error
+here reaches the page as a database fault rather than as a refusal.
+
+**THE JOB NOW CARRIES THE CALLER'S FLEET** and the table is scoped on it
+(`supabase/su_parse_jobs_fleet_scope.sql`): permissive
+`fleet_id = current_fleet_id()` plus the RESTRICTIVE `fleet_isolation` the house
+pattern asks for, with the officer and cook denies standing alongside.
+
+**THE ORDER IS THE WHOLE OF "DON'T BREAK THE PAGE".** The function went first,
+stamping `fleet_id` while the old allow-list policy still stood; the policy went
+second. In that order there is no moment when a job cannot be collected.
+Reversed, every read in between would have polled a row it could not see and
+reported a six-minute timeout.
+
+**PROBED AS THE REAL LOGINS, NOT INSPECTED** — a job planted for each fleet and
+read back as each account:
+
+    BERYL skipper       1, his own · Audacious's job 0   (it was visible before)
+    AUDACIOUS skipper   1, his own · Beryl's job 0
+    AUDACIOUS officer   0            AUDACIOUS cook   0
+    BOY ANDREW skipper  1, his own — and su_is_allowed() is FALSE
+
+**That last line is the old limitation closing in the same change.** Nine boats
+could never collect a reader result: the poll found nothing every three seconds
+and gave up after six minutes. The boundary is the fleet now, the one every
+other table in this app uses.
+
+**A row left from before carries no fleet and is invisible to everyone.** That
+is correct and costs nothing — a job is transient working state, and the
+function deletes anything over 24 hours old on its next call.
+
+**WHAT IS NOT PROVEN IS THE REFUSAL ITSELF.** The function needs a real
+skipper's JWT, so it cannot be driven from here: the probes prove the POLICY
+half end to end, and the boat rule was asserted in SQL against
+`su_visible_boat()`'s own two conditions. `test-reader-guard.mjs` (8 checks)
+asserts the SHAPE of the guard in the source, the way `test-gmail-script.mjs`
+asserts its regex as a literal — it cannot prove the function refuses, and it
+does prove nobody has quietly narrowed the guard back to certificates or moved
+it after the job is made. **It was checked against three weakened copies** — the
+grant half deleted, the guard re-gated behind certificates, the fleet stamp
+dropped — and catches all three.
+
+**AND THE FIRST GO AT THAT CHECK WAS THE BUG IT EXISTS TO CATCH.** The mutation
+meant to delete the `su_fleet_agents` query matched those same words in the
+COMMENT above it and deleted that instead, so the test passed on a copy that had
+never been weakened and read as vacuous. Same lesson as the `orbLink` import
+guard: **check for the code, not for the substring.**
 
 ## Pair teams
 

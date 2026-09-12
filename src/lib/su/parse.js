@@ -13,11 +13,12 @@ import { supabase } from '../../supabaseClient'
 //     -> { job_id }
 //     -> poll su_parse_jobs every 3s until done or error
 //
-// Note on su_parse_jobs: the function writes it with the service-role key, so
-// its rows carry no fleet_id and the table is left unscoped in
-// supabase/su_fleet_isolation.sql. Scoping it would break this poll — the
-// client reads the job back with its own session. Fixing that properly means
-// changing the edge function to set fleet_id from the caller's JWT.
+// Note on su_parse_jobs: the function writes it with the service-role key,
+// where current_fleet_id() is null — so it stamps fleet_id from the CALLER'S
+// OWN JWT (v14), and supabase/su_parse_jobs_fleet_scope.sql scopes the table on
+// that column. What it replaced was a read gated on the settlements allow-list:
+// three logins of fifteen could collect a result, and one of the three was
+// another business's. The boundary is the fleet now, like everywhere else.
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY
@@ -157,11 +158,12 @@ export async function runReader(body, { tooLong = 'Reading took too long. The fi
       .from('su_parse_jobs').select('status, result, error').eq('id', jobId).maybeSingle()
     if (error) throw new Error(error.message)
     /* THE JOB IS WRITTEN BEFORE ITS ID COMES BACK, so a poll that finds no row
-       at all is not "still reading" — it is a login that cannot see the result.
-       `su_parse_jobs` is read through the settlements allow-list, and without
-       this a skipper off that list sat through the whole six minutes to be told
-       the read had taken too long, which was never the problem. */
-    if (!job) throw new Error('This login cannot collect the reader’s result — it is not on the settlements reading list. Ask for it to be added, or enter the details by hand.')
+       at all is not "still reading" — it is a job this login cannot see, and
+       sitting out the six minutes to report a timeout would name the wrong
+       problem. It should not happen now the table is scoped by fleet and the
+       function stamps the caller's own, which is why it says so plainly rather
+       than telling anyone what to fix. */
+    if (!job) throw new Error('This login cannot collect the reader’s result. The read itself may have worked — check before paying for another, or enter the details by hand.')
     if (job?.status === 'done') return job.result
     if (job?.status === 'error') throw new Error(job.error || 'Reading failed.')
   }

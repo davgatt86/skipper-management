@@ -370,26 +370,67 @@ Deno.serve(async (req: Request) => {
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     /* THE READER HOLDS THE SERVICE-ROLE KEY, SO IT WILL READ ANY PATH IT IS
-     * HANDED — storage RLS never sees this download. For certificates the folder
-     * IS the fleet (`vessel-certs/{fleet_id}/...`), so the caller's own fleet is
-     * checked against it here, and only a skipper files vessel certificates, the
-     * same rule the page applies. A path in another boat's folder is refused
-     * before a job is even made, rather than read and handed back. */
+     * HANDED — storage RLS never sees this download, which makes this function
+     * the one place in the app where the tenant boundary has to be written out
+     * by hand. It was written for certificates and for nothing else, so until
+     * Sep 2026 any signed-in login could hand in a path from another boat's
+     * folder and have the reader extract what was in it.
+     *
+     * THE TWO BUCKETS ARE FOLDERED DIFFERENTLY, and that is why this is not one
+     * comparison. A certificate sits under its FLEET
+     * (`vessel-certs/{fleet_id}/...`); a settling sheet or an invoice bundle
+     * sits under its BOAT (`su-documents/{su_boats.id}/...`). Testing a boat id
+     * against a fleet id would refuse every legitimate read.
+     *
+     * AND THE BOAT IS NOT ALWAYS THE CALLER'S OWN. `su_fleet_agents` grants one
+     * fleet a read over another's boat — Audacious holds one over Beryl so the
+     * settlements integration could be proven — so the test here is the one
+     * `su_visible_boat()` makes. THAT FUNCTION CANNOT BE CALLED FROM HERE: it
+     * resolves the fleet through `auth.uid()`, which is null on the
+     * service-role key, so the rule is mirrored explicitly and the two have to
+     * be kept in step.
+     *
+     * Only a skipper reads any of these — Settlements, Invoices and Vessel
+     * certificates are all skipper-only pages. A path that fails is refused
+     * before a job is made, so nothing is read and nothing is charged. */
+    const auth = req.headers.get("Authorization") || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const { data: who } = await admin.auth.getUser(token);
+    const uid = who?.user?.id;
+    if (!uid) return json({ error: "Signed out - sign in again and retry." }, 401);
+    const { data: me } = await admin.from("app_users").select("fleet_id, role").eq("id", uid).maybeSingle();
+    if (!me?.fleet_id) return json({ error: "This login is not attached to a boat." }, 403);
+    if (me.role !== "skipper") return json({ error: "Only the skipper reads documents here." }, 403);
+
+    const folders = [...new Set(paths.map((p: unknown) => String(p).split("/")[0]))];
     if (doc_type === "vessel_cert_bundle") {
-      const auth = req.headers.get("Authorization") || "";
-      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-      const { data: who } = await admin.auth.getUser(token);
-      const uid = who?.user?.id;
-      if (!uid) return json({ error: "Signed out - sign in again and retry." }, 401);
-      const { data: me } = await admin.from("app_users").select("fleet_id, role").eq("id", uid).maybeSingle();
-      if (!me?.fleet_id) return json({ error: "This login is not attached to a boat." }, 403);
-      if (me.role !== "skipper") return json({ error: "Only the skipper files vessel certificates." }, 403);
-      if (paths.some((p: unknown) => String(p).split("/")[0] !== me.fleet_id)) {
+      if (folders.some((f) => f !== me.fleet_id)) {
         return json({ error: "That document is not in this boat's certificate folder." }, 403);
+      }
+    } else {
+      /* A folder that is not a uuid cannot be a boat, and `.in()` on one ERRORS
+       * rather than matching nothing — which would read as a database fault at
+       * the client instead of a refusal. Refused before it is asked. */
+      const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+      if (folders.some((f) => !isUuid(f))) {
+        return json({ error: "That document is not in this boat's folder." }, 403);
+      }
+      const { data: own } = await admin.from("su_boats").select("id").in("id", folders).eq("fleet_id", me.fleet_id);
+      const { data: granted } = await admin.from("su_fleet_agents").select("boat_id").in("boat_id", folders).eq("agent_fleet_id", me.fleet_id);
+      const allowed = new Set([
+        ...(own ?? []).map((b: { id: string }) => b.id),
+        ...(granted ?? []).map((g: { boat_id: string }) => g.boat_id),
+      ]);
+      if (folders.some((f) => !allowed.has(f))) {
+        return json({ error: "That document is not in this boat's folder." }, 403);
       }
     }
     await admin.from("su_parse_jobs").delete().lt("created_at", new Date(Date.now() - 86400000).toISOString());
-    const { data: job, error } = await admin.from("su_parse_jobs").insert({ doc_type: doc_type || "settlement" }).select().single();
+    /* THE JOB CARRIES THE CALLER'S FLEET, and the client polls it back through
+     * a policy that checks exactly that. Written here because the insert runs on
+     * the service-role key, where `current_fleet_id()` is null — the column
+     * existed from the day the table was scoped and nothing had ever set it. */
+    const { data: job, error } = await admin.from("su_parse_jobs").insert({ doc_type: doc_type || "settlement", fleet_id: me.fleet_id }).select().single();
     if (error || !job) return json({ error: `Could not start the read: ${error?.message}` }, 500);
     EdgeRuntime.waitUntil(runParse(admin, job.id, paths, doc_type || "settlement", apiKey, Number.isInteger(page_count) ? page_count : null,
       Array.isArray(only) ? only.map(String).slice(0, 20) : []));
