@@ -41,7 +41,7 @@ select cron.schedule(
 -- raised: Audacious's extinguisher certificate was renewed to 2030 and the
 -- "expired on 26-08-2026" alert was still unread three weeks later, on the one
 -- stream that has to stay believable. `resolve_compliance_alerts()`
--- (alert_noise.sql) dismisses an alert whose subject no longer matches.
+-- (alert_cap_per_day.sql) dismisses an alert whose subject no longer matches.
 --
 -- AND THIS FILE HAD DRIFTED AGAIN, which is what it exists to prevent: the live
 -- job had gained `generate_activity_alerts()` and the file never learned about
@@ -62,7 +62,7 @@ select cron.schedule(
 -- 104 unread price alerts had stacked up by Sep 2026. The dedup key carries the
 -- board's date AND the species, so a later run could not repeat a species and
 -- was perfectly free to raise three MORE of them — eight runs a day against a
--- cap written per run. The cap is per DAY now (alert_noise.sql); this schedule
+-- cap written per run. The cap is per DAY now (alert_cap_per_day.sql); this schedule
 -- is unchanged, because with a real cap the frequency only decides how promptly
 -- the day's few are said.
 select cron.unschedule('market-alerts')

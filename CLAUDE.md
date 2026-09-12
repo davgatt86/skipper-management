@@ -4620,7 +4620,11 @@ generates**, an hour before the digest reads the table.
     105 unread -> 51 on the sweep -> 25, all prices, none stale
     the one certificate alert: resolved, because the certificate was renewed
 
-`supabase/alert_noise.sql`. **The applied copy and the file are identical**,
+`supabase/alert_cap_per_day.sql`, which supersedes `generate_alerts()` as
+August’s `alert_noise.sql` defined it — that file keeps its own measurement (4,781
+live alerts against 2 that mattered) and now carries a DO-NOT-RE-RUN warning,
+since its cap is the per-run one and its foot sweeps the backlog. **The applied
+copy and the file are identical**,
 checked by hashing the stored function bodies against the file's rather than by
 eye — the comments live above each function for exactly that reason.
 
