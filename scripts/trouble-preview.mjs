@@ -22,14 +22,14 @@ import { safeOut } from './safeOut.mjs'
 const out = safeOut(process.argv[2] || 'didnt-load-preview.html', '.html')
 
 mkdirSync('node_modules/.cache', { recursive: true })
-const bundlePath = join('node_modules/.cache', 'didnt-load.mjs')
+const bundlePath = join('node_modules/.cache', 'trouble.mjs')
 await esbuild.build({
-  entryPoints: ['src/components/DidntLoad.jsx'],
+  entryPoints: ['src/components/Trouble.jsx'],
   bundle: true, format: 'esm', outfile: bundlePath, platform: 'node', jsx: 'automatic',
   external: ['react', 'react-dom', 'react-dom/*', 'react/*'],
   logLevel: 'warning',
 })
-const DidntLoad = (await import(pathToFileURL(bundlePath).href)).default
+const Trouble = (await import(pathToFileURL(bundlePath).href)).default
 const { renderToStaticMarkup } = await import('react-dom/server')
 const React = await import('react')
 
@@ -59,10 +59,28 @@ const states = [
     reassurance: 'Everything else on this page is unaffected.',
     why: 'permission denied for table quota_manual_stocks',
   }],
+  /* The crew pages, where several reads go out together and any of them can be
+     the one that failed — so the panel has to say WHICH, or the skipper is left
+     guessing whether it was his crew or his rank list that is missing. */
+  ['Crew — several reads, and only two of them failed', {
+    what: 'Some of this page didn’t load.',
+    reassurance: 'Missing: the rank list, the contracts. Nothing has been changed — this is only a read, so trying again is safe.',
+    why: 'the rank list: permission denied for table crew_ranks · the contracts: canceling statement due to statement timeout',
+    busy: false, onRetry() {},
+  }],
+  /* A WRITE that failed, and the reason this panel does both: the same reader
+     needs the same voice whether it was a read or a save. It takes no retry —
+     a button that silently re-fires a save is how a boat ends up with two of
+     the same crewman. */
+  ['Crew — a save that failed, which must NOT offer to try again', {
+    what: 'Couldn’t add the crewman.',
+    reassurance: 'Nothing was added, so the list is as it was.',
+    why: 'new row violates row-level security policy for table "crew"',
+  }],
 ]
 
 const html = states.map(([title, props]) =>
-  `<h2 class="pv">${title}</h2>` + renderToStaticMarkup(React.createElement(DidntLoad, props))).join('\n')
+  `<h2 class="pv">${title}</h2>` + renderToStaticMarkup(React.createElement(Trouble, props))).join('\n')
 
 const appCss = readFileSync('src/index.css', 'utf8')
 writeFileSync(out, `<!doctype html><meta charset="utf-8"><title>That didn't load</title>
@@ -112,8 +130,20 @@ has(3, '>Try again<', 'and still offers the retry')
 ok(!panes[3].includes('Try again'), 'no retry button where the page passes no handler')
 has(4, 'permission denied', 'but the reason is still carried')
 
+has(5, 'Missing: the rank list, the contracts', 'a multi-read failure names which parts are missing')
+has(5, 'only a read, so trying again is safe', 'and says why retrying is safe')
+has(5, 'permission denied for table crew_ranks', 'carrying each read’s own reason')
+has(5, '>Try again<', 'a read offers the retry')
+
+has(6, 'Couldn’t add the crewman.', 'a failed save names the action in plain words')
+has(6, 'Nothing was added', 'and says what did not happen')
+ok(!panes[5].includes('Try again'),
+   'A SAVE NEVER OFFERS A RETRY — re-firing a write is how a boat gets two of the same crewman')
+ok(panes[5].includes('violates row-level security policy'),
+   'though the server’s own words are still carried')
+
 ok(panes.every((p) => p.includes('var(--brass)')),
-   'brass, not rust: a read that failed is a question, not a fault in the boat')
+   'brass, not rust: a failure here is a question, not a fault in the boat')
 
 console.log(out)
 console.log(`  ${states.length} states rendered`)

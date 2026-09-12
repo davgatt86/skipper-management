@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
-import DidntLoad from '../components/DidntLoad'
+import Trouble from '../components/Trouble'
 import { useCurrentVessel } from '../VesselContext'
 import { scopeRows } from '../lib/vessels'
 import PickABoat from '../components/PickABoat'
@@ -486,7 +486,7 @@ export default function Quota() {
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
       {!manualReady && (
-        <DidntLoad
+        <Trouble
           what="Manual stock tracking didn’t load."
           reassurance="Everything else on this page is unaffected — the position off your statements is above, and nothing you have entered by hand has been lost."
           why={manualWhy}

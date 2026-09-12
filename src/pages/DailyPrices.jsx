@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
-import DidntLoad from '../components/DidntLoad'
+import Trouble from '../components/Trouble'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ScatterChart, Scatter, ZAxis,
@@ -144,7 +144,7 @@ export default function DailyPrices() {
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
       {!ready && (
-        <DidntLoad
+        <Trouble
           what="The market board didn’t load."
           reassurance="The board lives on the server rather than on this device, so nothing has been lost and nothing you have uploaded is affected. It is worth trying again."
           why={notReadyWhy}

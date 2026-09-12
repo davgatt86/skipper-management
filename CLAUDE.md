@@ -4664,7 +4664,8 @@ is manners:
 3. **Both migrations have been applied for months**, so the only reader who
    could ever have seen it truthfully is a brand-new tenant mid-setup.
 
-`src/components/DidntLoad.jsx` — one panel, two pages. It says WHAT did not
+`src/components/Trouble.jsx` — one panel, now four pages (it was `DidntLoad`
+until the crew pages needed the same voice for a failed SAVE). It says WHAT did not
 load, says what is safe (different per page, which is why the wording is a prop
 and not a copy), offers **Try again** because the real occurrence was transient,
 and carries **the server's own words** in small muted type. A genuinely missing
@@ -4675,7 +4676,7 @@ in the boat.
 
 **IT IS A COMPONENT SO THAT IT CAN BE RENDERED.** Both pages drag the supabase
 client in behind them and cannot be server-rendered;
-`scripts/didnt-load-preview.mjs` renders this in four states and asserts mostly
+`scripts/trouble-preview.mjs` renders this in six states and asserts mostly
 what it must NEVER say — no `.sql`, no Supabase, no console, no claim about the
 cause — because the easiest way to undo this is to paste the old sentence back,
 and nothing else in the repo would notice.

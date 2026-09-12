@@ -1,5 +1,10 @@
-/* "That didn't load" — said in one voice, and never as an instruction to go and
- * fix the database.
+/* SOMETHING WENT WRONG — said in one voice, and never as an instruction to go
+ * and fix the database.
+ *
+ * Two shapes, one panel. A READ that failed takes a retry, because trying again
+ * is free and often works. A WRITE that failed does not: it names what did not
+ * save and stops, since a button that silently re-fires a save is how a boat
+ * ends up with two of something.
  *
  * BOTH PAGES THAT NEEDED THIS USED TO NAME A .sql FILE. Daily Prices said "the
  * market tables aren't set up yet — run supabase/market_prices.sql in
@@ -23,9 +28,11 @@
  *
  * `reassurance` is per page and is the point of the component being shared
  * rather than copied: what is safe differs. The market board is on the server,
- * so nothing local is lost; on Quota the rest of the page stands on its own.
+ * so nothing local is lost; on Quota the rest of the page stands on its own;
+ * on the crew pages a failed read leaves the record untouched, and saying so is
+ * most of the message.
  */
-export default function DidntLoad({ what, reassurance, why, busy, onRetry }) {
+export default function Trouble({ what, reassurance, why, busy, onRetry }) {
   return (
     <div className="card" style={{ marginBottom: '1rem', borderLeft: '3px solid var(--brass)' }}>
       <p style={{ margin: 0, fontWeight: 600 }}>{what}</p>
