@@ -4,6 +4,7 @@ import autoTable from 'jspdf-autotable'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
+import Trouble from '../components/Trouble'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
@@ -15,6 +16,28 @@ import UnattachedFiles from '../components/UnattachedFiles'
 const BUCKET = 'crew-certs'
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '—')
 const catOf = (r) => (CERT_CATEGORIES.includes(r.category) ? r.category : 'Other')
+
+/* A FAILED READ AND A FAILED WRITE ARE NOT THE SAME TROUBLE, so they are not
+ * said the same way. A read changed nothing and is worth trying again; filing
+ * that failed must never offer a button that silently fires it a second time.
+ * `retry` is what tells the two apart, and it is the only thing that puts a
+ * button on the panel.
+ *
+ * WHICH of the two reads went is the part worth keeping, so the name each one
+ * carries in `load` is what the server's wording is reported against. */
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
+function readFail(failed) {
+  const names = failed.map(([name]) => name)
+  return {
+    retry: true,
+    what: names.length === 1 ? cap(`${names[0]} didn’t load.`) : 'Some of this page didn’t load.',
+    // Where only one read went, `what` has already named it and listing it
+    // again says nothing. Several of them is the case that needs the list.
+    reassurance: `${names.length > 1 ? `Not loaded: ${andList(names)}. ` : ''}Nothing has been changed — reading changes nothing — so trying again is safe.`,
+    why: failed.map(([name, e]) => `${name}: ${e.message}`).join(' · '),
+  }
+}
 
 function CertBadge({ expiry }) {
   const s = certStatus(expiry)
@@ -40,7 +63,7 @@ function CertBadge({ expiry }) {
 // rather than by row, because the whole point of filing against a type is
 // that every certificate of that type belongs in the same bucket: six Man
 // Overboard Awareness tickets are one decision, not six.
-function Categoriser({ rows, onDone, setError }) {
+function Categoriser({ rows, onDone, onFail, clearFail }) {
   const [choice, setChoice] = useState({})   // cert_type -> category
   const [busy, setBusy] = useState('')
 
@@ -58,21 +81,37 @@ function Categoriser({ rows, onDone, setError }) {
   async function apply(certType, ids) {
     const cat = choice[certType] ?? suggestCategory(certType)
     if (!cat) return
-    setBusy(certType)
+    setBusy(certType); clearFail()
     const { error } = await supabase.from('crew_certificates').update({ category: cat }).in('id', ids)
     setBusy('')
-    if (error) setError(error.message); else onDone()
+    if (error) {
+      onFail({
+        what: `${ids.length} ${certType || 'unnamed'} certificate${ids.length === 1 ? ' wasn’t' : 's weren’t'} filed under ${cat}.`,
+        reassurance: 'They still show under Other, and nothing else on the register was touched.',
+        why: error.message,
+      })
+    } else onDone()
   }
 
   async function applyAll() {
     const ready = groups.filter(([t]) => (choice[t] ?? suggestCategory(t)))
     if (!ready.length) return
     if (!confirm(`File ${ready.reduce((n, [, r]) => n + r.length, 0)} certificates into the categories shown?`)) return
-    setBusy('all')
+    setBusy('all'); clearFail()
     for (const [t, rs] of ready) {
       const cat = choice[t] ?? suggestCategory(t)
       const { error } = await supabase.from('crew_certificates').update({ category: cat }).in('id', rs.map((r) => r.id))
-      if (error) { setError(error.message); setBusy(''); return }
+      if (error) {
+        /* One type at a time, so a failure part-way through means the ones
+         * before it ARE filed. Saying which type it stopped on is what makes
+         * the list still on screen readable afterwards. */
+        onFail({
+          what: `Filing stopped at ${t || 'a certificate with no name'}.`,
+          reassurance: 'Anything filed before it has been filed and will drop off this list; the rest still show under Other.',
+          why: error.message,
+        })
+        setBusy(''); return
+      }
     }
     setBusy('')
     onDone()
@@ -132,13 +171,17 @@ export default function CrewCertsRegister() {
   const [rows, setRows] = useState([])
   const [crew, setCrew] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [fail, setFail] = useState(null)
   const [view, setView] = useState('matrix')     // matrix | list
   const [filter, setFilter] = useState('all')     // all | expired | due | valid | none
   const [q, setQ] = useState('')
 
+  // A write that is being tried again clears its own last complaint, never a
+  // failed read — that one is still true, and has a Try again of its own.
+  const clearWriteFail = () => setFail((f) => (f?.retry ? f : null))
+
   async function load() {
-    setLoading(true); setError('')
+    setLoading(true); setFail(null)
     const [cRes, certRes] = await Promise.all([
       supabase.from('crew').select('id, full_name, status').is('archived_at', null).neq('status', 'former').order('full_name'),
       supabase.from('crew_certificates').select('id, cert_type, category, cert_number, issuer, issue_date, expiry_date, file_path, crew_id, crew(full_name, status)'),
@@ -146,7 +189,7 @@ export default function CrewCertsRegister() {
     // A failed crew read empties the matrix's rows, which looks exactly like a
     // boat whose tickets are all filed, so both reads are named.
     const failed = [['the crew', cRes.error], ['the certificates', certRes.error]].filter(([, e]) => e)
-    if (failed.length) setError(failed.map(([what, e]) => `Couldn’t read ${what}: ${e.message}`).join(' · '))
+    if (failed.length) setFail(readFail(failed))
     setCrew(cRes.data || [])
     setRows(certRes.data || [])
     setLoading(false)
@@ -205,8 +248,16 @@ export default function CrewCertsRegister() {
 
   async function viewFile(c) {
     if (!c.file_path) return
+    clearWriteFail()
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(c.file_path, 3600)
-    if (error) { setError(error.message); return }
+    if (error) {
+      setFail({
+        what: `${c.crew?.full_name ? `${c.crew.full_name}’s ` : 'That '}${c.cert_type || 'certificate'} wouldn’t open.`,
+        reassurance: 'The certificate and its dates are on the register either way — it is the scan in the store that could not be fetched.',
+        why: error.message,
+      })
+      return
+    }
     window.open(data.signedUrl, '_blank', 'noopener')
   }
 
@@ -237,7 +288,15 @@ export default function CrewCertsRegister() {
 
       <CrewTabs />
 
-      {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
+      {fail && (
+        <Trouble
+          what={fail.what}
+          reassurance={fail.reassurance}
+          why={fail.why}
+          busy={loading}
+          onRetry={fail.retry ? () => load() : undefined}
+        />
+      )}
 
       {/* Summary counts */}
       <div className="card">
@@ -262,7 +321,7 @@ export default function CrewCertsRegister() {
       />
 
       {uncategorised > 0 && canEdit && (
-        <Categoriser rows={enriched} onDone={load} setError={setError} />
+        <Categoriser rows={enriched} onDone={load} onFail={setFail} clearFail={clearWriteFail} />
       )}
       {uncategorised > 0 && !canEdit && (
         <div className="card" style={{ borderColor: 'var(--brass)' }}>

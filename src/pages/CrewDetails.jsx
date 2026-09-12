@@ -35,9 +35,11 @@ export function CrewDetails({ crew, canEdit, onSaved }) {
   useEffect(() => {
     supabase.from('crew_ranks').select('code, label').order('sort')
       .then(({ data, error }) => {
-        // An empty pick-list reads as a man with no rank on record, not as a
-        // read that failed, so a failure has to say so.
-        if (error) setMsg(`Couldn’t load the rank list: ${error.message}`)
+        /* An empty pick-list reads as a man with no rank on record, not as a
+         * read that failed — so the message names the CONSEQUENCE rather than
+         * the table. There is no built-in list to fall back on here: the
+         * options are gone, and so is any rank already held. */
+        if (error) setMsg(`The rank pick-list is incomplete — no rank can be chosen, and one already on record won’t show: ${error.message}`)
         setRanks(data || [])
       })
   }, [])

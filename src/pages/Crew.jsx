@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
+import Trouble from '../components/Trouble'
 import { supabase } from '../supabaseClient'
 import { useCurrentVessel } from '../VesselContext'
 import { scopeRows } from '../lib/vessels'
@@ -40,6 +41,28 @@ function money(n, cur) {
 
 const isExpired = (d) => !!d && new Date(String(d).slice(0, 10) + 'T00:00:00') < new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00')
 
+/* A FAILED READ AND A FAILED WRITE ARE NOT THE SAME TROUBLE, so they are not
+ * said the same way. A read changed nothing and is worth trying again; a save
+ * that failed must never offer a button that silently fires it a second time,
+ * which is how a boat ends up with two of something. `retry` is what tells the
+ * two apart, and it is the only thing that puts a button on the panel.
+ *
+ * WHICH of the six reads went is the part worth keeping, so the name each one
+ * carries in `loadAll` is what the server's wording is reported against. */
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
+function readFail(failed) {
+  const names = failed.map(([name]) => name)
+  return {
+    retry: true,
+    what: names.length === 1 ? cap(`${names[0]} didn’t load.`) : 'Some of this page didn’t load.',
+    // Where only one read went, `what` has already named it and listing it
+    // again says nothing. Several of them is the case that needs the list.
+    reassurance: `${names.length > 1 ? `Not loaded: ${andList(names)}. ` : ''}Nothing has been changed — reading changes nothing — so trying again is safe.`,
+    why: failed.map(([name, e]) => `${name}: ${e.message}`).join(' · '),
+  }
+}
+
 export default function Crew() {
   const { appUser } = useAuth()
   const [crew, setCrew] = useState([])
@@ -49,7 +72,7 @@ export default function Crew() {
   const [ghbPaid, setGhbPaid] = useState({})
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [fail, setFail] = useState(null)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [newStatus, setNewStatus] = useState('on_leave')
@@ -68,8 +91,12 @@ export default function Crew() {
   const boat = useCurrentVessel()
   const [unassigned, setUnassigned] = useState(0)
 
+  // A write that is being tried again clears its own last complaint, never a
+  // failed read — that one is still true, and has a Try again of its own.
+  const clearWriteFail = () => setFail((f) => (f?.retry ? f : null))
+
   async function loadAll() {
-    setLoading(true); setError('')
+    setLoading(true); setFail(null)
     const monthStart = new Date().toISOString().slice(0, 8) + '01'
     const [cRes, rRes, ctRes, lRes, sRes, pRes] = await Promise.all([
       supabase.from('crew').select('*').is('archived_at', null).order('full_name'),
@@ -93,7 +120,7 @@ export default function Crew() {
       ['the settings', sRes.error],
       ['the bonus payments', pRes.error],
     ].filter(([, e]) => e)
-    if (failed.length) setError(failed.map(([what, e]) => `Couldn’t read ${what}: ${e.message}`).join(' · '))
+    if (failed.length) setFail(readFail(failed))
     /* Filter to the boat being shown — but a man with NO boat would then
      * vanish, and a crewman quietly missing off a list is exactly the failure
      * worth guarding against. They are kept aside and counted, not dropped. */
@@ -119,7 +146,8 @@ export default function Crew() {
   async function addCrew(e) {
     e.preventDefault()
     if (!newName.trim()) return
-    setBusy(true); setError('')
+    const name = newName.trim()
+    setBusy(true); clearWriteFail()
     const { error } = await supabase.from('crew').insert({
       fleet_id: appUser.fleet_id, full_name: newName.trim(), status: newStatus, crew_type: newType,
       // Stamped from the boat being shown. Null on "all", which is honest —
@@ -127,24 +155,55 @@ export default function Crew() {
       vessel_id: boat.current?.id ?? null,
     })
     setBusy(false)
-    if (error) setError(error.message)
-    else { setNewName(''); setNewStatus('on_leave'); setNewType('contracted'); setAdding(false); loadAll() }
+    if (error) {
+      setFail({
+        what: `${name} wasn’t added to the crew.`,
+        reassurance: 'Nothing was saved — the form still holds what you typed, so trying again is safe.',
+        why: error.message,
+      })
+    } else { setNewName(''); setNewStatus('on_leave'); setNewType('contracted'); setAdding(false); loadAll() }
   }
 
+  /* These three name the man, because a failure against a row in a table of
+   * twenty has to say which row. The select goes back on its own — it reads
+   * `c.status`, and nothing here changes that until the reload — so the
+   * message says what the record still holds rather than what is on screen. */
+  const nameOf = (id) => crew.find((c) => c.id === id)?.full_name || 'That crewman'
+
   async function updateStatus(id, status) {
+    const before = crew.find((c) => c.id === id)?.status
     const { error } = await supabase.from('crew').update({ status }).eq('id', id)
-    if (error) setError(error.message); else loadAll()
+    if (error) {
+      setFail({
+        what: `${nameOf(id)}’s status wasn’t changed.`,
+        reassurance: `Still on record as ${STATUS_LABEL[before] || 'before'}, and nothing that reads the status has moved.`,
+        why: error.message,
+      })
+    } else loadAll()
   }
 
   async function updateType(id, crew_type) {
+    const before = crew.find((c) => c.id === id)?.crew_type || 'contracted'
     const { error } = await supabase.from('crew').update({ crew_type }).eq('id', id)
-    if (error) setError(error.message); else loadAll()
+    if (error) {
+      setFail({
+        what: `${nameOf(id)}’s crew type wasn’t changed.`,
+        reassurance: `Still on record as ${TYPE_LABEL[before] || 'before'}, so the contracts and box bonus are unaffected.`,
+        why: error.message,
+      })
+    } else loadAll()
   }
 
   async function archiveCrew(id, name) {
     if (!confirm(`Archive ${name}? They'll be hidden from the list but their history is kept.`)) return
     const { error } = await supabase.from('crew').update({ archived_at: new Date().toISOString(), status: 'former' }).eq('id', id)
-    if (error) setError(error.message); else loadAll()
+    if (error) {
+      setFail({
+        what: `${name} wasn’t archived.`,
+        reassurance: 'Still on the list at the same status, with all the history intact.',
+        why: error.message,
+      })
+    } else loadAll()
   }
 
   // Per-crewman figures. Contract language is only ever shown for contracted
@@ -206,7 +265,15 @@ export default function Crew() {
         </div>
       )}
 
-      {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
+      {fail && (
+        <Trouble
+          what={fail.what}
+          reassurance={fail.reassurance}
+          why={fail.why}
+          busy={loading}
+          onRetry={fail.retry ? () => loadAll() : undefined}
+        />
+      )}
 
       {canEdit && <CertAlerts />}
 
@@ -239,7 +306,7 @@ export default function Crew() {
             </label>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Add'}</button>
-              <button type="button" className="secondary" onClick={() => { setAdding(false); setNewName(''); setError('') }}>Cancel</button>
+              <button type="button" className="secondary" onClick={() => { setAdding(false); setNewName(''); clearWriteFail() }}>Cancel</button>
             </div>
           </form>
         </div>

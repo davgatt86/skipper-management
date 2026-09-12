@@ -4,6 +4,7 @@ import autoTable from 'jspdf-autotable'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import CrewTabs from '../CrewTabs'
+import Trouble from '../components/Trouble'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import { predeparture, nextAfterCrewList } from '../lib/certification/predeparture'
@@ -51,6 +52,33 @@ const REQUIRED = [
   ['place_of_birth', 'place of birth'],
 ]
 
+/* A FAILED READ AND A FAILED WRITE ARE NOT THE SAME TROUBLE, so they are not
+ * said the same way. A read changed nothing and is worth trying again; a save
+ * that failed must never offer a button that silently fires it a second time,
+ * which is how a boat ends up with two of something. `retry` is what tells the
+ * two apart, and it is the only thing that puts a button on the panel.
+ *
+ * WHICH of the four reads went is the part worth keeping, so the name each one
+ * carries in `loadAll` is what the server's wording is reported against. A
+ * third element is the CONSEQUENCE, where there is one worth saying out loud. */
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
+const andList = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`)
+function readFail(failed) {
+  const names = failed.map(([name]) => name)
+  const notes = failed.map(([, , note]) => note).filter(Boolean)
+  return {
+    retry: true,
+    what: names.length === 1 ? cap(`${names[0]} didn’t load.`) : 'Some of this page didn’t load.',
+    // Where only one read went, `what` has already named it and listing it
+    // again says nothing. Several of them is the case that needs the list.
+    reassurance: [
+      ...(names.length > 1 ? [`Not loaded: ${andList(names)}.`] : []), ...notes,
+      'Nothing has been changed — reading changes nothing — so trying again is safe.',
+    ].join(' '),
+    why: failed.map(([name, e]) => `${name}: ${e.message}`).join(' · '),
+  }
+}
+
 export default function CrewList() {
   const { appUser } = useAuth()
   const canEdit = keepsCrewRecords(appUser)
@@ -65,7 +93,7 @@ export default function CrewList() {
   const [ranks, setRanks] = useState(FALLBACK_RANKS)
   const [lists, setLists] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [fail, setFail] = useState(null)
 
   const [voyage, setVoyage] = useState({ departure_date: today(), departure_port: '', last_port: '', next_port: '', notes: '' })
   const [sel, setSel] = useState({})        // crew_id -> { on, rank }
@@ -82,8 +110,12 @@ export default function CrewList() {
      instruction. */
   const [next, setNext] = useState(null)
 
+  // A write that is being tried again clears its own last complaint, never a
+  // failed read — that one is still true, and has a Try again of its own.
+  const clearWriteFail = () => setFail((f) => (f?.retry ? f : null))
+
   async function loadAll() {
-    setLoading(true); setError('')
+    setLoading(true); setFail(null)
     const [v, c, l, r] = await Promise.all([
       supabase.from('vessel_details').select('*'),
       supabase.from('crew').select('*').is('archived_at', null).neq('status', 'former').order('full_name'),
@@ -110,9 +142,9 @@ export default function CrewList() {
       ['the vessel particulars', v.error],
       ['the crew', c.error],
       ['the saved crew lists', l.error],
-      ['the rank list — the built-in list is being shown instead', r.error],
+      ['the rank list', r.error, 'The built-in rank list is being shown instead.'],
     ].filter(([, e]) => e)
-    if (failed.length) setError(failed.map(([what, e]) => `Couldn’t read ${what}: ${e.message}`).join(' · '))
+    if (failed.length) setFail(readFail(failed))
     setLoading(false)
   }
   useEffect(() => { loadAll() }, [])
@@ -142,9 +174,11 @@ export default function CrewList() {
   const [statusBusy, setStatusBusy] = useState({})
   async function toggle(id) {
     const next = !sel[id]?.on
-    const before = crew.find((c) => c.id === id)?.status
+    const man = crew.find((c) => c.id === id)
+    const before = man?.status
     const status = next ? 'on_boat' : 'on_leave'
 
+    clearWriteFail()
     setSel((p) => ({ ...p, [id]: { ...p[id], on: next } }))
     setCrew((p) => p.map((c) => (c.id === id ? { ...c, status } : c)))
     setStatusBusy((p) => ({ ...p, [id]: true }))
@@ -154,7 +188,14 @@ export default function CrewList() {
     if (error) {
       setSel((p) => ({ ...p, [id]: { ...p[id], on: !next } }))
       setCrew((p) => p.map((c) => (c.id === id ? { ...c, status: before } : c)))
-      setError(error.message)
+      /* The tick was put back above, and the message has to SAY so — a tick
+       * moving back on its own is otherwise alarming, and reads as the page
+       * having done something of its own accord. */
+      setFail({
+        what: `${man?.full_name || 'That crewman'} wasn’t ${next ? 'put on the boat' : 'put ashore'}.`,
+        reassurance: 'The tick has been put back to what the record says, so nothing on this screen is out of step with it.',
+        why: error.message,
+      })
     }
   }
   const setRank = (id, rank) => setSel((p) => ({ ...p, [id]: { ...p[id], rank } }))
@@ -255,17 +296,31 @@ export default function CrewList() {
   }
 
   async function printList(list) {
+    clearWriteFail()
     const { data: members, error } = await supabase
       .from('crew_list_members').select('*').eq('crew_list_id', list.id).order('position')
-    if (error) { setError(error.message); return }
+    if (error) {
+      setFail({
+        what: `The crew list for ${fmt(list.departure_date) || 'that voyage'} couldn’t be printed.`,
+        reassurance: 'The saved list itself is untouched — it is reading back who was on it that failed, so no form has gone out half filled.',
+        why: error.message,
+      })
+      return
+    }
     makeFal5(vessel, list, members || [])
   }
 
   async function deleteList(list) {
     if (!confirm(`Delete the crew list for ${fmt(list.departure_date) || 'this voyage'}? This can’t be undone.`)) return
+    clearWriteFail()
     const { error } = await supabase.from('crew_lists').delete().eq('id', list.id)
-    if (error) setError(error.message)
-    else setLists((p) => p.filter((l) => l.id !== list.id))
+    if (error) {
+      setFail({
+        what: `The crew list for ${fmt(list.departure_date) || 'that voyage'} wasn’t deleted.`,
+        reassurance: 'It is still saved, with everybody on it, exactly as it was.',
+        why: error.message,
+      })
+    } else setLists((p) => p.filter((l) => l.id !== list.id))
   }
 
   const missingVessel = !vessel || !(vessel.vessel_name || vessel.pln)
@@ -277,7 +332,15 @@ export default function CrewList() {
 
       <CrewTabs />
 
-      {error && <div className="card" style={{ borderColor: 'var(--rust)' }}><p className="error">{error}</p></div>}
+      {fail && (
+        <Trouble
+          what={fail.what}
+          reassurance={fail.reassurance}
+          why={fail.why}
+          busy={loading}
+          onRetry={fail.retry ? () => loadAll() : undefined}
+        />
+      )}
 
       {missingVessel && (
         <div className="card" style={{ borderColor: 'var(--brass)' }}>
