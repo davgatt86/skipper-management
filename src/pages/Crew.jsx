@@ -69,7 +69,7 @@ export default function Crew() {
   const [unassigned, setUnassigned] = useState(0)
 
   async function loadAll() {
-    setLoading(true)
+    setLoading(true); setError('')
     const monthStart = new Date().toISOString().slice(0, 8) + '01'
     const [cRes, rRes, ctRes, lRes, sRes, pRes] = await Promise.all([
       supabase.from('crew').select('*').is('archived_at', null).order('full_name'),
@@ -83,7 +83,17 @@ export default function Crew() {
       // already been paid.
       supabase.from('payments').select('contract_id, payment_type, amount').in('payment_type', ['ghb_first_half', 'ghb_second_half']),
     ])
-    if (cRes.error || pRes.error) setError((cRes.error || pRes.error).message)
+    /* Six reads, six ways for this page to be quietly wrong — no ranks, no
+       contracts, a month with no boxes in it — so each one is named. */
+    const failed = [
+      ['the crew', cRes.error],
+      ['the rank list', rRes.error],
+      ['the contracts', ctRes.error],
+      ['this month’s landings', lRes.error],
+      ['the settings', sRes.error],
+      ['the bonus payments', pRes.error],
+    ].filter(([, e]) => e)
+    if (failed.length) setError(failed.map(([what, e]) => `Couldn’t read ${what}: ${e.message}`).join(' · '))
     /* Filter to the boat being shown — but a man with NO boat would then
      * vanish, and a crewman quietly missing off a list is exactly the failure
      * worth guarding against. They are kept aside and counted, not dropped. */

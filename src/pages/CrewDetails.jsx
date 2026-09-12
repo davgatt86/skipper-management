@@ -34,7 +34,12 @@ export function CrewDetails({ crew, canEdit, onSaved }) {
 
   useEffect(() => {
     supabase.from('crew_ranks').select('code, label').order('sort')
-      .then(({ data }) => setRanks(data || []))
+      .then(({ data, error }) => {
+        // An empty pick-list reads as a man with no rank on record, not as a
+        // read that failed, so a failure has to say so.
+        if (error) setMsg(`Couldn’t load the rank list: ${error.message}`)
+        setRanks(data || [])
+      })
   }, [])
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }))
@@ -83,11 +88,15 @@ export function CrewDetails({ crew, canEdit, onSaved }) {
           </label>
         ))}
       </div>
-      {canEdit && (
+      {/* A read can fail on a viewer's login too, where there is no Save button
+          to hang the message off. */}
+      {(canEdit || msg) && (
         <div style={{ marginTop: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-          <button onClick={save} disabled={saving} style={{ padding: '0.45rem 1rem' }}>
-            {saving ? 'Saving…' : 'Save details'}
-          </button>
+          {canEdit && (
+            <button onClick={save} disabled={saving} style={{ padding: '0.45rem 1rem' }}>
+              {saving ? 'Saving…' : 'Save details'}
+            </button>
+          )}
           {msg && <span style={{ color: msg.startsWith('Saved') ? 'var(--green)' : 'var(--red)', fontWeight: 600, fontSize: '0.85rem' }}>{msg}</span>}
         </div>
       )}

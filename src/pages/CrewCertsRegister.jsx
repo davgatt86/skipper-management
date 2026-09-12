@@ -143,7 +143,10 @@ export default function CrewCertsRegister() {
       supabase.from('crew').select('id, full_name, status').is('archived_at', null).neq('status', 'former').order('full_name'),
       supabase.from('crew_certificates').select('id, cert_type, category, cert_number, issuer, issue_date, expiry_date, file_path, crew_id, crew(full_name, status)'),
     ])
-    if (certRes.error) setError(certRes.error.message)
+    // A failed crew read empties the matrix's rows, which looks exactly like a
+    // boat whose tickets are all filed, so both reads are named.
+    const failed = [['the crew', cRes.error], ['the certificates', certRes.error]].filter(([, e]) => e)
+    if (failed.length) setError(failed.map(([what, e]) => `Couldn’t read ${what}: ${e.message}`).join(' · '))
     setCrew(cRes.data || [])
     setRows(certRes.data || [])
     setLoading(false)

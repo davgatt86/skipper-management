@@ -1949,6 +1949,12 @@ bucket, same reader, same review screen — only the delivery differs, and
 `su-documents` has no size limit. Raising the CloudMailin plan would restore the
 email route and costs money; the upload costs nothing and works today.
 
+**DECIDED Sep 2026, and it is not a gap any more.** David: *"we will stick with
+manual upload of settling sheets + invoices."* So `su_inbox` staying empty is
+the arrangement working as chosen, not a delivery fault waiting to be fixed, and
+the size limit is not worth paying to raise. Do not re-open it as outstanding
+work.
+
 Probed: skipper sees his own fleet's arrival and not Beryl's, **officer 0, cook
 0**, officer update affects **0 rows**. A settling sheet is money, and the
 officer and cook are denied every money table — that denial is the reason those
@@ -1966,11 +1972,16 @@ in sidebar, or possibily in it's own section next to vessel/crew. cerfication
 possibly. garbage, crew lists & oil record book would end up being part of
 certification part."***
 
-**EVERYTHING IN THIS SECTION IS ON BRANCH `certification` AND MUST NOT REACH
-`main`.** Netlify builds from `main` on push, so a merge is a deploy. The
-migrations ARE applied to the live database — additive, new tables, nothing
-renamed — because a schema cannot be branched and the probes have to run against
-the real one; nothing already live reads them.
+**IT IS LIVE. That was true while it was being built and is now stale** —
+`3e9f3ed Certification goes live` is on `main`, and the whole group has shipped.
+Left as written it reads as an instruction not to push, which would stop a
+future session touching work that is already deployed. The `certification`
+branch still exists and holds **nothing that is not in main** (0 commits ahead,
+26 behind), as does `design-system-rollout`; both are clutter rather than work.
+
+The migrations were applied to the live database throughout — additive, new
+tables, nothing renamed — because a schema cannot be branched and the probes had
+to run against the real one.
 
     Overview · Market · Sales · Quota · Settlement · Vessel · Certification · Crew · Admin
 
@@ -3886,11 +3897,16 @@ it.
 skipped it because it tested `s.includes('orbLink')` and the word already
 appeared in a COMMENT. Check for the import, not for the substring.
 
-**OPEN, AND WORTH SETTLING: litres or cubic metres.** The draft states the
-quantity in litres with the unit beside it, because that is what was logged and
-a converted figure that looks like a read one cannot be checked against the
-delivery note. But the ORB is conventionally kept in **m³**, the conversion is
-exact rather than estimated, and the form defaults to m3. David's call.
+**SETTLED: BOTH.** David — *"litres in fuel/oil log as thats what we get on our
+fuel reciept. but auto convert it so the draft in ORB has m3"*, confirmed again
+Sep 2026 as *"ORB m3 + litres"*. The prescribed quantity field carries **m³**
+and the narrative carries the litres as bunkered, so the entry ties back to the
+delivery note without putting two numbers in one prescribed column.
+
+**It is the one conversion this codebase does silently, and it is the exception
+that shows the rule**: a currency conversion rests on a rate nobody printed, so
+the original is kept beside it, while 1 m³ = 1000 L is exact, does not move and
+needs no source. Asserted by `test-orb-link.mjs`.
 
 #### AND THE BACKFILL GOT ONE TABLE WRONG — `vessel_departures` (Sep 2026)
 
@@ -4522,6 +4538,145 @@ COMMENT above it and deleted that instead, so the test passed on a copy that had
 never been weakened and read as vacuous. Same lesson as the `orbLink` import
 guard: **check for the code, not for the substring.**
 
+### THE MATE GETS THE PACK, AND THE ALERTS STOPPED SHOUTING (Sep 2026)
+
+David asked what was still outstanding, and the answer had to be MEASURED
+rather than read off this file — which is the standing rule here and earned its
+keep again: of the items this file listed as open, **five were already done**,
+one described data that no longer exists, and one carried an instruction that
+had become actively wrong. What follows is what was actually left, and what he
+then decided about each.
+
+#### The inspection pack for the officer — and the denial was only half of it
+
+He keeps most of the records in that pack, so being unable to see what they add
+up to was the wrong way round. **One table stood in the way**:
+`crew_familiarisation`, the only one of the **nineteen** the pack reads that the
+officer was denied — and because the pack REFUSES TO BUILD on a failed read, one
+denial withheld the whole document. That refusal is right: an empty book and a
+shut one must never print alike to a surveyor. It also made this
+all-or-nothing.
+
+**DROPPING THE DENIAL WOULD NOT HAVE BEEN ENOUGH, and that is the trap worth
+remembering.** Most tables here carry a permissive policy of the shape
+`to authenticated using (true)` with only the restrictive fleet check beside it,
+so lifting `officer_no_access` is all it takes. This one does not: its read
+policy is an **allow-list of roles** (skipper, viewer). Lifting the denial alone
+would have left him reading nothing, the pack still refusing, and every policy
+looking correct.
+
+`supabase/officer_reads_familiarisation.sql` — the denial dropped, a read of his
+own added, and section 3's restrictive trio so he can never sign one off.
+`officer_role.sql` carries the same change in all three of its allow-lists, so a
+future re-run keeps this rather than undoing it. **The whole file was NOT
+re-run**: it rewrites policies across ~109 tables on a live multi-tenant
+database, and the targeted version reaches the same state — the same reasoning
+as `crew_ranks` in the section above.
+
+**Predicted, then probed.** Predicted: of the pack's nineteen tables, one denied
+before and none after. Probed as the real logins afterwards — officer reads 2
+familiarisation records, **changes 0**, and still reads crew 20, vessel certs 17,
+crew certs 113 while sales, payments and settlements are all **0**; the cook is
+untouched at 0 familiarisation, 0 crew, and keeps his 2 stores lists.
+
+`/inspection-pack` is `['skipper', 'officer']` in `nav.js`, and
+`test-roles.mjs` asserts the officer's whole menu, so it had to be told in the
+same edit.
+
+#### 104 of 105 alerts were prices, and the one that mattered was thirteenth
+
+Measured before touching anything: **105 unread on Audacious, 104 of them market
+prices.** The single compliance alert — a fire extinguisher certificate reported
+expired — was the only actionable row on the page and it was buried.
+
+**THE CAP WAS WRITTEN PER RUN, AND THERE ARE EIGHT RUNS A DAY.**
+`price_max_per_run` is 3, which reads like three a day and was not: the dedup key
+is per SPECIES, so each three-hourly run could not repeat a species and was
+perfectly free to raise three MORE. This file's own note in `alert_cron.sql`
+said the extra runs "raise nothing new" — true of one species, false of the
+stream. **A cap per run is not a cap.** There is now `price_max_per_day` (4)
+counted across every price type, taking the biggest movers first.
+
+**A PRICE ALERT LIVED 21 DAYS**, which is not news and by then not even true.
+Seven.
+
+**AND THE FORECAST PAGE WAS THE WORST OFFENDER.** It raised one alert per
+forecast DAY — 26 in a single visit, about the table the skipper was looking at
+while it happened. Worse, **fifteen of them were for one day**: the dedup key
+used the vessel label as the feed prints it, and the feed carries a boat under
+several spellings, so a key meant to collapse a boat to one row collapsed
+nothing. Eighth instance of the drift `norm()` exists for. It is now the soonest
+likely landing per boat, keyed on the normalised name.
+
+**AN EXPIRY ALERT NEVER CLEARED ITSELF**, which is the other half of the same
+complaint. `resolve_activity_alerts.sql` closed this for the books — write in a
+log and its alert goes — but an expiry alert stayed open for ever once raised.
+That extinguisher certificate now runs to **05-03-2030** and the "expired on
+26-08-2026" alert was still sitting there. `resolve_compliance_alerts()` keys on
+the ROW rather than on "is it still expired", so a renewal, a deletion or a
+crewman since archived all resolve. The daily cron **resolves before it
+generates**, an hour before the digest reads the table.
+
+    105 unread -> 51 on the sweep -> 25, all prices, none stale
+    the one certificate alert: resolved, because the certificate was renewed
+
+`supabase/alert_noise.sql`. **The applied copy and the file are identical**,
+checked by hashing the stored function bodies against the file's rather than by
+eye — the comments live above each function for exactly that reason.
+
+#### Four crew pages were dropping a read error
+
+Each fired several queries and surfaced one or two, so a failed read rendered as
+a confidently wrong empty state: **no ranks, no contracts, a boat with nobody
+aboard.** Worst was Crew Details, which did not destructure `error` at all — an
+RLS failure silently emptied the rank pick-list. `CrewList.jsx` was the most
+dangerous, because a failed `crew_ranks` read fell through to `FALLBACK_RANKS`,
+the free-text drift that lookup exists to prevent; the message now says the
+built-in list is being shown. Every error is named per read, because a skipper
+needs to know whether it was his crew list or his rank list that went.
+
+#### `npm test` ran a third of the suite
+
+**48 test files in the repo, 17 in the script.** The certification work, the
+invoices work, the pre-departure check and the certificate bundle reader were
+all covered by suites that only ran if somebody typed their name. All 31 missing
+ones passed when run — which is luck, not proof, because nothing had been
+checking them. 48 suites, 19 seconds.
+
+#### What he settled, and what stays open on his word
+
+- **Manual upload of settling sheets and invoices** is the arrangement, not a
+  workaround. See the CloudMailin section above: not a gap any more.
+- **The other fleets' flagged sales notes and their blank days at sea are not
+  his to repair** — *"not my data"*. Five notes carry no `reconcile_diff` and
+  four fleets have no days at sea; both stay as they are, and `£/day` remains an
+  Audacious-only figure by circumstance rather than by design.
+- **The gear clear-out was his.** Corrected above.
+- **The bundle reader and the risk ratings have not been tried yet**, so nothing
+  is known about either in practice. 0 of 17 vessel certificates carry a page
+  number, and all 80 hazards are still unrated with all 12 assessments carrying
+  no review date.
+- **Single Net is retired when Barry is ready**, and the Beryl agent grant
+  stays until the settlements integration is finished.
+
+#### And what this file had wrong
+
+Every one of these read as outstanding and was not. Measured, not argued:
+
+- the FAL 5 **does** print place of birth (`CrewList.jsx`, column 14);
+- engine limits **are** checked on entry and block the save;
+- nothing reads `wage_payments`;
+- all **208** suppliers are categorised, the three mergeable pairs aliased and
+  the two that must stay apart marked `not_same_as`;
+- **no** invoice is left at face value in a foreign currency, and **none**
+  carries no number — the derived references did their job;
+- the ORB units were settled, not open;
+- and `test-cert-bundle.mjs` does measure the reader against what was saved,
+  though it is a frozen snapshot rather than runtime logging.
+
+**The rule this keeps proving: measure the database and the code, then read this
+file.** Not the other way round.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
@@ -5129,10 +5284,13 @@ In the order agreed:
    groups and shows these rather than correcting the log silently; a supplier
    lookup is the real fix, same lesson as `crew_ranks`.
 
-   Still to do: the itemised engine-parameter range checks — see the Logs
-   section above for why a limit derived from history alone would have flagged
-   the CORRECT gearbox readings, and why the range has to be stated rather than
-   learned.
+   ~~Still to do: the itemised engine-parameter range checks.~~ **DONE, and
+   this note was stale** (found Sep 2026): `checkReadings` and
+   `counterReversals` run inside `save()` on Engine Logs and BLOCK the save
+   until the readings are acknowledged, with three separate messages — out of
+   range, a counter going backwards, and drift — and a "these are right, save
+   anyway" override. The limits are stated per parameter in `engine_limits`, 50
+   of them, all confirmed, exactly as the Logs section argues they must be.
 
    The **garbage log** is built and in use — 6 entries as at Aug 2026, the most
    recent the same day — so the MARPOL Garbage Record Book question is settled:
@@ -5460,6 +5618,24 @@ Also agreed, not yet scheduled:
   twice.
 
   ### The old pair is retired — and four known oddities are LEFT ALONE
+
+  **EVERYTHING IN THIS SUBSECTION DESCRIBES GEAR THAT NO LONGER EXISTS.**
+  Measured Sep 2026: three nets on the books (Port Twin, Starboard Twin, Single
+  Net), **none retired**, and **three finished component lives in total** — not
+  the thirty-two the paragraphs below count. The audit log dates it: on
+  **21-08-2026 at 01:25** four nets, twenty sets and one measurement were
+  deleted from the database side (no login recorded, so not through the app),
+  and eight minutes later David entered the three nets and nineteen sets that
+  are there now. **He confirms that was him**, clearing out the imported gear to
+  start it properly.
+
+  **SO THE LIFE TAB HAS ALMOST NOTHING TO AVERAGE, and says so rather than
+  guessing** — `confidence(n)` reads "one renewal — not an average yet" on most
+  parts, which is the honest answer and the reason it exists. The wear rates
+  become worth reading after a few more renewals, not before.
+
+  The paragraphs below are kept as the record of what was decided about the old
+  data, and none of it is in the database now.
 
   `Port net` and `Starboard net` were retired on **10-05-2026**, the day the new
   `Port Twin` / `Starboard Twin` came aboard (David, Aug 2026). Nine of their ten
@@ -6363,9 +6539,10 @@ Missing credentials are reported as "skipped", not an error, so the schedule
 runs harmlessly until they are set.
 
 **A CloudMailin account starts in TEST MODE: it accepts the message and
-delivers nothing.** The function log will still say "sent". Verify a domain
-before believing a green run — and `netlify.app` cannot be verified, so this
-needs a domain David owns.
+delivers nothing.** The function log will still say "sent", so a green run is
+not delivery. **Out of test mode and sending as at Sep 2026 — David's word**, on
+his own domain; `netlify.app` could never have been verified. The lesson stands
+for the next vendor: a webhook probed from the database end is only half tested.
 
 ## Roles, and where the boundary actually is
 

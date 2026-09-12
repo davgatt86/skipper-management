@@ -102,7 +102,17 @@ export default function CrewList() {
     const s = {}
     for (const m of cr) s[m.id] = { on: m.status === 'on_boat', rank: byCode[m.rank_code] || 'Deckhand' }
     setSel(s)
-    if (c.error) setError(c.error.message)
+    /* Every read here has to speak up, and it has to say WHICH one went. A
+       dropped error renders as a boat with nobody aboard, or as the rank list
+       quietly falling back to FALLBACK_RANKS — the free-text drift the
+       crew_ranks lookup exists to prevent. */
+    const failed = [
+      ['the vessel particulars', v.error],
+      ['the crew', c.error],
+      ['the saved crew lists', l.error],
+      ['the rank list — the built-in list is being shown instead', r.error],
+    ].filter(([, e]) => e)
+    if (failed.length) setError(failed.map(([what, e]) => `Couldn’t read ${what}: ${e.message}`).join(' · '))
     setLoading(false)
   }
   useEffect(() => { loadAll() }, [])

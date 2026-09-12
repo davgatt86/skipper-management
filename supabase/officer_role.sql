@@ -92,6 +92,13 @@ declare
     'radio_log_entries', 'radio_log_days',
     'work_equipment', 'equipment_examinations',
     'self_certifications', 'self_certification_items',
+    -- READ-ONLY, and only so the inspection pack will build for him. That pack
+    -- reads nineteen tables and REFUSES TO BUILD if any one read fails -- right,
+    -- because an empty book and a shut one must never print alike to a surveyor,
+    -- and it meant a single denial withheld the whole document from the man who
+    -- keeps most of what is in it. Signing a familiarisation off stays the
+    -- skipper's: this name is in section 3 below, never in officer_works.
+    'crew_familiarisation',
     -- reads: the papers he needs, and the rows the app shell needs to boot
     'vessel_certificates', 'vessel_details', 'vessels', 'fleets', 'settings', 'app_users'
   ];
@@ -134,7 +141,7 @@ declare
     'risk_assessments','risk_assessment_hazards','risk_assessment_briefings',
     'radio_log_entries','radio_log_days',
     'work_equipment','equipment_examinations',
-    'self_certifications','self_certification_items',
+    'self_certifications','self_certification_items','crew_familiarisation',
     'vessel_certificates','vessel_details','vessels','fleets','settings','app_users'
   ];
 begin
@@ -152,7 +159,9 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['vessel_certificates','vessel_details','vessels','fleets','settings','app_users'] loop
+  foreach t in array array['vessel_certificates','vessel_details','vessels','fleets','settings','app_users',
+                           -- The pack reads it; only the skipper signs one off.
+                           'crew_familiarisation'] loop
     execute format('drop policy if exists engineer_read_only_ins on public.%I', t);
     execute format('drop policy if exists engineer_read_only_upd on public.%I', t);
     execute format('drop policy if exists engineer_read_only_del on public.%I', t);

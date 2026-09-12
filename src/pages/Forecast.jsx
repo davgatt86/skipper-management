@@ -77,12 +77,25 @@ export default function Forecast(){
   }, [visibleDeps])
 
   // Own vessel goes live on the forecast (its 'likely' = +7 day) -> alert naming
-  // who else is due that day. Dedup'd, one per boat per trip.
+  // who else is due that day.
+  //
+  // ONE PER BOAT, FOR THE SOONEST DAY ONLY (Sep 2026). It used to raise one per
+  // forecast DAY, so a single visit to this page put up 26 alerts about two
+  // days -- and it did that while showing the skipper the very same table. The
+  // one that is worth keeping is the next landing; the days behind it are on
+  // screen already and will alert in their own time.
+  //
+  // AND THE DEDUP KEY IS THE NORMALISED NAME, which is why 26 became 26 rather
+  // than 2: the key was the label as the feed prints it, and the feed carries
+  // one boat under several spellings, so a key meant to collapse a boat to one
+  // row collapsed nothing. Eighth instance of the drift that `norm()` exists
+  // for -- a key built from typed text is only as stable as the typing.
   useEffect(() => {
     if (!isSkipper || !appUser?.fleet_id || !days.length) return
     const own = new Set(deps.filter(d => d.fleet_id === appUser.fleet_id).map(d => norm(d.vessel_name)))
     if (!own.size) return
     const today = todayKey()
+    const told = new Set()
     const rows = []
     for (const g of days) {
       if (g.key < today) continue
@@ -91,13 +104,18 @@ export default function Forecast(){
       const others = [...new Set(g.items.filter(it => !own.has(norm(it.vessel))).map(it => it.vessel))]
       const list = others.slice(0, 4).join(', ')
       const extra = others.length > 4 ? ` +${others.length - 4}` : ''
-      for (const m of mine) rows.push({
-        fleet_id: appUser.fleet_id, type: 'forecast', severity: 'info',
-        title: `${m.vessel} likely landing ${niceDate(g.key)}`,
-        body: others.length ? `Also due that day: ${list}${extra}` : 'No other boats forecast that day.',
-        meta: { vessel: m.vessel, date: g.key, others },
-        dedup_key: `forecast:${m.vessel}:${g.key}`,
-      })
+      for (const m of mine) {
+        const boat = norm(m.vessel)
+        if (told.has(boat)) continue   // a later day for a boat already named
+        told.add(boat)
+        rows.push({
+          fleet_id: appUser.fleet_id, type: 'forecast', severity: 'info',
+          title: `${m.vessel} likely landing ${niceDate(g.key)}`,
+          body: others.length ? `Also due that day: ${list}${extra}` : 'No other boats forecast that day.',
+          meta: { vessel: m.vessel, date: g.key, others },
+          dedup_key: `forecast:${boat}:${g.key}`,
+        })
+      }
     }
     if (rows.length) supabase.from('alerts').upsert(rows, { onConflict: 'fleet_id,dedup_key', ignoreDuplicates: true }).then(() => {}, () => {})
   }, [days, deps, isSkipper])

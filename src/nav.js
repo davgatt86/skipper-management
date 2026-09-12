@@ -171,15 +171,18 @@ export const NAV = [
       // says what wants an entry before a voyage, and this says what the whole
       // record adds up to when somebody official asks.
       //
-      // SKIPPER ONLY, and NOT because the mate should not see it — he can read
-      // every page it draws from. `crew_familiarisation` is the one table it
-      // reads that is absent from the officer allow-list, so an officer opening
-      // it would be refused the whole pack rather than shown part of one.
-      // Handing it to him means adding that table to `officer_role.sql` and
-      // re-running it, which rewrites policies across ~100 tables on a live
-      // multi-tenant database and is a deliberate act, not a side effect of
-      // adding a page.
-      { to: '/inspection-pack', label: 'Inspection Pack', access: 'skipper' },
+      // THE MATE GETS IT TOO (Sep 2026). He keeps most of what is in it, so
+      // being unable to see what those records add up to was the wrong way
+      // round. What had stopped him was `crew_familiarisation`: one of the
+      // nineteen tables the pack reads, and the only one he was denied. A
+      // denial on one read withholds the WHOLE pack, because it refuses to
+      // build on a failed read rather than print a gap it cannot tell from a
+      // real one — which is the right refusal and made this an all-or-nothing
+      // question.
+      //
+      // He READS it and cannot sign one off, and that is enforced at the
+      // database, not by this menu: `officer_role.sql` section 3.
+      { to: '/inspection-pack', label: 'Inspection Pack', access: ['skipper', 'officer'] },
     ],
   },
   {

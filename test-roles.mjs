@@ -67,6 +67,9 @@ eq('officer menu', offNav, [
   // with NO PAPER TWIN — reg 7 prescribes no form and MGN 332 allows a
   // thorough examination report to be kept electronically — so the mate keeps
   // them and the app IS the record.
+  // The inspection pack (Sep 2026). He keeps most of the records in it, and
+  // one denied read out of nineteen used to withhold the whole document.
+  '/inspection-pack',
   '/lifting-equipment', '/maintenance',
   // The Oil Record Book and the Official Log Book are the engineer's and the
   // skipper's books. He makes the entries; the MASTER signs the ORB page and

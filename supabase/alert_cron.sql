@@ -33,8 +33,20 @@ where exists (select 1 from cron.job where jobname = 'compliance-alerts-daily');
 select cron.schedule(
   'compliance-alerts-daily',
   '0 6 * * *',
-  $$select public.generate_compliance_alerts(60), public.generate_bonus_alerts(30);$$
+  $job$select public.resolve_compliance_alerts(), public.generate_compliance_alerts(60),
+               public.generate_bonus_alerts(30), public.generate_activity_alerts();$job$
 );
+
+-- RESOLVE BEFORE GENERATING. An expiry alert used to stay open for ever once
+-- raised: Audacious's extinguisher certificate was renewed to 2030 and the
+-- "expired on 26-08-2026" alert was still unread three weeks later, on the one
+-- stream that has to stay believable. `resolve_compliance_alerts()`
+-- (alert_noise.sql) dismisses an alert whose subject no longer matches.
+--
+-- AND THIS FILE HAD DRIFTED AGAIN, which is what it exists to prevent: the live
+-- job had gained `generate_activity_alerts()` and the file never learned about
+-- it. Both are written down now. Read cron.job, not this file, before believing
+-- either.
 
 -- ---------------------------------------------------------------------------
 -- 2. Market alerts — through the day
@@ -44,8 +56,15 @@ select cron.schedule(
 --
 -- Every three hours rather than daily, because a board arriving at midday is
 -- worth knowing about that afternoon, not the next morning — the whole point of
--- a price alert is that it is still actionable. The dedup key carries the
--- board's own date, so the extra runs raise nothing new.
+-- a price alert is that it is still actionable.
+--
+-- THE CLAIM THAT THE EXTRA RUNS "RAISE NOTHING NEW" WAS WRONG, and it is why
+-- 104 unread price alerts had stacked up by Sep 2026. The dedup key carries the
+-- board's date AND the species, so a later run could not repeat a species and
+-- was perfectly free to raise three MORE of them — eight runs a day against a
+-- cap written per run. The cap is per DAY now (alert_noise.sql); this schedule
+-- is unchanged, because with a real cap the frequency only decides how promptly
+-- the day's few are said.
 select cron.unschedule('market-alerts')
 where exists (select 1 from cron.job where jobname = 'market-alerts');
 
