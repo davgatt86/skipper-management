@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import DidntLoad from '../components/DidntLoad'
 import { useCurrentVessel } from '../VesselContext'
 import { scopeRows } from '../lib/vessels'
 import PickABoat from '../components/PickABoat'
@@ -193,7 +194,14 @@ export default function Quota() {
   const [adjustments, setAdjustments] = useState([])
   const [manualStocks, setManualStocks] = useState([])
   const [manualEntries, setManualEntries] = useState([])
-  const [manualReady, setManualReady] = useState(true) // false until quota_manual.sql has been run
+  /* MANUAL STOCK TRACKING MAY FAIL TO LOAD FOR REASONS THAT ARE NOT A MISSING
+   * MIGRATION — that one is applied, and has been for months. The old message
+   * told the skipper to run `supabase/quota_manual.sql` in the Supabase SQL
+   * editor, which is an operator's job, is unreachable from a wheelhouse, and
+   * would have been wrong about the cause. Daily Prices shipped the same
+   * message and it fired once, on a statement timeout. */
+  const [manualReady, setManualReady] = useState(true)
+  const [manualWhy, setManualWhy] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -234,12 +242,13 @@ export default function Quota() {
      * have. */
     const err = snapRes.error || lineRes.error || tripRes.error || catchRes.error || adjRes.error
     if (err) { setError(err.message); return }
-    // manual tables are a later migration — degrade gracefully until it's run
+    // The rest of the page stands on its own, so a failure here degrades to
+    // "this panel is missing" rather than taking the quota position with it.
     if (msRes.error || meRes.error) {
-      setManualReady(false)
+      setManualReady(false); setManualWhy((msRes.error || meRes.error).message)
       setManualStocks([]); setManualEntries([])
     } else {
-      setManualReady(true)
+      setManualReady(true); setManualWhy('')
       setManualStocks(msRes.data || [])
       setManualEntries(meRes.data || [])
     }
@@ -477,9 +486,13 @@ export default function Quota() {
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
       {!manualReady && (
-        <p style={{ color: '#c2410c', fontSize: '0.85rem' }}>
-          Manual stock tracking isn't set up in the database yet — run <code>supabase/quota_manual.sql</code> in the Supabase SQL editor, then reload.
-        </p>
+        <DidntLoad
+          what="Manual stock tracking didn’t load."
+          reassurance="Everything else on this page is unaffected — the position off your statements is above, and nothing you have entered by hand has been lost."
+          why={manualWhy}
+          busy={loading}
+          onRetry={() => { setLoading(true); loadAll().then(() => setLoading(false)) }}
+        />
       )}
 
       <div className="card" style={{ marginBottom: '1rem' }}>

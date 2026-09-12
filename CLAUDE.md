@@ -4647,6 +4647,39 @@ all covered by suites that only ran if somebody typed their name. All 31 missing
 ones passed when run — which is luck, not proof, because nothing had been
 checking them. 48 suites, 19 seconds.
 
+#### The two pages that told the skipper to run a `.sql` file
+
+David: *"pages that run a .sql, what is problem here?"* — then *"fix the.sql
+pages."* Daily Prices and Quota could each render a message naming a migration
+file and the Supabase SQL editor. Three things wrong with it, and only the first
+is manners:
+
+1. **It hands a man on a boat a database console.** He cannot act on it at sea,
+   and a missing table is an operator's problem, never his.
+2. **IT ASSERTED A CAUSE IT DID NOT KNOW, and the one time Daily Prices ever
+   fired it was wrong.** The tables were there all along: sixty parallel reads
+   blew the statement timeout, so a PERFORMANCE fault wore the costume of a
+   missing migration. That incident is written up in `officer_role.sql`, which
+   is where the InitPlan rule came from.
+3. **Both migrations have been applied for months**, so the only reader who
+   could ever have seen it truthfully is a brand-new tenant mid-setup.
+
+`src/components/DidntLoad.jsx` — one panel, two pages. It says WHAT did not
+load, says what is safe (different per page, which is why the wording is a prop
+and not a copy), offers **Try again** because the real occurrence was transient,
+and carries **the server's own words** in small muted type. A genuinely missing
+table still reports itself there, as `relation "quota_manual_stocks" does not
+exist` — more use to whoever can act on it than a filename ever was to a
+skipper. Brass rather than rust: a read that failed is a question, not a fault
+in the boat.
+
+**IT IS A COMPONENT SO THAT IT CAN BE RENDERED.** Both pages drag the supabase
+client in behind them and cannot be server-rendered;
+`scripts/didnt-load-preview.mjs` renders this in four states and asserts mostly
+what it must NEVER say — no `.sql`, no Supabase, no console, no claim about the
+cause — because the easiest way to undo this is to paste the old sentence back,
+and nothing else in the repo would notice.
+
 #### What he settled, and what stays open on his word
 
 - **Manual upload of settling sheets and invoices** is the arrangement, not a

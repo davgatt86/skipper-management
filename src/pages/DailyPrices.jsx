@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
+import DidntLoad from '../components/DidntLoad'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ScatterChart, Scatter, ZAxis,
@@ -46,6 +47,19 @@ export default function DailyPrices() {
   const [days, setDays] = useState([])
   const [loading, setLoading] = useState(true)
   const [ready, setReady] = useState(true)
+  /* WHY it would not load, in the SERVER'S OWN WORDS rather than in a guess.
+   *
+   * The old message asserted a cause — "the market tables aren't set up yet,
+   * run supabase/market_prices.sql in Supabase" — and the one time it ever
+   * fired, the tables were fine: sixty parallel reads blew the statement
+   * timeout, so a PERFORMANCE fault wore the costume of a missing migration.
+   * It sent a man on a boat to a database console to fix something that was
+   * not broken.
+   *
+   * A missing table is an OPERATOR's problem and never the skipper's, so the
+   * page now says what happened, offers the thing that actually helps, and
+   * keeps the server's wording for whoever can act on it. */
+  const [notReadyWhy, setNotReadyWhy] = useState('')
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState([])
   const [error, setError] = useState('')
@@ -72,9 +86,10 @@ export default function DailyPrices() {
   async function loadAll() {
     const [p, v, d] = await Promise.all([fetchAll('market_prices'), fetchAll('market_volumes'), fetchAll('market_days')])
     if (p.error || v.error || d.error) {
-      setReady(false); setPrices([]); setVolumes([]); setDays([]); return
+      setReady(false); setNotReadyWhy((p.error || v.error || d.error).message)
+      setPrices([]); setVolumes([]); setDays([]); return
     }
-    setReady(true)
+    setReady(true); setNotReadyWhy('')
     setPrices(p.data); setVolumes(v.data)
     setDays([...d.data].sort((a, b) => b.price_date.localeCompare(a.price_date)))
   }
@@ -128,7 +143,15 @@ export default function DailyPrices() {
       <PageHeader title="Daily Prices" sub="Peterhead &amp; Denmark market board" />
 
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-      {!ready && <p style={{ color: '#c2410c', fontSize: '0.85rem' }}>The market tables aren't set up yet — run <code>supabase/market_prices.sql</code> in Supabase, then reload.</p>}
+      {!ready && (
+        <DidntLoad
+          what="The market board didn’t load."
+          reassurance="The board lives on the server rather than on this device, so nothing has been lost and nothing you have uploaded is affected. It is worth trying again."
+          why={notReadyWhy}
+          busy={loading}
+          onRetry={() => { setLoading(true); loadAll().then(() => setLoading(false)) }}
+        />
+      )}
 
       {isSkipper && (
         <div className="card" style={{ marginBottom: '1rem' }}>
