@@ -1,0 +1,1610 @@
+{
+  "_about": "Audacious BF83 engine_limits and engine_logs as the database held them on 13-09-2026. Shaped like the real tables. Used by test-engine-sheet.mjs and scripts/engine-sheet-preview.mjs to decide how many boxes each reading gets and which get a printed decimal point.",
+  "limits": [
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "Clutch Pressure",
+      "min_val": 21.8,
+      "max_val": 32.2,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "Oil Temp IN",
+      "min_val": 28.9,
+      "max_val": 39.1,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "Pitch",
+      "min_val": 57.1,
+      "max_val": 98.9,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "PTO 1 Bearing Temp",
+      "min_val": 44.3,
+      "max_val": 66.7,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "PTO 2 Bearing Temp",
+      "min_val": 45.3,
+      "max_val": 66.7,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "HT OUT Temp",
+      "min_val": 62,
+      "max_val": 92,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "HT Pressure",
+      "min_val": 1.48,
+      "max_val": 3.22,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "LT IN Temp",
+      "min_val": 24.9,
+      "max_val": 39.1,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Lube Oil Pressure",
+      "min_val": 3.45,
+      "max_val": 5.75,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "RPM",
+      "min_val": 716.2,
+      "max_val": 1025.8,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "Oil Press",
+      "min_val": 19.3,
+      "max_val": 43.7,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "Oil Temp OUT",
+      "min_val": 19.8,
+      "max_val": 32.2,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "PTO 3 Bearing Temp",
+      "min_val": 45.3,
+      "max_val": 66.7,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Gearbox 1",
+      "param_key": "Thrust Bearing Temp",
+      "min_val": 47.3,
+      "max_val": 66.7,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "Exhaust Temp",
+      "min_val": 228.1,
+      "max_val": 420.9,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "Inst Fuel",
+      "min_val": 17.4,
+      "max_val": 50.6,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "Jacket Water Temp",
+      "min_val": 65.85,
+      "max_val": 93.15,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "Load",
+      "min_val": 70.45,
+      "max_val": 203.55,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Running Hours",
+      "min_val": null,
+      "max_val": null,
+      "is_counter": true,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "Oil",
+      "min_val": 3.39,
+      "max_val": 4.72,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "RPM",
+      "min_val": 1273.4,
+      "max_val": 1752.6,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 1",
+      "param_key": "Running Hours",
+      "min_val": null,
+      "max_val": null,
+      "is_counter": true,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "Exhaust Temp",
+      "min_val": 278.45,
+      "max_val": 433.55,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "Inst Fuel",
+      "min_val": 36.4,
+      "max_val": 50.6,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "Jacket Water Temp",
+      "min_val": 67.55,
+      "max_val": 95.45,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "Load",
+      "min_val": 86.4,
+      "max_val": 211.6,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "Oil",
+      "min_val": 3.39,
+      "max_val": 4.72,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "RPM",
+      "min_val": 1284,
+      "max_val": 1748,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Generator 2",
+      "param_key": "Running Hours",
+      "min_val": null,
+      "max_val": null,
+      "is_counter": true,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Charge Air Pressure",
+      "min_val": 1.11,
+      "max_val": 2.99,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Charge Air Temp",
+      "min_val": 30.6,
+      "max_val": 64.4,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Fuel Pressure",
+      "min_val": 3.3,
+      "max_val": 5.41,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "GOV",
+      "min_val": 4.95,
+      "max_val": 8.05,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "HT IN Temp",
+      "min_val": 61.9,
+      "max_val": 92,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "LT OUT Temp",
+      "min_val": 12.4,
+      "max_val": 27.6,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "LT Pressure",
+      "min_val": 2.46,
+      "max_val": 4.14,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Lube Oil IN Temp",
+      "min_val": 44.7,
+      "max_val": 71.3,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Lube Oil OUT Temp",
+      "min_val": 44.55,
+      "max_val": 72.45,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Start Air Pressure",
+      "min_val": 19.8,
+      "max_val": 32.2,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Stop Air Pressure",
+      "min_val": 5.92,
+      "max_val": 8.28,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Turbo IN Temp",
+      "min_val": 237.15,
+      "max_val": 596.85,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Turbo OUT Temp",
+      "min_val": 292.1,
+      "max_val": 443.9,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 1 Exhaust Temp",
+      "min_val": 307.3,
+      "max_val": 503.7,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 2 Exhaust Temp",
+      "min_val": 311.8,
+      "max_val": 492.2,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 3 Exhaust Temp",
+      "min_val": 316.85,
+      "max_val": 507.15,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 4 Exhaust Temp",
+      "min_val": 312.8,
+      "max_val": 492.2,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 5 Exhaust Temp",
+      "min_val": 314.75,
+      "max_val": 500.25,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 6 Exhaust Temp",
+      "min_val": 300.35,
+      "max_val": 495.65,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 7 Exhaust Temp",
+      "min_val": 321.7,
+      "max_val": 508.3,
+      "is_counter": false,
+      "confirmed": true
+    },
+    {
+      "group_key": "Main Engine 1",
+      "param_key": "Unit 8 Exhaust Temp",
+      "min_val": 283.05,
+      "max_val": 474.95,
+      "is_counter": false,
+      "confirmed": true
+    }
+  ],
+  "logs": [
+    {
+      "log_date": "2026-05-22",
+      "readings": {
+        "Gearbox 1": {},
+        "Generator 1": {
+          "Oil": 4.1,
+          "RPM": 1510,
+          "Load": 97,
+          "Inst Fuel": 28,
+          "Exhaust Temp": 305,
+          "Jacket Water Temp": 78
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 881,
+          "Oil added": 50,
+          "HT IN Temp": 73.9,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.8,
+          "LT Pressure": 3.6,
+          "Fuel Pressure": 4,
+          "Turbo IN Temp": 493,
+          "Turbo OUT Temp": 355,
+          "Lube Oil IN Temp": 57,
+          "Lube Oil Pressure": 5,
+          "Stop Air Pressure": 7.1,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 2.1,
+          "Unit 1 Exhaust Temp": 406,
+          "Unit 2 Exhaust Temp": 410,
+          "Unit 3 Exhaust Temp": 423,
+          "Unit 4 Exhaust Temp": 407,
+          "Unit 5 Exhaust Temp": 425,
+          "Unit 6 Exhaust Temp": 398,
+          "Unit 7 Exhaust Temp": 418,
+          "Unit 8 Exhaust Temp": 372
+        }
+      }
+    },
+    {
+      "log_date": "2026-05-25",
+      "readings": {
+        "Gearbox 1": {},
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1511,
+          "Load": 99,
+          "Inst Fuel": 28,
+          "Exhaust Temp": 301,
+          "Jacket Water Temp": 78
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 882,
+          "HT IN Temp": 74.6,
+          "HT OUT Temp": 80,
+          "HT Pressure": 2.8,
+          "LT Pressure": 3.6,
+          "Fuel Pressure": 4,
+          "Turbo IN Temp": 502,
+          "Turbo OUT Temp": 350,
+          "Lube Oil IN Temp": 57.2,
+          "Lube Oil Pressure": 4.9,
+          "Stop Air Pressure": 7.2,
+          "Start Air Pressure": 25,
+          "Unit 1 Exhaust Temp": 419,
+          "Unit 2 Exhaust Temp": 421,
+          "Unit 3 Exhaust Temp": 433,
+          "Unit 4 Exhaust Temp": 420,
+          "Unit 5 Exhaust Temp": 426,
+          "Unit 6 Exhaust Temp": 410,
+          "Unit 7 Exhaust Temp": 427,
+          "Unit 8 Exhaust Temp": 383
+        }
+      }
+    },
+    {
+      "log_date": "2026-05-28",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 83,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4.1,
+          "RPM": 1510,
+          "Load": 175,
+          "Inst Fuel": 32,
+          "Exhaust Temp": 334,
+          "Fuel Pressure": 3.6,
+          "Running Hours": 7350,
+          "Jacket Water Temp": 78
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 883,
+          "HT IN Temp": 80,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.6,
+          "Running Hours": 65662,
+          "Turbo IN Temp": 490,
+          "Turbo OUT Temp": 354,
+          "Charge Air Temp": 39,
+          "Lube Oil IN Temp": 54,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.75,
+          "Unit 1 Exhaust Temp": 396,
+          "Unit 2 Exhaust Temp": 405,
+          "Unit 3 Exhaust Temp": 414,
+          "Unit 4 Exhaust Temp": 396,
+          "Unit 5 Exhaust Temp": 411,
+          "Unit 6 Exhaust Temp": 387,
+          "Unit 7 Exhaust Temp": 409,
+          "Unit 8 Exhaust Temp": 363
+        }
+      }
+    },
+    {
+      "log_date": "2026-05-31",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 83,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4.1,
+          "RPM": 1510,
+          "Load": 175,
+          "Oil added": 0,
+          "Exhaust Temp": 332,
+          "Fuel Pressure": 36,
+          "Running Hours": 7385,
+          "Jacket Water Temp": 79
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 864,
+          "Oil added": 0,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 20,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.6,
+          "Running Hours": 65697,
+          "Turbo IN Temp": 507,
+          "Turbo OUT Temp": 364,
+          "Charge Air Temp": 45,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 56,
+          "Lube Oil Pressure": 4.6,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 2,
+          "Unit 1 Exhaust Temp": 417,
+          "Unit 2 Exhaust Temp": 415,
+          "Unit 3 Exhaust Temp": 430,
+          "Unit 4 Exhaust Temp": 414,
+          "Unit 5 Exhaust Temp": 430,
+          "Unit 6 Exhaust Temp": 406,
+          "Unit 7 Exhaust Temp": 429,
+          "Unit 8 Exhaust Temp": 378
+        }
+      }
+    },
+    {
+      "log_date": "2026-06-05",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 70,
+          "Oil Press": 28,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 57,
+          "PTO 2 Bearing Temp": 56,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1502,
+          "Load": 175,
+          "Inst Fuel": 24,
+          "Exhaust Temp": 283,
+          "Running Hours": 7485,
+          "Jacket Water Temp": 79
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 6,
+          "RPM": 883,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.6,
+          "Running Hours": 65820,
+          "Turbo IN Temp": 490,
+          "Turbo OUT Temp": 374,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.6,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.5,
+          "Unit 1 Exhaust Temp": 398,
+          "Unit 2 Exhaust Temp": 407,
+          "Unit 3 Exhaust Temp": 418,
+          "Unit 4 Exhaust Temp": 401,
+          "Unit 5 Exhaust Temp": 419,
+          "Unit 6 Exhaust Temp": 394,
+          "Unit 7 Exhaust Temp": 412,
+          "Unit 8 Exhaust Temp": 357
+        }
+      }
+    },
+    {
+      "log_date": "2026-06-09",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 86,
+          "Oil Press": 28,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1524,
+          "Load": 175,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 320,
+          "Running Hours": 7588,
+          "Jacket Water Temp": 80
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.6,
+          "Running Hours": 65924,
+          "Turbo IN Temp": 498,
+          "Turbo OUT Temp": 357,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.6,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 417,
+          "Unit 2 Exhaust Temp": 421,
+          "Unit 3 Exhaust Temp": 434,
+          "Unit 4 Exhaust Temp": 420,
+          "Unit 5 Exhaust Temp": 430,
+          "Unit 6 Exhaust Temp": 411,
+          "Unit 7 Exhaust Temp": 432,
+          "Unit 8 Exhaust Temp": 381
+        }
+      }
+    },
+    {
+      "log_date": "2026-06-14",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 82,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1515,
+          "Load": 165,
+          "Inst Fuel": 42,
+          "Exhaust Temp": 321,
+          "Running Hours": 7696,
+          "Jacket Water Temp": 80
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.6,
+          "Running Hours": 66032,
+          "Turbo IN Temp": 498,
+          "Turbo OUT Temp": 357,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.8,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 417,
+          "Unit 2 Exhaust Temp": 421,
+          "Unit 3 Exhaust Temp": 432,
+          "Unit 4 Exhaust Temp": 421,
+          "Unit 5 Exhaust Temp": 431,
+          "Unit 6 Exhaust Temp": 410,
+          "Unit 7 Exhaust Temp": 431,
+          "Unit 8 Exhaust Temp": 381
+        }
+      }
+    },
+    {
+      "log_date": "2026-06-16",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 83,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1520,
+          "Load": 175,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 319,
+          "Running Hours": 7745,
+          "Jacket Water Temp": 80
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 17,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.7,
+          "Running Hours": 66081,
+          "Turbo IN Temp": 490,
+          "Turbo OUT Temp": 355,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 57,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 5,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 416,
+          "Unit 2 Exhaust Temp": 420,
+          "Unit 3 Exhaust Temp": 433,
+          "Unit 4 Exhaust Temp": 422,
+          "Unit 5 Exhaust Temp": 431,
+          "Unit 6 Exhaust Temp": 412,
+          "Unit 7 Exhaust Temp": 430,
+          "Unit 8 Exhaust Temp": 413
+        }
+      }
+    },
+    {
+      "log_date": "2026-06-20",
+      "readings": {
+        "Gearbox 1": {
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1515,
+          "Load": 177,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 320,
+          "Jacket Water Temp": 80
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 78,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 17,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.7,
+          "Running Hours": 66176,
+          "Turbo IN Temp": 496,
+          "Turbo OUT Temp": 355,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 5,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 415,
+          "Unit 2 Exhaust Temp": 419,
+          "Unit 3 Exhaust Temp": 431,
+          "Unit 4 Exhaust Temp": 417,
+          "Unit 5 Exhaust Temp": 427,
+          "Unit 6 Exhaust Temp": 408,
+          "Unit 7 Exhaust Temp": 429,
+          "Unit 8 Exhaust Temp": 378
+        }
+      }
+    },
+    {
+      "log_date": "2026-06-23",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 83,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1524,
+          "Load": 170,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 321,
+          "Jacket Water Temp": 80
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.7,
+          "Running Hours": 66235,
+          "Turbo IN Temp": 498,
+          "Turbo OUT Temp": 355,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.6,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.9,
+          "Unit 1 Exhaust Temp": 417,
+          "Unit 2 Exhaust Temp": 421,
+          "Unit 3 Exhaust Temp": 432,
+          "Unit 4 Exhaust Temp": 420,
+          "Unit 5 Exhaust Temp": 430,
+          "Unit 6 Exhaust Temp": 411,
+          "Unit 7 Exhaust Temp": 432,
+          "Unit 8 Exhaust Temp": 381
+        }
+      }
+    },
+    {
+      "log_date": "2026-07-01",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 86,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {},
+        "Generator 2": {
+          "Oil": 4.1,
+          "RPM": 1515,
+          "Load": 184,
+          "Inst Fuel": 44,
+          "Exhaust Temp": 377,
+          "Running Hours": 8707,
+          "Jacket Water Temp": 81
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 862,
+          "HT IN Temp": 79,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 74,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 17,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.5,
+          "Running Hours": 66433,
+          "Turbo IN Temp": 515,
+          "Turbo OUT Temp": 365,
+          "Charge Air Temp": 46,
+          "Lube Oil IN Temp": 57,
+          "Lube Oil OUT Temp": 56,
+          "Lube Oil Pressure": 4.6,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 2.3,
+          "Unit 1 Exhaust Temp": 423,
+          "Unit 2 Exhaust Temp": 421,
+          "Unit 3 Exhaust Temp": 432,
+          "Unit 4 Exhaust Temp": 421,
+          "Unit 5 Exhaust Temp": 431,
+          "Unit 6 Exhaust Temp": 414,
+          "Unit 7 Exhaust Temp": 437,
+          "Unit 8 Exhaust Temp": 390
+        }
+      }
+    },
+    {
+      "log_date": "2026-07-17",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 84,
+          "Oil Press": 28,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1509,
+          "Load": 177,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 366,
+          "Running Hours": 8264,
+          "Jacket Water Temp": 80
+        },
+        "Generator 2": {},
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 862,
+          "HT IN Temp": 79,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 74,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 17,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.5,
+          "Running Hours": 66796,
+          "Turbo IN Temp": 515,
+          "Turbo OUT Temp": 365,
+          "Charge Air Temp": 46,
+          "Lube Oil IN Temp": 57,
+          "Lube Oil OUT Temp": 56,
+          "Lube Oil Pressure": 4.6,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 2.2,
+          "Unit 1 Exhaust Temp": 423,
+          "Unit 2 Exhaust Temp": 422,
+          "Unit 3 Exhaust Temp": 430,
+          "Unit 4 Exhaust Temp": 420,
+          "Unit 5 Exhaust Temp": 430,
+          "Unit 6 Exhaust Temp": 414,
+          "Unit 7 Exhaust Temp": 435,
+          "Unit 8 Exhaust Temp": 390
+        }
+      }
+    },
+    {
+      "log_date": "2026-07-31",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 86,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 2": {
+          "Oil": 4.1,
+          "RPM": 1515,
+          "Load": 144,
+          "Inst Fuel": 44,
+          "Exhaust Temp": 364,
+          "Running Hours": 8876,
+          "Jacket Water Temp": 80
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 882,
+          "HT IN Temp": 79,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 74,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 17,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.3,
+          "Running Hours": 67105,
+          "Turbo IN Temp": 515,
+          "Turbo OUT Temp": 365,
+          "Charge Air Temp": 46,
+          "Lube Oil IN Temp": 57,
+          "Lube Oil OUT Temp": 56,
+          "Lube Oil Pressure": 4.3,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 423,
+          "Unit 2 Exhaust Temp": 422,
+          "Unit 3 Exhaust Temp": 437,
+          "Unit 4 Exhaust Temp": 421,
+          "Unit 5 Exhaust Temp": 414,
+          "Unit 6 Exhaust Temp": 431,
+          "Unit 7 Exhaust Temp": 437,
+          "Unit 8 Exhaust Temp": 390
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-03",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 85,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 56,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 2": {
+          "Oil": 4.1,
+          "RPM": 1515,
+          "Load": 142,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 335,
+          "Running Hours": 8976,
+          "Jacket Water Temp": 81
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 862,
+          "HT IN Temp": 80,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 78,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.2,
+          "Running Hours": 67205,
+          "Turbo IN Temp": 510,
+          "Turbo OUT Temp": 365,
+          "Charge Air Temp": 46,
+          "Lube Oil IN Temp": 54,
+          "Lube Oil OUT Temp": 56,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 28,
+          "Charge Air Pressure": 2.5,
+          "Unit 1 Exhaust Temp": 397,
+          "Unit 2 Exhaust Temp": 404,
+          "Unit 3 Exhaust Temp": 415,
+          "Unit 4 Exhaust Temp": 395,
+          "Unit 5 Exhaust Temp": 410,
+          "Unit 6 Exhaust Temp": 388,
+          "Unit 7 Exhaust Temp": 409,
+          "Unit 8 Exhaust Temp": 364
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-05",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 83,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 2": {
+          "Oil": 4,
+          "RPM": 1515,
+          "Load": 157,
+          "Inst Fuel": 43,
+          "Exhaust Temp": 360,
+          "Running Hours": 9011,
+          "Jacket Water Temp": 80
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 890,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.7,
+          "LT OUT Temp": 16,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.6,
+          "Running Hours": 67280,
+          "Turbo IN Temp": 498,
+          "Turbo OUT Temp": 357,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 417,
+          "Unit 2 Exhaust Temp": 421,
+          "Unit 3 Exhaust Temp": 434,
+          "Unit 4 Exhaust Temp": 420,
+          "Unit 5 Exhaust Temp": 430,
+          "Unit 6 Exhaust Temp": 411,
+          "Unit 7 Exhaust Temp": 432,
+          "Unit 8 Exhaust Temp": 391
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-08",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 84,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 28,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 57,
+          "PTO 2 Bearing Temp": 56,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 2": {
+          "Oil": 4,
+          "RPM": 1520,
+          "Load": 172,
+          "Inst Fuel": 44,
+          "Exhaust Temp": 368,
+          "Running Hours": 9061,
+          "Jacket Water Temp": 81
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 892,
+          "HT IN Temp": 74,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 78,
+          "HT Pressure": 2.7,
+          "LT OUT Temp": 18,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.3,
+          "Running Hours": 67330,
+          "Turbo IN Temp": 497,
+          "Turbo OUT Temp": 361,
+          "Charge Air Temp": 43,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 57,
+          "Lube Oil Pressure": 4.4,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 1.8,
+          "Unit 1 Exhaust Temp": 416,
+          "Unit 2 Exhaust Temp": 420,
+          "Unit 3 Exhaust Temp": 432,
+          "Unit 4 Exhaust Temp": 422,
+          "Unit 5 Exhaust Temp": 432,
+          "Unit 6 Exhaust Temp": 414,
+          "Unit 7 Exhaust Temp": 434,
+          "Unit 8 Exhaust Temp": 396
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-09",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 86,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 54,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 2": {
+          "Oil": 4.1,
+          "RPM": 1512,
+          "Load": 114,
+          "Inst Fuel": 43,
+          "Running Hours": 9087,
+          "Jacket Water Temp": 83
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 850,
+          "HT IN Temp": 79,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 74,
+          "HT Pressure": 2.7,
+          "LT OUT Temp": 17,
+          "LT Pressure": 3.5,
+          "Fuel Pressure": 4.5,
+          "Running Hours": 67357,
+          "Turbo IN Temp": 315,
+          "Turbo OUT Temp": 371,
+          "Lube Oil IN Temp": 62,
+          "Lube Oil OUT Temp": 56,
+          "Lube Oil Pressure": 4.7,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 25,
+          "Charge Air Pressure": 2.1,
+          "Unit 1 Exhaust Temp": 373,
+          "Unit 2 Exhaust Temp": 376,
+          "Unit 3 Exhaust Temp": 383,
+          "Unit 4 Exhaust Temp": 377,
+          "Unit 5 Exhaust Temp": 380,
+          "Unit 6 Exhaust Temp": 365,
+          "Unit 7 Exhaust Temp": 388,
+          "Unit 8 Exhaust Temp": 345
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-15",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 80,
+          "Oil Press": 38,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 26,
+          "PTO 1 Bearing Temp": 57,
+          "PTO 2 Bearing Temp": 58,
+          "PTO 3 Bearing Temp": 57,
+          "Thrust Bearing Temp": 56
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1511,
+          "Inst Fuel": 35,
+          "Exhaust Temp": 364,
+          "Running Hours": 8610,
+          "Jacket Water Temp": 81
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 854,
+          "HT IN Temp": 80,
+          "LT IN Temp": 34,
+          "HT OUT Temp": 74,
+          "HT Pressure": 1.9,
+          "LT OUT Temp": 24,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.4,
+          "Running Hours": 67490,
+          "Turbo IN Temp": 518,
+          "Turbo OUT Temp": 367,
+          "Charge Air Temp": 55,
+          "Lube Oil IN Temp": 58,
+          "Lube Oil OUT Temp": 63,
+          "Lube Oil Pressure": 4.3,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 2.5,
+          "Unit 1 Exhaust Temp": 434,
+          "Unit 2 Exhaust Temp": 428,
+          "Unit 3 Exhaust Temp": 441,
+          "Unit 4 Exhaust Temp": 427,
+          "Unit 5 Exhaust Temp": 433,
+          "Unit 6 Exhaust Temp": 420,
+          "Unit 7 Exhaust Temp": 442,
+          "Unit 8 Exhaust Temp": 391
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-17",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 81,
+          "Oil Press": 25,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 58,
+          "PTO 2 Bearing Temp": 56,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 57
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1515,
+          "Load": 175,
+          "Inst Fuel": 44,
+          "Exhaust Temp": 365,
+          "Jacket Water Temp": 81
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 850,
+          "HT IN Temp": 80,
+          "LT IN Temp": 34,
+          "HT OUT Temp": 79,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 24,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.2,
+          "Running Hours": 67541,
+          "Turbo IN Temp": 519,
+          "Turbo OUT Temp": 386,
+          "Charge Air Temp": 39,
+          "Lube Oil IN Temp": 55,
+          "Lube Oil OUT Temp": 54,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 28,
+          "Charge Air Pressure": 1.75,
+          "Unit 1 Exhaust Temp": 431,
+          "Unit 2 Exhaust Temp": 424,
+          "Unit 3 Exhaust Temp": 440,
+          "Unit 4 Exhaust Temp": 424,
+          "Unit 5 Exhaust Temp": 435,
+          "Unit 6 Exhaust Temp": 417,
+          "Unit 7 Exhaust Temp": 439,
+          "Unit 8 Exhaust Temp": 386
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-20",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 85,
+          "Oil Press": 38,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 53,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 58,
+          "Thrust Bearing Temp": 58
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1508,
+          "Load": 140,
+          "Inst Fuel": 35,
+          "Exhaust Temp": 340,
+          "Running Hours": 8727,
+          "Jacket Water Temp": 79
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 882,
+          "HT IN Temp": 78,
+          "LT IN Temp": 30,
+          "HT OUT Temp": 80,
+          "HT Pressure": 2.6,
+          "LT OUT Temp": 24,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.2,
+          "Running Hours": 67610,
+          "Turbo IN Temp": 510,
+          "Turbo OUT Temp": 356,
+          "Charge Air Temp": 56,
+          "Lube Oil IN Temp": 60,
+          "Lube Oil OUT Temp": 62,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 28,
+          "Charge Air Pressure": 2.6,
+          "Unit 1 Exhaust Temp": 438,
+          "Unit 2 Exhaust Temp": 426,
+          "Unit 3 Exhaust Temp": 440,
+          "Unit 4 Exhaust Temp": 428,
+          "Unit 5 Exhaust Temp": 426,
+          "Unit 6 Exhaust Temp": 418,
+          "Unit 7 Exhaust Temp": 436,
+          "Unit 8 Exhaust Temp": 387
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-22",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 85,
+          "Oil Press": 28,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 53,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 58,
+          "Thrust Bearing Temp": 58
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1502,
+          "Load": 192,
+          "Inst Fuel": 47,
+          "Exhaust Temp": 374,
+          "Running Hours": 8772,
+          "Jacket Water Temp": 82
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 78,
+          "LT IN Temp": 34,
+          "HT OUT Temp": 72,
+          "HT Pressure": 3,
+          "LT OUT Temp": 24,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.2,
+          "Running Hours": 67654,
+          "Turbo IN Temp": 507,
+          "Turbo OUT Temp": 353,
+          "Charge Air Temp": 51.9,
+          "Lube Oil IN Temp": 62,
+          "Lube Oil OUT Temp": 60,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 24,
+          "Charge Air Pressure": 2.4,
+          "Unit 1 Exhaust Temp": 422,
+          "Unit 2 Exhaust Temp": 422,
+          "Unit 3 Exhaust Temp": 436,
+          "Unit 4 Exhaust Temp": 419,
+          "Unit 5 Exhaust Temp": 429,
+          "Unit 6 Exhaust Temp": 413,
+          "Unit 7 Exhaust Temp": 431,
+          "Unit 8 Exhaust Temp": 386
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-24",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 79,
+          "Oil Press": 28,
+          "Oil Temp IN": 35,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 56,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 58
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1514,
+          "Load": 174,
+          "Inst Fuel": 42,
+          "Exhaust Temp": 370,
+          "Running Hours": 8821,
+          "Jacket Water Temp": 80
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 78,
+          "LT IN Temp": 34,
+          "HT OUT Temp": 72,
+          "LT OUT Temp": 24,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.2,
+          "Running Hours": 67700,
+          "Turbo IN Temp": 504,
+          "Turbo OUT Temp": 364,
+          "Charge Air Temp": 49,
+          "Lube Oil IN Temp": 56,
+          "Lube Oil OUT Temp": 60,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 27,
+          "Charge Air Pressure": 2.6,
+          "Unit 1 Exhaust Temp": 420,
+          "Unit 2 Exhaust Temp": 423,
+          "Unit 3 Exhaust Temp": 435,
+          "Unit 4 Exhaust Temp": 416,
+          "Unit 5 Exhaust Temp": 422,
+          "Unit 6 Exhaust Temp": 412,
+          "Unit 7 Exhaust Temp": 430,
+          "Unit 8 Exhaust Temp": 383
+        }
+      }
+    },
+    {
+      "log_date": "2026-08-26",
+      "readings": {
+        "Gearbox 1": {
+          "Pitch": 81,
+          "Oil Press": 28,
+          "Oil Temp IN": 34,
+          "Oil Temp OUT": 24,
+          "Clutch Pressure": 28,
+          "PTO 1 Bearing Temp": 56,
+          "PTO 2 Bearing Temp": 57,
+          "PTO 3 Bearing Temp": 54,
+          "Thrust Bearing Temp": 58
+        },
+        "Generator 1": {
+          "Oil": 4,
+          "RPM": 1510,
+          "Inst Fuel": 45,
+          "Exhaust Temp": 370,
+          "Running Hours": 8864,
+          "Jacket Water Temp": 80
+        },
+        "Main Engine 1": {
+          "GOV": 7,
+          "RPM": 880,
+          "HT IN Temp": 72,
+          "LT IN Temp": 34,
+          "HT OUT Temp": 78,
+          "HT Pressure": 3,
+          "LT OUT Temp": 24,
+          "LT Pressure": 3,
+          "Fuel Pressure": 4.2,
+          "Running Hours": 67746,
+          "Turbo IN Temp": 506,
+          "Turbo OUT Temp": 357,
+          "Charge Air Temp": 50.2,
+          "Lube Oil IN Temp": 57,
+          "Lube Oil OUT Temp": 60,
+          "Lube Oil Pressure": 4.2,
+          "Stop Air Pressure": 7,
+          "Start Air Pressure": 26,
+          "Charge Air Pressure": 2.6,
+          "Unit 1 Exhaust Temp": 423,
+          "Unit 2 Exhaust Temp": 425,
+          "Unit 3 Exhaust Temp": 436,
+          "Unit 4 Exhaust Temp": 421,
+          "Unit 5 Exhaust Temp": 424,
+          "Unit 6 Exhaust Temp": 414,
+          "Unit 7 Exhaust Temp": 433,
+          "Unit 8 Exhaust Temp": 387
+        }
+      }
+    }
+  ]
+}

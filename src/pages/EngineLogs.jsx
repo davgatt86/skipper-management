@@ -14,61 +14,10 @@ import { useOfflineTable } from '../lib/offline/useOfflineTable'
 import { readCache, cacheTable, isOnline } from '../lib/offline/queue'
 import SyncStatus from '../components/SyncStatus'
 import { splitCharts } from '../lib/engineCharts'
+import { ENGINE_TEMPLATE } from '../lib/engine/template'
+import { exportEngineSheet } from '../lib/engine/printSheet'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
-// ------------------------------------------------------------------
-// Parameter template — modelled on Ægir's Engine Log. Readings are
-// grouped by equipment; each entry stores { group: { param: value } }
-// in engine_logs.readings (jsonb), so this template can be tweaked
-// without a DB migration. Units are shown next to each input.
-// ------------------------------------------------------------------
-const P = (label, unit = '') => ({ label, unit })
-
-export const ENGINE_TEMPLATE = [
-  {
-    group: 'Main Engine 1',
-    hoursParam: 'Running Hours',           // this param feeds the headline running-hours figure
-    params: [
-      P('RPM', 'rpm'), P('GOV'),
-      P('Charge Air Pressure', 'bar'), P('Charge Air Temp', '°C'),
-      P('Turbo IN Temp', '°C'), P('Turbo OUT Temp', '°C'),
-      P('Unit 1 Exhaust Temp', '°C'), P('Unit 2 Exhaust Temp', '°C'),
-      P('Unit 3 Exhaust Temp', '°C'), P('Unit 4 Exhaust Temp', '°C'),
-      P('Unit 5 Exhaust Temp', '°C'), P('Unit 6 Exhaust Temp', '°C'),
-      P('Unit 7 Exhaust Temp', '°C'), P('Unit 8 Exhaust Temp', '°C'),
-      P('HT Pressure', 'bar'), P('HT IN Temp', '°C'), P('HT OUT Temp', '°C'),
-      P('LT Pressure', 'bar'), P('LT IN Temp', '°C'), P('LT OUT Temp', '°C'),
-      P('Lube Oil Pressure', 'bar'), P('Lube Oil IN Temp', '°C'), P('Lube Oil OUT Temp', '°C'),
-      P('Fuel Pressure', 'bar'), P('Start Air Pressure', 'bar'), P('Stop Air Pressure', 'bar'),
-      P('Oil added', 'L'), P('Running Hours', 'h'),
-    ],
-  },
-  {
-    group: 'Generator 1',
-    params: [
-      P('Oil', 'bar'), P('RPM', 'rpm'), P('Load', 'kW'),
-      P('Jacket Water Temp', '°C'), P('Exhaust Temp', '°C'), P('Inst Fuel', 'L'),
-      P('Fuel Pressure', 'bar'), P('Oil added', 'L'), P('Running Hours', 'h'),
-    ],
-  },
-  {
-    group: 'Generator 2',
-    params: [
-      P('Oil', 'bar'), P('RPM', 'rpm'), P('Load', 'kW'),
-      P('Jacket Water Temp', '°C'), P('Exhaust Temp', '°C'), P('Inst Fuel', 'L'),
-      P('Fuel Pressure', 'bar'), P('Oil added', 'L'), P('Running Hours', 'h'),
-    ],
-  },
-  {
-    group: 'Gearbox 1',
-    params: [
-      P('Oil Press', 'bar'), P('Oil Temp IN', '°C'), P('Oil Temp OUT', '°C'),
-      P('Thrust Bearing Temp', '°C'), P('Clutch Pressure', 'bar'),
-      P('PTO 1 Bearing Temp', '°C'), P('PTO 2 Bearing Temp', '°C'), P('PTO 3 Bearing Temp', '°C'),
-      P('Pitch', '%'),
-    ],
-  },
-]
 
 const MAIN_HOURS = { group: 'Main Engine 1', param: 'Running Hours' }
 
@@ -302,6 +251,8 @@ export default function EngineLogs() {
               <button onClick={() => setView('entries')} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', border: 'none', background: view === 'entries' ? 'var(--navy)' : 'transparent', color: view === 'entries' ? '#fff' : 'var(--navy)', cursor: 'pointer' }}>Entries</button>
               <button onClick={() => setView('chart')} style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', border: 'none', background: view === 'chart' ? 'var(--navy)' : 'transparent', color: view === 'chart' ? '#fff' : 'var(--navy)', cursor: 'pointer' }}>Chart</button>
             </div>
+            <button className="secondary" onClick={() => exportEngineSheet({ vessel, logs, limits })} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}
+                    title="A blank sheet to fill in by hand: one figure per box, with the decimal point printed where these readings use one">Print blank sheet</button>
             {logs.length > 0 && <button className="secondary" onClick={() => makePdf(vessel, logs)} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>Export PDF</button>}
             {canEdit && !draft && <button onClick={openNew} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>+ Record log</button>}
           </div>

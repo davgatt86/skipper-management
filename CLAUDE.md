@@ -4794,6 +4794,98 @@ preview still renders.
 
     214 files scanned, 0 unbound names
 
+### THE PRINTABLE ENGINE ROOM SHEET — made to be READ (Sep 2026)
+
+David, showing the clipboard sheet the engineer fills in: *"if we made a clearer
+printable version of the sheet. could they upload a photo of the sheet and it
+auto reads it (with better handwritting)"* — then *"build printable sheet for
+reading. put decimal into the entry box where it typically has a low number for
+example 2.2 to make it easier for the reader."*
+
+**Print blank sheet** on Engine Logs. `src/lib/engine/printSheet.js`. The sheet
+comes first because it helps on paper today, before any reader exists.
+
+**ONE FIGURE PER BOX.** Free handwriting on a ruled line is where a 1 becomes a 7
+and two figures run into one; a box per figure gives the pen and the reader a
+place for each character.
+
+**THE DECIMAL POINT IS PRINTED, WHERE THIS BOAT'S RECORD SAYS IT BELONGS.** Every
+slip found in the old log was a decimal in the wrong place — Charge Air Pressure
+150 for 1.50, Lube Oil Pressure 42 for 4.2, gearbox oil pressure 2.8 for 28 — so
+the one character most likely to be lost is now printed rather than written.
+
+The rule is MEASURED, not decided row by row: a reading gets a point when it is
+typically **below 10** and has been **written with a point at least once**. On
+Audacious that is exactly seven parameters, eight boxes:
+
+    main engine   charge air · HT · LT · lube oil · fuel · stop air pressure
+    generators    oil pressure, on both
+
+**GOV is low and has never had a point**, so it gets none. **Gearbox oil pressure
+is bar but reads 28**, so it gets none either. Both are asserted, because they
+are the two a unit-based rule would have got wrong.
+
+**THE BOX COUNT COMES FROM THE CONFIRMED RANGE, NOT THE HIGHEST READING ON
+RECORD.** A 175-bar slip would otherwise print three boxes where one belongs, and
+a sheet with room for the slip invites the next one — the same authority the
+entry checks give the stated range. History speaks only for a reading with no
+range. Counters get one spare box to grow into; a percentage and litres get at
+least three, because pitch reaches 100 and oil added runs past 99.
+
+#### The test caught a wrong rule the preview agreed with
+
+A reading with no range and no history borrows the shape of the same row
+elsewhere. The first version took the first match in template order — **the main
+engine**, whose fuel pressure reads about 4.5 bar — so **Generator 2, whose fuel
+pressure reads 38, was given one box and a printed point.** A box nobody could
+write 38 in, and a sheet teaching the wrong place for the decimal, which is the
+mistake it exists to stop.
+
+**`scripts/engine-sheet-preview.mjs` passed throughout**, and that is the lesson
+worth keeping: it checks that the DRAWING matches the RULE, so it agreed with a
+wrong rule perfectly. `test-engine-sheet.mjs` checks the RULE against the
+outcome David asked for, and failed. **Both are needed and they are not the same
+check.** Borrowing is now only from the same kind of machine: a generator's
+gauge is only like another generator's.
+
+#### The rows are the app's, and the paper sheet does not match it
+
+**`ENGINE_TEMPLATE` moved to `src/lib/engine/template.js`.** It lived inside
+`EngineLogs.jsx`, which drags the supabase client in behind it, so the sheet could
+not be built or tested without a login. Now the page, its PDF export and the
+sheet share one list — add a parameter there and the sheet grows a row — and the
+rows print under **exactly the names the app stores**, since a box with no column
+behind it gives the reader somewhere to write and nowhere to put it.
+
+**THE OLD PAPER SHEET AND THE APP DISAGREE, and nothing was added to settle it**
+— which fields the boat actually keeps is David's call:
+
+    on paper, not in the app    generator oil temp · gearbox oil added
+                                ice machines, fishroom, fish-handling compressors
+                                fuel / hydraulic / sludge remaining on board
+                                vessel operation (steaming / towing / alongside)
+    in the app, not on paper    generator exhaust temp · generator inst fuel
+
+**Sludge remaining on board is the Oil Record Book's weekly reading** (code C, item
+11.3), which makes it the most useful of those to bring in.
+
+**Each generator column is captioned with both names** — `DG1 · Generator 1` —
+because which physical set the app calls Generator 1 is exactly the question an
+hour meter reading 7,396 against 8,864 on record raised, and it is still open.
+
+**The sheet prints `Layout ER1`.** Bump it whenever a row moves, or a photograph
+of an old sheet will be read against a new grid.
+
+**Checked, not eyeballed alone.** `test-engine-sheet.mjs` — 20 checks against
+Audacious's real 50 limits and 23 logs in `scripts/fixtures/engine-log.json`, in
+`npm test`. The preview builds the real PDF and reads it back with pdf.js: one
+page, all 46 rows named as the app stores them, every printed point matched to
+the row it sits on and exactly the rows the rule chose, nothing off the paper.
+
+**Not built yet: the reader.** A photograph of this sheet goes through the same
+reader as the invoices and certificate bundles, shows what it read for checking,
+and is never saved unlooked-at.
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.
