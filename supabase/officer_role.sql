@@ -67,6 +67,11 @@ declare
     -- writes: the logs and the maintenance record
     'engine_logs', 'vessel_fuel_log', 'garbage_log', 'fuel_suppliers',
     'maintenance_tasks', 'maintenance_events', 'engine_limits',
+    -- Photos of the engine room sheet, and what the reader made of them. READ
+    -- only: the reader writes it on the service-role key, and its own policies
+    -- in engine_sheet_reads.sql grant SELECT and nothing else. So it is NOT in
+    -- the officer_works loop, which would hand him ALL.
+    'engine_sheet_reads',
     'parts', 'parts_movements',
     -- The gear log. Deck work: a mate keeps it as much as the skipper does.
     'gear_nets', 'gear_parts', 'gear_components', 'gear_measurements',
@@ -134,6 +139,7 @@ declare
   allowed text[] := array[
     'engine_logs','vessel_fuel_log','garbage_log','fuel_suppliers',
     'maintenance_tasks','maintenance_events','engine_limits','parts','parts_movements',
+    'engine_sheet_reads',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
     'oil_record_book_pages','oil_record_book_entries','orb_items','crew_ranks',
@@ -229,8 +235,11 @@ drop policy if exists engineer_no_storage on storage.objects;
 drop policy if exists officer_storage_scope on storage.objects;
 create policy officer_storage_scope on storage.objects as restrictive
   for all to authenticated
-  using (not (select public.is_officer()) or bucket_id in ('crew-certs','vessel-certs'))
-  with check (not (select public.is_officer()) or bucket_id = 'crew-certs');
+  using (not (select public.is_officer()) or bucket_id in ('crew-certs','vessel-certs','engine-sheets'))
+  with check (not (select public.is_officer()) or bucket_id in ('crew-certs','engine-sheets'));
+-- engine-sheets: he photographs the engine room sheet for the reader. Its own
+-- read and insert policies are in engine_sheet_reads.sql; there is no update or
+-- delete on it for anybody, because the photo is the record of what was read.
 
 -- The existing crew_certs_insert/update/delete policies require a skipper, so
 -- an officer needs his own. Same fleet-folder check as theirs.

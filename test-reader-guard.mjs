@@ -38,5 +38,19 @@ ok(/const isUuid = /.test(serve) && serve.indexOf('const isUuid') < serve.indexO
 ok(/insert\(\{ doc_type: doc_type \|\| "settlement", fleet_id: me\.fleet_id \}\)/.test(serve),
    'the job carries the caller’s fleet — the column the poll policy checks')
 
+/* THE ENGINE ROOM SHEET — the one read an officer may start, and so the one
+   place the role check opens. It must open by exactly that much. */
+ok(/if \(doc_type === "engine_sheet"\) \{\s*if \(!\["skipper", "officer", "engineer"\]\.includes\(me\.role\)\)/.test(serve),
+   'an engine room sheet may be read by the skipper or an officer, and by no other role')
+ok(/if \(doc_type === "vessel_cert_bundle" \|\| doc_type === "engine_sheet"\) \{\s*if \(folders\.some\(\(f\) => f !== me\.fleet_id\)\)/.test(serve),
+   'an engine sheet photo must sit in the caller’s own fleet folder')
+const readInsertAt = serve.indexOf('engine_sheet_reads").insert')
+ok(readInsertAt > guardAt && readInsertAt > serve.indexOf('folders.some((f) => f !== me.fleet_id)'),
+   'and its read is made only after both checks')
+ok(/engine_sheet_reads"\)\.insert\(\{ fleet_id: me\.fleet_id, file_path: String\(paths\[0\]\), created_by: uid/.test(serve),
+   'the read carries the caller’s fleet and who took the photo')
+ok(/const fields = cleanFields\(rawFields\);\s*if \(!fields\)/.test(serve),
+   'the rows the client asks for are cleaned, and a list that does not parse is refused')
+
 console.log(`reader guard: ${pass} checks passed`)
 if (bad) { console.log(`  ${bad} PROBLEM${bad === 1 ? '' : 'S'}`); process.exit(1) }

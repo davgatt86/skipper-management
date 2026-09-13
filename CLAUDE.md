@@ -4974,9 +4974,83 @@ since both are counters; not harmless for anything reading `enabled` or
 `test-limits.mjs` gained 12 checks on the boat's real generator figures,
 including the 24-hour ceiling both ways and three generators that both fit.
 
-**Not built yet: the reader.** A photograph of this sheet goes through the same
-reader as the invoices and certificate bundles, shows what it read for checking,
-and is never saved unlooked-at.
+### THE PHOTO READER FOR THE SHEET — it fills the form, and only fills it (Sep 2026)
+
+David: *"build the photo reader for the sheet."* **Read a photo of the sheet** on
+Engine Logs: the engineer photographs the filled-in sheet, the AI reader fills
+the form, brass marks the figures worth a second look, and **nothing is saved
+until he presses Save** — with the range, reversal and drift checks running
+exactly as they do on a typed entry.
+
+    src/lib/engine/sheetRead.js      what to ask for, and what to do with the answer (pure)
+    src/lib/engine/sheetReadIO.js    upload, read, signed link
+    src/components/SheetReadCard.jsx the panel above the filled form
+    su-parse-document                doc_type 'engine_sheet', ENGINE_SHEET_PROMPT (deployed v15)
+    supabase/engine_sheet_reads.sql  the read table, the bucket, the officer's scope
+
+**THE OFFICER IS THE ONE TAKING THE PHOTO, AND BOTH SHARED PATHS WERE SHUT TO
+HIM.** Every other read polls `su_parse_jobs`, which carries settling sheets and
+invoices for a day and is denied to the officer because that is money; and his
+storage scope opened only the certificate buckets. Opening either would have
+moved the money boundary for a photograph of an engine room. So the sheet has
+its own bucket (`engine-sheets/{fleet_id}/…`) and its own table, and the reader's
+role check opens by exactly one document type — asserted in
+`test-reader-guard.mjs`, which now has 13 checks.
+
+**A READ IS A RECORD, NOT A JOB.** `engine_sheet_reads` is never swept, and the
+saved log carries `engine_logs.sheet_read_id`, so what the reader got wrong can
+be COUNTED — read against saved, figure by figure — which the certificate reader
+has never been able to say. The link sits on the LOG, not the read, because the
+log goes through the offline outbox: one insert carries it, where a second update
+naming a log not yet synced would fail its foreign key. Authenticated users get
+SELECT only, so a read cannot be rewritten afterwards to flatter the reader; the
+photo has no update or delete policy for the same reason.
+
+**THE READER IS TOLD WHICH ROWS TO LOOK FOR, AND THE LIST IS THE APP'S.** The page
+sends `sheetFields()` — every template row with the box shape the printed sheet
+carries — so a row added to `template.js` is read the day it is printed, with no
+redeploy. **The key the function builds must be the key the page looks up**, and
+the function strips a label to letters, figures and a few marks before building
+it; `test-sheet-read.mjs` asserts every template label passes that exact filter,
+and that the function's regex and `LABEL_CHARS` are the same characters.
+
+**MOST OF THE PROMPT IS NEGATIVE, for the invoice work-date reason.** The
+dangerous read is not an illegible figure — that comes back null and is typed —
+it is a figure the model TIDIED. 7,396 under Generator 1 is the real mistake off
+the 06-09 paper sheet; a reader that moved it to the machine it "fits", or
+corrected it, would hide exactly what the reversal check exists to catch. So it
+reads what is written where it is written, and lists what it is unsure of.
+
+**FLAGGED, NEVER FIXED — four facts about the sheet, not guesses:** the reader was
+unsure; more figures than the sheet has boxes for (the 2.8/28 gearbox slip the
+sheet was built against); a decimal where no point is printed; more decimal
+places than boxes. Touching a marked figure takes its mark off, and the panel
+counts what is LEFT to check, not what was found.
+
+**"67,746" is refused, not read as 67.746.** The function takes a string figure
+only if it is a plain number; the one conversion that looks harmless is a
+thousand times out.
+
+**THE DATE FILES EVERY FIGURE UNDER A DAY**, so a doubtful one is never used:
+unread, impossible (31 February, or the sheet's own `06/09/26` returned as text)
+or in the future, the form takes today and the panel says which. A day that
+already has a log is named too.
+
+**IT NEEDS A SIGNAL AND SAYS SO FIRST**, before uploading anything. The engine log
+itself still works offline, typed.
+
+**Probed as the real logins** (a planted read per fleet, every write attempted
+and rolled back): skipper and officer each read their own fleet's read and not
+the other; the officer is refused writing a read and rewriting its result, may
+upload to his own `engine-sheets` folder and not another fleet's, is still shut
+out of `fleet-photos`, and still reads **0** of `su_parse_jobs`; the cook reads 0
+and cannot upload; another fleet's skipper reads his own and not Audacious's.
+
+**NOT PROVEN ON A REAL PHOTO.** The function needs a real login's JWT, so the
+prompt has not read a sheet from here. `test-sheet-read.mjs` (35 checks) and
+`scripts/sheet-read-preview.mjs` prove everything either side of the model; one
+photo of a filled ER2 sheet settles the model itself — and afterwards
+`engine_sheet_reads.result` against the saved log says how well it did.
 
 ## Pair teams
 

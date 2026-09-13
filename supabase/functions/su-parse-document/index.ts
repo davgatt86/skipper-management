@@ -164,6 +164,49 @@ Rules:
 - page_from and page_to are the pages this certificate occupies in the document AS SUPPLIED: count from 1 at the very first page and count EVERY page. A certificate on one page has page_from equal to page_to. Work through the document in order, so the certificates you return are in page order. If you are not certain which page a certificate is on, return null for both rather than guessing - a wrong page number sends the skipper to the wrong certificate, which is worse than no page number at all.
 Respond ONLY with the JSON object, no markdown fences, no commentary.`;
 
+/* THE ENGINE ROOM SHEET, READ OFF A PHOTOGRAPH.
+ *
+ * David, Sep 2026: "build the photo reader for the sheet." The printed sheet
+ * (src/lib/engine/printSheet.js) was designed for this read: one figure per box,
+ * the decimal point PRINTED where the boat's record uses one, every row named
+ * exactly as the app stores it.
+ *
+ * THE ROWS ARE SENT BY THE CLIENT, built from the app's own template and box
+ * shapes, so a row added there is read the day it is printed with no redeploy
+ * here — and the reader is never asked for a field the app cannot store.
+ *
+ * MOST OF THE RULES ARE NEGATIVE, for the same reason as the invoice work dates.
+ * The dangerous read is not an illegible figure, which comes back null and is
+ * typed in; it is a figure the model has TIDIED. A generator counter logged
+ * under the wrong machine, or below its last reading, is the exact mistake the
+ * save check exists to catch — a reader that moved or corrected it would hide it
+ * behind a figure that looks right. So it reads what is written, where it is
+ * written, and says when it is not sure. */
+type SheetField = { key: string; group: string; param: string; unit: string; int: number; dec: number };
+
+const ENGINE_SHEET_PROMPT = (fields: SheetField[], layout: string) => {
+  const rows = fields.map((f) =>
+    `${f.key} | ${f.unit || "no unit"} | ${f.int} figure box${f.int === 1 ? "" : "es"}` +
+    (f.dec ? `, a PRINTED decimal point, then ${f.dec} decimal box${f.dec === 1 ? "" : "es"}` : ", a whole number")
+  ).join("\n");
+  return `You are reading a photograph of a fishing vessel's DAILY ENGINE ROOM LOG, filled in by hand by the engineer. It is normally the printed "Daily Engine Room Log"${layout ? ` (layout code ${layout} printed at the foot)` : ""}: every reading has one box per figure, and where a reading takes a decimal the point is PRINTED between the boxes. It may be an older or hand-ruled sheet instead; read that the same way, by its row and column labels.
+Extract as JSON:
+{ "layout": string|null, "date": "YYYY-MM-DD"|null, "vessel_operation": "steaming"|"towing"|"alongside"|null, "logged_by": string|null, "notes": string|null, "readings": { "<key>": number|null }, "unsure": [ "<key>" ] }
+The readings, one per line as KEY | unit | boxes. A KEY is the section (the machine) and the row label joined by ||:
+${rows}
+Rules:
+- readings: use EXACTLY the keys above, spelled exactly as given, and no others. Return null for a reading whose boxes are empty, crossed out or unreadable.
+- Read each reading figure by figure, box by box. Where a decimal point is printed, the figures after it are the decimals: boxes 2 . 2 is 2.2, boxes 1 4 . 5 is 14.5. Where no point is printed the reading is a whole number - never insert a decimal point yourself. Return plain numbers with no thousands separators: 67746, not 67,746.
+- The generator columns are captioned "DG1 · Generator 1" and "DG2 · Generator 2"; on an older sheet DG1 is Generator 1 and DG2 is Generator 2. The refrigeration columns are Ice Machine 1, Ice Machine 2, Fishroom and Fish Handling. Read every figure from ITS OWN row and column.
+- DO NOT CORRECT, COMPLETE OR INFER ANY FIGURE. Never move a figure to a machine where you think it belongs better, never fill in a figure from another row or from what a reading ought to be, and never change a figure because it looks wrong. A running-hours figure lower than you would expect is exactly the mistake this sheet is checked for afterwards, and a corrected figure hides it. Read what is written.
+- unsure: list the key of every figure you did read but are not confident of - unclear handwriting, a figure written over another, a 1 that might be a 7, figures spilling outside their boxes. A figure you cannot read at all is null, not a guess, and does not go in unsure.
+- date: from the DATE boxes (DD / MM / YY, where YY is 20YY), else any date written on the sheet. null if it is not legible.
+- vessel_operation: whichever ONE of Steaming, Towing or Alongside is ticked. null if none is ticked or more than one is.
+- logged_by: the name written against LOGGED BY, as written, else null. notes: whatever is written in the NOTES box, as written, else null.
+- layout: the layout code printed at the foot of the sheet (for example "ER2"), else null.
+Respond ONLY with the JSON object, no markdown fences, no commentary.`;
+};
+
 // Canonicalise a crew name to one stable identity, merging company/spelling variants.
 function canonCrew(nm: string): string {
   const s = (nm || "").toUpperCase();
@@ -285,16 +328,68 @@ function fixWorkDates(rows: Record<string, unknown>[]): Record<string, unknown>[
   });
 }
 
-async function runParse(admin: ReturnType<typeof createClient>, jobId: string, paths: string[], docType: string, apiKey: string, pageCount: number | null, only: string[] = []) {
+/* THE ROWS THE CLIENT ASKS FOR, CLEANED BEFORE THEY REACH A PROMPT. The labels
+ * are the app's own and only ever letters, figures and a handful of marks — the
+ * client's test asserts every template label passes this same filter, so the
+ * key built here is the key the page looks the figure up by. A list that does
+ * not parse is refused whole rather than read partly. */
+function cleanFields(raw: unknown): SheetField[] | null {
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 200) return null;
+  const label = (v: unknown) => String(v ?? "").replace(/[^\p{L}\p{N} °³%().&/-]/gu, "").trim().slice(0, 60);
+  const out: SheetField[] = [];
+  for (const item of raw) {
+    const r = (item ?? {}) as Record<string, unknown>;
+    const group = label(r.group);
+    const param = label(r.param);
+    const int = Number(r.int);
+    const dec = Number(r.dec);
+    if (!group || !param || !Number.isInteger(int) || int < 1 || int > 7 || !Number.isInteger(dec) || dec < 0 || dec > 2) return null;
+    out.push({ key: `${group}||${param}`, group, param, unit: label(r.unit).slice(0, 8), int, dec });
+  }
+  return out;
+}
+
+/* WHAT CAME BACK, KEPT TO WHAT WAS ASKED. Keys nobody asked for are dropped, and
+ * a figure is a number or nothing. A string is taken only if it is a plain
+ * number: "67,746" is REFUSED rather than turned into 67.746, because the one
+ * conversion that looks harmless is a thousand times out. Nothing is corrected. */
+function fixSheetRead(parsed: Record<string, unknown>, fields: SheetField[]): Record<string, unknown> {
+  const keys = new Set(fields.map((f) => f.key));
+  const src = parsed.readings && typeof parsed.readings === "object" ? parsed.readings as Record<string, unknown> : {};
+  const readings: Record<string, number> = {};
+  for (const [k, v] of Object.entries(src)) {
+    if (!keys.has(k)) continue;
+    if (typeof v === "number" && Number.isFinite(v)) readings[k] = v;
+    else if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v.trim())) readings[k] = Number(v.trim());
+  }
+  const unsure = Array.isArray(parsed.unsure)
+    ? [...new Set((parsed.unsure as unknown[]).map(String))].filter((k) => k in readings)
+    : [];
+  const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
+  const day = String(parsed.date ?? "").slice(0, 10);
+  const op = String(parsed.vessel_operation ?? "").toLowerCase().trim();
+  return {
+    layout: text(parsed.layout, 12),
+    date: /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null,
+    vessel_operation: ["steaming", "towing", "alongside"].includes(op) ? op : null,
+    logged_by: text(parsed.logged_by, 80),
+    notes: text(parsed.notes, 1000),
+    readings,
+    unsure,
+  };
+}
+
+async function runParse(admin: ReturnType<typeof createClient>, jobTable: string, jobId: string, paths: string[], docType: string, apiKey: string, pageCount: number | null, only: string[] = [], fields: SheetField[] = [], layout = "") {
   try {
     const content: unknown[] = [];
-    /* Certificates live in their own bucket, one folder per fleet; everything
-     * else this reader has ever been given lives in su-documents. */
-    const bucket = docType === "vessel_cert_bundle" ? "vessel-certs" : "su-documents";
+    /* Certificates live in their own bucket, one folder per fleet, and so do
+     * photos of the engine room sheet; everything else this reader has ever been
+     * given lives in su-documents. */
+    const bucket = docType === "vessel_cert_bundle" ? "vessel-certs" : docType === "engine_sheet" ? "engine-sheets" : "su-documents";
     for (const path of paths) {
       const { data: blob, error } = await admin.storage.from(bucket).download(path);
       if (error || !blob) {
-        await admin.from("su_parse_jobs").update({ status: "error", error: `Could not read the uploaded file (${path}): ${error?.message ?? "not found"}` }).eq("id", jobId);
+        await admin.from(jobTable).update({ status: "error", error: `Could not read the uploaded file (${path}): ${error?.message ?? "not found"}` }).eq("id", jobId);
         return;
       }
       const media = mediaTypeFor(path);
@@ -302,7 +397,8 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
       if (media === "application/pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } });
       else content.push({ type: "image", source: { type: "base64", media_type: media, data: b64 } });
     }
-    const prompt = docType === "vessel_cert_bundle" ? CERT_BUNDLE_PROMPT
+    const prompt = docType === "engine_sheet" ? ENGINE_SHEET_PROMPT(fields, layout)
+      : docType === "vessel_cert_bundle" ? CERT_BUNDLE_PROMPT
       : docType === "invoice_lines" ? LINES_PROMPT(only)
       : docType === "invoice" ? INVOICE_PROMPT
       : docType === "settlement_beryl" ? BERYL_PROMPT : SETTLEMENT_PROMPT;
@@ -316,7 +412,7 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
     });
     if (!resp.ok) {
       const errText = await resp.text();
-      await admin.from("su_parse_jobs").update({ status: "error", error: `AI request failed: ${errText.slice(0, 300)}` }).eq("id", jobId);
+      await admin.from(jobTable).update({ status: "error", error: `AI request failed: ${errText.slice(0, 300)}` }).eq("id", jobId);
       return;
     }
     const data = await resp.json();
@@ -326,7 +422,7 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
     try {
       parsed = JSON.parse(clean);
     } catch {
-      await admin.from("su_parse_jobs").update({ status: "error", error: "Couldn't read the document clearly. Try a sharper photo or clearer scan, or enter the figures manually." }).eq("id", jobId);
+      await admin.from(jobTable).update({ status: "error", error: "Couldn't read the document clearly. Try a sharper photo or clearer scan, or enter the figures manually." }).eq("id", jobId);
       return;
     }
     if (docType === "settlement_beryl") {
@@ -338,6 +434,8 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
       if (Array.isArray(parsed.invoices)) {
         parsed.invoices = fixCurrency(fixWorkDates(fixPages(parsed.invoices as Record<string, unknown>[], pageCount)));
       }
+    } else if (docType === "engine_sheet") {
+      parsed = fixSheetRead(parsed, fields);
     } else if (docType === "vessel_cert_bundle") {
       /* The same page check as the invoices, against the page count the client
        * read off the PDF. Nothing else is corrected here: which certificates
@@ -351,12 +449,12 @@ async function runParse(admin: ReturnType<typeof createClient>, jobId: string, p
       // normalise crew names on the way out (Audacious settlements only)
       parsed.crew_payments = (parsed.crew_payments as Record<string, unknown>[]).map((c) => ({ ...c, crew_name: canonCrew(String(c.crew_name || "")) }));
     }
-    await admin.from("su_parse_jobs").update({ status: "done", result: parsed }).eq("id", jobId);
+    await admin.from(jobTable).update({ status: "done", result: parsed }).eq("id", jobId);
   } catch (e) {
     const msg = String(e).includes("Timeout") || String(e).includes("timed out")
       ? "Reading took too long - try fewer pages at a time or clearer photos."
       : String(e).slice(0, 300);
-    await admin.from("su_parse_jobs").update({ status: "error", error: msg }).eq("id", jobId);
+    await admin.from(jobTable).update({ status: "error", error: msg }).eq("id", jobId);
   }
 }
 
@@ -365,7 +463,7 @@ Deno.serve(async (req: Request) => {
   try {
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) return json({ error: "AI reading isn't switched on yet - the ANTHROPIC_API_KEY secret is missing in Supabase (Edge Functions > Secrets). You can still enter figures manually." }, 501);
-    const { paths, doc_type, page_count, only } = await req.json();
+    const { paths, doc_type, page_count, only, fields: rawFields, layout, vessel_id } = await req.json();
     if (!Array.isArray(paths) || paths.length === 0) return json({ error: "No files provided" }, 400);
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
@@ -400,18 +498,25 @@ Deno.serve(async (req: Request) => {
     if (!uid) return json({ error: "Signed out - sign in again and retry." }, 401);
     const { data: me } = await admin.from("app_users").select("fleet_id, role").eq("id", uid).maybeSingle();
     if (!me?.fleet_id) return json({ error: "This login is not attached to a boat." }, 403);
-    if (me.role !== "skipper") return json({ error: "Only the skipper reads documents here." }, 403);
+    /* The engine room sheet is photographed by whoever keeps the engine log, and
+     * that is the officer as often as the skipper. Everything else stays the
+     * skipper's: settlements and invoices are money, and certificates are his to
+     * file. The legacy 'engineer' value is an officer not yet migrated. */
+    if (doc_type === "engine_sheet") {
+      if (!["skipper", "officer", "engineer"].includes(me.role)) return json({ error: "Only the skipper or an officer reads an engine room sheet." }, 403);
+    } else if (me.role !== "skipper") return json({ error: "Only the skipper reads documents here." }, 403);
 
     const folders = [...new Set(paths.map((p: unknown) => String(p).split("/")[0]))];
-    if (doc_type === "vessel_cert_bundle") {
+    /* A folder that is not a uuid cannot be a boat, and `.in()` on one ERRORS
+     * rather than matching nothing — which would read as a database fault at the
+     * client instead of a refusal. Refused before it is asked. */
+    const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+    /* Certificates and engine room sheets are both foldered by FLEET. */
+    if (doc_type === "vessel_cert_bundle" || doc_type === "engine_sheet") {
       if (folders.some((f) => f !== me.fleet_id)) {
-        return json({ error: "That document is not in this boat's certificate folder." }, 403);
+        return json({ error: doc_type === "engine_sheet" ? "That photo is not in this boat's engine sheet folder." : "That document is not in this boat's certificate folder." }, 403);
       }
     } else {
-      /* A folder that is not a uuid cannot be a boat, and `.in()` on one ERRORS
-       * rather than matching nothing — which would read as a database fault at
-       * the client instead of a refusal. Refused before it is asked. */
-      const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
       if (folders.some((f) => !isUuid(f))) {
         return json({ error: "That document is not in this boat's folder." }, 403);
       }
@@ -425,6 +530,25 @@ Deno.serve(async (req: Request) => {
         return json({ error: "That document is not in this boat's folder." }, 403);
       }
     }
+    if (doc_type === "engine_sheet") {
+      /* AN ENGINE SHEET READ IS A RECORD, NOT A JOB — its own table, which the
+       * officer who took the photo can read and which is never swept, so what
+       * the reader got wrong can be measured against the log saved from it. */
+      const fields = cleanFields(rawFields);
+      if (!fields) return json({ error: "The reader was not told which rows to look for. Reload the page and try again." }, 400);
+      if (paths.length > 4) return json({ error: "Read one sheet at a time." }, 400);
+      let vesselId: string | null = null;
+      if (typeof vessel_id === "string" && isUuid(vessel_id)) {
+        const { data: v } = await admin.from("vessels").select("id").eq("id", vessel_id).eq("fleet_id", me.fleet_id).maybeSingle();
+        vesselId = v?.id ?? null;
+      }
+      const { data: read, error: readError } = await admin.from("engine_sheet_reads").insert({ fleet_id: me.fleet_id, file_path: String(paths[0]), created_by: uid, vessel_id: vesselId }).select().single();
+      if (readError || !read) return json({ error: `Could not start the read: ${readError?.message}` }, 500);
+      EdgeRuntime.waitUntil(runParse(admin, "engine_sheet_reads", read.id, paths, "engine_sheet", apiKey, null, [], fields,
+        typeof layout === "string" ? layout.replace(/[^A-Za-z0-9]/g, "").slice(0, 12) : ""));
+      return json({ job_id: read.id });
+    }
+
     await admin.from("su_parse_jobs").delete().lt("created_at", new Date(Date.now() - 86400000).toISOString());
     /* THE JOB CARRIES THE CALLER'S FLEET, and the client polls it back through
      * a policy that checks exactly that. Written here because the insert runs on
@@ -432,7 +556,7 @@ Deno.serve(async (req: Request) => {
      * existed from the day the table was scoped and nothing had ever set it. */
     const { data: job, error } = await admin.from("su_parse_jobs").insert({ doc_type: doc_type || "settlement", fleet_id: me.fleet_id }).select().single();
     if (error || !job) return json({ error: `Could not start the read: ${error?.message}` }, 500);
-    EdgeRuntime.waitUntil(runParse(admin, job.id, paths, doc_type || "settlement", apiKey, Number.isInteger(page_count) ? page_count : null,
+    EdgeRuntime.waitUntil(runParse(admin, "su_parse_jobs", job.id, paths, doc_type || "settlement", apiKey, Number.isInteger(page_count) ? page_count : null,
       Array.isArray(only) ? only.map(String).slice(0, 20) : []));
     return json({ job_id: job.id });
   } catch (e) {

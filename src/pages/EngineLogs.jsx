@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import AppShell from '../AppShell'
@@ -15,7 +15,10 @@ import { readCache, cacheTable, isOnline } from '../lib/offline/queue'
 import SyncStatus from '../components/SyncStatus'
 import { splitCharts } from '../lib/engineCharts'
 import { ENGINE_TEMPLATE } from '../lib/engine/template'
-import { exportEngineSheet, OPERATIONS } from '../lib/engine/printSheet'
+import { exportEngineSheet, OPERATIONS, sheetShapes, SHEET_LAYOUT } from '../lib/engine/printSheet'
+import { sheetFields, reviewSheetRead, flagText, readKey } from '../lib/engine/sheetRead'
+import { uploadSheetPhoto, readSheetPhoto, sheetPhotoUrl } from '../lib/engine/sheetReadIO'
+import SheetReadCard from '../components/SheetReadCard'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
 
@@ -68,6 +71,11 @@ export default function EngineLogs() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [outlierWarn, setOutlierWarn] = useState(null)
+  // What the reader made of a photo of the paper sheet, while the form it filled
+  // is being checked. Null for a typed entry.
+  const [sheetRead, setSheetRead] = useState(null)
+  const [sheetStage, setSheetStage] = useState('')
+  const photoInput = useRef(null)
   /* THE STATED OPERATING RANGES — the primary test, and the reason the
    * rolling-average check is no longer the authority. Gearbox 1 Oil Press read
    * 28, 28, 2.8, 2.8, 38, 25, 38 and the median was 28, so a check derived from
@@ -113,9 +121,10 @@ export default function EngineLogs() {
   const setReading = (group, param, val) =>
     setDraft((p) => ({ ...p, readings: { ...p.readings, [group]: { ...(p.readings[group] || {}), [param]: val } } }))
 
-  function openNew() { setEditingId(null); setDraft(blankEntry()); setMsg('') }
+  function openNew() { setEditingId(null); setDraft(blankEntry()); setMsg(''); setSheetRead(null) }
   function openEdit(l) {
     setEditingId(l.id)
+    setSheetRead(null)
     setDraft({
       log_date: l.log_date || today(),
       vessel_operation: l.vessel_operation || '',
@@ -129,7 +138,52 @@ export default function EngineLogs() {
   }
   // Clearing the acknowledgement matters: without it, one "save anyway" would
   // silently wave through every later entry in the same session.
-  async function cancel() { setDraft(null); setEditingId(null); setOutlierWarn(null) }
+  async function cancel() { setDraft(null); setEditingId(null); setOutlierWarn(null); setSheetRead(null) }
+
+  /* A PHOTO OF THE PAPER SHEET FILLS THE FORM — and only fills it. The engineer
+   * checks it against the sheet and presses Save himself, and every check a
+   * typed entry gets still runs. Nothing about saving changes except that the
+   * log points at the read it came from (engine_logs.sheet_read_id), so what the
+   * reader got wrong can be counted later.
+   *
+   * IT NEEDS A SIGNAL, and says so before uploading anything rather than failing
+   * halfway. The engine log itself still works offline, typed. */
+  async function readPhoto(file) {
+    if (!isOnline()) {
+      setMsg('Reading a photo needs a signal. Type the figures in, or read the photo once you are back in signal.')
+      return
+    }
+    setMsg('')
+    try {
+      setSheetStage('Uploading the photo…')
+      const path = await uploadSheetPhoto(appUser?.fleet_id, file)
+      setSheetStage('Reading the sheet. This usually takes under a minute…')
+      const fields = sheetFields(ENGINE_TEMPLATE, sheetShapes({ logs, limits }))
+      let readId = null
+      const result = await readSheetPhoto({
+        path, fields, layout: SHEET_LAYOUT, vesselId: boat?.current?.id,
+        onJob: (id) => { readId = id },
+      })
+      const review = reviewSheetRead(result, fields, { today: today(), layout: SHEET_LAYOUT })
+      const photoUrl = await sheetPhotoUrl(path).catch(() => null)
+      setEditingId(null); setOutlierWarn(null)
+      setDraft({ ...blankEntry(), ...review.draft })
+      setSheetRead({ ...review, readId, path, photoUrl })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch (e) {
+      setMsg(e?.message || 'The photo could not be read. Type the figures in instead.')
+    } finally {
+      setSheetStage('')
+    }
+  }
+
+  // Touching a marked figure takes its mark off: the panel counts what is left.
+  const clearFlag = (k) => setSheetRead((s) => {
+    if (!s?.flags?.[k]) return s
+    const flags = { ...s.flags }
+    delete flags[k]
+    return { ...s, flags }
+  })
 
   /* A COUNTER LOGGED LOWER STAYS FLAGGED ON ITS OWN CARD until it is edited.
    * The save warning is seen once, by one man, and "save anyway" puts it out of
@@ -216,6 +270,9 @@ export default function EngineLogs() {
       log_date: draft.log_date,
       // A word, not a reading, so it has its own column — the readings keep numbers only.
       vessel_operation: draft.vessel_operation || null,
+      // Only when this entry came off a photo — an edit of an old log must not
+      // wipe the link it already has.
+      ...(sheetRead?.readId ? { sheet_read_id: sheetRead.readId } : {}),
       running_hours: running,
       readings,
       notes: draft.notes?.trim() || '',
@@ -229,7 +286,7 @@ export default function EngineLogs() {
       await insert(base)
     }
     setSaving(false)
-    setDraft(null); setEditingId(null); setOutlierWarn(null)
+    setDraft(null); setEditingId(null); setOutlierWarn(null); setSheetRead(null)
     setMsg(isOnline() ? 'Engine log saved ✓' : 'Saved on this device — it will send when there is a signal')
     setTimeout(() => setMsg(''), 3500)
   }
@@ -275,15 +332,30 @@ export default function EngineLogs() {
             <button className="secondary" onClick={() => exportEngineSheet({ vessel, logs, limits })} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}
                     title="A blank sheet to fill in by hand: one figure per box, with the decimal point printed where these readings use one">Print blank sheet</button>
             {logs.length > 0 && <button className="secondary" onClick={() => makePdf(vessel, logs)} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>Export PDF</button>}
+            {canEdit && !draft && (
+              <>
+                <input ref={photoInput} type="file" accept="image/*,application/pdf" hidden
+                  onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readPhoto(f) }} />
+                <button className="secondary" disabled={!!sheetStage} onClick={() => photoInput.current?.click()}
+                  style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}
+                  title="Photograph the filled-in engine room sheet and the reader fills the form for you to check">
+                  {sheetStage ? 'Reading…' : 'Read a photo of the sheet'}
+                </button>
+              </>
+            )}
             {canEdit && !draft && <button onClick={openNew} style={{ padding: '0.4rem 0.9rem', fontSize: '0.85rem' }}>+ Record log</button>}
           </div>
         </div>
       </div>
 
+      {sheetStage && <div className="card" role="status"><span style={{ color: 'var(--brass)', fontWeight: 600 }}>{sheetStage}</span></div>}
+
       {/* Record / edit form */}
       {canEdit && draft && (
         <div className="card" style={{ borderColor: 'var(--navy)' }}>
           <h2 style={{ marginTop: 0 }}>{editingId ? 'Edit engine log' : 'Record engine log'}</h2>
+          <SheetReadCard read={sheetRead} onDiscard={cancel}
+            sameDayAs={sheetRead && logs.some((l) => l.log_date === draft.log_date && l.id !== editingId) ? draft.log_date : null} />
           <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
             <Field label="Date"><input type="date" value={draft.log_date} onChange={(e) => setDraft((p) => ({ ...p, log_date: e.target.value }))} /></Field>
             <Field label="Logged by"><input value={draft.logged_by} onChange={(e) => setDraft((p) => ({ ...p, logged_by: e.target.value }))} placeholder={appUser?.display_name || 'Name'} /></Field>
@@ -311,15 +383,23 @@ export default function EngineLogs() {
             <div key={grp.group} style={{ marginTop: '1.1rem' }}>
               <h3 style={{ marginBottom: '0.4rem' }}>{grp.group}</h3>
               <div style={{ display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-                {grp.params.map((p) => (
-                  <label key={p.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.78rem', fontWeight: 600 }}>
-                    <span>{p.label}{p.unit ? <span className="muted" style={{ fontWeight: 400 }}> ({p.unit})</span> : null}</span>
-                    <input type="number" step="any" inputMode="decimal"
-                      value={draft.readings[grp.group]?.[p.label] ?? ''}
-                      onChange={(e) => setReading(grp.group, p.label, e.target.value)}
-                      style={{ padding: '0.4rem 0.5rem', borderRadius: 6, border: '1px solid var(--border)', fontWeight: 400 }} />
-                  </label>
-                ))}
+                {grp.params.map((p) => {
+                  const k = readKey(grp.group, p.label)
+                  const flag = sheetRead?.flags?.[k]
+                  return (
+                    <label key={p.label} style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', fontSize: '0.78rem', fontWeight: 600 }}>
+                      <span>{p.label}{p.unit ? <span className="muted" style={{ fontWeight: 400 }}> ({p.unit})</span> : null}</span>
+                      <input type="number" step="any" inputMode="decimal"
+                        value={draft.readings[grp.group]?.[p.label] ?? ''}
+                        onChange={(e) => { setReading(grp.group, p.label, e.target.value); if (flag) clearFlag(k) }}
+                        title={flag ? `Check this against the sheet: ${flagText(flag)}` : undefined}
+                        style={{ padding: '0.4rem 0.5rem', borderRadius: 6, fontWeight: 400,
+                                 border: `1px solid ${flag ? 'var(--brass)' : 'var(--border)'}`,
+                                 boxShadow: flag ? '0 0 0 1px var(--brass)' : 'none' }} />
+                      {flag && <span style={{ fontSize: '0.72rem', fontWeight: 500, color: 'var(--brass)' }}>Check: {flagText(flag)}</span>}
+                    </label>
+                  )
+                })}
               </div>
             </div>
           ))}

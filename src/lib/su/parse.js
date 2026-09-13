@@ -131,7 +131,11 @@ export async function parseDocuments(files, docType, boatId, { onStage, existing
  * same start-and-poll, and a second copy of a poll loop is a second place for
  * the deadline or the error handling to drift.
  */
-export async function runReader(body, { tooLong = 'Reading took too long. The file is stored — try again, or enter the figures by hand.' } = {}) {
+/* `table` is where the job is polled: su_parse_jobs for everything except the
+ * engine room sheet, whose reads live in engine_sheet_reads because the officer
+ * who photographs it is denied su_parse_jobs. `onJob` hands back the job id,
+ * which for an engine sheet is the record the saved log points at. */
+export async function runReader(body, { tooLong = 'Reading took too long. The file is stored — try again, or enter the figures by hand.', table = 'su_parse_jobs', onJob } = {}) {
   const { data: sess } = await supabase.auth.getSession()
   const token = sess?.session?.access_token
   if (!token) throw new Error('Signed out — sign in again and retry.')
@@ -150,12 +154,13 @@ export async function runReader(body, { tooLong = 'Reading took too long. The fi
 
   const jobId = json.job_id
   if (!jobId) throw new Error('The reader did not return a job to wait on.')
+  onJob?.(jobId)
 
   const deadline = Date.now() + DEADLINE_MS
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, POLL_MS))
     const { data: job, error } = await supabase
-      .from('su_parse_jobs').select('status, result, error').eq('id', jobId).maybeSingle()
+      .from(table).select('status, result, error').eq('id', jobId).maybeSingle()
     if (error) throw new Error(error.message)
     /* THE JOB IS WRITTEN BEFORE ITS ID COMES BACK, so a poll that finds no row
        at all is not "still reading" — it is a job this login cannot see, and
