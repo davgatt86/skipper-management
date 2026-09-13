@@ -19,6 +19,8 @@
  * So the range is stated and the average only ever comments.
  */
 
+import { ENGINE_TEMPLATE } from './template.js'
+
 export const DRIFT_PCT = 0.6      // how far off its own mean before drift is worth a word
 export const MIN_HISTORY = 3      // below this there is no meaningful average
 
@@ -156,7 +158,7 @@ export function isCounter(values) {
  * check would never have caught it: every individual figure is perfectly
  * ordinary, and it is only wrong in relation to the one before.
  */
-export function counterReversals(logs, limits) {
+export function counterReversals(logs, limits, template = ENGINE_TEMPLATE) {
   const ordered = [...(logs || [])].sort(
     (a, b) => String(a.log_date || '').localeCompare(String(b.log_date || '')))
   const last = new Map()
@@ -167,16 +169,29 @@ export function counterReversals(logs, limits) {
       for (const param of Object.keys(l.readings[group] || {})) {
         const lim = limitFor(limits, group, param)
         if (!lim?.is_counter) continue
-        const v = Number(l.readings[group][param])
+        // Blank is not nought — the same trap as checkRange.
+        const raw = l.readings[group][param]
+        if (raw === null || raw === undefined || String(raw).trim() === '') continue
+        const v = Number(raw)
         if (!Number.isFinite(v)) continue
         const k = limitKey(group, param)
         const prev = last.get(k)
+        /* A METER THAT ROLLED OVER IS NOT A REVERSAL. David: an hour meter does
+         * go back to nought, "but it happens at 9999hrs". So the one lower
+         * reading that is not a mistake is the wrap past the top of the dial —
+         * and it needs no button, because it can be recognised exactly. */
+        const unit = template.find((g) => g.group === group)?.params.find((p) => p.label === param)?.unit
+        if (unit === 'h' && rolledOver(prev, v, l.log_date)) {
+          last.set(k, { value: v, on: l.log_date })
+          continue
+        }
         if (prev && v < prev.value) {
           out.push({
-            kind: 'reversal', group, param,
+            kind: 'reversal', group, param, id: l.id ?? null,
             value: v, previous: prev.value,
             on: l.log_date, previousOn: prev.on,
             back: Math.round((prev.value - v) * 100) / 100,
+            ...fitsSibling({ group, param, value: v, on: l.log_date, last, template }),
           })
         }
         // Only advance on a forward step, so one bad entry does not make every
@@ -186,6 +201,67 @@ export function counterReversals(logs, limits) {
     }
   }
   return out
+}
+
+/* WAS IT WRITTEN AGAINST THE WRONG ENGINE?
+ *
+ * David, Sep 2026, on a generator counter logged below its last reading: *"there
+ * must be an error by engineer. flag up if counter has been logged lower. it could
+ * be he's put as wrong engine and he would then need to edit it."*
+ *
+ * So a reversal is never a meter reset to be counted from — it is a mistake, and
+ * the most useful thing the warning can add is WHICH mistake. Each entry records
+ * one generator at a time and nothing on the form says which is which but the
+ * heading he typed it under, so a figure belonging to the other machine is the
+ * likeliest story.
+ *
+ * THE TEST IS PHYSICS, NOT A TOLERANCE: a running-hours meter cannot advance more
+ * than 24 hours a day. A reading fits another machine of the same kind when it is
+ * at or above that machine's last reading and no further ahead than the days since
+ * allow (plus a day, for readings taken at different times). Only hours carry
+ * that bound, so only hours get a suggestion. Exactly one machine must fit —
+ * naming one of two would be a guess dressed as an answer.
+ *
+ * `siblingsChecked` says whether there was anything to compare with, so the page
+ * can tell "fits no other generator either" from "there is no other generator".
+ */
+const kindOf = (name) => String(name).replace(/\s*\d+$/, '')
+const DAY_MS = 86400000
+
+/* DID THE DIAL GO ROUND? A meter showing 9,990 wraps to 0 after 9,999, so a
+ * later 40 is 50 hours on, not 9,950 back. The width of the dial is read off the
+ * previous reading — four figures wrap at 10,000, five at 100,000 — and the same
+ * 24-hours-a-day ceiling decides it: the hours gained across the wrap must fit
+ * the days that passed. So 8,864 to 7,396 in eleven days is 8,532 hours "gained"
+ * and stays a mistake, while 9,990 to 40 in three days is 50 and is a rollover.
+ * No dates, no rollover — it is never assumed. */
+export function rolledOver(prev, value, on) {
+  if (!prev || !Number.isFinite(value) || value < 0 || !(value < prev.value)) return false
+  const days = (Date.parse(on) - Date.parse(prev.on)) / DAY_MS
+  if (!Number.isFinite(days) || days < 0) return false
+  const wrap = 10 ** String(Math.floor(prev.value)).length
+  const gained = value + wrap - prev.value
+  return gained >= 0 && gained <= 24 * (days + 1)
+}
+
+function fitsSibling({ group, param, value, on, last, template }) {
+  const unit = template.find((g) => g.group === group)?.params.find((p) => p.label === param)?.unit
+  if (unit !== 'h') return { fitsGroup: null, siblingsChecked: 0 }
+  const fits = []
+  let checked = 0
+  for (const g of template) {
+    if (g.group === group || kindOf(g.group) !== kindOf(group)) continue
+    if (!g.params.some((p) => p.label === param)) continue
+    const sib = last.get(limitKey(g.group, param))
+    if (!sib) continue
+    const days = (Date.parse(on) - Date.parse(sib.on)) / DAY_MS
+    if (!Number.isFinite(days) || days < 0) continue
+    checked++
+    if (value >= sib.value && value <= sib.value + 24 * (days + 1)) {
+      fits.push({ group: g.group, previous: sib.value, previousOn: sib.on })
+    }
+  }
+  return { fitsGroup: fits.length === 1 ? fits[0] : null, siblingsChecked: checked }
 }
 
 /* SEED A SUGGESTION FROM THE HISTORY — and it is a suggestion, not an answer.

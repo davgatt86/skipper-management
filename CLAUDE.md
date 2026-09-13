@@ -4857,30 +4857,122 @@ sheet share one list — add a parameter there and the sheet grows a row — and
 rows print under **exactly the names the app stores**, since a box with no column
 behind it gives the reader somewhere to write and nowhere to put it.
 
-**THE OLD PAPER SHEET AND THE APP DISAGREE, and nothing was added to settle it**
-— which fields the boat actually keeps is David's call:
+**Each generator column is captioned with both names** — `DG1 · Generator 1`.
+**David confirmed Sep 2026: DG1 is Generator 1.**
 
-    on paper, not in the app    generator oil temp · gearbox oil added
-                                ice machines, fishroom, fish-handling compressors
-                                fuel / hydraulic / sludge remaining on board
-                                vessel operation (steaming / towing / alongside)
-    in the app, not on paper    generator exhaust temp · generator inst fuel
+**The sheet prints its layout code.** Bump it whenever a row moves, or a
+photograph of an old sheet will be read against a new grid.
 
-**Sludge remaining on board is the Oil Record Book's weekly reading** (code C, item
-11.3), which makes it the most useful of those to bring in.
+#### EVERY FIELD ON THE PAPER SHEET IS IN THE APP NOW — layout ER2
 
-**Each generator column is captioned with both names** — `DG1 · Generator 1` —
-because which physical set the app calls Generator 1 is exactly the question an
-hour meter reading 7,396 against 8,864 on record raised, and it is still open.
+David: *"add them all to app."* The paper sheet carried fields the app had no
+place for, written down every day and thrown away:
 
-**The sheet prints `Layout ER1`.** Bump it whenever a row moves, or a photograph
-of an old sheet will be read against a new grid.
+    Generator 1 & 2      Oil Temp
+    Gearbox 1            Oil added
+    Remaining on Board   Main Engine Oil L · Fuel Oil m³ · Hydraulic Oil L · Sludge L
+    Ice Machine 1 & 2,   Compressor HP · Compressor LP · Oil Level · Running Hours
+    Fishroom, Fish Handling
+    the entry itself     Steaming / Towing / Alongside
 
-**Checked, not eyeballed alone.** `test-engine-sheet.mjs` — 20 checks against
-Audacious's real 50 limits and 23 logs in `scripts/fixtures/engine-log.json`, in
-`npm test`. The preview builds the real PDF and reads it back with pdf.js: one
-page, all 46 rows named as the app stores them, every printed point matched to
-the row it sits on and exactly the rows the rule chose, nothing off the paper.
+**The readings needed no migration** — they are rows in `template.js`, stored in
+the `readings` jsonb, and the form, the cards, the chart picker and the PDF all
+walk that list, so they appeared everywhere at once. **Sludge remaining on board
+is the Oil Record Book's weekly reading** (code C 11.3); nothing links the two
+yet.
+
+**VESSEL OPERATION IS A COLUMN, NOT A READING** —
+`engine_logs.vessel_operation`, checked against the three words the sheet
+prints (`supabase/engine_log_vessel_operation.sql`). It is a word, and the save
+keeps numbers only, so as a reading "towing" would have been dropped without a
+sound. One list, `OPERATIONS` in `printSheet.js`, is what the sheet ticks and
+the page's toggle offers. **The toggle is a `div`, not a `<label>`**: a label
+wrapping buttons hands a click on its own text to the first button, so tapping
+the word "Operation" would have picked Steaming.
+
+**A row the template gives no sheet position still prints**, in the right-hand
+column — a field in the app and not on paper is the failure this sheet exists to
+prevent. **`Oil Level` has no unit**, because the sheet gives none; it is worth
+asking what the engineer writes there.
+
+**ER2 still fits one A4 page** with 17 more rows: rows go back to 19.5pt, the
+generators and remaining-on-board join the gearbox on the right, and the four
+refrigeration machines share one full-width band with the notes beside it. A new
+row with no range and no history takes the template's own `boxes` hint before a
+unit default, and is marked `hint` so nobody mistakes it for a measurement.
+Refrigeration pressures get two figures and a point, which holds 15 and 2.3
+alike; fuel remaining is m³ to a tenth.
+
+**The preview's decimal-point matcher had to change with the layout.** It
+assigned each printed point to the row on its half of the page, which a
+full-width band breaks; it now takes the nearest row label to the point's LEFT
+on the same line. **A check shaped like the old layout would have passed a new
+layout it could not see.**
+
+`test-engine-sheet.mjs` 20 → **33**, including that a template GUESS is never
+borrowed by a sibling, that a real reading beats the guess, and that a group
+added with no position still lands on the page. The preview: one page, all 56
+rows, 17 points exactly where the rule puts them.
+
+#### A COUNTER LOGGED LOWER IS THE ENGINEER'S MISTAKE — NEVER A RESET
+
+David's paper sheet had DG1 at **7,396** against **8,864** on record. The first
+design was a *"meter replaced — count from here"* column, because the reversal
+check never lowers its baseline and a genuinely new meter would warn for years.
+David: *"there must be an error by engineer. flag up if counter has been logged
+lower. it could be he's put as wrong engine and he would then need to edit it."*
+So `counter_resets` was added and dropped in the same sitting, and a reversal
+stays something to correct.
+
+**THE WARNING NOW SAYS WHICH ENGINE THE FIGURE FITS**, because each entry records
+one generator at a time and the only thing saying which is the heading it was
+typed under. `counterReversals` carries `fitsGroup` and `siblingsChecked`.
+
+**THE TEST IS PHYSICS, NOT A TOLERANCE: an hour meter cannot gain more than 24
+hours a day.** A figure fits another machine of the same kind when it is at or
+above that machine's last reading and no further ahead than the days since allow,
+plus a day for readings taken at different times. Only hours carry that bound, so
+only hours get a suggestion — and **exactly one machine must fit**, since naming
+one of two is a guess dressed as an answer. `siblingsChecked` is what lets the
+page say *"it does not follow the other generator either"* instead of saying
+nothing when there is no other generator.
+
+**THE ONE LOWER READING THAT IS NOT A MISTAKE IS THE DIAL GOING ROUND.** David:
+*"a hours meter can be changed, but it happens at 9999hrs. so leave that
+function available. but 8000 odd hrs to 7000hrs is either a typo or wrong
+generator."* So a rollover is recognised automatically rather than by a button —
+`rolledOver()`, the same 24-hours-a-day ceiling applied across the wrap. The
+dial's width is read off the previous reading (four figures wrap at 10,000, five
+at 100,000); 9,990 to 40 three days later is 50 hours and is let through, and
+the count carries on from 40. **8,864 to 7,396 in eleven days would be 8,532
+hours** and stays flagged. No dates, no rollover; hour meters only.
+**A button would have been worse than no rule**: it is the "meter replaced"
+override again, available on the 8,000-to-7,000 case where it must not be used.
+
+**The 7,396 fits neither.** Generator 2 was 9,087 on 09-08, so it is below both
+records; that is a misread or mis-keyed figure, not the wrong heading, and the
+warning says to check the figure itself.
+
+**THE FLAG STAYS ON THE CARD UNTIL THE ENTRY IS EDITED.** The save warning is seen
+once by one man, and *save anyway* puts it out of sight for good while the
+mistake sits in the record making every later reading on that meter look wrong.
+Measured before shipping: **the real record has no reversal on it today**, so no
+card lights up on the first load.
+
+**A blank counter box read as a reversal to nought.** `counterReversals` did
+`Number(raw)` with no blank guard, so an emptied Running Hours box on an edit
+would have been reported as the meter going back to 0. **Seventh time**
+`Number('') === 0` in this repo.
+
+**`engine_limits` HOLDS TWO ROWS FOR ONE PARAMETER**, found checking which
+counters exist: Generator 1 and Main Engine 1 running hours each carry one
+confirmed and disabled row and one unconfirmed and enabled one. `limitFor` takes
+the first, so which one answers is row order. Harmless for the reversal check,
+since both are counters; not harmless for anything reading `enabled` or
+`confirmed`. Not touched here.
+
+`test-limits.mjs` gained 12 checks on the boat's real generator figures,
+including the 24-hour ceiling both ways and three generators that both fit.
 
 **Not built yet: the reader.** A photograph of this sheet goes through the same
 reader as the invoices and certificate bundles, shows what it read for checking,

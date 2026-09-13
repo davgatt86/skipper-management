@@ -15,7 +15,7 @@ import { readCache, cacheTable, isOnline } from '../lib/offline/queue'
 import SyncStatus from '../components/SyncStatus'
 import { splitCharts } from '../lib/engineCharts'
 import { ENGINE_TEMPLATE } from '../lib/engine/template'
-import { exportEngineSheet } from '../lib/engine/printSheet'
+import { exportEngineSheet, OPERATIONS } from '../lib/engine/printSheet'
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts'
 
 
@@ -35,8 +35,11 @@ const CHART_COLORS = ['#1d4ed8', '#dc2626', '#059669', '#d97706', '#7c3aed', '#0
 const today = () => new Date().toISOString().slice(0, 10)
 const fmt = (d) => (d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-GB') : '')
 const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v))
+// Stored lower case, shown as the sheet prints it — one list, so the paper and
+// the page cannot disagree about the words.
+const opLabel = (v) => OPERATIONS.find((o) => o.toLowerCase() === v) || v
 
-const blankEntry = () => ({ log_date: today(), readings: {}, notes: '', logged_by: '', edit_reason: '' })
+const blankEntry = () => ({ log_date: today(), vessel_operation: '', readings: {}, notes: '', logged_by: '', edit_reason: '' })
 
 // Sent, held on the device, or wrong — three states, three colours.
 const msgTone = (m) =>
@@ -115,6 +118,7 @@ export default function EngineLogs() {
     setEditingId(l.id)
     setDraft({
       log_date: l.log_date || today(),
+      vessel_operation: l.vessel_operation || '',
       readings: l.readings || {},
       notes: l.notes || '',
       logged_by: l.logged_by || '',
@@ -126,6 +130,21 @@ export default function EngineLogs() {
   // Clearing the acknowledgement matters: without it, one "save anyway" would
   // silently wave through every later entry in the same session.
   async function cancel() { setDraft(null); setEditingId(null); setOutlierWarn(null) }
+
+  /* A COUNTER LOGGED LOWER STAYS FLAGGED ON ITS OWN CARD until it is edited.
+   * The save warning is seen once, by one man, and "save anyway" puts it out of
+   * sight for good — while the mistake sits in the record making every later
+   * figure on that meter look wrong. So the card carries it, with the engine the
+   * figure fits where exactly one does, and the Edit button beside it. */
+  const reversalsById = useMemo(() => {
+    const m = new Map()
+    for (const r of counterReversals(logs, limits)) {
+      if (r.id == null) continue
+      if (!m.has(r.id)) m.set(r.id, [])
+      m.get(r.id).push(r)
+    }
+    return m
+  }, [logs, limits])
 
   const summary = useMemo(() => {
     const latest = logs.find((l) => l.running_hours != null)
@@ -195,6 +214,8 @@ export default function EngineLogs() {
     const base = {
       fleet_id: appUser?.fleet_id,
       log_date: draft.log_date,
+      // A word, not a reading, so it has its own column — the readings keep numbers only.
+      vessel_operation: draft.vessel_operation || null,
       running_hours: running,
       readings,
       notes: draft.notes?.trim() || '',
@@ -266,6 +287,23 @@ export default function EngineLogs() {
           <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
             <Field label="Date"><input type="date" value={draft.log_date} onChange={(e) => setDraft((p) => ({ ...p, log_date: e.target.value }))} /></Field>
             <Field label="Logged by"><input value={draft.logged_by} onChange={(e) => setDraft((p) => ({ ...p, logged_by: e.target.value }))} placeholder={appUser?.display_name || 'Name'} /></Field>
+            {/* A div, not a <label>: a label wrapping buttons hands a click on its
+                text to the first button, so tapping "Operation" would pick Steaming. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', fontSize: '0.8rem', fontWeight: 600 }}>
+              Operation
+              <span className="seg" role="group" aria-label="Vessel operation" style={{ alignSelf: 'flex-start' }}>
+                {OPERATIONS.map((o) => {
+                  const val = o.toLowerCase()
+                  const on = draft.vessel_operation === val
+                  return (
+                    <button type="button" key={val} className={on ? 'on' : ''} aria-pressed={on}
+                      onClick={() => setDraft((p) => ({ ...p, vessel_operation: p.vessel_operation === val ? '' : val }))}>
+                      {o}
+                    </button>
+                  )
+                })}
+              </span>
+            </div>
             {editingId && <Field label="Edit reason"><input value={draft.edit_reason} onChange={(e) => setDraft((p) => ({ ...p, edit_reason: e.target.value }))} placeholder="e.g. Corrected" /></Field>}
           </div>
 
@@ -313,8 +351,13 @@ export default function EngineLogs() {
                     )}
                     {o.kind === 'reversal' && (
                       <span className="muted">
-                        {' '}— lower than {o.previous} on {fmt(o.previousOn)}. This only ever
-                        climbs, so one of the two is wrong.
+                        {' '}— lower than {o.previous} on {fmt(o.previousOn)}. A counter only ever
+                        climbs, so this figure is wrong or the one before it is.
+                        {o.fitsGroup
+                          ? ` It does follow ${o.fitsGroup.group} (${o.fitsGroup.previous} on ${fmt(o.fitsGroup.previousOn)}) — was it written under the wrong engine? If so, move it to ${o.fitsGroup.group} above.`
+                          : o.siblingsChecked
+                            ? ' It does not follow the other machine’s record either, so check the figure itself.'
+                            : ''}
                       </span>
                     )}
                     {(o.kind === 'drift' || !o.kind) && (
@@ -327,9 +370,9 @@ export default function EngineLogs() {
                 ))}
               </ul>
               <p className="muted" style={{ fontSize: '0.85rem' }}>
-                This is usually a decimal in the wrong place — but it can be a real engine problem,
-                and only you can tell which. Check the figures, then either fix them above or save
-                them as they stand.
+                {outlierWarn.every((o) => o.kind === 'reversal')
+                  ? 'A counter going backwards is a mistake, not the engine. Correct the figure above, or move it to the right engine, then save.'
+                  : 'This is usually a decimal in the wrong place — but it can be a real engine problem, and only you can tell which. Check the figures, then either fix them above or save them as they stand.'}
               </p>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button className="secondary" onClick={() => setOutlierWarn(null)}>Go back and check</button>
@@ -368,6 +411,7 @@ export default function EngineLogs() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '0.5rem' }}>
               <div>
                 <strong style={{ fontSize: '1.05rem' }}>{fmt(l.log_date)}</strong>
+                {l.vessel_operation && <span className="muted" style={{ marginLeft: '0.6rem', fontWeight: 600 }}>{opLabel(l.vessel_operation)}</span>}
                 {l.running_hours != null && <span className="muted" style={{ marginLeft: '0.6rem' }}>{Number(l.running_hours).toLocaleString('en-GB')} h</span>}
                 <div className="muted" style={{ fontSize: '0.82rem', marginTop: '0.15rem' }}>
                   Logged by: {l.logged_by || '—'}
@@ -381,6 +425,18 @@ export default function EngineLogs() {
                 </div>
               )}
             </div>
+
+            {(reversalsById.get(l.id) || []).map((r) => (
+              <div key={`${r.group}|${r.param}`} role="alert"
+                style={{ marginTop: '0.6rem', padding: '0.45rem 0.6rem', borderLeft: '3px solid var(--rust)', background: 'var(--surface-2)', fontSize: '0.85rem' }}>
+                <strong>{r.group} · {r.param} {r.value.toLocaleString('en-GB')}</strong> is lower than{' '}
+                {r.previous.toLocaleString('en-GB')} on {fmt(r.previousOn)}, and a counter only climbs.
+                {r.fitsGroup
+                  ? ` It follows ${r.fitsGroup.group} (${r.fitsGroup.previous.toLocaleString('en-GB')} on ${fmt(r.fitsGroup.previousOn)}), so it may be under the wrong engine.`
+                  : r.siblingsChecked ? ' It does not follow the other machine’s record either.' : ''}
+                {canEdit ? ' Edit this entry to correct it.' : ''}
+              </div>
+            ))}
 
             <div style={{ marginTop: '0.6rem', display: 'grid', gap: '0.8rem', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
               {ENGINE_TEMPLATE.filter((grp) => l.readings?.[grp.group] && Object.keys(l.readings[grp.group]).length).map((grp) => (
@@ -584,7 +640,7 @@ function makePdf(vessel, logs) {
   logs.forEach((l) => {
     if (y > doc.internal.pageSize.getHeight() - 90) { doc.addPage(); y = 46 }
     doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
-    doc.text(`${fmt(l.log_date)}${l.running_hours != null ? `   ·   ${Number(l.running_hours).toLocaleString('en-GB')} h` : ''}`, M, y)
+    doc.text(`${fmt(l.log_date)}${l.vessel_operation ? `   ·   ${opLabel(l.vessel_operation)}` : ''}${l.running_hours != null ? `   ·   ${Number(l.running_hours).toLocaleString('en-GB')} h` : ''}`, M, y)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(120)
     doc.text(`Logged by: ${l.logged_by || '—'}`, W - M, y, { align: 'right' }); doc.setTextColor(0)
     y += 8

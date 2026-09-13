@@ -257,6 +257,89 @@ eq('and the history floor', MIN_HISTORY, 3)
   eq('out-of-order rows are sorted first',
     counterReversals([real[2], real[0], real[1]], counter)[0].on, '2026-07-30')
   eq('nothing at all', counterReversals(null, counter).length, 0)
+  eq('a blank counter box is not a reading of nought, so not a reversal', counterReversals([
+    { log_date: '2026-01-01', readings: { ME: { Hours: 100 } } },
+    { log_date: '2026-01-02', readings: { ME: { Hours: '' } } },
+  ], counter).length, 0)
+}
+
+/* WRITTEN AGAINST THE WRONG ENGINE. David, Sep 2026: a counter logged lower is
+ * the engineer's mistake, and the likeliest one is the wrong generator heading.
+ * The generator figures are the boat's real last readings: Generator 2 9,087 on
+ * 09-08, Generator 1 8,864 on 26-08. */
+{
+  const GEN = (g) => LIM({ group_key: g, param_key: 'Running Hours', is_counter: true, enabled: false, min_val: null, max_val: null })
+  const gens = [GEN('Generator 1'), GEN('Generator 2'), GEN('Main Engine 1')]
+  const hist = [
+    { id: 'a', log_date: '2026-08-09', readings: { 'Generator 2': { 'Running Hours': 9087 } } },
+    { id: 'b', log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 8864 } } },
+  ]
+  const add = (id, log_date, readings) => counterReversals([...hist, { id, log_date, readings }], gens)
+
+  const swapped = add('c', '2026-09-06', { 'Generator 2': { 'Running Hours': 8900 } })
+  eq('a Generator 1 figure typed under Generator 2 is caught as lower', swapped.length, 1)
+  eq('and the warning names the entry it is on, so the card can carry it', swapped[0].id, 'c')
+  eq('it fits Generator 1, whose last reading it follows', swapped[0].fitsGroup?.group, 'Generator 1')
+  eq('against that reading', swapped[0].fitsGroup?.previous, 8864)
+
+  const nowhere = add('d', '2026-09-06', { 'Generator 1': { 'Running Hours': 7396 } })
+  eq('7,396 under Generator 1 is lower than 8,864', nowhere[0]?.previous, 8864)
+  eq('and fits Generator 2 no better, so no engine is named', nowhere[0]?.fitsGroup, null)
+  eq('but it says the other generator WAS checked', nowhere[0]?.siblingsChecked, 1)
+
+  /* 24 HOURS A DAY IS THE CEILING. Generator 2 was 9,087 on 09-08, so by 06-09
+   * it can read at most 9,087 + 24 × 29 = 9,783. */
+  const ceiling = [
+    { id: 'e', log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 10000 } } },
+    { id: 'f', log_date: '2026-09-06', readings: { 'Generator 1': { 'Running Hours': 9950 } } },
+  ]
+  const tooFar = counterReversals([hist[0], ...ceiling], gens)
+  eq('a figure further ahead than 24 hours a day allows fits no machine', tooFar[0]?.fitsGroup, null)
+  const inReach = counterReversals([hist[0], ceiling[0], { ...ceiling[1], readings: { 'Generator 1': { 'Running Hours': 9780 } } }], gens)
+  eq('one inside that ceiling does', inReach[0]?.fitsGroup?.group, 'Generator 2')
+
+  const main = counterReversals([
+    { log_date: '2026-08-26', readings: { 'Main Engine 1': { 'Running Hours': 67746 } } },
+    { log_date: '2026-09-06', readings: { 'Main Engine 1': { 'Running Hours': 67700 } } },
+  ], gens)
+  eq('the main engine has no twin, so nothing is compared', [main[0]?.fitsGroup, main[0]?.siblingsChecked], [null, 0])
+
+  /* THE ONE LOWER READING THAT IS NOT A MISTAKE. David: the meter goes back to
+   * nought, but at 9,999 hours. */
+  const wrapped = counterReversals([
+    { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 9990 } } },
+    { log_date: '2026-08-29', readings: { 'Generator 1': { 'Running Hours': 40 } } },
+    { log_date: '2026-08-30', readings: { 'Generator 1': { 'Running Hours': 64 } } },
+  ], gens)
+  eq('9,990 then 40 three days later is the meter rolling over, not a reversal', wrapped.length, 0)
+  eq('and the count carries on from 40, so 64 the next day is fine too', wrapped.length, 0)
+  eq('the real 8,864 to 7,396 is still a mistake — 8,532 hours in eleven days is impossible',
+    add('g', '2026-09-06', { 'Generator 1': { 'Running Hours': 7396 } }).length, 1)
+  eq('9,000 to 100 the next day is not a rollover either — 1,100 hours in a day', counterReversals([
+    { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 9000 } } },
+    { log_date: '2026-08-27', readings: { 'Generator 1': { 'Running Hours': 100 } } },
+  ], gens).length, 1)
+  eq('a five-figure meter wraps at 100,000', counterReversals([
+    { log_date: '2026-08-26', readings: { 'Main Engine 1': { 'Running Hours': 99990 } } },
+    { log_date: '2026-08-27', readings: { 'Main Engine 1': { 'Running Hours': 10 } } },
+  ], gens).length, 0)
+  eq('with no dates, a rollover is never assumed', counterReversals([
+    { readings: { 'Generator 1': { 'Running Hours': 9990 } } },
+    { readings: { 'Generator 1': { 'Running Hours': 40 } } },
+  ], gens).length, 1)
+  eq('only an hour meter rolls over — a counter with no hours unit does not', counterReversals([
+    { log_date: '2026-08-26', readings: { ME: { Hours: 9990 } } },
+    { log_date: '2026-08-27', readings: { ME: { Hours: 5 } } },
+  ], [LIM({ group_key: 'ME', param_key: 'Hours', is_counter: true, enabled: false, min_val: null, max_val: null })]).length, 1)
+
+  /* Needs a THIRD generator to be possible at all, so it brings its own
+   * template — with two, there is only ever one other machine to fit. */
+  const three = ['Generator 1', 'Generator 2', 'Generator 3'].map((group) => ({ group, params: [{ label: 'Running Hours', unit: 'h' }] }))
+  const both = counterReversals([
+    { log_date: '2026-08-25', readings: { 'Generator 1': { 'Running Hours': 9000 }, 'Generator 2': { 'Running Hours': 8800 }, 'Generator 3': { 'Running Hours': 8810 } } },
+    { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 8830 } } },
+  ], [...gens, GEN('Generator 3')], three)[0]
+  eq('two machines that both fit name neither — that would be a guess', [both?.fitsGroup, both?.siblingsChecked], [null, 2])
 }
 
 

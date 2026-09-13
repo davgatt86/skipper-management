@@ -28,7 +28,9 @@
  *
  * THE ROWS ARE THE APP'S, not the old paper sheet's, and named exactly as the app
  * stores them — a sheet that prints a field the app has no column for gives the
- * reader somewhere to write and nowhere to put it.
+ * reader somewhere to write and nowhere to put it. Where the group sits on the
+ * page comes from the template too (`sheet`), so a new group lands somewhere
+ * rather than nowhere.
  *
  * Built and saved separately, like buildStoresDoc: doc.save() does nothing at
  * all under node, so the build half is what the preview renders and reads back.
@@ -37,14 +39,17 @@ import { jsPDF } from 'jspdf'
 import { ENGINE_TEMPLATE } from './template.js'
 
 /* Printed on the sheet so a reader can tell which layout it is looking at. Bump
- * it whenever a row moves, or an old photograph will be read against a new grid. */
-export const SHEET_LAYOUT = 'ER1'
+ * it whenever a row moves, or an old photograph will be read against a new grid.
+ * ER2 (Sep 2026): the paper sheet's own fields joined, and rows moved to make
+ * room for them. */
+export const SHEET_LAYOUT = 'ER2'
 
-// For a reading with no range and no history at all — a new boat, or a new row.
+// For a reading with no range, no history and no hint — a new boat, or a new row.
 // A pressure gets two figures AND a point, which holds 28 and 2.2 alike.
 const UNIT_DEFAULT = {
   bar: { int: 2, dec: 1 }, '°C': { int: 3, dec: 0 }, rpm: { int: 4, dec: 0 },
-  kW: { int: 3, dec: 0 }, L: { int: 3, dec: 0 }, '%': { int: 3, dec: 0 }, h: { int: 6, dec: 0 },
+  kW: { int: 3, dec: 0 }, L: { int: 3, dec: 0 }, 'm³': { int: 3, dec: 1 },
+  '%': { int: 3, dec: 0 }, h: { int: 6, dec: 0 },
 }
 const NO_UNIT_DEFAULT = { int: 2, dec: 0 }
 
@@ -52,10 +57,13 @@ const digitsOf = (n) => String(Math.floor(Math.abs(n))).length
 const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
 
 /* How many boxes a reading gets, whether a point is printed, and what that was
- * decided from — 'range', 'history', 'sibling' (the same row on the other
- * generator) or 'default'. The basis is returned so a test can say WHY. */
+ * decided from — 'range', 'history', 'sibling' (the same row on another machine
+ * of the same kind), 'hint' (the template's guess) or 'default'. Real data
+ * always beats a guess, so that is also the order they are tried in. */
 export function boxShape(group, param, { logs = [], limits = [], template = ENGINE_TEMPLATE, siblings = true } = {}) {
-  const unit = template.find((g) => g.group === group)?.params.find((p) => p.label === param)?.unit ?? ''
+  const def = template.find((g) => g.group === group)?.params.find((p) => p.label === param)
+  const unit = def?.unit ?? ''
+  const hint = def?.boxes ? { int: def.boxes.int, dec: def.boxes.dec || 0, basis: 'hint' } : null
   const lim = limits.find((l) => l.group_key === group && l.param_key === param)
   // A blank box is not a reading of nought — Number('') is 0, and this codebase
   // has been bitten by that six times.
@@ -66,8 +74,8 @@ export function boxShape(group, param, { logs = [], limits = [], template = ENGI
     .filter(Number.isFinite)
 
   if (lim?.is_counter || unit === 'h') {
-    if (!hist.length) return { ...UNIT_DEFAULT.h, basis: 'default' }
-    return { int: digitsOf(Math.max(...hist)) + 1, dec: 0, basis: 'history' }
+    if (hist.length) return { int: digitsOf(Math.max(...hist)) + 1, dec: 0, basis: 'history' }
+    return hint || { ...UNIT_DEFAULT.h, basis: 'default' }
   }
 
   const rangeMax = lim && lim.max_val !== null && lim.max_val !== undefined && lim.max_val !== ''
@@ -81,15 +89,16 @@ export function boxShape(group, param, { logs = [], limits = [], template = ENGI
        * 38 — was given one box and a printed point, a box nobody could write 38
        * in. Caught by test-engine-sheet.mjs, not by the preview, which checks
        * the drawing against the rule and so agreed with a wrong rule. A
-       * generator's gauge is only like another generator's. */
+       * generator's gauge is only like another generator's. And only REAL data
+       * is borrowed: a sibling's own guess is no better than this row's. */
       const kind = (name) => name.replace(/\s*\d+$/, '')
       for (const g of template) {
         if (g.group === group || kind(g.group) !== kind(group) || !g.params.some((p) => p.label === param)) continue
         const s = boxShape(g.group, param, { logs, limits, template, siblings: false })
-        if (s.basis !== 'default') return { ...s, basis: 'sibling', from: g.group }
+        if (s.basis === 'range' || s.basis === 'history') return { ...s, basis: 'sibling', from: g.group }
       }
     }
-    return { ...(UNIT_DEFAULT[unit] || NO_UNIT_DEFAULT), basis: 'default' }
+    return hint || { ...(UNIT_DEFAULT[unit] || NO_UNIT_DEFAULT), basis: 'default' }
   }
 
   const top = rangeMax !== null ? rangeMax : Math.max(...hist)
@@ -109,24 +118,39 @@ export function sheetShapes({ logs = [], limits = [], template = ENGINE_TEMPLATE
   return out
 }
 
+/* The page laid out as BLOCKS: a single group, or a run of groups that share
+ * their rows side by side. A group with no `sheet` hint goes in the right-hand
+ * column rather than being left off — a row that exists in the app and not on
+ * the paper is the failure this sheet exists to prevent. */
+export function sheetBlocks(template = ENGINE_TEMPLATE) {
+  const blocks = []
+  for (const g of template) {
+    const at = g.sheet || { column: 'right', order: 99 }
+    const last = blocks[blocks.length - 1]
+    if (at.pair && last && last.pair === at.pair) { last.groups.push(g); continue }
+    blocks.push({ column: at.column, order: at.order ?? 99, pair: at.pair || null, groups: [g], title: at.pair || g.group })
+  }
+  const rank = { left: 0, right: 1, band: 2 }
+  return blocks.sort((a, b) => (rank[a.column] ?? 1) - (rank[b.column] ?? 1) || a.order - b.order)
+}
+
 // ------------------------------------------------------------------ drawing
 const INK = [10, 29, 38]
 const RULE = [205, 212, 216]
 const MUTE = [93, 112, 121]
 
-/* Sized to fill A4, not merely to fit it. The first cut left the bottom quarter
-   of the page empty below the signature — room that belongs in the boxes, since
-   a bigger box is easier to write in with a cold hand and easier for the reader
-   to split into figures. The widest generator row still leaves room for "Jacket
-   Water Temp", which is what sets the box width. */
-const BW = 13.5   // box width
-const BH = 17     // box height
+/* ER1 had room to spare and grew its boxes to fill the page. ER2 carries the
+   paper sheet's own fields as well — 17 more rows — so the rows are back to
+   19.5pt, and it still fits one A4 page, which is one photograph a day. */
+const BW = 13     // box width
+const BH = 15     // box height
 const BG = 1.6    // gap between boxes
 const DOT = 7.5   // the space the printed point sits in
-const RH = 23.5   // row height
+const RH = 19.5   // row height
 const HEAD = 16   // section bar
 const M = 28      // page margin
 const GAP = 14    // between the two columns
+const PAIR_GAP = 12
 
 const groupWidth = ({ int, dec }) =>
   int * BW + (int - 1) * BG + (dec ? DOT + dec * BW + (dec - 1) * BG : 0)
@@ -171,7 +195,7 @@ function rowRule(doc, x, y, w) {
   doc.setDrawColor(...RULE); doc.setLineWidth(0.4); doc.line(x, y + RH, x + w, y + RH)
 }
 
-function paramRows(doc, x, y, w, group, shapes) {
+function singleRows(doc, x, y, w, group, shapes) {
   for (const p of group.params) {
     const shape = shapes.get(`${group.group}||${p.label}`)
     const right = x + w - 4
@@ -184,33 +208,36 @@ function paramRows(doc, x, y, w, group, shapes) {
   return y
 }
 
-/* The generators side by side, as the paper sheet has always had them. The
- * caption names BOTH what the engine room calls it and what the app calls it,
- * because which physical set is "Generator 1" is exactly the question an hour
- * meter reading 7,396 against 8,864 on record raised. */
-function generatorRows(doc, x, y, w, gens, shapes) {
-  const labels = [...new Set(gens.flatMap((g) => g.params.map((p) => p.label)))]
-  const unitOf = (label) => gens.flatMap((g) => g.params).find((p) => p.label === label)?.unit || ''
-  const GW = Math.max(...labels.flatMap((label) =>
-    gens.map((g) => { const s = shapes.get(`${g.group}||${label}`); return s ? groupWidth(s) : 0 })))
-  const right2 = x + w - 4
-  const right1 = right2 - GW - 12
-  const cols = [right1, right2]
+const pairWidth = (groups, shapes) => Math.max(...groups.flatMap((g) =>
+  g.params.map((p) => { const s = shapes.get(`${g.group}||${p.label}`); return s ? groupWidth(s) : 0 })))
+
+/* Groups that share rows, side by side — the generators, as the paper sheet has
+ * always had them, and the four refrigeration machines. The generator caption
+ * names BOTH what the engine room calls it and what the app calls it, which David
+ * confirmed in Sep 2026: DG1 is Generator 1. */
+function pairedRows(doc, x, y, w, block, shapes) {
+  const { groups } = block
+  const labels = [...new Set(groups.flatMap((g) => g.params.map((p) => p.label)))]
+  const unitOf = (label) => groups.flatMap((g) => g.params).find((p) => p.label === label)?.unit || ''
+  const GW = pairWidth(groups, shapes)
+  const rights = []
+  for (let i = groups.length - 1, r = x + w - 4; i >= 0; i--, r -= GW + PAIR_GAP) rights[i] = r
+  const caption = (g, i) => (block.pair === 'Generators' ? `DG${i + 1} · ${g.group}` : g.group)
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...INK)
-  gens.forEach((g, i) => doc.text(`DG${i + 1} · ${g.group}`, cols[i] - GW / 2, y + 10, { align: 'center' }))
+  groups.forEach((g, i) => doc.text(caption(g, i), rights[i] - GW / 2, y + 10, { align: 'center' }))
   y += 14
 
   for (const label of labels) {
     rowLabel(doc, x, y, label)
-    rowUnit(doc, right1 - GW - 5, y, unitOf(label))
-    gens.forEach((g, i) => {
+    rowUnit(doc, rights[0] - GW - 5, y, unitOf(label))
+    groups.forEach((g, i) => {
       if (!g.params.some((p) => p.label === label)) {
         doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...MUTE)
-        doc.text('—', cols[i] - GW / 2, y + RH / 2 + 3, { align: 'center' })
+        doc.text('—', rights[i] - GW / 2, y + RH / 2 + 3, { align: 'center' })
         return
       }
-      drawBoxes(doc, cols[i], y + (RH - BH) / 2, shapes.get(`${g.group}||${label}`))
+      drawBoxes(doc, rights[i], y + (RH - BH) / 2, shapes.get(`${g.group}||${label}`))
     })
     rowRule(doc, x, y, w)
     y += RH
@@ -218,10 +245,21 @@ function generatorRows(doc, x, y, w, gens, shapes) {
   return y
 }
 
+const PAIR_LABEL_W = 100
+const pairBlockWidth = (block, shapes) =>
+  PAIR_LABEL_W + block.groups.length * pairWidth(block.groups, shapes) + (block.groups.length - 1) * PAIR_GAP + 4
+
+function drawBlock(doc, x, y, w, block, shapes) {
+  y = sectionHead(doc, x, y, w, block.title)
+  return block.pair ? pairedRows(doc, x, y, w, block, shapes) : singleRows(doc, x, y, w, block.groups[0], shapes)
+}
+
 const fmtDay = (d) => {
   const t = d instanceof Date ? d : new Date(d)
   return Number.isNaN(t.getTime()) ? '' : t.toLocaleDateString('en-GB')
 }
+
+export const OPERATIONS = ['Steaming', 'Towing', 'Alongside']
 
 export function buildEngineSheet({ vessel = {}, logs = [], limits = [], template = ENGINE_TEMPLATE, printedOn = new Date() } = {}) {
   const shapes = sheetShapes({ logs, limits, template })
@@ -243,50 +281,72 @@ export function buildEngineSheet({ vessel = {}, logs = [], limits = [], template
   // The date in boxes too: a date read wrongly files every figure under the
   // wrong day, and nothing on the rest of the sheet would say so.
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...INK)
-  doc.text('DATE', M, 64)
+  doc.text('DATE', M, 62)
   let dx = M + 32
   const two = { int: 2, dec: 0 }
   ;['DD', 'MM', 'YY'].forEach((cap, i) => {
     const gw = groupWidth(two)
-    drawBoxes(doc, dx + gw, 53, two)
+    drawBoxes(doc, dx + gw, 51, two)
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...MUTE)
-    doc.text(cap, dx + gw / 2, 76, { align: 'center' })
+    doc.text(cap, dx + gw / 2, 73, { align: 'center' })
     dx += gw
     if (i < 2) {
       doc.setFont('helvetica', 'normal'); doc.setFontSize(12); doc.setTextColor(...INK)
-      doc.text('/', dx + 5, 65, { align: 'center' })
+      doc.text('/', dx + 5, 63, { align: 'center' })
       dx += 10
     }
   })
 
+  // Steaming / towing / alongside: ONE tick, laid out from the right edge in.
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
+  const TICK = 11
+  const widths = OPERATIONS.map((o) => TICK + 4 + doc.getTextWidth(o))
+  doc.setFont('helvetica', 'bold')
+  const opLabelW = doc.getTextWidth('OPERATION')
+  let ox = W - M - (opLabelW + 8 + widths.reduce((a, b) => a + b, 0) + 12 * (OPERATIONS.length - 1))
+  doc.setTextColor(...INK)
+  doc.text('OPERATION', ox, 62)
+  ox += opLabelW + 8
+  OPERATIONS.forEach((o, i) => {
+    doc.setDrawColor(...INK); doc.setLineWidth(0.6)
+    doc.rect(ox, 53, TICK, TICK)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...INK)
+    doc.text(o, ox + TICK + 4, 62)
+    ox += widths[i] + 12
+  })
+
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...MUTE)
-  doc.text('One figure in each box. Where a decimal point is printed, write the figures either side of it.', W - M, 62, { align: 'right' })
-  doc.text(`Layout ${SHEET_LAYOUT} · every row is named as the app stores it`, W - M, 73, { align: 'right' })
+  doc.text('One figure in each box. Where a decimal point is printed, write the figures either side of it. Tick one operation.', M, 86)
 
-  const y0 = 88
+  const y0 = 96
+  const blocks = sheetBlocks(template)
+  const inColumn = (c) => blocks.filter((b) => b.column === c)
 
-  // ---- left: the main engine
-  const main = template.find((g) => /^Main Engine/.test(g.group))
-  const gearbox = template.find((g) => /^Gearbox/.test(g.group))
-  const gens = template.filter((g) => /^Generator/.test(g.group))
-  const rest = template.filter((g) => g !== main && g !== gearbox && !gens.includes(g))
-
+  // ---- the two columns
   let yL = y0
-  if (main) { yL = sectionHead(doc, xL, yL, colW, main.group); yL = paramRows(doc, xL, yL, colW, main, shapes) }
-
-  // ---- right: gearbox, generators, anything added later, then notes
+  for (const b of inColumn('left')) yL = drawBlock(doc, xL, yL, colW, b, shapes) + 12
   let yR = y0
-  if (gearbox) { yR = sectionHead(doc, xR, yR, colW, gearbox.group); yR = paramRows(doc, xR, yR, colW, gearbox, shapes) + 12 }
-  if (gens.length) { yR = sectionHead(doc, xR, yR, colW, 'Generators'); yR = generatorRows(doc, xR, yR, colW, gens, shapes) + 12 }
-  for (const g of rest) { yR = sectionHead(doc, xR, yR, colW, g.group); yR = paramRows(doc, xR, yR, colW, g, shapes) + 12 }
+  for (const b of inColumn('right')) yR = drawBlock(doc, xR, yR, colW, b, shapes) + 12
 
-  const bodyEnd = Math.max(yL, yR + HEAD + 70)
-  yR = sectionHead(doc, xR, yR, colW, 'Notes')
-  doc.setDrawColor(...RULE); doc.setLineWidth(0.6)
-  doc.rect(xR, yR, colW, bodyEnd - yR)
+  // ---- the full-width band, with the notes beside it
+  let y = Math.max(yL, yR) + 2
+  let bandEnd = y
+  for (const b of inColumn('band')) {
+    const bw = pairBlockWidth(b, shapes)
+    const end = drawBlock(doc, xL, y, bw, b, shapes)
+    const notesX = xL + bw + GAP
+    const notesW = W - M - notesX
+    if (notesW > 60) {
+      const top = sectionHead(doc, notesX, y, notesW, 'Notes')
+      doc.setDrawColor(...RULE); doc.setLineWidth(0.6)
+      doc.rect(notesX, top, notesW, end - top)
+    }
+    bandEnd = end
+    y = end + 12
+  }
 
   // ---- sign-off
-  const yS = bodyEnd + 30
+  const yS = bandEnd + 22
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...INK)
   doc.text('LOGGED BY', xL, yS)
   doc.text('SIGNATURE', xR, yS)
@@ -296,7 +356,7 @@ export function buildEngineSheet({ vessel = {}, logs = [], limits = [], template
 
   // ---- foot
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(...MUTE)
-  doc.text(`${name || 'Engine room'} · printed ${fmtDay(printedOn)} · Skipper Management · layout ${SHEET_LAYOUT}`, M, H - 18)
+  doc.text(`${name || 'Engine room'} · printed ${fmtDay(printedOn)} · Skipper Management · Layout ${SHEET_LAYOUT} · every row is named as the app stores it`, M, H - 16)
 
   return doc
 }
