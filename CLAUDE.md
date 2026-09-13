@@ -4715,6 +4715,85 @@ Every one of these read as outstanding and was not. Measured, not argued:
 **The rule this keeps proving: measure the database and the code, then read this
 file.** Not the other way round.
 
+### THE ENGINE LOG WOULD NOT SAVE — the tenth undefined name, and a button behind it that never worked (Sep 2026)
+
+David: *"engine log. when click to save the screen just goes blank. when refresh
+page it hasn't saved. engineer reported same issue and i'm getting it via my
+login too."*
+
+**THE LAST ENGINE LOG TO SAVE WAS 26-08-2026**, and the paper sheets for 06-09
+and 08-09 were on the clipboard waiting. The server settled the first question
+before any code was read: in the day's API logs there were GETs on
+`engine_logs` and **not one POST**. So nothing was being refused — the save was
+dying in the browser before it sent anything.
+
+**THE CAUSE WAS ONE CALL TO A FUNCTION THAT DOES NOT EXIST.** The warning for a
+counter that has gone backwards printed the earlier reading's date with
+`fmtDate(o.previousOn)`. The page's date helper is `fmt`. So the moment that
+warning rendered, React threw, the page went blank, and — because `save()` stops
+to show the warning rather than saving — nothing was saved either.
+
+**AND EVERY ENTRY WAS REACHING IT, which is what made it everybody's bug.**
+Replayed in Node against the real 50 limits and 23 logs:
+
+    an ordinary next-day entry (last readings, counters moved on)  0 warnings
+    the actual 06-09 sheet                                         1 warning
+        reversal  Generator 1 · Running Hours  7,396  (was 8,864 on 26-08)
+
+The sheet's DG1 hour meter reads **1,468 hours lower** than what the app holds
+for Generator 1 — so every entry looks like a counter running backwards, and
+every entry hit the one warning branch with the undefined name.
+
+**WHICH GENERATOR IS WHICH IS DAVID'S QUESTION, NOT A BUG.** The app's
+Generator 2 last read 9,087 on 09-08 and has had nothing since, and the paper
+sheet now fills in DG1 only. A swapped or re-metered generator, or DG1 on paper
+not being the app's Generator 1, all explain it. **The warning is right to ask**
+— *"this only ever climbs, so one of the two is wrong"* — and the fault was that
+it crashed instead of asking.
+
+#### And "save anyway" had never saved anything
+
+With the crash fixed, the warning's **These are right — save anyway** button
+would still not have worked. It set `confirmedOutliers` to true and then called
+`setTimeout(save, 0)` — but the `save` that timeout held was the one from the
+render where the flag was still false. So it ran the check again, found the same
+reading, and put the same warning back. **A STALE CLOSURE: the button could
+never save anything.** Nobody met it, because the warning above it blew up first.
+
+`save({ force })` now takes the override as an ARGUMENT, and the button passes
+it. The dead `confirmedOutliers` state is gone. The main Save button calls
+`save()` rather than passing `save` to `onClick`, or React's click event lands in
+the options argument — the trap that broke Keep over on the worksheet.
+
+**Not clicked through in a test**: there is no `jsdom` here. What proves it is the
+replay reaching the reversal, the scanner catching `fmtDate`, and the override no
+longer depending on when React re-renders.
+
+#### `scripts/find-undefined.mjs`, and it found an eleventh
+
+**There is no ESLint in this project**, and this is the tenth time an undefined
+name has shipped — valid JavaScript right up until the line runs, invisible to
+`npm run build`. So there is now a real scan: the Babel parser Vite already
+brings, with **scope analysis** rather than a grep, reporting a referenced name
+only if no scope around it binds it. It exits 1 on any finding and is **the first
+thing `npm test` runs**.
+
+**Checked against the bug it exists for**: pointed at the committed
+`EngineLogs.jsx` it reports `fmtDate` at line 353 and exits 1; the fixed file is
+clean. **And its first draft had a bug of its own** — it built its root from
+`URL.pathname`, which hands back `Skipper%20Management` with the space encoded, a
+folder that does not exist. `fileURLToPath` now.
+
+**THE FULL SCAN FOUND AN ELEVENTH that nobody had reported.** The **Open** button
+on each invoice arrival called `signedUrl` — imported nowhere. Inside a click
+handler that throws without blanking anything, so the button simply did nothing.
+**Importing it would have been the wrong fix**: `Arrivals.jsx` touches no supabase
+client precisely so `invoices-page-preview.mjs` can render it. Opening now arrives
+as an `onOpen` prop, like Read and Delete beside it — the button works and the
+preview still renders.
+
+    214 files scanned, 0 unbound names
+
 ## Pair teams
 
 Sandy and Gavin each run two boats towing one net. Two boats, one trip.

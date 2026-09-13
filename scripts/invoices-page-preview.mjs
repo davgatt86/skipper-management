@@ -225,7 +225,7 @@ const panes = [
   ['+ Invoice batch — 364 bundles, two unread, one of them old',
    h(Arrivals, { batches, loading: false, canUpload: true, fileInput: { current: null },
                  onRead: noop, onReadAll: noop, onUpload: noop, onIgnore: noop,
-                 onDelete: noop, reading: false, busy: false })],
+                 onDelete: noop, onOpen: noop, reading: false, busy: false })],
   ['The year — 2026, part finished, against 2025 to the same day',
    h(YearDashboard, { invoices: inv, suppliers, cats, basis: 'total', on: 'invoice',
                       year: 2026, setYear: noop, onDrill: noop, onOpen: noop })],

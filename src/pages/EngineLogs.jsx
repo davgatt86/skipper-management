@@ -123,7 +123,6 @@ export default function EngineLogs() {
   const [limits, setLimits] = useState([])
   // Which boat these particulars describe — one row per boat since Aug 2026.
   const boat = useCurrentVessel()
-  const [confirmedOutliers, setConfirmedOutliers] = useState(false)
 
   // The logs come from the offline hook above. The vessel particulars are read
   // separately and cached by hand, because the page prints them on the PDF and
@@ -177,7 +176,7 @@ export default function EngineLogs() {
   }
   // Clearing the acknowledgement matters: without it, one "save anyway" would
   // silently wave through every later entry in the same session.
-  async function cancel() { setDraft(null); setEditingId(null); setOutlierWarn(null); setConfirmedOutliers(false) }
+  async function cancel() { setDraft(null); setEditingId(null); setOutlierWarn(null) }
 
   const summary = useMemo(() => {
     const latest = logs.find((l) => l.running_hours != null)
@@ -188,7 +187,20 @@ export default function EngineLogs() {
     }
   }, [logs])
 
-  async function save() {
+  /* `force` is how "These are right — save anyway" gets past the check, and it
+   * is an ARGUMENT, not state, for a reason found the hard way (Sep 2026).
+   *
+   * It used to set `confirmedOutliers` and then `setTimeout(save, 0)` — but the
+   * `save` that timeout held was the one from the render where the flag was
+   * still false, so it ran the check again, found the same reading, and put the
+   * same warning back. The button could never save anything. Nobody met it
+   * because the warning above it crashed first: `fmtDate` was undefined, and
+   * the page went blank the moment a counter looked like it had gone backwards.
+   *
+   * The main Save button calls `save()` rather than passing `save` straight to
+   * onClick, or React's click event lands in this options argument — the same
+   * trap that broke Keep over on the worksheet. */
+  async function save({ force = false } = {}) {
     if (!canEdit || !draft) return
     if (!draft.log_date) { setMsg('Pick a date for the entry.'); return }
     setSaving(true); setMsg('')
@@ -224,7 +236,7 @@ export default function EngineLogs() {
       ...counterReversals([...priorLogs, { log_date: draft.log_date, readings }], limits)
         .filter((r) => r.on === draft.log_date),
     ]
-    if (odd.length && !confirmedOutliers) {
+    if (odd.length && !force) {
       setOutlierWarn(odd)
       setSaving(false)
       setMsg('')
@@ -247,7 +259,7 @@ export default function EngineLogs() {
       await insert(base)
     }
     setSaving(false)
-    setDraft(null); setEditingId(null); setOutlierWarn(null); setConfirmedOutliers(false)
+    setDraft(null); setEditingId(null); setOutlierWarn(null)
     setMsg(isOnline() ? 'Engine log saved ✓' : 'Saved on this device — it will send when there is a signal')
     setTimeout(() => setMsg(''), 3500)
   }
@@ -350,7 +362,7 @@ export default function EngineLogs() {
                     )}
                     {o.kind === 'reversal' && (
                       <span className="muted">
-                        {' '}— lower than {o.previous} on {fmtDate(o.previousOn)}. This only ever
+                        {' '}— lower than {o.previous} on {fmt(o.previousOn)}. This only ever
                         climbs, so one of the two is wrong.
                       </span>
                     )}
@@ -370,7 +382,7 @@ export default function EngineLogs() {
               </p>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button className="secondary" onClick={() => setOutlierWarn(null)}>Go back and check</button>
-                <button onClick={() => { setConfirmedOutliers(true); setOutlierWarn(null); setTimeout(save, 0) }}>
+                <button onClick={() => { setOutlierWarn(null); save({ force: true }) }}>
                   These are right — save anyway
                 </button>
               </div>
@@ -378,7 +390,7 @@ export default function EngineLogs() {
           )}
 
           <div style={{ marginTop: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.9rem' }}>
-            <button onClick={save} disabled={saving}>{saving ? 'Saving…' : (editingId ? 'Save changes' : 'Save engine log')}</button>
+            <button onClick={() => save()} disabled={saving}>{saving ? 'Saving…' : (editingId ? 'Save changes' : 'Save engine log')}</button>
             <button className="secondary" onClick={cancel} disabled={saving}>Cancel</button>
             {/* "Saved on this device" is neither a success nor a failure — the
                 entry is safe but not yet away, so it gets its own colour. */}

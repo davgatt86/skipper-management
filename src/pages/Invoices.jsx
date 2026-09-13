@@ -665,6 +665,7 @@ export default function Invoices() {
           )}
 
           <Arrivals batches={batches} loading={loading} onRead={readBatch}
+                    onOpen={(b) => openDocument(b.file_path).catch((e) => setErr(e.message || String(e)))}
                     onReadAll={readAllNew} reading={!!progress}
                     busy={!!stage || !!progress} canUpload={!!boatId}
                     fileInput={fileInput} onUpload={uploadBundle}

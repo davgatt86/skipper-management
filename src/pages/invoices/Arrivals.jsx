@@ -68,7 +68,7 @@ function Dropzone({ canUpload, fileInput, onUpload, busy }) {
  * What the email put here. A bundle is FILED, never read automatically — the
  * same rule as a settling sheet, and for the same reason: reading is a model
  * looking at a photograph, and it has to be checked before it becomes a cost. */
-export default function Arrivals({ batches, loading, onRead, onReadAll, reading, onIgnore, onDelete, busy,
+export default function Arrivals({ batches, loading, onRead, onReadAll, reading, onIgnore, onDelete, onOpen, busy,
                    canUpload, fileInput, onUpload }) {
   /* A TEN-YEAR LIST NEEDS A WAY IN. This was written when the tab held the
      Monday arrivals and a handful of them; it now holds 364 bundles going back
@@ -194,10 +194,13 @@ export default function Arrivals({ batches, loading, onRead, onReadAll, reading,
             <button className="secondary" onClick={() => onRead(b)} disabled={busy}>
               {b.invoiceCount ? 'Read again' : 'Read'}
             </button>
-            <button className="secondary" onClick={async () => {
-              const url = await signedUrl(b.file_path).catch(() => null)
-              if (url) window.open(url, '_blank', 'noopener')
-            }}>Open</button>
+            {/* OPENING ARRIVES AS A PROP, like Read and Delete beside it. This file
+                touches no supabase client so the preview can render it, and the
+                Open button used to call `signedUrl` here without importing it —
+                inside a click handler that throws without blanking anything, so
+                the button simply did nothing. Importing it would have fixed the
+                button and broken the preview; passing it keeps both. */}
+            <button className="secondary" onClick={() => onOpen(b)}>Open</button>
             {b.status !== 'ignored' && (
               <button className="secondary" onClick={() => onIgnore(b)}>Ignore</button>
             )}
