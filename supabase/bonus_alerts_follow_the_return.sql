@@ -55,6 +55,7 @@
  * that cannot be got wrong is better than one written down correctly.
  */
 
+-- The column lives with the enum in supabase/contract_status_not_returning.sql.
 alter table public.contracts add column if not exists not_returning_on date;
 
 /* WHAT IS ACTUALLY DUE, one half at a time.

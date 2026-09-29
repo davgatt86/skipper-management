@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
@@ -68,8 +68,29 @@ export default function Contracts() {
   const [newGhb, setNewGhb] = useState('')
   const [newNotes, setNewNotes] = useState('')
   const [busy, setBusy] = useState(false)
+  const errorRef = useRef(null)
 
   const canEdit = appUser?.role === 'skipper'
+
+  /* A ROW ACTION'S FAILURE HAS TO BE VISIBLE FROM THE ROW.
+   *
+   * The banner sits at the top of the page and the buttons are on nineteen
+   * contracts below it, so a refused save was reported off the top of the screen
+   * and the button read as doing nothing. That is exactly what happened to *Did
+   * not return*: `check_status_consistency` enumerated the statuses by name and
+   * had never heard of `not_returning`, so the database refused it every time and
+   * the reason scrolled past unseen.
+   *
+   * It says WHAT DID NOT HAPPEN in words, because "violates check constraint
+   * check_status_consistency" is not a sentence for a man on a boat — the same
+   * rule as Trouble.jsx. The server's own words stay underneath: they are no use
+   * to him and every use to whoever fixes it. */
+  function failed(what, error) {
+    setError(`Could not ${what}. Nothing was changed. — ${error.message}`)
+    requestAnimationFrame(() => {
+      errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  }
 
   async function loadAll() {
     setLoading(true)
@@ -135,7 +156,7 @@ export default function Contracts() {
     })
     setBusy(false)
     if (error) {
-      setError(error.message)
+      failed('add the contract', error)
     } else {
       setNewCrewId('')
       setNewStart('')
@@ -147,24 +168,26 @@ export default function Contracts() {
   }
 
   async function markGoneHome(c) {
+    const name = c.crew?.full_name || 'crewman'
     const d = promptDate(`Mark ${c.crew?.full_name || 'crewman'} as gone home — contract end date`)
     if (!d) return
     const { error } = await supabase
       .from('contracts')
       .update({ status: 'pending_return', end_date: d })
       .eq('id', c.id)
-    if (error) setError(error.message)
+    if (error) failed(`record ${name} as gone home`, error)
     else loadAll()
   }
 
   async function markReturned(c) {
+    const name = c.crew?.full_name || 'crewman'
     const d = promptDate(`Mark ${c.crew?.full_name || 'crewman'} as returned — return date`)
     if (!d) return
     const { error } = await supabase
       .from('contracts')
       .update({ status: 'completed', return_date: d })
       .eq('id', c.id)
-    if (error) setError(error.message)
+    if (error) failed(`record ${name} as returned`, error)
     else loadAll()
   }
 
@@ -187,7 +210,7 @@ export default function Contracts() {
       .from('contracts')
       .update({ status: 'not_returning', not_returning_on: d })
       .eq('id', c.id)
-    if (error) setError(error.message)
+    if (error) failed(`record that ${name} is not returning`, error)
     else loadAll()
   }
 
@@ -206,7 +229,7 @@ export default function Contracts() {
       .from('contracts')
       .update({ going_home_bonus: t === '' ? null : Number(t) })
       .eq('id', c.id)
-    if (error) setError(error.message)
+    if (error) failed('set the going-home bonus', error)
     else loadAll()
   }
 
@@ -229,7 +252,7 @@ export default function Contracts() {
       notes: `GHB ${label} half`,
       created_by: appUser.id,
     })
-    if (error) setError(error.message)
+    if (error) failed(`record the ${label} half as paid to ${name}`, error)
     else loadAll()
   }
 
@@ -303,7 +326,14 @@ export default function Contracts() {
         )}
       </PageHeader>
 
-      {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
+      <div ref={errorRef}>
+        {error && (
+          <div className="card" style={{ borderColor: 'var(--rust)' }}>
+            <p className="error">{error}</p>
+            <button className="secondary" onClick={() => setError('')} style={btnStyle}>Dismiss</button>
+          </div>
+        )}
+      </div>
 
       {adding && (
         <div className="card">

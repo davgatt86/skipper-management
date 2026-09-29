@@ -4671,6 +4671,40 @@ anything is written.
 `src/lib/crew/bonus.js` is the JS half, used by both Contracts and Contract
 Detail, so the page and the alert cannot disagree again.
 
+#### AND THE ENUM WAS NOT THE WHOLE JOB — the button did nothing for a day
+
+David, the next morning: *"Did not return button does nothing."* The value was in
+the enum, the column was there, the handler was right. **`check_status_consistency`
+ENUMERATES THE STATUSES BY NAME:**
+
+    CHECK ( (status = 'current' AND end_date IS NULL)
+         OR (status IN ('completed','pending_return') AND end_date IS NOT NULL) )
+
+`not_returning` matched neither branch, so the database refused every attempt.
+**An enum and a CHECK that lists its values are two copies of one list, and the
+second does not follow the first** — the same shape as `orb_items` beside the JS
+item list, except nothing here was asserting they agreed. Before believing a new
+enum value is usable, read the constraints that name it:
+
+    select conname, pg_get_constraintdef(oid) from pg_constraint
+     where conrelid = 'public.contracts'::regclass and contype = 'c';
+
+**AND IT FAILED SILENTLY TO THE SKIPPER, WHICH IS WHY IT COST A DAY.** The page
+DID report it — `setError(error.message)` — into a banner at the top of the page,
+above a list of nineteen contracts. He pressed a button on a row well down the
+page and the refusal rendered off the top of the screen. **A row action's failure
+has to be visible from the row**: `failed()` names what did not happen in words,
+says nothing was changed, keeps the server's own sentence underneath for whoever
+fixes it, and scrolls itself into view. Ninth instance of the same lesson —
+reporting a fault is not the same as the fault being seen.
+
+**Two separate migrations, because a value added to an enum cannot be used in the
+transaction that added it.** `supabase/contract_status_not_returning.sql` holds
+both, and the first of them **existed only in the Supabase console** until this
+was written — recovered verbatim from `schema_migrations.statements`, which is the
+only reason nothing was lost. Same failure as the six console-only migrations of
+the certification run, and as the edge function.
+
 #### The count of days was stale, and the resolver was NOT why
 
 **The reading that looks obvious here is wrong, so it is written down.** The same
