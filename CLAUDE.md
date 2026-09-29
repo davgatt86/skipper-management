@@ -4628,6 +4628,82 @@ copy and the file are identical**,
 checked by hashing the stored function bodies against the file's rather than by
 eye — the comments live above each function for exactly that reason.
 
+### THE BONUS ALERT CHASED MONEY THAT WAS NOT DUE, AND NOTHING COULD CLEAR IT (Sep 2026)
+
+David: *"elizer bonus was already paid, why won't it clear? i keep getting
+emails. [a crewman] decided to not return. but it won't let me click to say did
+not return."* Four faults, and only the first is the one he could see.
+
+**NOTHING HAS EVER RESOLVED A BONUS ALERT.** The books got
+`resolve_activity_alerts` and the certificates got `resolve_compliance_alerts`;
+`generate_bonus_alerts` only ever INSERTED. So an alert raised on 18-09 stood
+whatever was paid afterwards and the 07:00 digest re-listed it every morning.
+Dismissing it by hand would have silenced it — and, because the unique key is
+(fleet_id, dedup_key) **whether or not a row is dismissed**, that same alert
+could then never raise again on that contract while the money was still owed.
+Both halves of that are wrong.
+
+**AND IT CHASED THE WRONG DATE.** The boat's rule is HALF ON GOING HOME, HALF ON
+RETURN, and the Contracts page says so on the row — *"2nd £3,500 on return"*. The
+generator took the whole outstanding balance from `end_date`, so Elizer Tano, who
+went home on 27-08 with his first half paid that day, was reported in September
+as owing £3,500 he is not owed until he is back. **The page and the alert
+disagreed and the page was right.** Asked outright, David: *"not paid yet — due
+when he returns."*
+
+**SO EACH HALF IS ITS OWN ALERT** with its own key and its own date — first at
+`end_date`, second at `return_date` — and `bonus_halves_due()` is the ONLY place
+that rule lives. The generator raises what it returns; the resolver closes
+anything it does not. Two copies would drift, and the drift would present as an
+alert that will not clear.
+
+**A MAN WHO DOES NOT RETURN FORFEITS THE SECOND HALF.** David's call, asked
+outright: *"forfeited outright."* The status enum had no way to say it — current,
+pending_return, completed — so the only way out of "gone home" was **Returned**,
+which would have recorded a return that never happened and made the second half
+due. That is what "it won't let me click to say did not return" was.
+`not_returning` is the fourth value, `not_returning_on` records the day it was
+decided, and the contract drops out of the due list entirely. **The forfeited
+figure is still reported on the row**, because money that will never be paid is
+not the same as money that was never owed — and the confirmation names it before
+anything is written.
+
+`src/lib/crew/bonus.js` is the JS half, used by both Contracts and Contract
+Detail, so the page and the alert cannot disagree again.
+
+#### The count of days was stale, and the resolver was NOT why
+
+**The reading that looks obvious here is wrong, so it is written down.** The same
+digest said *"Engine log — nothing written for 2 days"* on a day when the last
+entry was **ten** days old, and *"Crew list — none saved for 7 days"* when it was
+twenty. That reads as a superseded episode nothing had closed — and
+`generate_activity_alerts` performs `resolve_activity_alerts` on its own first
+line, so the resolver ran every morning and correctly left both alerts open: the
+books WERE stale, and the key is the last-entry date, which had not moved.
+
+**THE KEY WAS RIGHT AND THE SENTENCE WAS STALE.** `nolog:engine:2026-09-19` is
+deliberately one alert per EPISODE, which is what stops one quiet book raising an
+alert a day. But the title carries a COUNT OF DAYS, and that moves every morning
+while the key does not — so `on conflict do nothing` kept the row and threw away
+the only part of it that had changed. It is `do update` on the title, body,
+severity and meta now (`supabase/alert_wording_refresh.sql`). **A dismissed alert
+is never re-worded**: it has been answered.
+
+**MAINTENANCE HAD IT WORSE.** Its days key is `maintdue:<task>:<due_on>:`, which
+does not change when a job crosses its due date, so a task alerted two days early
+said **"due soon"** in `info` grey for ever, including after it fell due. The one
+case here where the stale wording understated the thing.
+
+**AND THE CRON IS TWO GENERATORS NOW, not three resolvers and three generators.**
+Each generator closes before it raises, so there is no order to get wrong — the
+same reason `orbLink` offers a draft in one place. An order that cannot be got
+wrong beats one written down correctly.
+
+Run against the live database: **2 bonus alerts closed** (both chasing halves not
+due), Audacious left with none at all, and the two book alerts re-worded to *10
+days* and *20 days*. `test-crew-bonus.mjs` — 24 checks against the boat's real
+contracts.
+
 #### Four crew pages were dropping a read error
 
 Each fired several queries and surfaced one or two, so a failed read rendered as

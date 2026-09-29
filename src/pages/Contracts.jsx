@@ -4,9 +4,16 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { supabase } from '../supabaseClient'
 import { useAuth } from '../AuthContext'
+import { bonusState, halfLabel, halfColour } from '../lib/crew/bonus'
 
-const STATUS_LABEL = { current: 'Current', pending_return: 'Gone Home', completed: 'Completed' }
-const STATUS_COLOR = { current: 'var(--green)', pending_return: 'var(--amber)', completed: 'var(--grey-400)' }
+const STATUS_LABEL = {
+  current: 'Current', pending_return: 'Gone Home', completed: 'Completed',
+  not_returning: 'Not returning',
+}
+const STATUS_COLOR = {
+  current: 'var(--green)', pending_return: 'var(--amber)', completed: 'var(--grey-400)',
+  not_returning: 'var(--rust)',
+}
 
 function money(n, currency) {
   if (n === null || n === undefined || n === '') return '—'
@@ -46,8 +53,6 @@ function promptDate(message) {
   }
   return t
 }
-
-const round2 = (x) => Math.round(x * 100) / 100
 
 export default function Contracts() {
   const { appUser } = useAuth()
@@ -111,13 +116,9 @@ export default function Contracts() {
     contracts.filter(c => c.status === 'current').map(c => c.crew_id)
   )
 
-  function ghbHalves(c) {
-    const raw = settings ? Number(settings.ghb_first_half_pct) : 0.5
-    const frac = raw > 1 ? raw / 100 : raw
-    const total = Number(c.going_home_bonus)
-    const first = round2(total * frac)
-    return { total, first, second: round2(total - first) }
-  }
+  // What each half is worth and whether it is owed — src/lib/crew/bonus.js, the
+  // same rule the alert generator applies in the database.
+  const stateOf = (c) => bonusState(c, ghbPaid[c.id] || {}, settings)
 
   async function addContract(e) {
     e.preventDefault()
@@ -167,6 +168,29 @@ export default function Contracts() {
     else loadAll()
   }
 
+  /* HE WENT HOME AND IS NOT COMING BACK, which the status enum could not say —
+   * the only way out of "gone home" was Returned, and that records a return that
+   * never happened and makes the second half due. David, Sep 2026: the second
+   * half is *"forfeited outright"*, so it stops being chased AND the button to
+   * record it as paid goes, or it could be paid later by mistake. */
+  async function markNotReturning(c) {
+    const name = c.crew?.full_name || 'crewman'
+    const st = stateOf(c)
+    const forfeit = st && st.second.state !== 'paid' ? st.second.amount : 0
+    const warn = forfeit
+      ? `\n\nThe second half of his going-home bonus, ${money(forfeit, settings?.currency)}, is forfeited: nothing will chase it and it can no longer be recorded as paid.`
+      : ''
+    if (!confirm(`Record that ${name} is not returning?${warn}`)) return
+    const d = promptDate('Date you were told he is not returning')
+    if (!d) return
+    const { error } = await supabase
+      .from('contracts')
+      .update({ status: 'not_returning', not_returning_on: d })
+      .eq('id', c.id)
+    if (error) setError(error.message)
+    else loadAll()
+  }
+
   async function setGhbAmount(c) {
     const v = window.prompt(
       `Going-home bonus for ${c.crew?.full_name || 'crewman'}`,
@@ -187,8 +211,9 @@ export default function Contracts() {
   }
 
   async function markHalfPaid(c, half) {
-    const { first, second } = ghbHalves(c)
-    const amount = half === 'first' ? first : second
+    const st = stateOf(c)
+    if (!st) return
+    const amount = half === 'first' ? st.first.amount : st.second.amount
     const name = c.crew?.full_name || 'crewman'
     const label = half === 'first' ? '1st' : '2nd'
     if (!confirm(`Record ${label} half GHB of ${money(amount, settings?.currency)} as paid to ${name}?`)) return
@@ -210,25 +235,22 @@ export default function Contracts() {
 
   function renderGhb(c) {
     const cur = settings?.currency || ''
-    if (c.going_home_bonus === null || c.going_home_bonus === undefined) {
-      return <span className="muted">not set</span>
-    }
-    const { total, first, second } = ghbHalves(c)
-    const paid = ghbPaid[c.id] || {}
+    const st = stateOf(c)
+    if (!st) return <span className="muted">not set</span>
 
     if (c.status === 'current') {
-      return <span>{money(total, cur)}</span>
+      return <span>{money(st.total, cur)}</span>
     }
     return (
       <span>
-        {money(total, cur)}
+        {money(st.total, cur)}
         <div style={{ fontSize: '0.8rem', marginTop: '0.15rem' }}>
-          <span style={{ color: paid.first ? 'var(--green)' : 'var(--amber)' }}>
-            1st {money(first, cur)} {paid.first ? '✓ paid' : 'due'}
+          <span style={{ color: halfColour(st.first.state) }}>
+            1st {money(st.first.amount, cur)} {halfLabel(st.first.state)}
           </span>
           {' · '}
-          <span style={{ color: paid.second ? 'var(--green)' : c.status === 'completed' ? 'var(--amber)' : 'var(--grey-400)' }}>
-            2nd {money(second, cur)} {paid.second ? '✓ paid' : c.status === 'completed' ? 'due' : 'on return'}
+          <span style={{ color: halfColour(st.second.state) }}>
+            2nd {money(st.second.amount, cur)} {halfLabel(st.second.state)}
           </span>
         </div>
       </span>
@@ -247,8 +269,7 @@ export default function Contracts() {
   const btnStyle = { padding: '0.3rem 0.7rem', fontSize: '0.85rem' }
 
   function actionButtons(c) {
-    const paid = ghbPaid[c.id] || {}
-    const hasGhb = c.going_home_bonus !== null && c.going_home_bonus !== undefined
+    const st = stateOf(c)
     return (
       <div style={{ display: 'flex', gap: '0.3rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
         {c.status === 'current' && (
@@ -257,10 +278,16 @@ export default function Contracts() {
         {c.status === 'pending_return' && (
           <button className="secondary" onClick={() => markReturned(c)} style={btnStyle}>Returned…</button>
         )}
-        {hasGhb && (c.status === 'pending_return' || c.status === 'completed') && !paid.first && (
+        {c.status === 'pending_return' && (
+          <button className="secondary" onClick={() => markNotReturning(c)} style={btnStyle}>Did not return…</button>
+        )}
+        {/* Offered only where the money is actually owed: a half that is not due
+            until he returns, or forfeited because he never will, is not a
+            payment anybody should be able to record by accident. */}
+        {st?.first.state === 'due' && (
           <button className="secondary" onClick={() => markHalfPaid(c, 'first')} style={btnStyle}>1st half paid…</button>
         )}
-        {hasGhb && c.status === 'completed' && !paid.second && (
+        {st?.second.state === 'due' && (
           <button className="secondary" onClick={() => markHalfPaid(c, 'second')} style={btnStyle}>2nd half paid…</button>
         )}
         <button className="secondary" onClick={() => setGhbAmount(c)} style={btnStyle}>Set GHB…</button>

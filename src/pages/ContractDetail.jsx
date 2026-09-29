@@ -3,9 +3,16 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
 import { useAuth } from '../AuthContext'
+import { bonusState, halfLabel, halfColour } from '../lib/crew/bonus'
 
-const STATUS_LABEL = { current: 'Current', pending_return: 'Gone Home', completed: 'Completed' }
-const STATUS_COLOR = { current: 'var(--green)', pending_return: 'var(--amber)', completed: 'var(--grey-400)' }
+const STATUS_LABEL = {
+  current: 'Current', pending_return: 'Gone Home', completed: 'Completed',
+  not_returning: 'Not returning',
+}
+const STATUS_COLOR = {
+  current: 'var(--green)', pending_return: 'var(--amber)', completed: 'var(--grey-400)',
+  not_returning: 'var(--rust)',
+}
 
 function money(n, currency) {
   if (n === null || n === undefined || n === '') return '—'
@@ -132,14 +139,10 @@ export default function ContractDetail() {
   const boxTotal = months.reduce((s, m) => s + Number(m.box_bonus_paid), 0)
   const wagesTotal = months.reduce((s, m) => s + Number(m.total_paid), 0)
 
-  const ghb = contract.going_home_bonus !== null && contract.going_home_bonus !== undefined
-    ? Number(contract.going_home_bonus) : null
-  const raw = settings ? Number(settings.ghb_first_half_pct) : 0.5
-  const frac = raw > 1 ? raw / 100 : raw
-  const firstHalf = ghb !== null ? round2(ghb * frac) : null
-  const secondHalf = ghb !== null ? round2(ghb - firstHalf) : null
   const p1 = ghbPayments.find(p => p.payment_type === 'ghb_first_half')
   const p2 = ghbPayments.find(p => p.payment_type === 'ghb_second_half')
+  // One rule for the halves and what is owed — src/lib/crew/bonus.js.
+  const ghbSt = bonusState(contract, { first: !!p1, second: !!p2 }, settings)
   const ghbPaidTotal = (p1 ? Number(p1.amount) : 0) + (p2 ? Number(p2.amount) : 0)
 
   const oneOffPaidTotal = oneOffs.filter(o => o.paid).reduce((s, o) => s + Number(o.amount), 0)
@@ -161,6 +164,7 @@ export default function ContractDetail() {
         <p className="muted" style={{ marginBottom: 0 }}>
           {fmtDate(contract.start_date)} → {contract.end_date ? fmtDate(contract.end_date) : 'ongoing'}
           {contract.return_date ? ` · returned ${fmtDate(contract.return_date)}` : ''}
+          {contract.not_returning_on ? ` · not returning, told ${fmtDate(contract.not_returning_on)}` : ''}
           {' · '}
           <span style={{ color: STATUS_COLOR[contract.status], fontWeight: 600 }}>
             {STATUS_LABEL[contract.status] || contract.status}
@@ -202,16 +206,16 @@ export default function ContractDetail() {
 
       <div className="card">
         <h2>Going-home bonus</h2>
-        {ghb === null && <p className="muted">Not set yet.</p>}
-        {ghb !== null && (
+        {!ghbSt && <p className="muted">Not set yet.</p>}
+        {ghbSt && (
           <p style={{ marginBottom: 0 }}>
-            {money(ghb, cur)} total —{' '}
-            <span style={{ color: p1 ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
-              1st {money(firstHalf, cur)} {p1 ? `✓ paid ${fmtDate(p1.payment_date)}` : 'due on going home'}
+            {money(ghbSt.total, cur)} total —{' '}
+            <span style={{ color: halfColour(ghbSt.first.state), fontWeight: 600 }}>
+              1st {money(ghbSt.first.amount, cur)} {p1 ? `✓ paid ${fmtDate(p1.payment_date)}` : halfLabel(ghbSt.first.state)}
             </span>
             {' · '}
-            <span style={{ color: p2 ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>
-              2nd {money(secondHalf, cur)} {p2 ? `✓ paid ${fmtDate(p2.payment_date)}` : 'due on return'}
+            <span style={{ color: halfColour(ghbSt.second.state), fontWeight: 600 }}>
+              2nd {money(ghbSt.second.amount, cur)} {p2 ? `✓ paid ${fmtDate(p2.payment_date)}` : halfLabel(ghbSt.second.state)}
             </span>
           </p>
         )}

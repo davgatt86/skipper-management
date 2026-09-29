@@ -227,17 +227,30 @@ export const handler = async () => {
 
   /* RE-CHECK BEFORE SENDING, not just at 06:00.
    *
-   * The generator runs an hour before this on cron, and it now closes any
-   * activity alert whose book has been written in. But a man who writes his
-   * engine log at half past six would still have been told at seven that he
-   * had not — which is exactly the mail that teaches a reader to ignore the
-   * sender. Running the generator here costs one call and makes the digest
-   * report the state at SEND time rather than an hour earlier.
+   * A man who writes his engine log at half past six would otherwise be told at
+   * seven that he had not — exactly the mail that teaches a reader to ignore the
+   * sender. Same for a bonus paid first thing.
+   *
+   * EACH GENERATOR CLOSES BEFORE IT RAISES — `perform resolve_*_alerts()` is its
+   * own first line — so calling the two generators is calling all four halves,
+   * and there is no order here to get wrong.
+   *
+   * IT ALSO REFRESHES THE WORDING, which is the reason the bonus one is in this
+   * list at all. The mail of 29-09-2026 said the engine log had "nothing written
+   * for 2 days" on a day when the last entry was ten days old. The alert was
+   * right and unresolved on purpose — the book WAS stale, and its key is the last
+   * entry date, so it stays one alert per episode. What was stale was the SENTENCE,
+   * written on the morning the episode began and then re-sent unchanged. The
+   * generators now update an open alert's title and body, so a digest sends
+   * today's figure.
    *
    * One source of truth, invoked twice, rather than a second copy of the
-   * staleness rules living in this file. */
-  const { error: ge } = await svc.rpc('generate_activity_alerts')
-  if (ge) console.error('activity alerts refresh failed, sending on the 06:00 state:', ge.message)
+   * staleness rules living in this file. A failure here is logged and the mail
+   * still goes on the 06:00 state — a late digest is worse than a stale one. */
+  for (const fn of ['generate_bonus_alerts', 'generate_activity_alerts']) {
+    const { error: re } = await svc.rpc(fn)
+    if (re) console.error(`${fn} failed, sending on the 06:00 state:`, re.message)
+  }
 
   // Outstanding expiry alerts, oldest first. Read or dismissed ones are gone:
   // acting on it in the app is what stops it being chased.
