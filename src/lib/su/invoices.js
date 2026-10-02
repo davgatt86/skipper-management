@@ -24,7 +24,8 @@ const BATCH = 'id, fleet_id, boat_id, file_path, filename, bytes, page_count, '
 
 const INVOICE = 'id, batch_id, supplier_id, supplier, invoice_no, invoice_date, '
   + 'description, net, vat, total, currency, invoice_no_assigned, account_code, status, paid_date, '
-  + 'page_from, page_to, file_path, confidence, category, vessel_era, work_from, work_to'
+  + 'page_from, page_to, file_path, confidence, category, vessel_era, work_from, work_to, '
+  + 'work_as_billed'
 
 /** The bundles that have arrived, newest first. */
 export async function listBatches(fleetId) {
@@ -292,8 +293,28 @@ export async function setInvoiceWork(id, from, to) {
  *  that bills six jobs on one day is the reason this exists at all. */
 export async function setInvoicesWork(ids, from, to) {
   if (!ids.length) return
+  /* A real work date supersedes "worked as billed" — he has found the date, so
+     the flag that stood in for it must go, and the CHECK on the table refuses to
+     hold both anyway. */
   const { error } = await supabase.from('su_invoices')
-    .update({ work_from: dateOrNull(from), work_to: dateOrNull(to) }).in('id', ids)
+    .update({ work_from: dateOrNull(from), work_to: dateOrNull(to), work_as_billed: null })
+    .in('id', ids)
+  if (error) throw error
+}
+
+/* ASKED, AND ANSWERED "WHEN IT WAS BILLED" — David, Sep 2026: *"put them into
+ * the year they were billed. to the exact date they were invoiced."*
+ *
+ * It writes a FLAG, never a date. The cost already counts on its invoice date, so
+ * nothing moves; what changes is that the group stops being asked about, and does
+ * so without a copied date sitting in `work_from` pretending to have been read
+ * off the document. Clearing it puts the question back. */
+export async function setInvoicesWorkAsBilled(ids, yes = true) {
+  if (!ids.length) return
+  const patch = yes
+    ? { work_as_billed: true, work_from: null, work_to: null }
+    : { work_as_billed: null }
+  const { error } = await supabase.from('su_invoices').update(patch).in('id', ids)
   if (error) throw error
 }
 
@@ -345,9 +366,20 @@ const num = (v) => {
 }
 /* A DATE OR NOTHING. An empty box is not a date, and '' reaches Postgres as an
    invalid input rather than a null — the same class of trap as page 0. */
+/* A DATE OR NOTHING, and the backslashes matter.
+ *
+ * This shipped as `/^d{4}-d{2}-d{2}$/` — the escapes eaten writing the file — so
+ * it matched the letters "dddd-dd-dd" and returned null for every real date.
+ * `setInvoicesWork` then wrote null over null: the UPDATE ran, touched the rows,
+ * changed nothing, and the page said it had saved. **No work date has ever been
+ * saved through the app**; the nine on record were written by hand in SQL.
+ *
+ * Fourth lost backslash in this repo, and the first one that cost data rather
+ * than a visible break. `scripts/find-eaten-escapes.mjs` scans for the shape and
+ * runs in `npm test`. */
 const dateOrNull = (v) => {
   const s = String(v ?? '').slice(0, 10)
-  return /^d{4}-d{2}-d{2}$/.test(s) ? s : null
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
 }
 
 /* The rule lives in src/lib/invoices/pages.js so it can be tested without a

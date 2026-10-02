@@ -232,11 +232,11 @@ const panes = [
   ['All years — billed',
    h(AllYears, { invoices: inv, suppliers, cats, eras, basis: 'total', on: 'invoice',
                  onDrill: noop, onFileSupplier: noop, onSuggestAll: noop,
-                 onPlaceVessel: noop, onSetWork: noop })],
+                 onPlaceVessel: noop, onSetWork: noop, onWorkAsBilled: noop })],
   ['All years — dated by when the work was done',
    h(AllYears, { invoices: inv, suppliers, cats, eras, basis: 'total', on: 'work',
                  onDrill: noop, onFileSupplier: noop, onSuggestAll: noop,
-                 onPlaceVessel: noop, onSetWork: noop })],
+                 onPlaceVessel: noop, onSetWork: noop, onWorkAsBilled: noop })],
   ['Find — drilled into 2025 engine, as a grid cell opens it',
    h(FindInvoices, { invoices: inv, suppliers, cats, eras, basis: 'total', on: 'invoice',
                      filter: { q: '', year: 2025, category: 'engine' }, setFilter: noop,
@@ -359,6 +359,12 @@ has(3, 'Which boat', 'the three hulls')
 has(3, '/yr over', 'compared per year of service, not by raw total')
 has(3, 'distrust', 'and the oldest boat says why hers is the shaky one')
 has(3, 'lump billing', 'the lump billings are offered')
+/* BOTH ANSWERS ARE ON THE ROW. Typing a work date is the one that moves money;
+   "worked when billed" is the one most of them want, and before it existed the
+   only way to clear a group was to invent a date for it. */
+has(3, 'Worked when billed', 'and the as-billed answer is offered beside the dates')
+has(3, 'carry a work date read off the document',
+    'the coverage line says the figure is a reading, not a count of answers')
 has(3, 'not filed to a category', 'and the unfiled firm is named as work to do')
 has(3, 'no date', 'the undated invoice has its own column')
 has(3, 'Every year, by trade', 'the grid')

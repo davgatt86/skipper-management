@@ -11,7 +11,7 @@
  */
 import assert from 'node:assert/strict'
 import {
-  workSpan, yearShares, workLabel, workDateCoverage, lumpBillings,
+  workSpan, yearShares, workLabel, workDateCoverage, lumpBillings, workedAsBilled, workAnswered,
 } from './src/lib/invoices/when.js'
 import {
   yearInsight, slicesForYear, recordReaches, yearsCovered,
@@ -116,6 +116,58 @@ eq(workLabel({ invoice_date: '2025-10-05' }), '',
   const cov = workDateCoverage(trevor)
   eq(cov.withWork, 0, 'none of the seven carries a work date yet')
   eq(cov.total, 7, 'and the page can say so out of how many')
+
+  /* ---- WORKED WHEN IT WAS BILLED ---------------------------------------------
+     David, Sep 2026: "put them into the year they were billed. to the exact date
+     they were invoiced." The answer for most lump billings, and the one that
+     could not be given — so the group was offered for ever. */
+  const asBilled = trevor.map((t) => ({ ...t, work_as_billed: true }))
+  eq(lumpBillings([...asBilled, ...gloves]).length, 0,
+     'answered as billed, so it stops being asked about')
+  ok(workedAsBilled(asBilled[0]), 'and the answer is readable')
+  ok(workAnswered(asBilled[0]), 'the question is settled')
+  ok(!workAnswered(trevor[0]), 'an untouched one is not')
+
+  /* IT IS NOT A WORK DATE AND MUST NOT BE COUNTED AS ONE. Copying the invoice
+     date into work_from would read exactly like a date found printed on the
+     document — the failure this whole feature is built to avoid. */
+  const cov2 = workDateCoverage(asBilled)
+  eq(cov2.withWork, 0, 'answering as billed does not claim a work date was read')
+  eq(cov2.asBilled, 7, 'it is counted apart, and the panel says both figures')
+  eq(cov2.spanning, 0, 'and nothing is divided')
+
+  /* THE MONEY DOES NOT MOVE, which is the whole point: it already counted on its
+     invoice date and that is where it stays. */
+  eq(yearShares(asBilled[0], 'work'), yearShares(asBilled[0], 'invoice'),
+     'dated by work reads exactly as dated by billing')
+  eq(yearShares(asBilled[0], 'work')[0].year, 2025, 'the year it was billed')
+  eq(workLabel(asBilled[0]), '', 'and it never prints a work date it does not have')
+
+  /* A REAL WORK DATE WINS. He has found the date, so the stand-in goes — the
+     CHECK on the table refuses to hold both. */
+  const both = { ...trevor[0], work_as_billed: true, work_from: '2023-02-01' }
+  ok(!workedAsBilled(both), 'a stated work date supersedes the flag')
+  eq(yearShares(both, 'work')[0].year, 2023, 'and the cost moves to the year worked')
+}
+
+// ---- A DATE IS A DATE, AND THE BACKSLASHES MATTER -------------------------
+/* `dateOrNull` shipped as /^d{4}-d{2}-d{2}$/ — escapes eaten writing the file —
+   so it matched the letters "dddd-dd-dd", returned null for every real date, and
+   setInvoicesWork wrote null over null. The UPDATE ran, touched the rows, changed
+   nothing, and the page reported success. No work date was ever saved through the
+   app; the nine on record were written by hand in SQL.
+   The shape is pinned here as well as by scripts/find-eaten-escapes.mjs, because
+   the scan is a lint and this is the behaviour. */
+{
+  const dateOrNull = (v) => {
+    const s = String(v ?? '').slice(0, 10)
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+  }
+  eq(dateOrNull('2023-02-01'), '2023-02-01', 'a real date survives the round trip')
+  eq(dateOrNull('2023-02-01T00:00:00Z'), '2023-02-01', 'a timestamp is cut to its day')
+  eq(dateOrNull('dddd-dd-dd'), null, 'and the letters the broken regex matched do not')
+  eq(dateOrNull(''), null, 'blank is nothing')
+  eq(dateOrNull(null), null, 'and so is null — not today')
 }
 
 // ---- A PART YEAR IS NEVER COMPARED WITH A WHOLE ONE ----------------------

@@ -159,7 +159,11 @@ const SCAN_TEXT_LIMIT = 40
 
 function classifyKind(t) {
   t = t || ''
-  if (t.replace(/s+/g, '').length < SCAN_TEXT_LIMIT) return 'scan'
+  /* `\s`, with its backslash: this read `/s+/` and stripped the letter "s" while
+     keeping every space and newline, so a scan yielding nothing but page
+     furniture could clear the 40-character floor and fall through as 'unknown'
+     instead of being filed as a scan. */
+  if (t.replace(/\s+/g, '').length < SCAN_TEXT_LIMIT) return 'scan'
   // ---- Sales notes (per-vessel, private -> fleet tables) ----
   if (/My sales/i.test(t) || /MyTransactions/i.test(t)) return 'sales'              // Hanstholm "My sales"
   if (/Registered Seller Sales Note/i.test(t) || /PETER\s*&\s*J\.?\s*JOHNSTONE/i.test(t) || /pjj-peterhead/i.test(t)) return 'sales'

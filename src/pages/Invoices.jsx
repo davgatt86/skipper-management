@@ -7,7 +7,7 @@ import {
   listBatches, listInvoices, listSuppliers, createSupplier, addAlias,
   saveBatchInvoices, setBatchStatus, deleteBatch, applySuppliers, storeRead, clearRead,
   setSupplierCategory, setSupplierCategories, loadCategorySettings,
-  setInvoiceVessels, setInvoicesWork, setInvoiceCategory,
+  setInvoiceVessels, setInvoicesWork, setInvoicesWorkAsBilled, setInvoiceCategory,
   deleteInvoice, editInvoice, mergeSuppliers, markNotSame,
 } from '../lib/su/invoices'
 import { parseDocuments, DOC_TYPES, mapInvoices, signedUrl, openDocument } from '../lib/su/parse'
@@ -485,6 +485,23 @@ export default function Invoices() {
     } catch (e) { setErr(e.message || String(e)) }
   }, [])
 
+  /* WORKED WHEN IT WAS BILLED — the answer for most lump billings, and the one
+     that was impossible to give. The cost stays on its invoice date, so no figure
+     moves; the group simply stops being asked about. A flag rather than a copied
+     date, or the page would claim to know when work was done on invoices that
+     never said. */
+  const setWorkAsBilled = useCallback(async (ids) => {
+    setErr(''); setMsg('')
+    try {
+      await setInvoicesWorkAsBilled(ids, true)
+      setInvoices((prev) => prev.map((i) => (ids.includes(i.id)
+        ? { ...i, work_as_billed: true, work_from: null, work_to: null } : i)))
+      setMsg(ids.length + (ids.length === 1 ? ' invoice' : ' invoices')
+        + ' left in the year they were billed, on their own invoice date.'
+        + ' No figure changed — that is where they already counted.')
+    } catch (e) { setErr(e.message || String(e)) }
+  }, [])
+
   const placeVessel = useCallback(async (ids, era) => {
     setErr('')
     try {
@@ -614,7 +631,8 @@ export default function Invoices() {
         <AllYears invoices={invoices} suppliers={suppliers} cats={cats} eras={eras}
                   basis={basis} on={on}
                   onDrill={drill} onFileSupplier={fileSupplierCategory}
-                  onSuggestAll={suggestAll} onPlaceVessel={placeVessel} onSetWork={setWork} />
+                  onSuggestAll={suggestAll} onPlaceVessel={placeVessel} onSetWork={setWork}
+                  onWorkAsBilled={setWorkAsBilled} />
       ))}
 
       {shownTab === 'find' && (loading ? <p className="muted">Loading…</p> : (

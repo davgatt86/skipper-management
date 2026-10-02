@@ -59,6 +59,30 @@ export function workSpan(inv) {
   return { from, to, stated: true }
 }
 
+/**
+ * ASKED, AND THE ANSWER WAS "WHEN IT WAS BILLED".
+ *
+ * David, Sep 2026: *"put them into the year they were billed. to the exact date
+ * they were invoiced."* For most lump billings the work was done about when it
+ * was billed, so the cost belongs where it already sits — and this says so, out
+ * loud, instead of leaving the group on the undecided list for ever.
+ *
+ * IT IS NOT A WORK DATE AND MUST NEVER BECOME ONE. Copying the invoice date into
+ * `work_from` would read exactly like a date somebody found printed on the
+ * document, which is the failure this whole feature is built to avoid — the
+ * reader is told at length not to do it and `fixWorkDates` strips it when it
+ * does. So `work_from` keeps meaning "read off the invoice", this means "asked
+ * and answered", and the two are counted separately.
+ */
+export function workedAsBilled(inv) {
+  return inv?.work_as_billed === true && !workSpan(inv)
+}
+
+/** Whether the question has been settled either way — read, or answered. */
+export function workAnswered(inv) {
+  return !!workSpan(inv) || workedAsBilled(inv)
+}
+
 /** Which date this invoice is counted on, and where it came from. */
 export function dateBasisOf(inv, on = 'invoice') {
   if (on === 'work') {
@@ -126,16 +150,21 @@ export function workLabel(inv) {
 /** How many of these invoices state when the work was done. */
 export function workDateCoverage(invoices = [], basis = 'total') {
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
-  let withWork = 0, withWorkValue = 0, spanning = 0, total = 0, value = 0
+  let withWork = 0, withWorkValue = 0, spanning = 0, asBilled = 0, total = 0, value = 0
   for (const inv of invoices) {
     total++
     value += num(inv[basis])
+    /* COUNTED APART, because they are two different facts: a work date was READ
+       off the document, and "as billed" is the skipper saying there is nothing to
+       read. Adding them together would report the record as better evidenced
+       than it is. */
+    if (workedAsBilled(inv)) asBilled++
     if (!workSpan(inv)) continue
     withWork++
     withWorkValue += num(inv[basis])
     if (yearShares(inv, 'work').length > 1) spanning++
   }
-  return { withWork, withWorkValue, spanning, total, value }
+  return { withWork, withWorkValue, spanning, asBilled, total, value }
 }
 
 /**
@@ -153,7 +182,7 @@ export function lumpBillings(invoices = [], { basis = 'total', minTotal = 20000,
   const byDay = new Map()
   for (const inv of invoices) {
     if (!inv.invoice_date || !inv.supplier_id) continue
-    if (workSpan(inv)) continue           // already answered
+    if (workAnswered(inv)) continue       // read off the invoice, or answered as billed
     const k = inv.supplier_id + '|' + String(inv.invoice_date).slice(0, 10)
     const cur = byDay.get(k)
       || { supplier_id: inv.supplier_id, supplier: inv.supplier, date: String(inv.invoice_date).slice(0, 10),

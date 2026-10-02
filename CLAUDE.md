@@ -507,6 +507,78 @@ cannot disturb an id, a file path, a supplier link, a category or a boat
 decision. The dates are undone with one `update ... set work_from = null,
 work_to = null` on that batch.
 
+#### NO WORK DATE HAD EVER BEEN SAVED THROUGH THE APP — a lost backslash (Oct 2026)
+
+David: *"invoices, when saving the lump invoices to the year, it's not saving.
+sort that."* `dateOrNull` in `src/lib/su/invoices.js` read
+
+    /^d{4}-d{2}-d{2}$/
+
+**with its backslashes eaten**, so it matched the letters `dddd-dd-dd` and
+returned null for every real date. `setInvoicesWork` then wrote **null over
+null**: the UPDATE ran, touched the rows, changed nothing, and the page
+optimistically showed the date and reported success. A reload lost it.
+
+**IT LOOKED LIKE A WORKING FEATURE BECAUSE THE NINE ON RECORD WERE WRITTEN BY
+HAND.** The 13-10-2025 bundle's work dates — the reading that moved £290,782 of
+engine work out of 2025 — were filed by direct SQL, not through the page. So
+`9 of 3,284 carry a work date` read as slow progress rather than as a dead
+button, for weeks.
+
+**Fourth lost backslash here**, after `split(/s+/)` splitting the invoice search
+on the letter "s" and `/^d{4}-d{2}-d{2} /` in `gmail-attachments.gs`, whose own
+test lost its escape the same way. **The cause is writing a file through a shell
+heredoc**, which eats one level of escaping — and it happened AGAIN writing the
+scanner for it: `[^/\n\\]` arrived as `[^/\n\]` and Node refused the file. That
+refusal is the lucky case. In a character class the damage is a syntax error;
+`\d` → `d` is still a valid regex that quietly matches the wrong thing.
+
+`scripts/find-eaten-escapes.mjs` scans every regex literal for a class letter
+used bare (`d{2}`, `s+`, `w+`) and is **the second thing `npm test` runs**. It
+found a second live one: `netlify/functions/ingest.js` stripped the letter "s"
+instead of whitespace before measuring a PDF's text, so a scan yielding nothing
+but page furniture could clear the 40-character floor and fall through as
+*unknown* rather than being filed as a scan. **Its first run reported five and
+three were false positives** — `w*x1/100` arithmetic, `S{s+1}` in JSX, a line of
+prose — so it now requires the literal to sit where a regex can sit, and skips
+comments. A scan that cries wolf gets switched off, which is how the previous
+three survived. **Checked against a planted copy of all three real shapes**: all
+three caught, a genuine `[ds]` class ignored.
+
+#### WORKED WHEN IT WAS BILLED — `su_invoices.work_as_billed`
+
+David, in the same breath: *"put them into the year they were billed. to the
+exact date they were invoiced."*
+
+**That answer could not be given before, so the list could never be cleared.**
+The panel offered only a work date, and a firm's lump billing where the work was
+done about when it was billed has no work date to type — so 32 groups sat there
+being offered for ever.
+
+**IT IS A FLAG, NOT A COPIED DATE, and that is the whole care in it.** Writing
+the invoice date into `work_from` would read exactly like a date somebody found
+printed on the document — the documented failure mode of this entire feature,
+the thing most of the reader's prompt is about, and what `fixWorkDates` strips.
+Copy it and the page would claim 95 invoices state when the work was done when
+**nine** of them do, and the *dated by work* grid would be a copy of the billed
+one with nothing saying why.
+
+So `work_from` keeps meaning *read off the invoice*, `work_as_billed` means
+*asked, and there is nothing to read*, and the panel counts them apart. **The
+cost needs no date at all**: `dateBasisOf` already falls back to the invoice
+date, so it counts in the billed year on the exact invoice date — where it
+already was. A CHECK refuses to hold both, and a real work date supersedes the
+flag.
+
+**Applied to the whole list on his word: 32 groups, 86 invoices, £2,260,901.01,
+31-12-2016 to 22-06-2026.** No year total moved, by construction — and the nine
+genuine readings are untouched. One `update ... set work_as_billed = null` undoes
+it. Zero lump billings left to answer.
+
+`supabase/invoice_worked_as_billed.sql` · `test-invoice-dashboard.mjs` 76 → **93**,
+including that answering as billed claims no work date, that dated-by-work then
+reads identically to dated-by-billing, and the date regex itself.
+
 #### The rest of the rebuild
 
 - **A part year is never compared with a whole one.** 2026 is £693,796 against

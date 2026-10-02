@@ -17,7 +17,7 @@ import {
  */
 export default function AllYears({
   invoices, suppliers, cats, eras, basis, on,
-  onDrill, onFileSupplier, onSuggestAll, onPlaceVessel, onSetWork,
+  onDrill, onFileSupplier, onSuggestAll, onPlaceVessel, onSetWork, onWorkAsBilled,
 }) {
   const [view, setView] = useState('category')
   const [era, setEra] = useState('')
@@ -142,9 +142,10 @@ export default function AllYears({
       {lumps.length > 0 && (
         <Panel tone="var(--brass)"
                title={`${lumps.length} lump billing${lumps.length === 1 ? '' : 's'} — several invoices on one day`}
-               sub={`A firm that bills a run of jobs in one go puts all of it in one year. Saying when the work was actually done moves each job to the year it belongs in. ${cover.withWork} of ${cover.total} invoices carry a work date so far.`}>
+               sub={`A firm that bills a run of jobs in one go puts all of it in one year. Saying when the work was actually done moves each job to the year it belongs in — and where it was done about when it was billed, saying so leaves it where it is and takes it off this list. ${cover.withWork} of ${cover.total} invoices carry a work date read off the document${cover.asBilled ? `, ${cover.asBilled} answered as billed` : ''}.`}>
           {lumps.slice(0, 6).map((g) => (
-            <LumpRow key={g.supplier_id + g.date} g={g} onSetWork={onSetWork} onDrill={onDrill} />
+            <LumpRow key={g.supplier_id + g.date} g={g} onSetWork={onSetWork} onDrill={onDrill}
+                     onWorkAsBilled={onWorkAsBilled} />
           ))}
           {lumps.length > 6 && (
             <p className="muted" style={{ fontSize: '0.8rem', margin: '0.4rem 0 0' }}>
@@ -351,7 +352,7 @@ function BoatChip({ on, onClick, label, total, perYear, years, fromRecord }) {
  * MAK M20 jobs invoiced on 5 October are six jobs from one visit, and asking
  * six times is how the answer does not get given at all. Per-invoice dates are
  * still available in Find, for the case where one job genuinely sits apart. */
-function LumpRow({ g, onSetWork, onDrill }) {
+function LumpRow({ g, onSetWork, onDrill, onWorkAsBilled }) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const bad = from && to && to < from
@@ -380,6 +381,13 @@ function LumpRow({ g, onSetWork, onDrill }) {
                 onClick={() => onSetWork(g.invoices.map((i) => i.id), from, to)}>
           Put {g.count} invoices in that year
         </button>
+        {/* THE ANSWER FOR MOST OF THEM, and it needs no date typed: the work was
+            done about when it was billed, so it stays in the billed year on its
+            own invoice date and stops being asked about. */}
+        <button className="secondary"
+                onClick={() => onWorkAsBilled(g.invoices.map((i) => i.id))}>
+          Worked when billed
+        </button>
         {bad && <span style={{ color: 'var(--rust)', fontSize: '0.78rem' }}>
           the end is before the start
         </span>}
@@ -387,6 +395,8 @@ function LumpRow({ g, onSetWork, onDrill }) {
       <p className="muted" style={{ margin: '0.3rem 0 0', fontSize: '0.76rem' }}>
         One date puts all {g.count} whole into that year. Two dates spanning a year end
         divide them between the years by days, and the grid says so.
+        <b> Worked when billed</b> leaves all {g.count} on {fmtDate(g.date)}, where they
+        already count — nothing moves, and the question is answered.
       </p>
     </div>
   )
