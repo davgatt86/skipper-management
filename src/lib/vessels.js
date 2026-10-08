@@ -51,27 +51,52 @@ export function resolveCurrent(vessels, storedId) {
   }
 }
 
+/* WHICH ID TO FILTER ON, or null for "do not filter at all".
+ *
+ * A FLEET WITH ONE BOAT FILTERS ON NOTHING, and getting that wrong hid a man's
+ * own quota statement from him (Oct 2026).
+ *
+ * This used to read `current ? filter : no filter`, over a comment saying
+ * *"filtering by the ONLY boat is the same as not filtering, so a single-vessel
+ * fleet takes the filter harmlessly."* **It is not harmless.** It is the same
+ * only where every row carries the boat — and the moment one does not, the
+ * filter drops a row that has exactly one possible owner. Audacious has one
+ * boat; her 2026 AFPO statement went in with no `vessel_id`, so the Position
+ * table showed *"Nothing to show — add a stock, or upload a statement"* above a
+ * banner saying the statement was already loaded. Sixty-three stocks were in the
+ * database and on screen there was nothing.
+ *
+ * So the rule is the one the backfill migration already used: **a fleet with
+ * exactly one boat has exactly one possible answer**, and filtering can only
+ * lose rows. Only a pair fleet with a boat chosen filters, where a null really
+ * is ambiguous — and there the page must COUNT what it is hiding and say so.
+ *
+ * It takes the whole vessel state rather than `current`, because the fleet's
+ * boat count is the half of the question `current` cannot answer.
+ */
+export function vesselFilter(state) {
+  if (!state || !state.multi) return null   // no boats, or only one: nothing to filter
+  return state.current ? state.current.id : null   // a pair showing ALL filters nothing
+}
+
 /* Apply the choice to a Supabase query.
  *
- * Filtering by the ONLY boat is the same as not filtering, so a single-vessel
- * fleet takes the filter harmlessly — which means a page can call this
- * unconditionally instead of remembering when it applies.
- *
- * BUT NOT WHERE THE COLUMN IS NULL. 5 rows across the database have no
- * vessel_id and never will: HANSTHOLM's rota trips, because that fleet has no
- * boat to point at. Filtering those out is correct — they belong to no vessel —
- * but a page showing "all" must not lose them, which is why `all` applies
- * nothing at all rather than `is null or eq`.
+ * NOT WHERE THE COLUMN IS NULL on a pair fleet. HANSTHOLM's 4 rota trips have no
+ * vessel_id and never will — that fleet has no boat to point at — and a page
+ * showing "all" must not lose them, which is why `all` applies nothing at all
+ * rather than `is null or eq`.
  */
-export function scopeQuery(query, current) {
-  return current ? query.eq('vessel_id', current.id) : query
+export function scopeQuery(query, state) {
+  const id = vesselFilter(state)
+  return id ? query.eq('vessel_id', id) : query
 }
 
 // The same decision for rows already in hand, which is how the offline pages
 // work — they read the table whole and filter here.
-export function scopeRows(rows, current) {
-  if (!current) return rows || []
-  return (rows || []).filter((r) => r.vessel_id === current.id)
+export function scopeRows(rows, state) {
+  const id = vesselFilter(state)
+  if (!id) return rows || []
+  return (rows || []).filter((r) => r.vessel_id === id)
 }
 
 /* What to call it on screen. `label` is the canonical "NAME REG" — the same

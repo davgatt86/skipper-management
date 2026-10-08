@@ -88,22 +88,52 @@ const SOLO = { id: 'v9', label: 'AUDACIOUS BF83', active: true }
     { id: 2, vessel_id: 'v2' },
     { id: 3, vessel_id: null },     // HANSTHOLM's rota trips
   ]
-  eq('one boat filters to it', scopeRows(rows, A).map((r) => r.id), [1])
-  /* ALL APPLIES NOTHING AT ALL, rather than "is null or equals". 5 rows across
-   * the database have no vessel_id and never will — HANSTHOLM has no boat to
-   * point at — and a page showing all must not lose them. */
-  eq('all keeps everything, nulls included', scopeRows(rows, null).map((r) => r.id), [1, 2, 3])
-  eq('nothing at all is handled', scopeRows(null, A).length, 0)
+  const oneBoat = resolveCurrent([A], null)          // AUDACIOUS
+  const pairOnA = resolveCurrent([A, B], 'v1')       // a pair, one boat chosen
+  const pairAll = resolveCurrent([A, B], null)       // a pair, showing both
+  const noBoats = resolveCurrent([], null)           // HANSTHOLM
 
-  // The query form does the same, and takes the filter harmlessly on a
-  // single-vessel fleet — so a page can call it without remembering when.
+  /* THIS ASSERTION USED TO SAY THE OPPOSITE, and it was wrong — it is the
+   * reason sixty-three stocks were invisible.
+   *
+   * It read `scopeRows(rows, A) === [1]`: one boat, so filter to it. The
+   * function's own comment called that harmless, because filtering by the only
+   * boat is the same as not filtering. **It is the same only where every row
+   * carries the boat.** Audacious has one boat; her 2026 AFPO statement was
+   * written with no vessel_id, and the filter dropped her own statement — the
+   * Position table said "Nothing to show" directly under a banner saying the
+   * statement was already loaded.
+   *
+   * A fleet with one boat now filters on NOTHING: there is exactly one possible
+   * owner, the same rule the stage-2 backfill used, so filtering can only lose
+   * rows and can never gain an answer. */
+  eq('one boat filters on nothing — a null still belongs to her',
+     scopeRows(rows, oneBoat).map((r) => r.id), [1, 2, 3])
+  eq('no boats at all filters on nothing either',
+     scopeRows(rows, noBoats).map((r) => r.id), [1, 2, 3])
+
+  /* A PAIR IS THE ONLY PLACE A NULL IS AMBIGUOUS, so it is the only place one is
+   * hidden — and the page that hides it has to count it and say so. */
+  eq('a pair with a boat chosen filters to that boat',
+     scopeRows(rows, pairOnA).map((r) => r.id), [1])
+  /* ALL APPLIES NOTHING AT ALL, rather than "is null or equals". HANSTHOLM's
+   * rota trips have no vessel_id and never will, and a page showing all must
+   * not lose them. */
+  eq('a pair showing all keeps everything, nulls included',
+     scopeRows(rows, pairAll).map((r) => r.id), [1, 2, 3])
+  eq('nothing at all is handled', scopeRows(null, pairOnA).length, 0)
+  eq('and no state at all does not filter', scopeRows(rows, null).map((r) => r.id), [1, 2, 3])
+
+  // The query form makes the same decision.
   let applied = null
   const q = { eq: (col, val) => { applied = [col, val]; return 'filtered' } }
-  eq('a boat applies the filter', scopeQuery(q, A), 'filtered')
+  eq('a pair with a boat chosen applies the filter', scopeQuery(q, pairOnA), 'filtered')
   eq('on the right column', applied, ['vessel_id', 'v1'])
   applied = null
-  eq('all leaves the query alone', scopeQuery(q, null), q)
+  eq('one boat leaves the query alone', scopeQuery(q, oneBoat), q)
   eq('and touches nothing', applied, null)
+  eq('a pair showing all leaves it alone too', scopeQuery(q, pairAll), q)
+  eq('still touching nothing', applied, null)
 }
 
 // ---- odds and ends ----------------------------------------------------------

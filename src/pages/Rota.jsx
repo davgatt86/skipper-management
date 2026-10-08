@@ -94,7 +94,7 @@ export default function Rota() {
     const crewByTrip = {}
     for (const r of tc.data || []) (crewByTrip[r.trip_id] = crewByTrip[r.trip_id] || []).push(r.crew_id)
     // A pair team's two boats keep separate rotas: different men aboard each.
-    setTrips(scopeRows((t.data || []).map((x) => ({ ...x, crew_ids: crewByTrip[x.id] || [] })), boat.current))
+    setTrips(scopeRows((t.data || []).map((x) => ({ ...x, crew_ids: crewByTrip[x.id] || [] })), boat))
     setHolidays(h.data || [])
     setCrew((c.data || []).filter((x) => !x.archived_at))
     setTeams(tm.data || [])

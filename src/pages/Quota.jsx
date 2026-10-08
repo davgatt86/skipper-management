@@ -224,6 +224,21 @@ export default function Quota() {
   const boat = useCurrentVessel()
   const mustPickBoat = boat.multi && !boat.current
 
+  /* WHICH BOAT A ROW BELONGS TO, written when the row is written.
+   *
+   * NOTHING HERE EVER STAMPED IT, and that is what hid his statement: a 2026
+   * AFPO sheet went in with `vessel_id` null, the boat filter dropped it, and
+   * the Position table said "Nothing to show" over a banner saying the
+   * statement was already loaded. The reading side is fixed too (a one-boat
+   * fleet filters on nothing), but a row that knows its own boat is the half
+   * that keeps working when a fleet gains a second hull.
+   *
+   * NULL ON A PAIR SHOWING ALL, deliberately — the same rule as the crew stamp.
+   * A statement uploaded while looking at the whole fleet has not been put on a
+   * boat, and guessing one would file a pair's quota against the wrong hull,
+   * which is the one thing quota must never do. */
+  const stampBoat = () => boat.current?.id || null
+
   const pushLog = m => setLog(l => [...l, m])
 
   async function loadAll() {
@@ -257,7 +272,7 @@ export default function Quota() {
     for (const l of lineRes.data || []) (linesBySnap[l.snapshot_id] = linesBySnap[l.snapshot_id] || []).push(l)
     const catchesByTrip = {}
     for (const c of catchRes.data || []) (catchesByTrip[c.trip_id] = catchesByTrip[c.trip_id] || []).push(c)
-    setSnapshots(scopeRows(snapRes.data || [], boat.current).map(s => ({ ...s, lines: linesBySnap[s.id] || [] })))
+    setSnapshots(scopeRows(snapRes.data || [], boat).map(s => ({ ...s, lines: linesBySnap[s.id] || [] })))
     setTrips((tripRes.data || []).map(t => ({ ...t, catches: catchesByTrip[t.id] || [] })))
   }
   useEffect(() => { loadAll().then(() => setLoading(false)) }, [])
@@ -271,9 +286,27 @@ export default function Quota() {
         res.warnings.forEach(w => pushLog(`⚠ ${f.name}: ${w}`))
         if (!res.lines.length) continue
         const { data: snap, error: e1 } = await supabase.from('quota_snapshots')
-          .insert({ ...res.meta, year: res.meta.year }).select().single()
+          .insert({ ...res.meta, year: res.meta.year, vessel_id: stampBoat() }).select().single()
         if (e1) {
-          if (e1.code === '23505') { pushLog(`↺ ${f.name}: this statement (${res.meta.year}, updated ${fmtDate((res.meta.last_updated || '').slice(0, 10))}) is already loaded`); continue }
+          /* ALREADY LOADED — AND SAY WHAT IS IN IT.
+           *
+           * The bare wording was a dead end: it told him the sheet was on file
+           * at the moment the table below said "Nothing to show", so the two
+           * halves of the screen disagreed and the message was the one he had no
+           * way to check. Counting the stocks on the row that already exists
+           * answers the real question — is my statement there? — and if it ever
+           * does read 0 stocks, that is a fault worth seeing rather than a
+           * reassurance. */
+          if (e1.code === '23505') {
+            const when = fmtDate((res.meta.last_updated || '').slice(0, 10))
+            const { data: had } = await supabase.from('quota_snapshots')
+              .select('id, quota_lines(id)').eq('year', res.meta.year)
+              .eq('last_updated', res.meta.last_updated).maybeSingle()
+            const n = had?.quota_lines?.length
+            pushLog(`↺ ${f.name}: this statement (${res.meta.year}, updated ${when}) is already loaded`
+              + (n === undefined ? '' : ` — ${n} stock${n === 1 ? '' : 's'} on file${n ? '' : ', which is wrong: re-upload after a Reset'}`))
+            continue
+          }
           throw e1
         }
         const rows = res.lines.map(l => ({ ...l, snapshot_id: snap.id }))
@@ -296,7 +329,8 @@ export default function Quota() {
         // replace-on-reupload so corrected reports propagate
         const { data: existing } = await supabase.from('quota_trips').select('id').eq('trip_nr', res.trip.trip_nr).maybeSingle()
         if (existing) await supabase.from('quota_trips').delete().eq('id', existing.id)
-        const { data: trip, error: e1 } = await supabase.from('quota_trips').insert(res.trip).select().single()
+        const { data: trip, error: e1 } = await supabase.from('quota_trips')
+          .insert({ ...res.trip, vessel_id: stampBoat() }).select().single()
         if (e1) throw e1
         const rows = res.catches.map(c => ({ ...c, trip_id: trip.id }))
         const { error: e2 } = await supabase.from('quota_trip_catches').insert(rows)
@@ -352,6 +386,7 @@ export default function Quota() {
     setError('')
     const row = {
       year: Number(year),
+      vessel_id: stampBoat(),
       stock,
       section: sectionOfStock(stock),
       anchor_t: stockOverride ? null : (msT === '' ? null : Number(msT)),

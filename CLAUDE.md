@@ -8042,6 +8042,63 @@ rolling average would have flagged the *correct* readings instead.
   shortfall. "Pick a boat" alone would lose that. It also says WHERE to answer,
   since the control is in the sidebar and a man reading the middle of the screen
   has no reason to look there.
+### THE BOAT FILTER HID A FLEET'S OWN QUOTA STATEMENT (Oct 2026)
+
+David: *"reset quota to upload a fresh sheet, and this is the message i get"* —
+the Position table reading **"Nothing to show — add a stock, or upload an AFPO
+statement and trip reports"** directly under a banner reading
+**"Current_Quota_Holdings.xlsx: this statement (2026, updated 07/10/2026) is
+already loaded"**.
+
+**BOTH HALVES WERE TELLING THE TRUTH**, which is why it was baffling. The
+statement was on file with its **63 stocks**; the boat filter was dropping it
+before it reached the table. Two faults meeting:
+
+- **Nothing on the quota page ever stamped `vessel_id`.** Crew and Rota stamp on
+  insert — that is explicitly what the stage-2 note says earns its keep — and
+  the quota uploads were never given the same treatment.
+- **`scopeRows` filtered on `vessel_id` for a fleet with ONE boat**, over a
+  comment of its own saying *"filtering by the ONLY boat is the same as not
+  filtering, so a single-vessel fleet takes the filter harmlessly."*
+
+**THAT COMMENT IS THE BUG, and the assertion under it said the same thing.** It
+is the same only where every row carries the boat — and the moment one does not,
+the filter drops a row with exactly one possible owner. `test-vessels.mjs` had
+*"one boat filters to it"* as a passing check, so the suite was pinning the
+behaviour that hid the data. **Third belief in this file overturned by
+measuring** after the numberless invoices and the net+VAT accusation.
+
+`vesselFilter(state)` now returns **no filter at all for a fleet with one boat**
+— the same rule the stage-2 backfill used: one boat is one possible answer, so
+filtering can only lose rows and can never gain one. **A pair is the only place a
+null is ambiguous**, so it is the only place one is hidden, and the page hiding it
+must count it and say so. It takes the whole vessel state, because the fleet's
+boat count is the half of the question `current` cannot answer.
+
+**AND THE CREW PAGE WAS TELLING A ONE-BOAT SKIPPER TO USE A PICKER HE DOES NOT
+HAVE.** Its unassigned panel counted any unstamped man as hidden and said *"Switch
+Showing to all boats to see them"* — advice that only exists on a pair. Counted
+on `boat.multi` now.
+
+**The failure shape to remember: a filter and a stamp are one feature.** Ship the
+filter without the stamp and the page reads as empty rather than broken, which is
+the worst way for this to fail — and it is the fifth instance here after
+`VesselProvider` never being rendered, which was the same fault one level up.
+
+`supabase/quota_stamp_single_boat_fleets.sql` stamped the one row already
+written: **1 snapshot, 63 stocks, 0 trips, 0 manual stocks** — nothing else in
+the database was unstamped. Test Fleet's unstamped manual stock is left alone on
+purpose (a pair; which hull is not knowable, and quota on the wrong hull is the
+one mistake this page must never make), as are HANSTHOLM's 4 rota trips, which
+have no boat to point at.
+
+**The message is no longer a dead end either.** *"already loaded"* now carries
+what is in it — *"63 stocks on file"* — because the one thing he could not check
+was the claim the banner was making, and a statement that really does hold 0
+stocks is a fault worth seeing rather than a reassurance.
+
+`test-vessels.mjs` — 51 → **56**.
+
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:

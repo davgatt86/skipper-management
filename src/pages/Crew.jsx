@@ -125,8 +125,12 @@ export default function Crew() {
      * vanish, and a crewman quietly missing off a list is exactly the failure
      * worth guarding against. They are kept aside and counted, not dropped. */
     const allCrew = cRes.data || []
-    setCrew(scopeRows(allCrew, boat.current))
-    setUnassigned(boat.current ? allCrew.filter((c) => !c.vessel_id).length : 0)
+    setCrew(scopeRows(allCrew, boat))
+    /* ONLY A PAIR FLEET HIDES ANYBODY. With one boat nothing is filtered at all
+       now (see vesselFilter), so counting an unstamped man as hidden would have
+       told a single-boat skipper that crew were missing — and sent him to a
+       "Showing" picker his fleet never gets. */
+    setUnassigned(boat.multi && boat.current ? allCrew.filter((c) => !c.vessel_id).length : 0)
     setRanks(rRes.data || [])
     setContracts(ctRes.data || [])
     setMonthLandings(lRes.data || [])
