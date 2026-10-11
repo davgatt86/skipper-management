@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient'
 import UploadSummary from '../UploadSummary'
 import SampleDocs from '../SampleDocs'
 import { summariseNote } from '../lib/salesChange'
+import { noRowsLine } from '../lib/salesNoRows'
 import { useAuth } from '../AuthContext'
 import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 // Shared with netlify/functions/ingest.js — the two upload paths must merge
@@ -231,7 +232,9 @@ export default function Sales() {
     for (const f of files) {
       try {
         let res = await parseSalesPdf(f)
-        if (!res.rows.length) { log.push(`✗ ${f.name}: no rows parsed (${res.market})`); continue }
+        /* A note with nothing on it gets a reason and a next step, not an
+         * internal market label. See src/lib/salesNoRows.js. */
+        if (!res.rows.length) { log.push(noRowsLine(f.name, res)); continue }
         // Danish (Hanstholm Afregning) notes are priced in DKK — ask for the
         // day's rate for this note, then convert to £ (rate stays editable later).
         let fxRate = null

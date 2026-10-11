@@ -2495,6 +2495,117 @@ already fetched stays fetched" — so parsing a PDF already sitting on the devic
 failed on the network. Bundled and lazily imported, the chunk is fetched once
 and cached like any other asset.
 
+### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
+
+Sandy McLeman emailed six Hanstholm notes he could not upload to the
+BOY JOHN INS110 + ROSEBLOOM INS353 page. **He did not say what the error was,
+and that is the finding** — the page told him
+`✗ INS 353 06-08-2026.pdf: no rows parsed (Unscannable)`, which names an
+internal market label, asserts nothing about the file and gives him nothing to
+do. There was no error to report, so he could not report one.
+
+**ALL SIX CARRY NO TEXT LAYER AT ALL** — 0 fonts, 0 text items, and **1,233
+`constructPath` + 1,230 `fill` operations per page**. The writing is line art.
+The metadata is identical across all six and says why:
+
+    Creator   Bullzip PDF Printer (14.2.0.2955) / netIP a/s
+    Producer  GPL Ghostscript 9.56.1
+    Title     Fiskeauktion.dk
+
+They were **printed to PDF through a virtual printer** rather than saved off
+the auction, and that printer outlined the glyphs. **A third shape this app had
+never met**: a text PDF reads, a photograph is known by having no text, and
+this has no text while looking nothing like a photo — the two DCTDecode images
+in it are the 501×157 Fiskeauktion logo, which is what made the first reading
+of it wrong.
+
+**NOTHING IS BROKEN — not Sandy's upload, not his boats, not the Hanstholm
+parser**, and that was worth proving rather than asserting. His June
+`Afregning 2504328.pdf` is a real text PDF, is recognised as *Hanstholm
+Afregning* with vessel BOY JOHN INS110 and a kr 167,872 total, and the fleet
+already holds twelve Hanstholm landings whose source file is
+`Fiskeauktion.dk.pdf`. The parser returns `Unscannable` and is right to.
+
+**AND THE HARNESS THAT NEARLY MISDIAGNOSED IT.** The first run passed a joined
+STRING to `parseExtracted`, which takes `{ allLines, pages, fullText }` — so
+**every file came back 0 rows, including the known-good controls.** Caught only
+by distrusting the harness when a note the app demonstrably reads failed in it.
+`parsePdf` is the real entry point and the LHD control then reconciled to the
+penny. **A control that fails is the harness talking, not the subject.**
+
+#### The message says what to do now — `src/lib/salesNoRows.js`
+
+Three outcomes hid behind that one sentence, and they want three different
+things done:
+
+    noText    no text at all. Nothing here will ever read it, now or later;
+              the only fix is a different copy, and that is his to ask for.
+    unknown   there IS text and no market matches. Ours to add.
+    noRows    the market WAS recognised and nothing came off it. A fault in
+              this app, on a note it claims to read — and the one most worth
+              hearing about.
+
+**IT NAMES NO CAUSE IT CANNOT SEE.** A file with no text may be a photograph, a
+scan or a print-to-PDF, and the app cannot tell them apart — nor does it need
+to, since the observation and the answer are the same. Blaming a print driver
+would be wrong the first time somebody photographs a note. Same lesson as
+`Trouble.jsx`, where Daily Prices asserted a missing migration and the tables
+had been there all along.
+
+**Shared by BOTH upload paths**, like `buyerAliases.js` — a note emailed in and
+a note dropped on the page are explained in the same words, out of one
+function. `test-sales-norows.mjs` is 24 checks and most of them are negative:
+the no-text case must never read as a fault in the app, and the recognised-
+market case must never read as a fault in the file. **The wrong way round sends
+a skipper chasing the office for a document that was fine.**
+
+#### The six are filed — read off the renders, £94,741.80
+
+No parser can read them, so they were rendered with pdf.js + `@napi-rs/canvas`
+and read by eye. **Every one adds up to its own printed total** — three exact,
+three a penny out on the auction's own rounding:
+
+    ROSEBLOOM INS353  06-08  210 bx   8,400 kg  10 rows  £18,473.55  exact
+    ROSEBLOOM INS353  14-08  140 bx   5,600 kg   3 rows  £12,992.36    +1p
+    ROSEBLOOM INS353  21-08  210 bx   8,400 kg  10 rows  £15,865.90  exact
+    BOY JOHN INS110   06-08  210 bx   8,400 kg   6 rows  £18,553.55    -1p
+    BOY JOHN INS110   14-08  140 bx   5,600 kg   4 rows  £13,038.67  exact
+    BOY JOHN INS110   21-08  210 bx   8,400 kg   9 rows  £15,817.77    -1p
+
+    landings 70 -> 76     Danish 12 -> 18     every dedup_key distinct
+
+Landing totals are the **ROW SUM**, the app's own convention, with the printed
+total in `reconcile_diff` so the penny is on the record rather than hidden.
+Each sits the day after a big Peterhead landing — 05/06, 13/14, 20/21 — so they
+are the Danish tail of trips already on file, not missing trips.
+
+**GBP EXACTLY AS PRINTED, ON DAVID'S INSTRUCTION, AND FLAGGED.** Every note
+states *"Listed prices are converted using todays currency exchange rate. These
+are NOT actual sales prices"* at **872.5125 DKK / 100 GBP**, last updated
+21.08.2026 — and **all six were printed on 21 August**, so the 06-08 and 14-08
+sales carry a rate set after the sale. That sentence travels with every landing
+in `reconcile_diff.fx_note` rather than being lost.
+
+**`currency` AND `fx_rate` ARE LEFT NULL, DELIBERATELY, AND IT IS A LANDMINE
+EITHER WAY.** Setting `currency = 'DKK'` puts the rate box on the page, and
+`updateDkkRate` recomputes each row from `value_dkk / rate` while **skipping
+rows where `value_dkk` is null** — which is all of these. One press would
+rewrite the six landings to zero. The twelve Hanstholm landings already on this
+fleet carry null for the same reason.
+
+**The species label is the note's own word.** It prints `Catfishes`, and the
+twelve already filed store that in `species` with `Catfish` in `species_canon`.
+The first cut of the load wrote `Catfish` in both and would have split the
+firm's own record — ninth instance of the drift `canonBuyer`, `VESSEL_CANON`
+and `crew_ranks` all exist to stop. Checked against the real rows before
+loading, not assumed from this file.
+
+**Still open, and not Sandy's problem:** the **Hanstholm Afregning** parser
+finds the document and its printed total and returns **0 rows**. Separate from
+all of the above, found while proving his June note parses, and now the one
+outcome the new message calls a fault here.
+
+
 ### The wrapped-row bug — 1.3.3, Aug 2026
 
 **A row whose species cell wrapped onto the next line was dropped silently.**

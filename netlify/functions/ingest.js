@@ -53,6 +53,7 @@ import { createClient } from '@supabase/supabase-js'
 import { parseMarketFromDoc } from '../../src/lib/market/parseMarket.js'
 // Shared with the browser upload in Sales.jsx. esbuild bundles it in.
 import { canonBuyerFrom } from '../../src/lib/buyerAliases.js'
+import { whyNoRows } from '../../src/lib/salesNoRows.js'
 import { readManagerBalance } from '../../src/lib/invoices/periods.js'
 
 // src/lib/parse-core.cjs is THE sales-note parser — one copy, in this repo,
@@ -362,7 +363,10 @@ export const handler = async (event) => {
 
       if (kind === 'sales') {
         const res = ParseCore.parseExtracted(extracted, name)
-        if (!res.rows.length) { results.push(`skip ${name}: sales note but no rows parsed (${res.market})`); continue }
+        /* The SAME wording the page gives, from one shared function — a note
+         * emailed in and a note dropped on the page must not be explained
+         * differently. src/lib/salesNoRows.js. */
+        if (!res.rows.length) { results.push(`skip ${name}: ${whyNoRows(res).what}`); continue }
         const rec = res.reconcile || {}
         const tot = rec.actual || { boxes: 0, weight: 0, value: 0 }
         const dkey = dedupKey(res)
