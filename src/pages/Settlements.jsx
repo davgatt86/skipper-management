@@ -11,7 +11,7 @@ import StatsTab from '../settlements/StatsTab'
 import CrewTab from '../settlements/CrewTab'
 import InvoicesTab from '../settlements/InvoicesTab'
 import Reconcile from '../settlements/Reconcile'
-import { computeMetrics, money, money2, pct, qty } from '../lib/su/metrics'
+import { computeMetrics, money, money2, pct, pctOfIncome, qty } from '../lib/su/metrics'
 
 // The settled sheets that come back from the office.
 //
@@ -403,19 +403,30 @@ export default function Settlements() {
           const list = (bySection[sec] || []).sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
           if (!list.length) return null
           const total = list.reduce((a, l) => a + Number(l.amount || 0), 0)
+          const totalPct = pctOfIncome(total, s.total_income)
           return (
             <div key={sec} style={{ marginTop: 16 }}>
               <SectionRule side={`${list.length} line${list.length === 1 ? '' : 's'}`}>{SECTION_LABEL[sec]}</SectionRule>
               <div className="tw"><table>
                 <thead><tr><th>Item</th><th className="r">Amount</th><th className="r">% of income</th></tr></thead>
-                <tbody>{list.map(l => (
-                  <tr key={l.id}>
-                    <td className="strong">{l.label}</td>
-                    <td className="r num">{money2(l.amount)}</td>
-                    <td className="r num">{l.pct_income == null ? '—' : Number(l.pct_income).toFixed(2)}</td>
-                  </tr>
-                ))}</tbody>
-                <tfoot><tr><td>Total {SECTION_LABEL[sec].toLowerCase()}</td><td className="r num">{money2(total)}</td><td /></tr></tfoot>
+                <tbody>{list.map(l => {
+                  const p = pctOfIncome(l.amount, s.total_income)
+                  return (
+                    <tr key={l.id}>
+                      <td className="strong">{l.label}</td>
+                      <td className="r num">{money2(l.amount)}</td>
+                      <td className="r num">{p == null ? '—' : p.toFixed(2)}</td>
+                    </tr>
+                  )
+                })}</tbody>
+                {/* The section's own share is the figure worth having — expenses
+                    against income is the whole question the column is asked. It
+                    rendered as an empty cell. */}
+                <tfoot><tr>
+                  <td>Total {SECTION_LABEL[sec].toLowerCase()}</td>
+                  <td className="r num">{money2(total)}</td>
+                  <td className="r num">{totalPct == null ? '—' : totalPct.toFixed(2)}</td>
+                </tr></tfoot>
               </table></div>
             </div>
           )

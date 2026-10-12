@@ -150,3 +150,52 @@ export const money = v => (v == null ? null : '£' + Math.round(v).toLocaleStrin
 export const money2 = v => (v == null ? null : '£' + Number(v).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 export const pct = v => (v == null ? null : v.toFixed(1) + '%')
 export const qty = (v, unit) => (v == null ? null : Math.round(v).toLocaleString('en-GB') + (unit ? ' ' + unit : ''))
+
+/* "% OF INCOME" — DERIVED, AND IT WAS A DEAD COLUMN FOR 381 SETTLEMENTS.
+ *
+ * The settlement page has printed a "% of income" heading since it was built,
+ * over a column reading `su_settlement_lines.pct_income`. Measured Oct 2026:
+ * ZERO of 3,505 lines across ALL 381 settlements carry one, and nothing in
+ * this repo writes it — the reader is never asked for a line percentage (the
+ * Audacious prompt takes `label` and `amount`; Beryl's two percentages are
+ * sheet-level), and `SettlementImport` inserts five columns of which that is
+ * not one. So every row printed an em dash under a heading promising a figure
+ * the app had no way to hold. Found by David asking why the column was empty.
+ *
+ * IT IS COMPUTED RATHER THAN READ, and that is not this codebase's usual call.
+ * A currency conversion keeps its printed original because it rests on a rate
+ * nobody put on the document; this rests on two figures already on the sheet
+ * and already reconciled against it, so it is the m³ conversion case — exact,
+ * derivable, with no source that can be lost. Nothing to store, nothing to
+ * drift, and no second copy of a figure the sheet already carries.
+ *
+ * THE DENOMINATOR IS THE SETTLEMENT'S OWN `total_income`, NEVER THE SUM OF THE
+ * INCOME LINES, and the record is emphatic about why: 365 of 389 settlements
+ * have NO income lines at all — a Beryl sheet carries a gross sales figure and
+ * no income section. Summing the lines would have divided by zero on 94% of
+ * the record while looking perfectly right on the 24 Audacious sheets in front
+ * of me. Every one of the 389 carries a usable total_income.
+ *
+ * NO INCOME IS NO PERCENTAGE — never 0%, never Infinity. The same rule as a
+ * quota line with no allocation: there is nothing to divide by, so there is no
+ * answer, and an em dash says exactly that where "0.00" would be a claim.
+ *
+ * AND A BLANK AMOUNT IS NOT AN AMOUNT OF NOUGHT. `Number(null)` and
+ * `Number('')` are both 0 and both pass `Number.isFinite`, so the first cut of
+ * this returned a confident 0.00% for a line carrying no figure at all — the
+ * eighth time that trap has been hit here, after the engine hours, the gear mm,
+ * the invoice VAT, the invoice page, the running hours, the risk rating and the
+ * ORB reading. Caught by the test, not by reading it back. A line that came to
+ * nothing IS 0.00%, and one with no figure is an em dash; the two must not
+ * print alike.
+ */
+const blank = v => v == null || (typeof v === 'string' && v.trim() === '')
+
+export function pctOfIncome(amount, totalIncome) {
+  if (blank(totalIncome) || blank(amount)) return null
+  const inc = Number(totalIncome)
+  if (!Number.isFinite(inc) || inc <= 0) return null
+  const amt = Number(amount)
+  if (!Number.isFinite(amt)) return null
+  return (amt / inc) * 100
+}
