@@ -41,6 +41,48 @@ const GRADE_RE = /^(A[0-9]|B[0-9]|U9|-)$/
 // ---------------- Peterhead ----------------
 // Two blocks. Left: species<118, grade ~126, low ~164, high ~200, ave ~235.
 // Right: species 295-378, grade ~382, low ~440, high ~477, ave ~517.
+//
+// UNSOLD — THE WORD WAS BEING EATEN BY THE SPECIES NAME (Oct 2026).
+//
+// The board prints "Unsold" in a PRICE column where a grade did not clear:
+//
+//     Hadd Chipper | A4 | Unsold | £2.35 | £1.75
+//
+// It is not money, not a header and not a grade, so it fell through to the
+// last branch and was pushed onto the species label. Proved by instrumenting
+// the parser over the real 12-10-2026 sheet rather than by reading it:
+//
+//     LABEL=[Hadd Seed]             -> subgrade=Seed      correct
+//     LABEL=[Hadd Chipper Unsold]   -> subgrade=null      lost
+//     LABEL=[Round Whiting Unsold]  -> subgrade=null      lost
+//
+// ONE CAUSE, THREE SYMPTOMS, and David reported two of them:
+//
+//   1. THE SUBGRADE WENT. `PD_SUBGRADE` is an exact-match map, so "Hadd
+//      Chipper" resolves and "Hadd Chipper Unsold" does not. The day's three
+//      A4 haddock lines all came back as a bare "Haddock A4" — three
+//      identical rows on the page with no way to tell chipper from metro
+//      from round, which is exactly what he was looking at.
+//
+//   2. NOTHING RECORDED THAT IT WAS UNSOLD. `num()` already refuses the word,
+//      so `low` came out null — and a null low is how the page says "no
+//      figure". A grade that did not sell and a figure nobody printed looked
+//      identical, which is the complaint: "system doesn't say that".
+//
+//   3. AND ON A LABEL THE SPECIES MAP DOES NOT KNOW, THE WORD BECAME THE
+//      SPECIES. `market_prices` carries 4 rows under the invented species
+//      "Fresh S UNSOLD" and "Fresh XS UNSOLD" — squid grades, which have no
+//      entry in either map, so the whole label including the word was kept.
+//      Phantom fish in the record of the board.
+//
+// Measured across the live board: 359 rows over 24 species/grade combinations
+// carry a null low beside a real high or ave, back to 26-09-2024. Every one is
+// an unsold line that lost the word — it is not a haddock problem.
+//
+// `unsold` is recorded on the row and the column is NULLABLE: true and false
+// are what the parser read, and null is a row filed before any of this, where
+// the honest answer is that nobody knows. Defaulting the history to false
+// would assert about sixty thousand rows that they cleared, when 359 did not.
 function parsePd(pages, fullText) {
   const price_date = parsePdDate(fullText)
   const warnings = []
@@ -51,6 +93,9 @@ function parsePd(pages, fullText) {
   const GRADE = /^(A[0-9]|B[0-9]|U9|-)$/i
   const isMoney = s => /^£?\d[\d,]*\.\d{2}$/.test(s)
   const isHdr = s => /^(LOW|HIGH|AVE)$/i.test(s)
+  /* THE BOARD PRINTS "Unsold" IN A PRICE COLUMN, and it is a STATE, not a
+     price and not part of the fish's name. See UNSOLD below. */
+  const isUnsold = s => /^unsold$/i.test(s)
 
   // 1. Anchor on the "LOW HIGH AVE  LOW HIGH AVE" header row, so column
   //    positions are read off each sheet instead of hard-coded (templates
@@ -81,7 +126,12 @@ function parsePd(pages, fullText) {
   //    without guessing — the right block's species is its leftmost element.
   let rightSpeciesX = Infinity
   for (const pg of pages) for (const r of pg.rows) for (const i of r.items) {
-    if (i.x > cols.left.ave + 5 && !isMoney(i.str) && !isHdr(i.str) && /[A-Za-z]/.test(i.str)) {
+    // "Unsold" is excluded for the same reason LOW/HIGH/AVE are: it sits in a
+    // PRICE column and is not a species name. It has never yet been the
+    // leftmost such token, so this is a latent trap rather than a live one —
+    // but a right-block row whose species is further right than its own low
+    // column would drag the block split onto a word.
+    if (i.x > cols.left.ave + 5 && !isMoney(i.str) && !isHdr(i.str) && !isUnsold(i.str) && /[A-Za-z]/.test(i.str)) {
       if (i.x < rightSpeciesX) rightSpeciesX = i.x
     }
   }
@@ -101,17 +151,21 @@ function parsePd(pages, fullText) {
         const slot = { low: null, high: null, ave: null }
         const headTok = []
         let grade = ''
+        let unsold = false
         for (const i of its) {
           if (isMoney(i.str)) { const k = nearest(i.x, c); if (slot[k] == null) slot[k] = num(i.str) }
           else if (isHdr(i.str)) { /* header row */ }
+          else if (isUnsold(i.str)) unsold = true
           else if (GRADE.test(i.str)) grade = i.str.toUpperCase()
           else headTok.push(i.str)
         }
-        if (slot.low == null && slot.high == null && slot.ave == null) continue
+        // An entirely unsold grade has no figures at all and is still a fact
+        // about the day — it used to be dropped with the blank rows.
+        if (!unsold && slot.low == null && slot.high == null && slot.ave == null) continue
         const label = headTok.join(' ').trim()
         if (!label) continue
         const { species, subgrade } = pdSpecies(label)
-        prices.push({ source: 'PD', price_date, species, grade, subgrade, low: slot.low, high: slot.high, ave: slot.ave })
+        prices.push({ source: 'PD', price_date, species, grade, subgrade, low: slot.low, high: slot.high, ave: slot.ave, unsold })
       }
     }
   }

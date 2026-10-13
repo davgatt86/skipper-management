@@ -234,7 +234,9 @@ function Board({ prices, days }) {
               {board.items.map((r, i) => (
                 <tr key={i}>
                   <td style={td}>{r.species}</td><td style={td}>{r.grade}</td>
-                  {source === 'PD' && <td style={tdR}>{gbp(r.low)}</td>}
+                  {/* A grade that did not clear and a figure nobody printed are
+                      two different facts and must not both render as a dash. */}
+                  {source === 'PD' && <td style={tdR}>{r.unsold ? <span style={{ color: 'var(--brass)', fontWeight: 600 }}>Unsold</span> : gbp(r.low)}</td>}
                   {source === 'PD' && <td style={tdR}>{gbp(r.high)}</td>}
                   <td style={{ ...tdR, fontWeight: 700 }}>{gbp(r.ave)}</td>
                   <td style={tdR}><Delta v={r.dDay} /></td>

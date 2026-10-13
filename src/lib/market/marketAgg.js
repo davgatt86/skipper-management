@@ -82,7 +82,7 @@ export function buildBoard(prices, source) {
     const avg4 = mean(recent)
     items.push({
       species: p.species, grade: gradeKey(p),
-      low: p.low, high: p.high, ave: p.ave,
+      low: p.low, high: p.high, ave: p.ave, unsold: p.unsold,
       dDay: prevP && prevP.ave != null && p.ave != null ? r2(p.ave - prevP.ave) : null,
       d4wk: avg4 != null && p.ave != null ? r2(p.ave - avg4) : null,
     })
