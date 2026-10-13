@@ -8,7 +8,8 @@ import { fnUrl } from "../lib/apiBase";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "../supabaseClient";
-import { buildEstimatorPrices } from "../lib/market/estimatorPrices";
+import { buildEstimatorPrices, LAST_CLEARED_WINDOW_DAYS } from "../lib/market/estimatorPrices";
+import { fetchAll } from "../lib/fetchAll";
 
 /* ============================================================
    Trip Gross Estimator v2 — Peterhead vs Hanstholm
@@ -291,25 +292,45 @@ export default function Estimator(){
   async function loadBoardPrices(){
     setBoardMsg("Loading latest board prices…");
     try{
-      const grab=async(src)=>{
+      /* PD is fetched over a WINDOW, not just the two latest days: an unsold
+         grade falls back to its own last cleared price, and that day may be a
+         week back. The two latest days are still the only ones that price the
+         tally — buildEstimatorPrices works that out from price_date and uses
+         the rest for the lookback alone.
+
+         `unsold` must be selected or the filter never fires, and `price_date`
+         or the window cannot be told from the pricing days.
+
+         fetchAll, not a plain select: 14 days is ~475 rows today against a
+         silent 1,000-row cap, and a truncated board would drop fallback
+         prices with no error at all. */
+      const grab=async(src,windowDays)=>{
         const {data:days}=await supabase.from("market_days").select("price_date").eq("source",src).order("price_date",{ascending:false}).limit(2);
         const dates=(days||[]).map(d=>d.price_date);
         if(!dates.length) return {dates:[],rows:[]};
-        // `unsold` is selected because an unsold grade must not value a tally —
-        // leave it off and the filter in buildEstimatorPrices never fires.
-        const {data:rows}=await supabase.from("market_prices").select("species,grade,subgrade,low,high,ave,unsold").eq("source",src).in("price_date",dates);
+        const cols="price_date,species,grade,subgrade,low,high,ave,unsold";
+        if(!windowDays){
+          const {data:rows}=await supabase.from("market_prices").select(cols).eq("source",src).in("price_date",dates);
+          return {dates,rows:rows||[]};
+        }
+        const from=new Date(new Date(dates[0]).getTime()-windowDays*86400000).toISOString().slice(0,10);
+        const {data:rows,error}=await fetchAll("market_prices",cols,q=>q.eq("source",src).gte("price_date",from).lte("price_date",dates[0]));
+        if(error) throw error;
         return {dates,rows:rows||[]};
       };
-      const [pdR,dkR]=await Promise.all([grab("PD"),grab("DK")]);
-      const {pd:pdObj,dk:dkObj,missing,unsold}=buildEstimatorPrices(pdR.rows,dkR.rows);
+      const [pdR,dkR]=await Promise.all([grab("PD",LAST_CLEARED_WINDOW_DAYS),grab("DK")]);
+      const {pd:pdObj,dk:dkObj,missing,unsold,lastCleared}=buildEstimatorPrices(pdR.rows,dkR.rows);
       if(Object.keys(pdObj).length) setPd(pdObj);
       if(Object.keys(dkObj).length) setDk(dkObj);
       if(!pdR.dates.length && !dkR.dates.length){
         setBoardMsg("No board prices yet — upload price sheets under Daily Prices, or enter prices by hand below.");
       }else{
-        // An unsold grade is not priced, and saying so is the point — it is the
-        // most useful thing the board can tell a man choosing where to land.
-        setBoardMsg(`Board prices loaded — Peterhead ${pdR.dates[0]||"—"}, Hanstholm ${dkR.dates[0]||"—"} (2 latest days, averaged).${missing.length?" Not on the board: "+missing.join(", ")+" — add by hand if you landed them.":""}${unsold.length?" Unsold at Peterhead, so not priced: "+unsold.join(", ")+".":""}`);
+        /* A price carried over from an earlier day is a decision the skipper is
+           entitled to see, so it is named with the day it came off. Grades that
+           cleared nowhere in the window are a different fact and said
+           separately — one is an old price, the other is no price. */
+        const carried=lastCleared.map(c=>`${c.label} (${c.date}, ${c.daysBack} days back)`).join(", ");
+        setBoardMsg(`Board prices loaded — Peterhead ${pdR.dates[0]||"—"}, Hanstholm ${dkR.dates[0]||"—"} (2 latest days, averaged).${missing.length?" Not on the board: "+missing.join(", ")+" — add by hand if you landed them.":""}${carried?" Unsold at Peterhead — using the last price each one cleared at: "+carried+".":""}${unsold.length?" Unsold and not cleared in the last "+LAST_CLEARED_WINDOW_DAYS+" days, so not priced: "+unsold.join(", ")+".":""}`);
       }
     }catch(e){ setBoardMsg(`Couldn't load board prices (${e.message}). Enter prices by hand, or check Daily Prices.`); }
   }

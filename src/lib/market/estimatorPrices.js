@@ -47,37 +47,92 @@ const r2 = n => (n == null ? null : Math.round(n * 100) / 100)
  * of the ~60,000 historical rows behaving exactly as it did. Treating null as
  * unsold would empty the board.
  *
- * A GRADE DROPPED ON BOTH DAYS IS REPORTED, NOT SILENTLY LOST. It then has no
- * price at all, and `resolvePrice` falls back within the A4 family or returns
- * null so the other market is borrowed — safe, but invisible. The skipper is
- * told which grades are unpriced and why, because "the market would not take
- * your chippers" is the single most useful thing the board can say to a man
- * deciding where to land.
+ * A GRADE UNSOLD ON BOTH DAYS FALLS BACK TO ITS OWN LAST CLEARED PRICE.
+ * David, Oct 2026: "fall back to it's own last cleared price." Not the other
+ * market, and not nothing — the most recent day the market actually paid for
+ * THAT grade. Borrowing Denmark prices a Scottish chipper off a different
+ * auction, and valuing at nothing quietly drops part of the hold.
  *
- * pdRows / dkRows: market_prices records from the 2 latest days for that
- * source. Each: { species, grade, subgrade, low, high, ave, unsold }.
+ * THE WINDOW IS 14 DAYS AND IT IS MEASURED, NOT CHOSEN. Over the board's own
+ * record, a grade that goes unsold clears again within one or two board days
+ * 38 times out of 47; the longest spell ever recorded is 8 board days, which
+ * is 11 calendar days across the weekends. 14 covers every spell on record
+ * with headroom, and keeps the query at ~475 rows. Past that the price is too
+ * old to value a hold with and the grade is reported unpriced instead — a
+ * three-week-old price presented as today's is worse than no price.
+ *
+ * IT IS THE SAME ROW, PUT THROUGH THE SAME ARITHMETIC. The fallback day's row
+ * is fed into the group exactly as a current row would be, so the haddock
+ * blends and every other per-grade rule run unchanged — there is no second
+ * pricing path to drift. All that is added is the DATE it came from.
+ *
+ * AND THE DATE IS REPORTED, because a price from last Tuesday valuing today's
+ * tally is a decision the skipper is entitled to see. `lastCleared` carries
+ * the grade, the day and how far back it is; `unsold` is what is still
+ * unpriced after looking. The two are different facts and read differently.
+ *
+ * pdRows: market_prices records for the PD board over the lookback window —
+ * the 2 LATEST days are what prices the tally, the rest exist only to answer
+ * "when did this grade last clear". dkRows: the 2 latest DK days.
+ * Each: { price_date, species, grade, subgrade, low, high, ave, unsold }.
  * Returns { pd, dk } in the Estimator's expected shape, plus `missing` (board
- * species the estimator cannot place) and `unsold` (grades left unpriced
- * because they did not clear on either day). */
+ * species the estimator cannot place), `lastCleared` (grades priced off an
+ * older day, with that day) and `unsold` (grades that cleared nowhere in the
+ * window and are not priced at all). */
+export const LAST_CLEARED_WINDOW_DAYS = 14
 export function buildEstimatorPrices(pdRows = [], dkRows = []) {
   const pd = {}, dk = {}
   const missing = new Set()
   const unsoldKeys = new Map()   // key -> readable label, for rows we dropped
+  const lastCleared = []         // grades priced off an older day
+  const unsold = []              // grades that cleared nowhere in the window
 
   const label = r => `${r.species} ${r.grade}${r.subgrade ? ' ' + r.subgrade : ''}`.trim()
+  const keyOf = r => `${r.species}|${r.grade}|${r.subgrade || ''}`
+  const hasPrice = r => r.ave != null || r.high != null
+
+  // The two most recent board days are what price the tally. Anything older in
+  // pdRows is lookback only — it must never quietly join the average.
+  const pdDates = [...new Set(pdRows.map(r => r.price_date).filter(Boolean))].sort().reverse()
+  const latest = pdDates[0] || null
+  const pricingDays = new Set(pdDates.slice(0, 2))
+  // No price_date at all means the caller passed the old two-day shape; price
+  // every row, exactly as before, rather than silently returning nothing.
+  const isPricingRow = r => (pdDates.length ? pricingDays.has(r.price_date) : true)
 
   // ---- group + average across the (up to 2) days ----
   // PD: key species|grade|subgrade
   const pdGroups = {}
-  for (const r of pdRows) {
-    const k = `${r.species}|${r.grade}|${r.subgrade || ''}`
-    if (r.unsold) { unsoldKeys.set(k, label(r)); continue }
+  const add = (k, r) => {
     ;(pdGroups[k] = pdGroups[k] || { species: r.species, grade: r.grade, subgrade: r.subgrade, ave: [], high: [], low: [] })
     pdGroups[k].ave.push(r.ave); pdGroups[k].high.push(r.high); pdGroups[k].low.push(r.low)
   }
-  // Only the grades with nothing left on EITHER day are unpriced. One unsold
-  // day beside one that cleared is not news — the price stands.
-  const unsold = [...unsoldKeys].filter(([k]) => !pdGroups[k]).map(([, v]) => v).sort()
+  for (const r of pdRows) {
+    if (!isPricingRow(r)) continue
+    const k = keyOf(r)
+    if (r.unsold) { unsoldKeys.set(k, label(r)); continue }
+    add(k, r)
+  }
+
+  // ---- fall back to the grade's own last cleared day --------------------
+  // Only for grades with nothing left on EITHER pricing day. One unsold day
+  // beside one that cleared is not news — that price stands.
+  const dayMs = 86400000
+  const cutoff = latest ? new Date(new Date(latest).getTime() - LAST_CLEARED_WINDOW_DAYS * dayMs).toISOString().slice(0, 10) : null
+  for (const [k, lbl] of [...unsoldKeys].sort((a, b) => a[1].localeCompare(b[1]))) {
+    if (pdGroups[k]) continue
+    const back = pdRows
+      .filter(r => keyOf(r) === k && !r.unsold && hasPrice(r) && !pricingDays.has(r.price_date)
+        && (!cutoff || r.price_date >= cutoff))
+      .sort((a, b) => String(b.price_date).localeCompare(String(a.price_date)))[0]
+    if (!back) { unsold.push(lbl); continue }
+    add(k, back)
+    lastCleared.push({
+      label: lbl,
+      date: back.price_date,
+      daysBack: latest ? Math.round((new Date(latest) - new Date(back.price_date)) / dayMs) : null,
+    })
+  }
   for (const g of Object.values(pdGroups)) {
     const name = PD_NAME[g.species]
     if (!name) { missing.add('PD ' + g.species); continue }
@@ -135,7 +190,7 @@ export function buildEstimatorPrices(pdRows = [], dkRows = []) {
     obj[sort] = ave
   }
 
-  return { pd, dk, missing: [...missing], unsold }
+  return { pd, dk, missing: [...missing], unsold, lastCleared }
 }
 
 // Pick the 2 most recent distinct dates from a list of {price_date} rows.
