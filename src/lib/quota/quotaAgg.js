@@ -81,10 +81,41 @@ export function buildPosition({ snapshot, trips, year, adjustments = [], manualS
     return out
   }
 
-  // Net what-if adjustment per stock (IN positive, OUT negative, tonnes)
+  /* Net swap / rental per stock (IN positive, OUT negative, tonnes).
+   *
+   * A STATEMENT PAST THE SWAP'S DATE ALREADY CONTAINS IT. David, Oct 2026:
+   * "statements are true positions, all swap/rents are on statements. so a
+   * swap/rent should be dated, if statement is after date inputted they
+   * disppear as they are now included in statement."
+   *
+   * This used to filter on YEAR alone, because the row had no date to filter
+   * on, so every swap was added on top of whatever statement was loaded. Not
+   * hypothetical: Audacious's own 22 adjustments were all agreed between June
+   * and 15 September against a statement as at 30-09-2026, and that statement
+   * carries 120 tonnes of swaps in `quota_lines.swaps` — they were in it.
+   *
+   * It is the SAME RULE the logbook already follows one block up, and the same
+   * rule the manual ledger follows one block down ("entries on/before anchor
+   * ignored"). The statement is the true position as at its date; everything
+   * else in this function exists only to carry it forward from there. The
+   * swaps were the one input not obeying it.
+   *
+   * ON the cutoff counts as inside, matching `ledgerFor`. The statement is
+   * struck at the end of that landing day.
+   *
+   * UNDATED IS A THIRD STATE AND IS KEPT, NOT GUESSED. It cannot be told
+   * whether the statement covers it, so it is counted — the behaviour it has
+   * always had — and returned in `undatedAdj` so the page can ask for a date.
+   * Dropping it would move the position with nothing on screen to say why;
+   * assuming it is covered would silently lose a real trade. */
   const adjByStock = {}
+  const supersededAdj = []   // on the statement already, so not added again
+  const undatedAdj = []      // counted, but nobody can say whether they are in
   for (const a of adjustments) {
     if (Number(a.year) !== Number(year)) continue
+    const on = a.effective_date ? String(a.effective_date).slice(0, 10) : null
+    if (!on) undatedAdj.push(a)
+    else if (cutoff && on <= cutoff) { supersededAdj.push(a); continue }
     adjByStock[a.stock] = (adjByStock[a.stock] || 0) + (a.direction === 'in' ? 1 : -1) * Number(a.tonnes || 0)
   }
 
@@ -197,7 +228,7 @@ export function buildPosition({ snapshot, trips, year, adjustments = [], manualS
     .map(([key, kg]) => ({ key, kg: r3(kg) }))
     .sort((a, b) => b.kg - a.kg)
 
-  return { rows, nonquotaRows, unmappedRows, cutoff, sinceTrips, conflicts }
+  return { rows, nonquotaRows, unmappedRows, cutoff, sinceTrips, conflicts, supersededAdj, undatedAdj }
 }
 
 // Forecast: project each stock's estimated balance to year-end using the catch

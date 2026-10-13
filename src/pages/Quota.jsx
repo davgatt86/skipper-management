@@ -446,12 +446,18 @@ export default function Quota() {
   const [inStock, setInStock] = useState('')
   const [inT, setInT] = useState('')
   const [adjNote, setAdjNote] = useState('')
+  /* A swap has to be dated or the position cannot tell whether a statement
+     already contains it. Defaulted to today because most are entered the day
+     they are agreed, and still editable. */
+  const [adjDate, setAdjDate] = useState(() => new Date().toISOString().slice(0, 10))
 
   async function addAdjustment(e) {
     e.preventDefault()
     const rows = []
-    if (outStock && Number(outT) > 0) rows.push({ year: Number(year), stock: outStock, direction: 'out', tonnes: Number(outT), note: adjNote.trim() })
-    if (inStock && Number(inT) > 0) rows.push({ year: Number(year), stock: inStock, direction: 'in', tonnes: Number(inT), note: adjNote.trim() })
+    const on = adjDate || null
+    if (!on) { setError('Give the date the swap or rental took effect — without it the position cannot tell whether a statement already includes it.'); return }
+    if (outStock && Number(outT) > 0) rows.push({ year: Number(year), stock: outStock, direction: 'out', tonnes: Number(outT), note: adjNote.trim(), effective_date: on })
+    if (inStock && Number(inT) > 0) rows.push({ year: Number(year), stock: inStock, direction: 'in', tonnes: Number(inT), note: adjNote.trim(), effective_date: on })
     if (!rows.length) { setError('Pick a stock and tonnage for at least one side.'); return }
     setError('')
     const { error: err } = await supabase.from('quota_adjustments').insert(rows)
@@ -761,11 +767,19 @@ export default function Quota() {
       )}
 
       <div className="card" style={{ marginBottom: '1rem' }}>
-        <h3 style={{ marginTop: 0 }}>Swaps & rentals — what-if ({year})</h3>
+        <h3 style={{ marginTop: 0 }}>Swaps & rentals ({year})</h3>
         <p className="muted" style={{ fontSize: '0.82rem' }}>
-          Try a swap or rental before it's official — e.g. 20t NS Cod OUT for 100t NS Saithe IN.
-          Either side can be left blank for a one-way rental. Entries adjust the Est. balance column until you remove them.
-          Once a lease is real, record it as a Lease/swap entry on the stock instead.
+          A swap or rental — e.g. 20t NS Cod OUT for 100t NS Saithe IN. Either side can be left
+          blank for a one-way rental. They adjust the Est. balance column until a statement
+          catches up with them.
+        </p>
+        {/* THE STATEMENT IS THE TRUE POSITION AND ALREADY CONTAINS THE SWAPS
+            STRUCK BEFORE IT. Saying so here is what stops the same swap being
+            typed back in when it drops off the list. */}
+        <p className="muted" style={{ fontSize: '0.82rem' }}>
+          Date each one. A statement is a true position with every swap already in it, so once a
+          statement is loaded that is dated on or after a swap, that swap drops off this list —
+          it is counted by the statement instead, and adding it again would count it twice.
         </p>
         <form onSubmit={addAdjustment} style={{ display: 'grid', gap: '0.5rem', maxWidth: 560 }}>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -778,7 +792,9 @@ export default function Quota() {
             <StockSelect value={inStock} onChange={setInStock} style={{ flex: 1, minWidth: 160 }} />
             <input type="number" min="0.001" step="0.001" placeholder="tonnes" value={inT} onChange={e => setInT(e.target.value)} style={{ width: 110 }} />
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.82rem' }} htmlFor="adj-date">Took effect</label>
+            <input id="adj-date" type="date" required value={adjDate} onChange={e => setAdjDate(e.target.value)} style={{ width: 150 }} />
             <input placeholder="Note, e.g. swap with WK170 (optional)" value={adjNote} onChange={e => setAdjNote(e.target.value)} style={{ flex: 1, minWidth: 200 }} />
             <button type="submit">Add</button>
           </div>
@@ -790,11 +806,29 @@ export default function Quota() {
                 <span>
                   <strong style={{ color: a.direction === 'in' ? '#15803d' : '#b91c1c' }}>{a.direction.toUpperCase()}</strong>{' '}
                   {Number(a.tonnes).toLocaleString('en-GB', { maximumFractionDigits: 3 })} t {a.stock}
+                  {/* The date is the thing that decides whether this still counts,
+                      so it is on the row rather than hidden in the record. */}
+                  {a.effective_date
+                    ? <span className="muted"> · {fmtDate(a.effective_date)}</span>
+                    : <span style={{ color: 'var(--brass)' }}> · undated — still counted, but give it a date</span>}
+                  {pos.supersededAdj?.some(s => s.id === a.id) &&
+                    <span style={{ color: 'var(--mute)' }}> · on the {fmtDate(pos.cutoff)} statement, not added again</span>}
                   {a.note && <span className="muted"> — {a.note}</span>}
                 </span>
                 <button className="secondary" style={{ padding: '0.1rem 0.5rem', fontSize: '0.8rem' }} onClick={() => deleteAdjustment(a)}>remove</button>
               </div>
             ))}
+            {/* A swap that stops counting must say so, or it looks like the app
+                lost it and gets typed in again — which is the double count the
+                dating exists to prevent. */}
+            {pos.supersededAdj?.length > 0 && (
+              <p className="muted" style={{ fontSize: '0.82rem', marginTop: '0.6rem', marginBottom: 0 }}>
+                {pos.supersededAdj.length} of these {pos.supersededAdj.length === 1 ? 'is' : 'are'} dated on or before
+                the {fmtDate(pos.cutoff)} statement, so {pos.supersededAdj.length === 1 ? 'it is' : 'they are'} already
+                in that true position and {pos.supersededAdj.length === 1 ? 'is' : 'are'} not counted here as well.
+                Safe to remove once you are happy the statement carries {pos.supersededAdj.length === 1 ? 'it' : 'them'}.
+              </p>
+            )}
           </div>
         )}
       </div>
