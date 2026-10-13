@@ -295,17 +295,21 @@ export default function Estimator(){
         const {data:days}=await supabase.from("market_days").select("price_date").eq("source",src).order("price_date",{ascending:false}).limit(2);
         const dates=(days||[]).map(d=>d.price_date);
         if(!dates.length) return {dates:[],rows:[]};
-        const {data:rows}=await supabase.from("market_prices").select("species,grade,subgrade,low,high,ave").eq("source",src).in("price_date",dates);
+        // `unsold` is selected because an unsold grade must not value a tally —
+        // leave it off and the filter in buildEstimatorPrices never fires.
+        const {data:rows}=await supabase.from("market_prices").select("species,grade,subgrade,low,high,ave,unsold").eq("source",src).in("price_date",dates);
         return {dates,rows:rows||[]};
       };
       const [pdR,dkR]=await Promise.all([grab("PD"),grab("DK")]);
-      const {pd:pdObj,dk:dkObj,missing}=buildEstimatorPrices(pdR.rows,dkR.rows);
+      const {pd:pdObj,dk:dkObj,missing,unsold}=buildEstimatorPrices(pdR.rows,dkR.rows);
       if(Object.keys(pdObj).length) setPd(pdObj);
       if(Object.keys(dkObj).length) setDk(dkObj);
       if(!pdR.dates.length && !dkR.dates.length){
         setBoardMsg("No board prices yet — upload price sheets under Daily Prices, or enter prices by hand below.");
       }else{
-        setBoardMsg(`Board prices loaded — Peterhead ${pdR.dates[0]||"—"}, Hanstholm ${dkR.dates[0]||"—"} (2 latest days, averaged).${missing.length?" Not on the board: "+missing.join(", ")+" — add by hand if you landed them.":""}`);
+        // An unsold grade is not priced, and saying so is the point — it is the
+        // most useful thing the board can tell a man choosing where to land.
+        setBoardMsg(`Board prices loaded — Peterhead ${pdR.dates[0]||"—"}, Hanstholm ${dkR.dates[0]||"—"} (2 latest days, averaged).${missing.length?" Not on the board: "+missing.join(", ")+" — add by hand if you landed them.":""}${unsold.length?" Unsold at Peterhead, so not priced: "+unsold.join(", ")+".":""}`);
       }
     }catch(e){ setBoardMsg(`Couldn't load board prices (${e.message}). Enter prices by hand, or check Daily Prices.`); }
   }

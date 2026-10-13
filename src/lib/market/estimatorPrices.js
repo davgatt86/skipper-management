@@ -28,22 +28,56 @@ function avg(list) {
 }
 const r2 = n => (n == null ? null : Math.round(n * 100) / 100)
 
-/* pdRows / dkRows: market_prices records from the 2 latest days for that source.
- * Each: { species, grade, subgrade, low, high, ave }.
- * Returns { pd, dk } in the Estimator's expected shape, plus a `missing` note
- * listing board species the estimator can't place (so the UI can flag them). */
+/* AN UNSOLD GRADE DOES NOT VALUE A TALLY. David, Oct 2026: "don't use unsold
+ * in estimator."
+ *
+ * The board prints a high and an average against a grade that did not clear,
+ * and those are real prices for whatever did sell — but valuing a hold of fish
+ * against a grade the market would not take is the wrong way to decide where
+ * to land, which is the one question this page exists to answer.
+ *
+ * IT IS FILTERED PER ROW, BEFORE GROUPING, and that is the whole care in it.
+ * The estimator averages the TWO most recent board days together, so a grade
+ * unsold yesterday and sold today would otherwise blend a non-sale into a real
+ * price. Dropped per row, the group simply keeps the day that cleared — the
+ * most recent price the market actually paid, which is the right answer.
+ *
+ * ONLY `unsold === true` IS DROPPED. The column is nullable and null means the
+ * row was filed before any of this was read, so a falsy test keeps every one
+ * of the ~60,000 historical rows behaving exactly as it did. Treating null as
+ * unsold would empty the board.
+ *
+ * A GRADE DROPPED ON BOTH DAYS IS REPORTED, NOT SILENTLY LOST. It then has no
+ * price at all, and `resolvePrice` falls back within the A4 family or returns
+ * null so the other market is borrowed — safe, but invisible. The skipper is
+ * told which grades are unpriced and why, because "the market would not take
+ * your chippers" is the single most useful thing the board can say to a man
+ * deciding where to land.
+ *
+ * pdRows / dkRows: market_prices records from the 2 latest days for that
+ * source. Each: { species, grade, subgrade, low, high, ave, unsold }.
+ * Returns { pd, dk } in the Estimator's expected shape, plus `missing` (board
+ * species the estimator cannot place) and `unsold` (grades left unpriced
+ * because they did not clear on either day). */
 export function buildEstimatorPrices(pdRows = [], dkRows = []) {
   const pd = {}, dk = {}
   const missing = new Set()
+  const unsoldKeys = new Map()   // key -> readable label, for rows we dropped
+
+  const label = r => `${r.species} ${r.grade}${r.subgrade ? ' ' + r.subgrade : ''}`.trim()
 
   // ---- group + average across the (up to 2) days ----
   // PD: key species|grade|subgrade
   const pdGroups = {}
   for (const r of pdRows) {
     const k = `${r.species}|${r.grade}|${r.subgrade || ''}`
+    if (r.unsold) { unsoldKeys.set(k, label(r)); continue }
     ;(pdGroups[k] = pdGroups[k] || { species: r.species, grade: r.grade, subgrade: r.subgrade, ave: [], high: [], low: [] })
     pdGroups[k].ave.push(r.ave); pdGroups[k].high.push(r.high); pdGroups[k].low.push(r.low)
   }
+  // Only the grades with nothing left on EITHER day are unpriced. One unsold
+  // day beside one that cleared is not news — the price stands.
+  const unsold = [...unsoldKeys].filter(([k]) => !pdGroups[k]).map(([, v]) => v).sort()
   for (const g of Object.values(pdGroups)) {
     const name = PD_NAME[g.species]
     if (!name) { missing.add('PD ' + g.species); continue }
@@ -101,7 +135,7 @@ export function buildEstimatorPrices(pdRows = [], dkRows = []) {
     obj[sort] = ave
   }
 
-  return { pd, dk, missing: [...missing] }
+  return { pd, dk, missing: [...missing], unsold }
 }
 
 // Pick the 2 most recent distinct dates from a list of {price_date} rows.
