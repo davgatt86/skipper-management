@@ -8223,6 +8223,55 @@ stocks is a fault worth seeing rather than a reassurance.
 
 `test-vessels.mjs` — 51 → **56**.
 
+### A STATEMENT IS THE TRUE POSITION, AND CONTAINS THE SWAPS BEFORE IT (Oct 2026)
+
+David: *"statements are true positions, all swap/rents are on statements. so a
+swap/rent should be dated, if statement is after date inputted they disppear as
+they are now included in statement. logbook uploads are estimates until the
+returned weight comes back after the fish are sold. use this figures in logbook
+exports until a new statement is uploaded, then we have a true position."*
+
+So the position is **one anchor carried forward**, and every input is dated
+against the statement:
+
+    statement balance, as at its last landing date      TRUE
+      − logbook catch from trips landed after it        ESTIMATE, until weights return
+      ± swaps and rentals dated after it                not yet on a statement
+
+**THE LOGBOOK HALF WAS ALREADY RIGHT.** `buildPosition` has always counted
+catch only from trips that LANDED after `last_landing_date`, and a new
+statement supersedes the lot. **The swaps were the one input not obeying it** —
+`quota_adjustments` had no date at all, only a `created_at` recording when the
+row was typed, so they were filtered on YEAR and added on top of every
+statement.
+
+**AUDACIOUS'S OWN 22 ARE THE PROOF.** Agreed 10-06 to 15-09-2026 — Lockers,
+60 N Fishing, Avrella, SQ, AQ, Flex, all real trades — against a statement as
+at 30-09-2026. Every one inside it, and the statement carries **120 t of swaps
+in `quota_lines.swaps`** to say so. Counting them again overstated NS Saithe
+alone by **258 t**.
+
+`effective_date` on the adjustment; **on the statement date counts as INSIDE
+it**, matching `ledgerFor`'s rule for the manual anchor — the statement is
+struck at the end of that landing day. All three inputs now obey one rule.
+
+**A SUPERSEDED SWAP SAYS WHERE IT WENT** rather than vanishing, because one
+that silently stops counting gets typed in again — which is the double count
+the dating exists to prevent. **Undated is a third state**: counted as it always
+was, and flagged for a date, since nobody can tell whether a statement covers
+it.
+
+**THE 22 ARE NOT RESTORED — David's call, Oct 2026: "don't restore".** They went
+in the 08-10 quota reset and are still in `audit_log` with full payloads. Every
+one is superseded by the 30-09 statement, so the position is correct without
+them, and restoring them would need a date each — `created_at` is when he typed
+it, which is a different fact and not one to launder into `effective_date`.
+**Do not helpfully put them back.**
+
+`supabase/quota_adjustment_effective_date.sql` (applied) ·
+`test-quota-swaps.mjs` 23 checks, including the boundary both ways and all 22
+real swaps against the real statement.
+
 **This section was audited against the code Aug 2026 and SIX entries were
 already built.** Check before starting anything here — a stale to-do already
 cost real effort twice in one session. Verified done and removed:
