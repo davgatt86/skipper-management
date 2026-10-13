@@ -2755,6 +2755,19 @@ Rules learned the hard way:
 
 - A4 haddock sub-grades: mini = cheapest boxes, chipper = dearest, metro = the
   remainder. Never the other way round.
+- **MINI METRO IS NOT A LINE ON THE BOARD.** Peterhead prints ONE Metro row,
+  and both boat grades are blends of its three columns — David, Oct 2026:
+  *"mini is the low/avg blend price of metro, metro is high/avg blend."*
+
+      Mini Metro  = (low + ave) / 2        Metro = (ave + high) / 2
+
+  Already built exactly so in `estimatorPrices.js` (the AVG page; the HIGH page
+  takes ave and high straight). **Do not go looking for a Mini line to parse** —
+  I asked David to send a sheet carrying one, and there is no such thing.
+  The consequence worth knowing is that **both grades hang off that single
+  Metro row**, so anything that loses it loses two prices at once: the Unsold
+  bug below cost the estimator its Metro row on **57 days**, and with it every
+  Mini Metro and Metro price, on a grade that is usually the bulk of the A4.
 - Grade labels are matched as exact strings by the estimator — SPRAG, ROBBY,
   BABY, CHIPPER, METRO, MINI METRO, FROGS, CATS, RANS, MEGS, LYTHE, HADD, WHIT,
   MONK. Do not normalise or retitle them.
