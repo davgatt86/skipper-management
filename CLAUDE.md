@@ -2670,6 +2670,51 @@ at once, and invisible until someone reconciles a note against its own printed
 total. `test-parser.mjs` carries the real page-break lines, including that the
 search does not reach past a real row and steal its tail.
 
+### THE SHETLAND TALLY LAYOUT — 1.3.7, Oct 2026, and the rows were never wrong
+
+Sandy's INS110/INS353 notes arrive as a **"Tally by species and grade"**: a
+summary page, then the same transaction rows `parseShetland` has always read,
+then the printed Total. **Every row parsed and reconciled to the penny all
+along** — 111/106/116/96 rows on the four, diffs 0/0/0.
+
+**WHAT CAME BACK EMPTY WAS THE HEADER.** This layout names the boat on a line
+of its own (`BOY JOHN INS110`) and writes `Sale date 08/09/2026`, where the
+parser wanted `Supplier: BF83 - AUDACIOUS` and a bare `dd/mm/yyyy` line. So
+`meta.vessel` and `meta.isoDate` were both blank on a note the app otherwise
+read perfectly.
+
+**THIS IS THE WORST PARSER IN THE APP TO LOSE A VESSEL ON.** Shetland lands a
+PAIR fleet, where `sales_landings.vessel` is the ONLY thing telling Boy John
+from Rosebloom — and the column is NOT NULL. **It had already happened**: the
+08-09 Boy John note was uploaded through the page and filed with no boat and no
+date, invisible to every date view and unsplittable by vessel. Deleted on
+David's word once its replacement was in, after proving the two were identical
+row for row (111 each, zero rows in one and not the other).
+
+**AND `dedupKey` FALLS BACK TO THE FILENAME** when there is no sale number and
+no date — `Shetland Auction||SSA_Tally_2026-09-08_INS110_BoyJohn.pdf`. So the
+blank landing could never be replaced in place by a re-upload: rename the file
+and it makes a SECOND one. A missing date is not just a gap in a column, it is
+the note losing its own identity.
+
+**The vessel is read off the "NAME REG" SHAPE, not off "a line of capitals"** —
+the app's own canonical label (`VESSEL_CANON`), with the registration run
+through `VESSEL_STOP` exactly as `detectVessel` does. A transaction row starts
+with digits and a heading carries no registration, so neither can match; the
+tests assert `TOTAL 374`, `LANDED LERWICK 1` and a real row are all refused.
+The old `Supplier:` layout is asserted untouched in the same breath, because a
+fix that quietly stopped reading it would break every Shetland note already
+filed.
+
+**A species subtotal is not a row.** `HADD total 143 5,657.0 ...` is the same
+fish counted again; it does not match the transaction regex and must not. The
+reconcile is what proves it, and the test says it in words.
+
+**The extract in the test does NOT claim to reconcile**, and that is deliberate:
+it holds 3 of 111 rows, so it pins that the printed Total is still FOUND and
+read off this layout. **A fixture trimmed until it agrees with itself proves
+nothing** — the 0/0/0 reconciliation is proven on the four real files.
+
 
 ### The starred-price bug — 1.3.4, Aug 2026
 

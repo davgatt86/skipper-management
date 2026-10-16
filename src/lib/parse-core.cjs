@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.6";
+  const VERSION = "1.3.7";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
@@ -757,11 +757,26 @@
     const rows = []; const meta = { port: "Shetland" };
     let exp = null;
     for (const ln of allLines) {
-      const dm0 = ln.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-      if (dm0) meta.isoDate = `${dm0[3]}-${dm0[2]}-${dm0[1]}`;
+      const dm0 = ln.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+        // THE TALLY LAYOUT heads the sale "Sale date 08/09/2026" rather than
+        // putting the date on a line of its own. Same note, same transaction
+        // rows below it; only the header differs.
+        || ln.match(/\bSale date\s+(\d{2})\/(\d{2})\/(\d{4})\b/i);
+      if (dm0 && !meta.isoDate) meta.isoDate = `${dm0[3]}-${dm0[2]}-${dm0[1]}`;
       // "Supplier: BF83 - AUDACIOUS" -> "AUDACIOUS BF83" (same label as Don notes)
       let vm = ln.match(/Supplier:\s*(?:([A-Z]+)\s?(\d+)\s*-\s*)?([A-Z][A-Z .'&]+?)\s*$/);
       if (vm && !meta.vessel) meta.vessel = (vm[3].trim() + (vm[1] ? " " + vm[1] + vm[2] : "")).toUpperCase();
+      /* AND THE TALLY LAYOUT NAMES THE BOAT ON A LINE OF ITS OWN, already in
+       * this app's own "NAME REG" form: "BOY JOHN INS110". Anchored on that
+       * SHAPE rather than on "a line of capitals" — a transaction row starts
+       * with digits and a heading carries no registration, so neither can
+       * match. The reg letters go through VESSEL_STOP exactly as detectVessel
+       * does, so a stray "TOTAL 374" style line is refused.
+       *
+       * It matters most here of all the parsers: Shetland lands a PAIR fleet,
+       * and the vessel label is the ONLY thing telling the two boats apart. */
+      const hv = ln.trim().match(/^([A-Z][A-Z .'&]*[A-Z])\s+([A-Z]{2,4})\s?(\d{1,4})$/);
+      if (hv && !meta.vessel && !VESSEL_STOP.has(hv[2])) meta.vessel = `${hv[1].trim()} ${hv[2]}${hv[3]}`;
       const tm = ln.match(/Total\s*:\s*(\d+)\s+([\d,]+\.?\d*)\s*Kg\s+([\d,]+\.\d{2})/i)
         || ln.match(/^\s*(\d+)\s+([\d,]+\.?\d*)\s*Kg\s+([\d,]+\.\d{2})\s+Total\s*$/i);
       if (tm) exp = { boxes: num(tm[1]), weight: num(tm[2]), value: num(tm[3]) };

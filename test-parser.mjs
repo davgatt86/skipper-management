@@ -194,7 +194,7 @@ eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1
   eq('and the real row in between is the one kept', Number(rows[0].total_value), 1555.20)
 }
 
-eq('the version was bumped', PC.VERSION, '1.3.6')
+eq('the version was bumped', PC.VERSION, '1.3.7')
 
 /* ---- SPECIES NAMES ARE CANONICALISED (1.3.6) -------------------------
  * Measured across every landing on the record, not guessed. The species
@@ -238,6 +238,87 @@ eq('and a generic one is not merged into a specific one', PC.canonSpecies('Skate
 eq('thornback stays its own fish', PC.canonSpecies('Thornback Skate'), 'Thornback Skate')
 eq('and nothing at all is nothing', PC.canonSpecies(''), '')
 
+
+/* THE SHETLAND TALLY LAYOUT — 1.3.7, Oct 2026
+ *
+ * Sandy's INS110/INS353 notes arrive as a "Tally by species and grade": a
+ * summary page, then the SAME transaction rows the parser has always read,
+ * then the printed Total. The rows parsed and reconciled to the penny all
+ * along — but the two header fields came back EMPTY, because this layout
+ * names the boat on a line of its own and writes "Sale date 08/09/2026"
+ * instead of putting the date on a bare line.
+ *
+ * That is the worst place in the app for a blank vessel: Shetland lands a
+ * PAIR fleet, where `sales_landings.vessel` is the only thing telling Boy
+ * John from Rosebloom, and `vessel` is NOT NULL. A landing would have filed
+ * with no boat and no date, and dedupKey would have fallen back to the
+ * FILENAME — so re-uploading the same note under a different name would
+ * have made a second landing rather than replacing the first.
+ *
+ * Lines verbatim from pdf.js's extraction of the real notes.
+ */
+const SHET_TALLY = [
+  'Shetland Seafood Auctions',
+  'Supplier transactions · Shetland Clock 1',
+  'BOY JOHN INS110',
+  'Sale date 08/09/2026',
+  'Boxes Total kg Gross value Avg £/kg',
+  '374 13,322.0 £46,530.62 3.49',
+  'Tally by species and grade',
+  'Species Grade Boxes Kg Value £ Avg £/kg Share',
+  'HADD 1 2 49.0 252.00 5.14',
+  'HADD total 143 5,657.0 10,426.32 1.84 22.4%',
+  'Tr no Lot Spec Gr Pres # box Box wgt Tot kgs Pr/box Pr./kg Tot price Buyer',
+  '534 254 COD 3 GH 1 35.0 35.0 245.00 7.00 245.00 LW LAURENCE',
+  '596 306 CATS 4 GH 1 40.0 40.0 134.00 3.35 134.00 LW JAMIE',
+  '599 280 HAL 4 GH 1 5.0 5.0 80.50 16.10 80.50 QALOCAL',
+  'Total: 374 13,322.0 Kg 46,530.62',
+]
+{
+  const r = PC.parseShetland(SHET_TALLY)
+  eq('tally layout: the boat is read off its own header line', r.meta.vessel, 'BOY JOHN INS110')
+  eq('tally layout: "Sale date" carries the date', r.meta.isoDate, '2026-09-08')
+  eq('tally layout: the transaction rows still parse', r.rows.length, 3)
+  /* The extract above holds 3 of the note's 111 rows, so it must NOT claim to
+     reconcile — what is pinned here is that the printed total is still FOUND
+     and read off this layout. The full note reconciling 0/0/0 is proven on the
+     real file, not on a hand-trimmed fixture that could be made to agree. */
+  eq('tally layout: the printed total is still found', r.reconcile.expected,
+    { boxes: 374, weight: 13322, value: 46530.62 })
+  eq('tally layout: and an extract is honest about not adding up', r.reconcile.ok, false)
+}
+
+/* THE SUMMARY LINES MUST NOT BE READ AS TRANSACTIONS. "HADD total 143 ..." is
+   the same fish already counted row by row below it; counting both would
+   double the note. Proved by the reconcile above, and stated here. */
+eq('a species subtotal is not a row', PC.parseShetland([
+  'HADD total 143 5,657.0 10,426.32 1.84 22.4%',
+  'Species Grade Boxes Kg Value £ Avg £/kg Share',
+]).rows.length, 0)
+
+/* THE OLD "Supplier:" LAYOUT IS UNTOUCHED — this is the shape every Shetland
+   note filed before today used, and a fix that quietly stopped reading it
+   would break far more than it mended. */
+{
+  const r = PC.parseShetland([
+    'Supplier: BF83 - AUDACIOUS',
+    '08/09/2026',
+    '534 254 COD 3 GH 1 35.0 35.0 245.00 7.00 245.00 LW LAURENCE',
+    'Total: 1 35.0 Kg 245.00',
+  ])
+  eq('supplier layout still names the boat', r.meta.vessel, 'AUDACIOUS BF83')
+  eq('supplier layout still dates the sale', r.meta.isoDate, '2026-09-08')
+  eq('supplier layout still reconciles', r.reconcile.ok, true)
+}
+
+/* AND THE HEADER RULE REFUSES WHAT IS NOT A BOAT. It keys on the "NAME REG"
+   shape and runs the registration through VESSEL_STOP, the same guard
+   detectVessel uses, so page furniture cannot name the vessel. */
+eq('a total line is not a boat', PC.parseShetland(['TOTAL 374']).meta.vessel, undefined)
+eq('a port line is not a boat', PC.parseShetland(['LANDED LERWICK 1']).meta.vessel, undefined)
+eq('a transaction row is not a boat', PC.parseShetland([
+  '534 254 COD 3 GH 1 35.0 35.0 245.00 7.00 245.00 LW LAURENCE',
+]).meta.vessel, undefined)
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
