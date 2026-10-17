@@ -26,6 +26,9 @@ export function runsOf(stacks) {
   const runs = []
   for (const s of stacks) {
     const days = s.parts.map((p) => p.day)
+    // What gets CHALKED is the tag as the market writes it: "1-3" under the
+    // four-tag system, "5" under the old one. The key stays on the numbers.
+    const dayLabels = s.parts.map((p) => p.dayLabel || String(p.day))
     const key = `${s.species}||${s.grade}||${days.join('/')}`
     const last = runs[runs.length - 1]
     if (last && last.key === key) {
@@ -34,7 +37,7 @@ export function runsOf(stacks) {
     } else {
       runs.push({
         key, species: s.species, grade: s.grade, auction: s.auction,
-        days, footprints: 1, boxes: s.boxes,
+        days, dayLabels, footprints: 1, boxes: s.boxes,
         height: s.height, max: s.max, lowered: s.lowered,
       })
     }

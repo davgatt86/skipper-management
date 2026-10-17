@@ -156,7 +156,7 @@ function Band({ runs, slots, mm, colours, label }) {
                className={`msheet-blk${r.newSpecies ? ' is-species' : r.newGrade ? ' is-grade' : ''}${r.newDay ? ' is-day' : ''}`}
                // Hover on screen, and the handle the layout check uses to tell
                // two blocks apart.
-               title={`${r.species} ${r.grade} — day ${r.days.join('/')} — ${r.boxes} boxes, ${r.footprints} footprint${r.footprints === 1 ? '' : 's'}, ${r.height > 1 ? `${r.height} high` : 'flat'}`}
+               title={`${r.species} ${r.grade} — day ${(r.dayLabels || r.days).join('/')} — ${r.boxes} boxes, ${r.footprints} footprint${r.footprints === 1 ? '' : 's'}, ${r.height > 1 ? `${r.height} high` : 'flat'}`}
                data-fish={`${r.species}||${r.grade}`}
                style={{
                  gridRow: `span ${n}`, background: st.fill, borderLeftColor: st.edge,
@@ -172,7 +172,7 @@ function Band({ runs, slots, mm, colours, label }) {
               </span>
               <span className="msheet-meta">
                 <span className="msheet-day" style={{ background: dayInk(r.days[0]) }}>
-                  {r.days.length > 1 ? r.days.join('/') : r.days[0]}
+                  {(r.dayLabels || r.days).join('/')}
                 </span>
                 <span className="msheet-n">{r.boxes}</span>
                 {/* How high it goes. Flat is the one that matters most on the

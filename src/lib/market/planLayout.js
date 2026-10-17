@@ -38,7 +38,7 @@ export function buildStacks(dayEntries, height) {
       left -= take
       const last = cur.parts[cur.parts.length - 1]
       if (last && last.day === e.day) last.boxes += take
-      else cur.parts.push({ day: e.day, boxes: take })
+      else cur.parts.push({ day: e.day, boxes: take, dayLabel: e.dayLabel, tagName: e.tagName })
     }
   }
   return stacks
@@ -70,7 +70,10 @@ function bucketGrades(clean, rules) {
     const g = grades.get(key)
     if (Number.isFinite(l.seq)) g.seq = Math.min(g.seq, l.seq)
     g.boxes += Number(l.boxes)
-    g.days.push({ day: Number(l.day), boxes: Number(l.boxes) })
+    g.days.push({
+      day: Number(l.day), boxes: Number(l.boxes),
+      dayLabel: l.dayLabel || String(l.day), tagName: l.tagName || null,
+    })
   }
   return [...grades.values()]
 }

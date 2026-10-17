@@ -75,12 +75,49 @@ export function parseDayTally(buf) {
     return { error: 'No sheet in that workbook has a SPECIES column — is it the day tally?' }
   }
 
+  /* A COLUMN IS A TAG, NOT ALWAYS A DAY.
+   *
+   * Peterhead Port Authority cut the ten day-tag colours to FOUR on 2 Oct 2026,
+   * and the sheet's own Tag Colours tab states the new scheme: Black 1-3,
+   * Purple 4-5, Red 6-7, Orange 8-9. So the tally now heads its columns
+   * "DAY 1-3" rather than "DAY 1", and the old `^DAY (\d+)$` matched none of
+   * them — which is the "no DAY columns" the page reported.
+   *
+   * `day` stays the FIRST day of the band, so every ordering downstream still
+   * works unchanged: freshest-first in the catalogue, high-to-low stacking in
+   * buildStacks, and the A+ mark on the newest tag. A band label rides along
+   * for anything that PRINTS the day, because "8-9" is what is on the box. */
   const dayCols = []
   for (let c = 0; c < (rows[hdr] || []).length; c++) {
-    const m = norm(rows[hdr][c]).match(/^DAY\s*(\d+)$/i)
-    if (m) dayCols.push({ col: c, day: Number(m[1]) })
+    const m = norm(rows[hdr][c]).match(/^DAY\s*(\d+)(?:\s*[-‐-―]\s*(\d+))?$/i)
+    if (!m) continue
+    const from = Number(m[1])
+    const to = m[2] ? Number(m[2]) : from
+    // A band written backwards is dropped whole rather than reversed: which of
+    // the two numbers is wrong is not knowable, the same refusal the invoice
+    // page makes on an impossible page range.
+    if (to < from) continue
+    dayCols.push({ col: c, day: from, dayTo: to, dayLabel: to > from ? `${from}-${to}` : String(from) })
   }
   if (!dayCols.length) return { error: 'Found the SPECIES header but no DAY columns under it.' }
+
+  /* THE TAG COLOUR IS READ, NEVER DERIVED FROM THE DAY NUMBER.
+   *
+   * Under the new scheme the Purple band STARTS at day 4 — and day 4 is Orange
+   * in the old ten-colour table. Three of the four bands would print the wrong
+   * colour on a document whose whole job is matching the tag stapled to the
+   * box. The sheet states the colour under each column, so it is taken from
+   * there and only falls back to the day number for the old layout.
+   *
+   * The old sheets put the day NUMBER in that row (1, 2, 3 …), so a value that
+   * is a number is not a colour name and is ignored. */
+  const tagRow = rows[hdr + 1] && /TAG\s*COLOUR/i.test(norm(rows[hdr + 1][0])) ? rows[hdr + 1] : null
+  if (tagRow) {
+    for (const d of dayCols) {
+      const v = norm(tagRow[d.col])
+      if (v && !Number.isFinite(Number(v))) d.tagName = v
+    }
+  }
 
   const lines = []
   let printedTotal = null
@@ -99,7 +136,7 @@ export function parseDayTally(buf) {
     if (/\bTOTAL\b/i.test(species)) continue      // per-species subtotal
     if (!grade) continue                          // TAG COLOUR row and spacers
 
-    for (const { col, day } of dayCols) {
+    for (const { col, day, dayTo, dayLabel, tagName } of dayCols) {
       const boxes = Number(r[col])
       if (Number.isFinite(boxes) && boxes > 0) {
         // `seq` is the row's position in the sheet, which is already the
@@ -107,7 +144,10 @@ export function parseDayTally(buf) {
         // Carrying it means the layout can follow the market's own order
         // instead of sorting grade names alphabetically, which put Sprag
         // above Med and Cod above Large.
-        lines.push({ species, grade, size: norm(r[2]) || null, boxKg: norm(r[3]) || null, day, boxes, seq: i })
+        lines.push({
+          species, grade, size: norm(r[2]) || null, boxKg: norm(r[3]) || null,
+          day, dayTo, dayLabel, tagName: tagName || null, boxes, seq: i,
+        })
       }
     }
   }

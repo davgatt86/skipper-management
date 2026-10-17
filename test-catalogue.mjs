@@ -9,7 +9,7 @@
  * OLDEST fish on every sheet the market hands out — which is why it is a
  * parameter and not my reading of it.
  */
-import { buildCatalogue, freshestDayOf, tagFor, TAG_COLOURS, freshestNote } from './src/lib/market/catalogue.js'
+import { buildCatalogue, freshestDayOf, tagFor, tagOf, TAG_COLOURS, freshestNote } from './src/lib/market/catalogue.js'
 import { resolveRules } from './src/lib/market/layoutRules.js'
 
 let fail = 0
@@ -137,6 +137,70 @@ eq('and null', freshestDayOf(null), null)
     'Day 5 (Green) is the freshest and sells as A+. Every other day is A.')
   eq('and says so when there are no tags',
     freshestNote(buildCatalogue({ lines: [], rules: RULES })), 'No day tags on this tally.')
+}
+
+/* PETERHEAD CUT TEN DAY TAGS TO FOUR — PPA, 2 Oct 2026.
+ *
+ *   Black 1-3 · Purple 4-5 · Red 6-7 · Orange 8-9
+ *
+ * The tally now heads its columns "DAY 1-3" and states the colour under each
+ * one. THE COLOUR CAN NO LONGER BE DERIVED FROM THE DAY: the Purple band
+ * STARTS on day 4, and day 4 is ORANGE in the ten-colour table. Deriving it
+ * would mis-colour three bands in four on the one document a buyer reads
+ * against the tag stapled to the box.
+ */
+{
+  const band = (day, dayLabel, tagName) => ({ day, dayLabel, tagName })
+  eq('the stated colour wins over the day number', tagOf(band(4, '4-5', 'PURPLE')).name, 'Purple')
+  eq('and it is the real Purple, with its own hex', tagOf(band(4, '4-5', 'PURPLE')).hex,
+    TAG_COLOURS.find((t) => t.name === 'Purple').hex)
+  eq('deriving day 4 would have said Orange', tagFor(4).name, 'Orange')
+  eq('Red is read off the sheet, not day 6', tagOf(band(6, '6-7', 'RED')).name, 'Red')
+  eq('deriving day 6 would have said Light Blue', tagFor(6).name, 'Light Blue')
+  eq('Orange is the 8-9 band, not day 4', tagOf(band(8, '8-9', 'ORANGE')).name, 'Orange')
+
+  /* EVERY TALLY ALREADY ON FILE HAS NO STATED COLOUR, and must read exactly as
+     it did before — this is the whole safety of the change. */
+  eq('no stated colour falls back to the day', tagOf({ day: 5 }).name, 'Green')
+  eq('and a null one does too', tagOf({ day: 10, tagName: null }).name, 'White')
+
+  /* A COLOUR NOBODY HAS A HEX FOR IS NAMED, NEVER GUESSED. Printing the wrong
+     colour is worse than printing the word on a neutral chip. */
+  eq('an unknown colour keeps its own name', tagOf(band(2, '2', 'TURQUOISE')).name, 'TURQUOISE')
+  eq('and takes a neutral chip', tagOf(band(2, '2', 'TURQUOISE')).hex, '#ECEFEE')
+}
+
+/* THE A+ GOES ON THE FRESHEST BAND, which is the whole point of the sheet. */
+{
+  const L = (day, dayLabel, tagName, boxes, seq) =>
+    ({ species: 'COD', grade: 'Sprag (2)', day, dayLabel, tagName, boxes, seq })
+  const cat = buildCatalogue({
+    lines: [L(1, '1-3', 'BLACK', 5, 1), L(4, '4-5', 'PURPLE', 6, 1), L(6, '6-7', 'RED', 7, 1)],
+    rules: RULES,
+  })
+  const rows = cat.clocks.flatMap((c) => c.species).flatMap((s) => s.grades).flatMap((g) => g.rows)
+  eq('three bands come through', rows.length, 3)
+  eq('only the newest band is A+', rows.filter((r) => r.mark === 'A+').map((r) => r.dayLabel), ['6-7'])
+  eq('and the rest are A', rows.filter((r) => r.mark === 'A').map((r) => r.dayLabel), ['4-5', '1-3'])
+  eq('the band is printed, not the bare day', rows.map((r) => r.dayLabel), ['6-7', '4-5', '1-3'])
+  eq('each carries the colour the sheet stated', rows.map((r) => r.tag.name), ['Red', 'Purple', 'Black'])
+
+  /* THE LINE THE WHOLE DOCUMENT TURNS ON, restated at the top of every page.
+     Naming the band by its first day and colouring it off the ten-colour table
+     printed "Day 6 (Light Blue)" on a sheet whose freshest tag is RED 6-7 —
+     wrong twice, and found only by reading the rendered PDF back. */
+  eq('the A+ banner names the band and its real colour', freshestNote(cat),
+    'Days 6-7 (Red) is the freshest and sells as A+. Every other day is A.')
+}
+
+/* A SINGLE DAY STILL READS AS A DAY, not "Days 5-5". */
+{
+  const cat = buildCatalogue({
+    lines: [{ species: 'COD', grade: 'Sprag (2)', day: 5, boxes: 4, seq: 1 }],
+    rules: RULES,
+  })
+  eq('an old per-day tally keeps its wording', freshestNote(cat),
+    'Day 5 (Green) is the freshest and sells as A+. Every other day is A.')
 }
 
 console.log('')

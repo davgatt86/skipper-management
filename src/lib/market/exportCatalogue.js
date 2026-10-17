@@ -71,7 +71,9 @@ export function buildCatalogueDoc(cat, meta = {}) {
             // wrapped the TAG cell onto its own line, breaking every row.
             grade: n === 0 ? (g.size ? `${g.grade}  ${g.size}` : g.grade) : '',
             mark: r.mark,
-            day: String(r.day),
+            // The band as the market writes it — "8-9", not "8". The buyer is
+            // reading this against the tag on the box.
+            day: String(r.dayLabel || r.day),
             tag: r.tag.name,
             tagHex: r.tag.hex,
             tagInk: r.tag.ink,

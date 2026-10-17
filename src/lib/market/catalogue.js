@@ -38,6 +38,29 @@ export const tagFor = (day) =>
   TAG_COLOURS.find((t) => t.day === Number(day))
   || { day: Number(day), name: `Day ${day}`, hex: '#ECEFEE', ink: '#1B1B1B' }
 
+/* THE SHEET'S OWN COLOUR BEATS THE DAY NUMBER.
+ *
+ * Peterhead cut ten day tags to four on 2 Oct 2026 — Black 1-3, Purple 4-5,
+ * Red 6-7, Orange 8-9 — so the colour no longer follows from the day. The
+ * Purple band starts on day 4, which is ORANGE in the ten-colour table, so
+ * deriving it would mis-colour three bands in four on the one document a buyer
+ * reads against the tag stapled to the box.
+ *
+ * Matched on NAME against the same table, so the hex and the ink that pair
+ * with each colour are the ones already measured for print. A colour nobody
+ * has a hex for is shown in its own words on a neutral chip rather than being
+ * guessed at — a wrong colour is worse than a named one.
+ *
+ * Falls through to the day number for every sheet written before the change,
+ * which is every tally already on file. */
+export const tagOf = (line) => {
+  const name = String(line?.tagName || '').trim()
+  if (!name) return tagFor(line?.day)
+  const known = TAG_COLOURS.find((t) => t.name.toLowerCase() === name.toLowerCase())
+  if (known) return { ...known, day: Number(line.day) }
+  return { day: Number(line.day), name, hex: '#ECEFEE', ink: '#1B1B1B' }
+}
+
 /* WHICH DAY IS THE FRESHEST.
  *
  * A boat fills day 1 first, so on a five-day trip day 5 is the last caught and
@@ -91,7 +114,12 @@ export function buildCatalogue({ lines, rules, freshest = 'high' }) {
     }
     const gr = s.grades.get(g)
     gr.seq = Math.min(gr.seq, l.seq)
-    gr.rows.push({ day: Number(l.day), boxes: Number(l.boxes) })
+    gr.rows.push({
+      day: Number(l.day), boxes: Number(l.boxes),
+      // What is PRINTED for this lot: the band as the market writes it ("8-9"),
+      // and the colour the sheet stated for it.
+      dayLabel: l.dayLabel || String(l.day), tagName: l.tagName || null,
+    })
   }
 
   const speciesList = [...bySpecies.values()]
@@ -107,7 +135,7 @@ export function buildCatalogue({ lines, rules, freshest = 'high' }) {
             sold += r.boxes
             return {
               ...r,
-              tag: tagFor(r.day),
+              tag: tagOf(r),
               // THE POINT OF THE SHEET. Only the freshest day is A+.
               mark: r.day === freshestDay ? 'A+' : 'A',
               /* How many boxes of this grade are still to come AFTER this lot.
@@ -154,6 +182,15 @@ export function buildCatalogue({ lines, rules, freshest = 'high' }) {
     unfiled,
     days: days.sort((a, b) => (freshest === 'low' ? a - b : b - a)),
     freshestDay,
+    /* The freshest tag AS IT IS WRITTEN AND COLOURED on the box. The A+ rule is
+     * restated at the top of every page, so naming the band by its first day
+     * and colouring it off the old ten-colour table put "Day 6 (Light Blue)" on
+     * a sheet whose freshest tag is RED 6-7 — wrong twice, on the one line the
+     * whole document turns on. Taken from a line in the freshest band. */
+    freshestTag: (() => {
+      const l = all.find((x) => Number(x.day) === freshestDay && Number(x.boxes) > 0)
+      return l ? { label: l.dayLabel || String(l.day), tag: tagOf(l) } : null
+    })(),
     freshest,
     totalBoxes: speciesList.reduce((n, s) => n + s.total, 0),
     speciesCount: speciesList.length,
@@ -161,7 +198,13 @@ export function buildCatalogue({ lines, rules, freshest = 'high' }) {
 }
 
 // One line of copy the sheet leads with, so nobody has to work out the rule.
-export const freshestNote = (cat) =>
-  cat.freshestDay == null
-    ? 'No day tags on this tally.'
-    : `Day ${cat.freshestDay} (${tagFor(cat.freshestDay).name}) is the freshest and sells as A+. Every other day is A.`
+export const freshestNote = (cat) => {
+  if (cat.freshestDay == null) return 'No day tags on this tally.'
+  const f = cat.freshestTag
+  const label = f ? f.label : String(cat.freshestDay)
+  const name = f ? f.tag.name : tagFor(cat.freshestDay).name
+  // "Day 5" for a single day, "Days 6-7" for a band — read off the tally rather
+  // than assumed, because the two layouts are both in use.
+  const word = label.includes('-') ? 'Days' : 'Day'
+  return `${word} ${label} (${name}) is the freshest and sells as A+. Every other day is A.`
+}

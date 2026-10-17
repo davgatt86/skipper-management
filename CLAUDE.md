@@ -3370,6 +3370,74 @@ for the boat's own chalk marking. A buyer is looking at the tag stapled to the
 box, so the catalogue prints each tag cell in its real colour, with dark ink on
 the pale ones.
 
+### TEN DAY TAGS BECAME FOUR — PPA, 2 Oct 2026, and a column is now a TAG
+
+David: *"new day tally spreadsheet isn't loading ... day tags have been reduced
+now by instrauction by PD market."* The page said **"Found the SPECIES header
+but no DAY columns under it."**
+
+Peterhead Port Authority cut the ten day-tag colours to **four bands**, and the
+wheelhouse sheet follows:
+
+    DAY 1-3  BLACK      DAY 4-5  PURPLE      DAY 6-7  RED      DAY 8-9  ORANGE
+
+So the header reads `DAY 1-3`, and `^DAY\s*(\d+)$` matched **none** of them.
+The workbook also gained a `DAILY ENTRY` sheet, which still holds the nine
+individual days and feeds the banded totals — the boat records per day and the
+MARKET sees four tags. `AUDACIOUS TOTALS` is the sheet with the SPECIES header
+the parser finds first, and the banded one is the right one to read: four tags
+is what a buyer can actually tell apart.
+
+**`day` STAYS THE FIRST DAY OF THE BAND**, so every ordering downstream works
+untouched — freshest-first in the catalogue, high-to-low in `buildStacks`, and
+the A+ mark. A `dayLabel` rides alongside for anything that PRINTS it, because
+"8-9" is what is written on the box.
+
+**THE COLOUR IS READ OFF THE SHEET AND NEVER DERIVED FROM THE DAY, and that is
+the whole care in this change.** The Purple band STARTS on day 4 — and day 4 is
+**ORANGE** in the ten-colour table. Matching the band's first day against the
+old table mis-colours **three bands in four**, on the one document a buyer reads
+against the tag stapled to the box. The tally states the colour under each
+column, so `tagOf()` takes it from there and falls back to the day number only
+for a sheet that states none — which is every tally already on file.
+
+**A colour nobody has a hex for is printed in its own words on a neutral chip**,
+never guessed at. The Tag Colours tab also lists the old day→colour mapping for
+boats using up old tag stock (old DAY 2 is Purple and goes in the BLACK 1-3
+column), so a drifting name is a real possibility.
+
+**AND THE A+ BANNER WAS WRONG TWICE, found only by reading the rendered PDF
+back.** It is restated at the top of every page — a buyer picking up page 3 has
+not read page 1 — and it said **"Day 6 (Light Blue) is the freshest"** on a
+sheet whose freshest tag is **RED, days 6-7**: the wrong day and the wrong
+colour, on the line the whole document turns on. `freshestNote` now names the
+band and its stated colour, and says *Days* for a band against *Day* for one.
+
+**A BAND WRITTEN BACKWARDS IS DROPPED WHOLE** rather than reversed — which of
+the two numbers is wrong is not knowable, the same refusal the invoice reader
+makes on an impossible page range. Reversing it would file the fish under a tag
+nobody printed.
+
+**PROVED ON ALL 21 REAL TALLIES.** Fingerprinting every workbook on the boat's
+OneDrive before and after — lines, total, printed total, tier count, mode, run
+count and a hash of every run's species/grade/days/boxes/height — gives **one
+line of difference**: Trip 71 goes from that error to 110 lines, 1,580 boxes
+reconciling to its own GRAND TOTAL, 20 tiers. **The other twenty are
+byte-identical.**
+
+Trip 71 renders with day chips reading `1-3`, `4-5`, `6-7` (and `4-5/1-3` where
+a stack spans two bands), and its catalogue prints Black, Purple and Red with
+no stale colour anywhere.
+
+**The PDF export is readable and is NOT parsed.** David started exporting one
+alongside; it carries a real text layer (699 text items on page 1, the banded
+headers among them), so it could be read. It is not worth a second parser: the
+spreadsheet is the same figures without a text-extraction step between them,
+and two readers for one document is the parse-core failure again.
+
+`src/lib/market/parseDayTally.js` · `tagOf` in `catalogue.js` ·
+`test-day-tally.mjs` 16 checks · `test-catalogue.mjs` 45 → **58**.
+
 **One clock per page.** The four clocks sell separately and a buyer follows one
 or two — a sheet where his clock starts halfway down page 2 is handing him
 somebody else's document as well. **The A+ rule is restated at the top of every
