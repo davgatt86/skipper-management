@@ -7,7 +7,7 @@
 // on the real June 2026 sheets), so it survives the run-together text that
 // plain extraction produces on the Danish reports.
 import {
-  pdSpecies, dkSpecies, dkGrade, parsePdDate, parseDkDate, num,
+  pdSpecies, pdGuideName, dkSpecies, dkGrade, parsePdDate, parseDkDate, num,
 } from './marketCanon.js'
 // One pdf.js for the whole app, bundled rather than fetched from a CDN — this
 // parser runs on a boat with a PDF already on the device.
@@ -90,7 +90,47 @@ function parsePd(pages, fullText) {
   const volumes = []
   const meta = { boats: null, consignments: null, total_boxes: null }
 
-  const GRADE = /^(A[0-9]|B[0-9]|U9|-)$/i
+  /* THE BOARD MOVED ONTO THE GRADING TABLE'S OWN CODES — 21 Oct 2026.
+   *
+   * David: "Don Co have updated their prices to match the grading finally!!"
+   *
+   *   before   Cod A1 Large · A2 Sprags · A3 Medium · A4 Selected · A5 Small
+   *   after    Cod 1a · 1b · 1c · 2 · 3 · 4 · 5a · 5b
+   *
+   * They are the codes on the Peterhead grading table AND on the boat's own
+   * day tally (`XL (1a)`, `Chipper (2b)`, `M Metro (4)`), so a tally grade and
+   * a board price can finally be joined on the code instead of bridged by
+   * name. The sheet itself settles which half is authoritative:
+   *
+   *   "THE BY NAMES LISTED NEXT TO THE GRADES ARE NOT DEFINITIVE AND MAY BE
+   *    INTERPRETED DIFFERENTLY, PROVIDED AS A GUIDE ONLY."
+   *
+   * So the CODE identifies the grade and the printed name is kept only as the
+   * guide it says it is.
+   *
+   * NONE of the new codes matched the old `A[0-9]|B[0-9]|U9|-`, so every one
+   * of them fell through to the species label — the same shape as the Unsold
+   * bug below, and measured on the real sheet it was worse: all 44 rows lost
+   * their grade, six took a grade code as their SPECIES (U9b, U9c, U9d, "3"),
+   * and cod's eight lines came back as eight rows all called "Cod" with
+   * nothing to tell them apart.
+   *
+   * A bare digit cannot be confused with the volumes block: those counts are
+   * two to four digits ("Boxes 1350", "Cod 267") and this is anchored. */
+  const GRADE = /^(A[0-9]|B[0-9]|U9|-|[0-9][a-f]?|U9[a-f])$/i
+  /* WRITTEN THE WAY THE GRADING TABLE WRITES IT — digit then a LOWERCASE size
+   * letter, `1a` / `2b` / `U9a`. The boat's own day tally spells them the same
+   * way (`Chipper (2b)`, `M Metro (4)`), and the whole point of the board
+   * moving onto these codes is that the two can be joined on them; upper-casing
+   * would put a `.toLowerCase()` at every future call site instead.
+   * The legacy `A1` / `B2` / `U9` keep their upper case, so nothing already
+   * filed reads differently. */
+  const normGrade = (s) => {
+    const t = s.trim()
+    if (/^u9[a-f]$/i.test(t)) return 'U9' + t.slice(2).toLowerCase()
+    if (/^[0-9][a-f]$/i.test(t)) return t[0] + t[1].toLowerCase()
+    return t.toUpperCase()
+  }
   const isMoney = s => /^£?\d[\d,]*\.\d{2}$/.test(s)
   const isHdr = s => /^(LOW|HIGH|AVE)$/i.test(s)
   /* THE BOARD PRINTS "Unsold" IN A PRICE COLUMN, and it is a STATE, not a
@@ -142,7 +182,26 @@ function parsePd(pages, fullText) {
     return d.low <= d.high && d.low <= d.ave ? 'low' : (d.high <= d.ave ? 'high' : 'ave')
   }
 
+  /* A FISH IS NAMED ONCE AND ITS OTHER GRADES RUN ON BENEATH IT.
+   *
+   *     Squid  | U9a | £4.52 ...
+   *            | U9b                      <- no prices, dropped
+   *            | U9c | £3.02 ...          <- belongs to Squid
+   *
+   * Without carrying the name down, the grade code became the species: the
+   * real sheet filed £3.85 squid under a species called "U9c", and Turbot,
+   * Halibut, Tusk and Skate the same way. Six rows of invented fish.
+   *
+   * Carried PER BLOCK, because the two columns are independent lists, and
+   * reset per page.
+   *
+   * IT IS UPDATED BEFORE THE NO-PRICE ROWS ARE DROPPED, and that is the whole
+   * care in it. `Turbot U9a` carries no prices at all, so dropping it first
+   * would leave the carry on SQUID and file Turbot's £20.84 under squid —
+   * a wrong price on a real fish, which is worse than the invented one. */
+  const carry = { left: null, right: null }
   for (const pg of pages) {
+    carry.left = null; carry.right = null
     for (const r of pg.rows) {
       for (const side of ['left', 'right']) {
         const c = cols[side]
@@ -156,15 +215,31 @@ function parsePd(pages, fullText) {
           if (isMoney(i.str)) { const k = nearest(i.x, c); if (slot[k] == null) slot[k] = num(i.str) }
           else if (isHdr(i.str)) { /* header row */ }
           else if (isUnsold(i.str)) unsold = true
-          else if (GRADE.test(i.str)) grade = i.str.toUpperCase()
+          else if (GRADE.test(i.str)) grade = normGrade(i.str)
           else headTok.push(i.str)
         }
+        const label = headTok.join(' ').trim()
+        // Whatever else this row is, if it names a fish it sets the block's
+        // running species — BEFORE any row is dropped for carrying no prices.
+        const named = label ? pdSpecies(label) : null
+        if (named && named.known) carry[side] = named.species
+
         // An entirely unsold grade has no figures at all and is still a fact
         // about the day — it used to be dropped with the blank rows.
         if (!unsold && slot.low == null && slot.high == null && slot.ave == null) continue
-        const label = headTok.join(' ').trim()
-        if (!label) continue
-        const { species, subgrade } = pdSpecies(label)
+
+        // A row with no label of its own belongs to the fish named above it.
+        // It needs a grade to be a grade row at all; without one there is
+        // nothing to say which line of that fish it is, so it is left alone.
+        if (!named && !(grade && carry[side])) continue
+        const species = named ? named.species : carry[side]
+        /* The guide name is taken ONLY off a new-ladder row. On the old board
+         * `Lythe/Pollack A3` would otherwise have gained a subgrade of
+         * "Pollack" — noise, and a change to four years of rows that nobody
+         * asked for. Tied to the grade code, every sheet already filed reads
+         * exactly as it did. */
+        const subgrade = !named ? null
+          : (named.subgrade || (/^([0-9][a-f]?|U9[a-f])$/.test(grade) ? pdGuideName(label) : null))
         prices.push({ source: 'PD', price_date, species, grade, subgrade, low: slot.low, high: slot.high, ave: slot.ave, unsold })
       }
     }

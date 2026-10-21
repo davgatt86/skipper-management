@@ -23,7 +23,10 @@ const PD_SPECIES = [
   [/^lythe|pollack/i, 'Pollack'],
   [/^lemons?/i, 'Lemon'],
   [/^megrims?/i, 'Megrim'],
-  [/^atlantic mackerel/i, 'Mackerel'],
+  // The board prints "Atlantic Mackeral" — their spelling, on the real sheet
+  // of 21-10-2026. Matching only the dictionary spelling left the label
+  // unresolved, which is how a fish becomes its own species in the record.
+  [/^atlantic mackerel|^atlantic mackeral|^mackerel|^mackeral/i, 'Mackerel'],
   [/^ling/i, 'Ling'],
   [/^hake/i, 'Hake'],
   [/^plaice/i, 'Plaice'],
@@ -42,10 +45,35 @@ const PD_SUBGRADE = {
   'Seed': 'Seed', 'Chippers': 'Chipper', 'Chipper': 'Chipper', 'Metros': 'Metro', 'Metro': 'Metro', 'Round Hadd': 'Round',
   'Round Whiting': 'Round', 'Catfish Scottish': 'Scottish',
 }
+/* `known` says whether the label actually RESOLVED to a species, as against
+ * falling through and being kept verbatim.
+ *
+ * The parser needs that to carry a species down a block. From 21-10-2026 the
+ * board names a fish once and then lists its grades on bare rows beneath:
+ *
+ *     Squid | U9a | £4.52 ...
+ *           | U9c | £3.02 ...      <- no species of its own
+ *
+ * Carrying the last label down is only safe if it was a FISH. Without this
+ * flag a volumes line ("Boxes 1350") or a stray word would be carried onto a
+ * price row as though it were a species. */
+/* The guide name off the new board, where the fish and its grade are printed
+ * as one label: "Cod/Sprag", "Hadd/Mini Metro", "Lythe/Pollack/LRG".
+ *
+ * It is DESCRIPTIVE ONLY. The sheet says so itself — "the by names listed next
+ * to the grades are not definitive and may be interpreted differently,
+ * provided as a guide only" — so the code identifies the grade and this is
+ * what to show a human beside it. `PD_SUBGRADE` is consulted first, so every
+ * label already on file keeps the exact subgrade it has always had. */
+export function pdGuideName(label) {
+  const clean = String(label || '').replace(/\s+/g, ' ').trim()
+  const i = clean.lastIndexOf('/')
+  return i < 0 ? null : (clean.slice(i + 1).trim() || null)
+}
 export function pdSpecies(label) {
   const clean = label.replace(/\s+/g, ' ').trim()
   const hit = PD_SPECIES.find(([re]) => re.test(clean))
-  return { species: hit ? hit[1] : clean, subgrade: PD_SUBGRADE[clean] || null }
+  return { species: hit ? hit[1] : clean, subgrade: PD_SUBGRADE[clean] || null, known: !!hit }
 }
 
 // ---- Denmark: one map covers both the fiskeauktion.dk and Hanstholm reports ----

@@ -2495,6 +2495,108 @@ already fetched stays fetched" — so parsing a PDF already sitting on the devic
 failed on the network. Bundled and lazily imported, the chunk is fetched once
 and cached like any other asset.
 
+### THE PETERHEAD BOARD MOVED ONTO THE GRADING TABLE'S CODES (21 Oct 2026)
+
+David: *"Don Co have updated their prices to match the grading finally!! ...
+update price page to suit."*
+
+    before   Cod  A1 Large · A2 Sprags · A3 Medium · A4 Selected · A5 Small
+    after    Cod  1a · 1b · 1c · 2 · 3 · 4 · 5a · 5b
+
+Five cod grades became eight and six haddock lines became nine, and the codes
+are **the Peterhead grading table's own** — which is also what the boat's day
+tally has always printed (`XL (1a)`, `Chipper (2b)`, `M Metro (4)`). A tally
+grade and a board price can now be joined ON THE CODE instead of bridged by
+name, which is the whole point of the change.
+
+**THE SHEET SETTLES WHICH HALF IS AUTHORITATIVE**, in its own words at the
+foot: *"THE BY NAMES LISTED NEXT TO THE GRADES ARE NOT DEFINITIVE AND MAY BE
+INTERPRETED DIFFERENTLY, PROVIDED AS A GUIDE ONLY."* So the CODE identifies
+the grade and the printed name is kept only as the guide it says it is.
+
+**IT BROKE THE PARSER COMPLETELY, AND THE BOARD WAS ALREADY UPLOADED.**
+Measured on the real sheet through the real entry point before anything was
+written: `^(A[0-9]|B[0-9]|U9|-)$` matched **none** of the new codes, so
+**all 44 rows lost their grade** and cod's eight lines came back as eight rows
+all called "Cod" with nothing to tell them apart. Same shape as the Unsold bug
+— a token that is not money and not a header falls through onto the label.
+
+**AND SIX ROWS TOOK A GRADE CODE AS THEIR SPECIES.** The board names a fish
+once and runs its other grades on bare rows beneath, so `U9c`, `U9d`, `U9b`
+and `3` were filed in `market_prices` as species. The carry is **per block**
+and is **updated BEFORE the no-price rows are dropped** — `Turbot U9a` carries
+no prices at all, so dropping it first would leave the carry on SQUID and file
+turbot's £20.84 under squid. **A wrong price on a real fish is worse than the
+invented one it replaces.**
+
+**THE CODE IS STORED AS THE GRADING TABLE WRITES IT** — digit then a lowercase
+size letter, `1a` / `2b` / `U9a` — because the tally spells them that way and
+the two are meant to join. Legacy `A1` / `U9` keep their upper case.
+
+**THE OLD BOARD PARSES BYTE-IDENTICALLY**, proved by running the real sheet of
+12-10-2026 through before and after and diffing: 49 rows, no difference. The
+guide name is taken only off a NEW-ladder row for the same reason — deriving
+it from the label alone gave `Lythe/Pollack A3` a subgrade of "Pollack", a
+change to four years of rows nobody asked for.
+
+**The 44 rows of 21-10 were re-filed** from the corrected parse: 0 without a
+grade, 0 invented species, 15 species.
+
+**STILL OPEN — THE ESTIMATOR, and it is the reason this is only half done.**
+`Estimator.jsx` maps each boat grade onto a COARSER board grade (`"2B" → A4c`,
+`"3" → A4m`, `"4" → A4ma`) with a column fudge (`c: "high"/"med"/"low"`) to
+stand in for the mismatch. That bridge now has nothing to bridge, and from
+21-10 it finds no Peterhead price at all because it is looking for `A1`-style
+keys. Retiring it is mostly replacing those `pd:` values with the boat's own
+code. **Not done here**, because it is a separate reviewable change to a
+1,025-line pricing page.
+
+**AND THE TWO LADDERS ARE NOT JOINED.** Old rows are on `A1`–`A5`, new rows on
+`1a`–`5b`, and nothing claims they are the same grade. By name old `A1 Large`
+looks like new `1c Cod/Large` and old `A2 Sprags` like new `2 Sprag` — but the
+old table never recorded a kg band, so that is a guess about four years of
+history. **David's call, not an inference to make quietly.**
+
+### PETERHEAD GRADES vs HANSTHOLM SORTS — `src/lib/market/gradeBridge.js`
+
+David, in the same breath: *"check pd grading table and hanstholm sorts
+(grades) and look for similarities for comparing price market vs market."*
+
+Both markets grade by weight and publish the bands, so whether a Peterhead
+price and a Hanstholm price are for the same fish is **measurable**.
+Transcribed from the crew grading table and from
+`hanstholmfiskeauktion.dk/Sorts` read 21-10-2026.
+
+**36 of the 66 comparable Peterhead grades cut at exactly the same kilos.**
+(75 grades on the table; 66 of them on a species Hanstholm also grades.)
+
+    Lythe      all 4 grades identical          Mackerel   all 3 identical
+    Monks      5 of 6                          Hake       4 exact
+    Plaice     3 exact                         Saithe     3 exact + a 3-way split
+    Cod        XL, Sprag, Medium, Big Baby     Haddock    Metro and M Metro
+
+**HADDOCK METRO AND MINI METRO ARE THE SAME BAND IN BOTH MARKETS** —
+0.37-0.57 and 0.17-0.37 — which makes them the fairest price comparison this
+boat has, and they are most of the A4.
+
+**WHERE ONE MARKET CUTS FINER, THE OTHER'S PRICE IS A BLEND** and the bridge
+says which way round. Peterhead splits the big haddock (1+ kg) into four where
+Hanstholm keeps one, so a Hanstholm size-1 price is fair against **the group**
+and never against one of them. It runs the other way on catfish and witch,
+where Hanstholm is the finer.
+
+**A SPECIES ON ONE MARKET ONLY SAYS SO** rather than leaving a blank — a
+missing species and one that matched nothing look identical in a table and are
+different facts. Megrim is not graded at Hanstholm; Peterhead grades squid by
+LENGTH, so size cannot be compared at all.
+
+**THEIR OWN SHEET HAS A GAP AND IT IS RECORDED AS PRINTED.** Hanstholm whiting
+size 3 reads 0,25-0,30 while size 2 starts at 0,35, so nothing grades
+0.30-0.35. Widening it to meet would invent a band nobody sells to, so PD
+Round simply does not match.
+
+`test-market-grades.mjs` 27 · `test-grade-bridge.mjs` 37.
+
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
 Sandy McLeman emailed six Hanstholm notes he could not upload to the
@@ -2800,19 +2902,22 @@ Rules learned the hard way:
 
 - A4 haddock sub-grades: mini = cheapest boxes, chipper = dearest, metro = the
   remainder. Never the other way round.
-- **MINI METRO IS NOT A LINE ON THE BOARD.** Peterhead prints ONE Metro row,
-  and both boat grades are blends of its three columns — David, Oct 2026:
-  *"mini is the low/avg blend price of metro, metro is high/avg blend."*
+- **MINI METRO IS A LINE ON THE BOARD NOW — 21 Oct 2026. THE RULE BELOW IS
+  RETIRED.** Peterhead used to print ONE Metro row and both boat grades were
+  blends of its three columns — David, Oct 2026: *"mini is the low/avg blend
+  price of metro, metro is high/avg blend."*
 
       Mini Metro  = (low + ave) / 2        Metro = (ave + high) / 2
 
-  Already built exactly so in `estimatorPrices.js` (the AVG page; the HIGH page
-  takes ave and high straight). **Do not go looking for a Mini line to parse** —
-  I asked David to send a sheet carrying one, and there is no such thing.
-  The consequence worth knowing is that **both grades hang off that single
-  Metro row**, so anything that loses it loses two prices at once: the Unsold
-  bug below cost the estimator its Metro row on **57 days**, and with it every
-  Mini Metro and Metro price, on a grade that is usually the bulk of the A4.
+  That held while the board was coarser than the boat's grading. It no longer
+  is: the sheet of 21-10-2026 prints **`Hadd/Metro 3` at £2.49 and
+  `Hadd/Mini Metro 4` at £1.93** as separate lines. On that day the blend
+  returns **2.49 for both** — 29% out on Mini Metro, which is usually the bulk
+  of the A4. **The blend must only be used on a board that carries no Mini
+  line**, and the test asserts the two are different money.
+  This note previously said *"do not go looking for a Mini line to parse —
+  there is no such thing"*. Left standing it would have told a future session
+  to ignore the real one.
 - Grade labels are matched as exact strings by the estimator — SPRAG, ROBBY,
   BABY, CHIPPER, METRO, MINI METRO, FROGS, CATS, RANS, MEGS, LYTHE, HADD, WHIT,
   MONK. Do not normalise or retitle them.
