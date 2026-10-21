@@ -1,4 +1,5 @@
 import { parseBoatText } from '../lib/estimator/parseBoatText'
+import { boardCode, onCodes, CODE_LADDER } from '../lib/market/estimatorGrades'
 import SampleDocs from '../SampleDocs'
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import AppShell from "../AppShell";
@@ -198,6 +199,14 @@ const gradeCode=(s)=>{
   if(/^\d[A-Z]?$/.test(t)) return t;       // 1, 1a, 2b, 5a …
   return "";
 };
+/* THE BOARD CARRIES THE BOAT'S OWN GRADE CODE NOW — 21 Oct 2026.
+ *
+ * BRACKET_DICT and the `c:"high"/"med"/"low"` column nudges below exist to
+ * bridge a mismatch that has gone: the boat graded `Chipper (2b)` and the
+ * board priced a single coarse `A4`. Don Fishing now print the grading
+ * table's own codes, which are the codes the tally prints — so where the
+ * board has the grade, it IS the grade. The bridge stays for every sheet
+ * already filed. See src/lib/market/estimatorGrades.js. */
 // Generic PD/DK grade from a numeric tally code: leading digit -> A-grade,
 // U-codes -> U9. The board-price step later snaps to the nearest grade actually
 // priced (e.g. Plaice board starts at A2, Whiting at A3), so a tally finer than
@@ -244,19 +253,24 @@ function buildMapping(tally){
     SQUID:{pd:"U9",dk:"2",c:"low"}, BRILL:{pd:"U9",dk:"—",c:"low"} };
   return tally.map((r)=>{
     const code=gradeCode(r.size);
+    /* The tally's own grade code, spelt the way the board spells it. Carried
+       on every mapping so the price step can use the board's own line where
+       the board has one; null where the tally gave no code, which falls back
+       to the A-ladder exactly as before. */
+    const pdCode=boardCode(code);
     // 1) Per-species bespoke code table (Cod / Haddock have named sub-grades)
     const bd=BRACKET_DICT[r.sp]&&code&&BRACKET_DICT[r.sp][code];
-    if(bd) return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:bd.pd, dkSp:SP_TO_DK[r.sp]||"—", dkSort:bd.dk, conf:bd.c };
+    if(bd) return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:bd.pd, pdCode, dkSp:SP_TO_DK[r.sp]||"—", dkSort:bd.dk, conf:bd.c };
     // 2) Generic numeric / U9 tally code -> grade, for every other species
     const gc=code&&codeToGrade(code);
-    if(gc&&SP_TO_PD[r.sp]) return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:gc.pd, dkSp:SP_TO_DK[r.sp]||"—", dkSort:gc.dk, conf:gc.c };
+    if(gc&&SP_TO_PD[r.sp]) return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:gc.pd, pdCode, dkSp:SP_TO_DK[r.sp]||"—", dkSort:gc.dk, conf:gc.c };
     // 3) Name-based mapping, with boat-synonym normalisation (SML/METRO/FROGS…)
     const tok=GRADE_DICT[r.sp]&&GRADE_DICT[r.sp][norm(r.size)]?norm(r.size):canonSize(r.size,r.sp);
     let d=GRADE_DICT[r.sp]&&GRADE_DICT[r.sp][tok];
     // Single-line species (size label is basically the species itself)
     if(!d&&SINGLE[r.sp]&&(norm(r.size)===r.sp||norm(r.size)===norm(SP_TO_PD[r.sp]||"")||/^(MIX|MIXED|UNSORTED|U\/R)$/.test(tok)||norm(r.size).includes(r.sp))) d=SINGLE[r.sp];
     if(!d) d={pd:"—",dk:"—",c:"low"};
-    return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:d.pd, dkSp:SP_TO_DK[r.sp]||"—", dkSort:d.dk, conf:d.c };
+    return { pdSp:SP_TO_PD[r.sp]||"—", pdGr:d.pd, pdCode, dkSp:SP_TO_DK[r.sp]||"—", dkSort:d.dk, conf:d.c };
   });
 }
 
@@ -413,8 +427,16 @@ export default function Estimator(){
     return null;
   };
   // Returns {price, exact, via} or null when species absent from this market.
-  const resolvePD=(sp,gr)=>{
+  const resolvePD=(sp,gr,code)=>{
     const o=findSpeciesObj(pd,sp); if(!o) return null;
+    /* WHERE THE BOARD IS ON THE GRADING TABLE'S CODES, the boat's own code IS
+       the board's line — no bridge, no column fudge. Stepped within the code
+       ladder so a grade that did not sell still lands on its neighbour. */
+    if(code&&onCodes(o)) return stepGrade(o,code,CODE_LADDER,pdHigh);
+    /* MINI METRO USED TO BE DERIVED, because the board printed one Metro row
+       and the boat graded two. It prints both now, so this only runs on a
+       board that carries no Mini line — on the sheet of 21-10 the blend gives
+       2.49 for both where Mini Metro actually made 1.93. */
     if(gr==="A4ma"||gr==="A4m"){ const p=metroPrice(o,gr,pdHigh); if(p!=null) return {price:p,exact:true,via:gr}; }
     return stepGrade(o,gr,pdLadder,pdHigh);
   };
@@ -426,7 +448,7 @@ export default function Estimator(){
 
   const rows=useMemo(()=>tally.map((r,i)=>{
     const m=map[i]||{}; const w=effW(r);
-    const pr=resolvePD(m.pdSp,m.pdGr), dr=resolveDK(m.dkSp,m.dkSort);
+    const pr=resolvePD(m.pdSp,m.pdGr,m.pdCode), dr=resolveDK(m.dkSp,m.dkSort);
     // manual overrides (Check-mapping editor) win over the board price for that grade
     const povRaw=priceOv[`pd|${m.pdSp}|${m.pdGr}`], dovRaw=priceOv[`dk|${m.dkSp}|${m.dkSort}`];
     const hasPov=povRaw!=null&&povRaw!==""&&!isNaN(povRaw);

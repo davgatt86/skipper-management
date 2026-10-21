@@ -2542,14 +2542,36 @@ change to four years of rows nobody asked for.
 **The 44 rows of 21-10 were re-filed** from the corrected parse: 0 without a
 grade, 0 invented species, 15 species.
 
-**STILL OPEN — THE ESTIMATOR, and it is the reason this is only half done.**
-`Estimator.jsx` maps each boat grade onto a COARSER board grade (`"2B" → A4c`,
-`"3" → A4m`, `"4" → A4ma`) with a column fudge (`c: "high"/"med"/"low"`) to
-stand in for the mismatch. That bridge now has nothing to bridge, and from
-21-10 it finds no Peterhead price at all because it is looking for `A1`-style
-keys. Retiring it is mostly replacing those `pd:` values with the boat's own
-code. **Not done here**, because it is a separate reviewable change to a
-1,025-line pricing page.
+**THE ESTIMATOR NOW PRICES OFF THE CODE — `src/lib/market/estimatorGrades.js`.**
+`Estimator.jsx` mapped each boat grade onto a COARSER board grade (`"2B" →
+A4c`, `"3" → A4m`, `"4" → A4ma`) with a column fudge (`c: "high"/"med"/"low"`)
+to stand in for the mismatch. From 21-10 that bridge found **no Peterhead
+price at all**, because it was asking for `A1`-style keys the board no longer
+prints.
+
+`resolvePD` now takes the tally's own code and, **where the board is on codes,
+uses that line directly**. The bridge is untouched and still carries every
+sheet already filed.
+
+**WHICH LADDER A BOARD IS ON IS READ OFF ITS KEYS, NEVER THE DATE.** The two
+will sit side by side in the record for as long as the history does, and an
+old sheet re-uploaded today has to read as old.
+
+**A GRADE THAT DID NOT SELL STEPS TO ITS NEIGHBOUR, and that needed a second
+ladder.** `pdLadder` is `A1..U9`, so a code is not on it — the step would have
+fallen through to *"any priced grade in this species"*, valuing Metro at the
+first haddock price found: **XL at £5.74 against its real £2.49.** Exactly the
+over-valuing the A4-family guard was written to stop. `CODE_LADDER` is the
+grading table's order, biggest first. No species mixes a bare digit with a
+lettered one at the same number, so digit-then-letter is the real size order
+throughout.
+
+**The helpers are a module so they can be RUN against the real board** — the
+page is 1,000 lines behind a login, and a build passing says nothing about
+whether a price is found. `test-estimator-codes.mjs` prices the real boards of
+21-10 and 19-10 and then asserts the WIRING in the source, because this repo
+has twice shipped a library that nothing called. Checked against a weakened
+copy: dropping the code from the call site fails it.
 
 **AND THE TWO LADDERS ARE NOT JOINED.** Old rows are on `A1`–`A5`, new rows on
 `1a`–`5b`, and nothing claims they are the same grade. By name old `A1 Large`
@@ -2595,7 +2617,8 @@ size 3 reads 0,25-0,30 while size 2 starts at 0,35, so nothing grades
 0.30-0.35. Widening it to meet would invent a band nobody sells to, so PD
 Round simply does not match.
 
-`test-market-grades.mjs` 27 · `test-grade-bridge.mjs` 37.
+`test-market-grades.mjs` 27 · `test-grade-bridge.mjs` 37 ·
+`test-estimator-codes.mjs` 41.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
