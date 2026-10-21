@@ -96,6 +96,50 @@ function Market({ board, species, landed, basis, onBasis, source, onSource }) {
   )
 }
 
+/* A MOVE MEASURED AGAINST A BLEND IS NOT THE SAME CLAIM as one measured
+ * against the grade's own past price, so the card says which. Before
+ * 21-10-2026 Peterhead priced haddock 1a, 1b and 1c as a single A1 line, and
+ * on 21-10 Metro made £2.49 against Mini Metro's £1.93 — 29% apart. A column
+ * that silently compared one against a blend of three would read as a price
+ * move when part of it is the grading changing. */
+function LadderNote({ grades }) {
+  const blended = grades.filter((g) => g.fit === 'group')
+  if (!blended.length) return null
+  return (
+    <p className="sp-nil">
+      Day and 4 wk for {blended.map((g) => g.grade).join(', ')} compare against the
+      old board, which priced {blended.length > 1 ? 'them' : 'it'} with other grades
+      as one line.
+    </p>
+  )
+}
+
+/* AND A DASH IN THE DAY COLUMN NEEDS A REASON. Without one it reads as "this
+ * did not sell yesterday", which for these is not what happened: the board
+ * has no earlier price for them at all. The two causes are different facts and
+ * are worded apart — one is a grade the old board never priced on its own, the
+ * other a species whose old grades cannot be matched to the new ones. */
+function LadderGaps({ grades }) {
+  const fresh = grades.filter((g) => g.fit === 'newOnly')
+  const unmatched = grades.filter((g) => g.fit === 'unbridged')
+  if (!fresh.length && !unmatched.length) return null
+  return (
+    <p className="sp-nil">
+      {!!fresh.length && <>
+        {fresh.map((g) => g.grade).join(', ')} {fresh.length > 1 ? 'are' : 'is'} new
+        to the board — it never priced {fresh.length > 1 ? 'them' : 'it'} on its own
+        before, so there is nothing to compare yet.
+      </>}
+      {!!fresh.length && !!unmatched.length && ' '}
+      {!!unmatched.length && <>
+        The old grades for {unmatched.map((g) => g.grade).join(', ')} cannot be matched
+        to the new ones, so {unmatched.length > 1 ? 'those columns start' : 'that column starts'}
+        {' '}again from here.
+      </>}
+    </p>
+  )
+}
+
 function SpeciesTile({ row, from }) {
   /* GRADES THAT DID NOT SELL ARE NAMED, NOT GIVEN A LINE EACH. On a real board
      day a third of them have no price, and a row of four dashes says nothing
@@ -141,6 +185,16 @@ function SpeciesTile({ row, from }) {
           ))}
           {unsold.length > 0 && <p className="sp-nil">{unsold.join(', ')} did not sell</p>}
           {sold.length === 0 && <p className="sp-nil">Nothing sold on the day</p>}
+          {/* WHERE THE MOVE IS AGAINST A BLEND, OR THERE IS NO PAST TO MOVE
+              FROM, THE CARD SAYS SO — once, at the foot. Peterhead changed
+              grade ladders on 21-10-2026, so some of these columns reach back
+              to a board that priced several of these grades as ONE line, and a
+              couple have no past at all. Said per row it would be three
+              identical labels stacked down the page, which is the noise this
+              card already refuses elsewhere; said nowhere, a dash in the Day
+              column reads as "it did not sell yesterday". */}
+          <LadderNote grades={sold} />
+          {sold.length > 0 && <LadderGaps grades={sold} />}
         </>
       )}
     </article>

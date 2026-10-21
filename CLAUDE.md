@@ -2620,6 +2620,111 @@ Round simply does not match.
 `test-market-grades.mjs` 27 · `test-grade-bridge.mjs` 37 ·
 `test-estimator-codes.mjs` 41.
 
+#### AND IT WAS WIRED TO NOTHING UNTIL THE COMPARISON WAS REBUILT ON IT
+
+The PD-vs-DK table on Daily Prices matched grades on the **A-number** and
+blended haddock by a hand-written list of tiers spelled `A3 Seed`. Both halves
+died on 21-10: `A(\d)` finds nothing in `2a`, so every species fell to one
+*All sizes* row and **haddock dropped off the table entirely**.
+
+**AND THE A-NUMBERS WERE NEVER THE SAME FISH.** Denmark numbers cod and hake
+from **0**, so their A1 cod is 7-12 kg against Peterhead's old A1 at 10 kg up.
+`src/lib/market/compareBoards.js` pairs on the published BANDS instead:
+**28 rows over 9 species, 19 of them an exact band match**, where the A-number
+gave nothing graded at all. A species that cannot be lined up is named with its
+own reason — one reason printed beside five names reads as though it applied to
+all of them.
+
+**IT COMPARES TODAY'S PRINTED LINES, NOT THE HISTORY GROUP**, and the
+distinction is the whole of `codesOf` there. `histKey` groups lemon 3a with 3b
+because ONE old row covered both — right for a four-year series, wrong when
+both boards are being read on the same day.
+
+### FOUR YEARS OF BOARD PRICES JOINED ONTO THE NEW LADDER (Oct 2026)
+
+David gave the mapping species by species, haddock in his own words:
+
+> *"A3 haddock is now 2a for example. A2 is 1d. A1 is a blend of 1a, 1b & 1c.
+> A4 chipper is 2b. A4 metro is 3, A4 mini is 4"*
+
+**THIS WAS NOT A TIDY-UP. The record is 41,696 PD rows back to 04-08-2022 and
+FORTY-FOUR were on the new ladder** — so keyed on `grade + subgrade` every
+Peterhead chart, day-on-day move and four-week average compared a key that
+exists on one side of 21 October and not the other. Measured on the real board:
+**0 of 22 lines had any history at all**; after the bridge, 19 of 22 carry a
+four-week baseline.
+
+`src/lib/market/legacyGrades.js`, and both ladders land on one key: a
+line-for-line pair is the code (`A3 Seed` and `2a` are both `2a`), a collapsed
+line is the group (`A1 Lge/Med`, `1a`, `1b`, `1c` → `1a+1b+1c`).
+
+**THE OLD LADDER IS THE NEW ONE WITH GRADES COLLAPSED, and WHICH END varies** —
+top for haddock, cod, hake, lemons and plaice; **bottom** for saithe, monks and
+megrim; one-for-one for ling and lythe. There is no single rule to apply.
+
+**MEGRIM'S PREMISE WAS WRONG AND THE GRADING TABLE CORRECTED IT.** The question
+put to David grouped megrim with the top-split species because the board printed
+`1a Large`. The crew table says megrim runs `1, 2, 3, 4a, 4b` — its detail is at
+the BOTTOM and there is no `1b` at all. **An answer must not be applied to a
+premise that turned out false**, so megrim is bridged the table's way and the
+one code the two documents disagree on is an explicit alias. The test fails on
+any board code that is neither on the table nor aliased, so a real megrim `1b`
+appearing later is a failure rather than a silent mis-join.
+
+**35,700 ROWS JOIN AND 4,074 DO NOT — 10.2%, named and never guessed:**
+
+    Haddock A4 Round   754   the table has eight haddock codes, none is Round
+    Haddock bare A4    145   shares a day with a NAMED A4 on 82 days, so it
+                             is not simply the only A4 line — unreadable back
+    Whiting          3,007   old A1-A4 + Round against 1a,1b,2,3,4, and the
+                             board names 1b "Large" where the table says Med.
+                             A1 also stopped in Aug 2025 while A2 carried on
+    Megrim B4          167   the old board ran a B-ladder too; no B code exists
+
+**THE B-LADDER WAS A REAL FAULT, found by censusing the record rather than
+reading the regex.** Matched on `A` only, `B4` fell through as a grading-table
+code, so a species that HAS a bridge reported a 2022 grade as `newOnly` — one
+the old board never printed.
+
+**HADDOCK MINI METRO HAS NO BOARD HISTORY AT ALL** and says so. Peterhead
+printed ONE Metro row and the boat graded two off it, so code 4's series starts
+21-10. `codesWithNoHistory` derives this rather than listing it.
+
+#### THE WARNING IS ABOUT THE COMPARISON, NOT THE GRADE — caught by rendering
+
+`seriesFit` describes a LINE; `fitAcross` describes the COMPARISON. Haddock A1
+is a blend of three codes whether or not anyone is looking across the change —
+so driven by the line alone, a skipper reading a **September** board, every row
+of it on the old ladder, was told his figures *"compare against the old board"*.
+**A warning that fires on the ordinary case stops being read.** Every unit check
+on the line itself was perfectly happy; only the rendered page showed it.
+
+**THE DISPLAY IS NEVER GROUPED, ONLY THE HISTORY.** Grouping the board as well
+undid the point of the change: on 21-10 Peterhead printed haddock 1b at £5.74
+and 1c at £5.81, and one blended £5.78 line hid exactly the detail the market
+changed ladders to publish. Caught the same way.
+
+And three different gaps must not read alike at the foot of a card — a blended
+baseline, a grade the board never priced on its own, and a species whose old
+grades cannot be matched at all.
+
+**The dashboard fixture was one step off the real columns**, which is the
+third time here: keyed bare, haddock `A1` matches nothing (the record always
+writes `A1 Lge/Med`), so the whole fixture read as unjoinable and the notes
+fired on every card. A sixth pane is the changeover itself, and panes 1-5 are
+asserted SILENT — reverting the rule fails ten of them.
+
+`supabase` untouched; this is all read-side. `test-legacy-grades.mjs` 93 ·
+`test-compare-boards.mjs` 49 · `scripts/compare-boards-preview.mjs` and
+`scripts/board-changeover-check.mjs` run both against the real boards.
+`scripts/fixtures/pd-grade-census.json` is **the whole record**, not a sample,
+so a grade key the bridge has never been shown fails the suite.
+
+**STILL OPEN, and both are questions for David rather than guesses:** where old
+**haddock A4 Round** (754 rows) goes, since the grading table has no Round code
+for haddock; and the **whiting** ladder, where several readings fit and the top
+grade changes partway through the history.
+
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
 Sandy McLeman emailed six Hanstholm notes he could not upload to the

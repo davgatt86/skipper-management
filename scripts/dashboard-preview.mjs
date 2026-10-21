@@ -42,8 +42,17 @@ const { priceRows, landedThisYear, boatBlocks, toDo, dashboardSpecies } =
   await import(pathToFileURL('src/lib/dashboard.js').href)
 
 /* A board shaped like the real one: cod A1-A5, haddock A1-A4, saithe A1-A4,
-   plus the extras — and Pollack, which is what the board calls lythe. */
+   plus the extras — and Pollack, which is what the board calls lythe.
+   THE SUBGRADES ARE THE ONES THE RECORD ACTUALLY CARRIES. Keyed bare, haddock
+   `A1` matches nothing in the grade bridge (the record always writes
+   `A1 Lge/Med`), so the whole fixture read as unjoinable and the ladder notes
+   fired on every card — a fixture one step from the real columns proves the
+   wrong thing, which this repo has now managed three times. */
 const days = ['2026-08-14', '2026-08-21', '2026-08-28', '2026-09-04', '2026-09-05', '2026-09-07']
+const SUB = {
+  Cod: { A1: 'Large', A2: 'Sprags', A3: 'Medium', A4: 'Selected', A5: 'Small' },
+  Haddock: { A1: 'Lge/Med', A2: 'Selected', A3: 'Seed', A4: 'Chipper' },
+}
 const base = {
   Cod: { A1: 5.10, A2: 4.20, A3: 3.40, A4: 2.60, A5: 1.90 },
   Haddock: { A1: 4.90, A2: 3.05, A3: 2.40, A4: 1.65 },
@@ -64,11 +73,51 @@ days.forEach((d, i) => {
       const drift = i === days.length - 1
         ? (species === 'Haddock' ? -0.28 : species === 'Cod' && grade === 'A3' ? 0 : 0.31)
         : (i - 2) * 0.04
-      prices.push({ price_date: d, species, grade, ave: round(p + drift),
+      prices.push({ source: 'PD', price_date: d, species, grade,
+                    subgrade: SUB[species]?.[grade] || null,
+                    ave: round(p + drift),
                     low: round(p + drift - 0.2), high: round(p + drift + 0.3) })
     }
   }
 })
+
+/* HADDOCK'S A4 IS THREE LINES ON THE REAL BOARD — Chipper, Metro and Round —
+ * and `base` can only carry one row per grade. Metro matters here because it
+ * is the one that maps straight onto a new code (A4 Metro -> 3); without it
+ * the changeover pane showed Metro with a bare dash and no reason, which is
+ * the very thing these notes exist to prevent. Round matters because it is
+ * the line that CANNOT be carried across. */
+for (const [sub, p] of [['Metro', 1.15], ['Round', 0.80]])
+  for (const [i, d] of days.entries())
+    prices.push({ source: 'PD', price_date: d, species: 'Haddock', grade: 'A4',
+                  subgrade: sub, ave: round(p + (i - 2) * 0.04),
+                  low: round(p - 0.2), high: round(p + 0.3) })
+
+/* THE LADDER CHANGE, as it really happened: a board day on the
+ * grade codes sitting on top of weeks of the A-ladder. It is its own pane
+ * because all three outcomes have to be on screen somewhere —
+ *   group     haddock 1b and 1c, which the old board sold as one A1 line
+ *   newOnly   Mini Metro, which the old board never priced on its own
+ *   unbridged whiting, whose old grades cannot be matched to the new ones
+ * and each says something different at the foot of its card. */
+const CHANGEOVER = [
+  ['Haddock', '1b', 'Large', 5.74], ['Haddock', '1c', 'Medium', 5.81],
+  ['Haddock', '1d', 'Good Seed', 6.25], ['Haddock', '2a', 'Seed', 5.68],
+  ['Haddock', '2b', 'Chipper', 4.74], ['Haddock', '3', 'Metro', 2.49],
+  ['Haddock', '4', 'Mini Metro', 1.93],
+  ['Cod', '1c', 'Large', 10.70], ['Cod', '2', 'Sprag', 10.24], ['Cod', '3', 'Medium', 9.74],
+  ['Saithe', '1', 'Large', 4.00], ['Saithe', '4a', 'Small', 3.39],
+  ['Whiting', '1b', 'Large', 3.56], ['Whiting', '2', 'Medium', 2.72],
+  ['Monkfish', '3', 'Selected', 5.34], ['Ling', '1', 'Large', 4.47],
+  ['Pollack', '1', 'Large', 2.60], ['Hake', '2', 'Selected', 10.56],
+]
+const newLadder = [
+  ...prices,
+  ...CHANGEOVER.map(([species, grade, subgrade, ave]) => ({
+    source: 'PD', price_date: '2026-09-09', species, grade, subgrade,
+    ave, low: round(ave - 0.2), high: round(ave + 0.3),
+  })),
+]
 /* One grade that simply did not sell on the last day. */
 const gone = prices.findIndex((r) => r.price_date === '2026-09-07' && r.species === 'Saithe' && r.grade === 'A4')
 prices[gone] = { ...prices[gone], ave: null, low: null, high: null }
@@ -105,11 +154,12 @@ const today = '2026-09-08'
 const landed = landedThisYear(rows, { year: 2026 })
 
 function pane(title, { basis = 'value', landings: L = landings, quota: Q = quota,
-                       expiring: E = expiring, landed: LD = landed, counts = {}, priceSet = prices } = {}) {
+                       expiring: E = expiring, landed: LD = landed, counts = {},
+                       priceSet = prices, asOf = '2026-09-07' } = {}) {
   const species = dashboardSpecies(LD, { basis })
   return [title, {
     vessel: { label: 'AUDACIOUS BF83' },
-    board: priceRows(priceSet, species, { asOf: '2026-09-07' }),
+    board: priceRows(priceSet, species, { asOf }),
     species, landed: LD, basis, source: 'PD',
     blocks: boatBlocks({ landings: L, quota: Q, expiring: E, asOf: today }),
     todo: toDo(counts), canSeeMoney: true,
@@ -124,6 +174,13 @@ const panes = [
   pane('By volume — the extras change', { basis: 'volume' }),
   pane('A species the board does not carry', {
     priceSet: prices.filter((r) => r.species !== 'Pollack'),
+  }),
+  /* The day Peterhead changed grade ladders. On the VOLUME basis, because
+     whiting is the species whose old grades cannot be matched to the new
+     ones and it only reaches her six by volume — so on value this pane could
+     not have exercised the unmatched case at all. */
+  pane('The board moves onto the grade codes', {
+    priceSet: newLadder, asOf: '2026-09-09', basis: 'volume',
   }),
 ]
 
@@ -267,6 +324,47 @@ has(4, 'Saithe', 'and the pinned three are still pinned')
 has(5, 'Not on this board', 'a species with no prices says so')
 has(5, 'it calls it Pollack', 'and names what the board calls it')
 times('Not on this board', 5, 1, 'and says it once, for the one species missing')
+
+/* NOTHING HAS CROSSED THE LADDER CHANGE ON PANES 1-5, so none of them may
+   mention it. Haddock A1 is a blend of three new codes whether or not anybody
+   is looking across the change, so a note driven by the LINE rather than by
+   the COMPARISON told a skipper reading a September board — every row of it on
+   the old ladder — that his figures "compare against the old board". Found by
+   rendering; every unit check on the line itself was perfectly happy. */
+for (const i of [1, 2, 3, 4, 5]) {
+  hasnt(i, 'compare against the old board', `pane ${i} has not crossed the change and does not mention it`)
+  hasnt(i, 'cannot be matched', `nor does pane ${i} warn about matching`)
+  hasnt(i, 'new to the board', `nor call an old grade new, on pane ${i}`)
+}
+
+/* ---- THE LADDER CHANGE, pane 6 ---------------------------------------- *
+ * Peterhead moved onto the grade codes on 21-10-2026. The board still shows
+ * every line it printed, the Day and 4 wk columns still reach back across the
+ * change, and the three things that can go wrong each say so in their own
+ * words at the foot of the card. */
+has(6, '1b Large', 'the board shows each code it printed')
+has(6, '1c Medium', 'and not one blended line in place of two')
+hasnt(6, '1a+1b+1c', 'the history group is never shown as if it were a grade')
+
+/* A MOVE AGAINST A BLEND IS A DIFFERENT CLAIM and the card says which. */
+has(6, 'compare against the', 'a blended comparison is declared')
+has(6, 'as one line', 'and says the old board priced them together')
+
+/* NEW TO THE BOARD AND UNMATCHABLE ARE DIFFERENT FACTS, worded apart. */
+has(6, 'Mini Metro', 'Mini Metro is on the board')
+has(6, 'new to the board', 'and is named as new rather than left with a bare dash')
+has(6, 'The old grades for', 'while whiting says its old grades cannot be matched')
+has(6, 'start again from here', 'and that its columns start again')
+/* The two causes are different facts and must not be reported in the same
+   words — one grade the old board never priced on its own, against a species
+   whose old grades cannot be lined up with the new ones at all. */
+times('new to the board', 6, 1, 'the new-to-the-board sentence is used once')
+times('The old grades for', 6, 1, 'and the unmatchable sentence once, separately')
+
+/* AND NOT ON EVERY CARD. A note that fires on a species whose grades map
+   straight across is the noise this card refuses elsewhere — ling, monkfish
+   and hake all map one for one and must stay quiet. */
+times('compare against the', 6, 3, 'the blend note appears only where a line was blended')
 
 console.log(out)
 console.log(`  ${panes.length} states rendered`)

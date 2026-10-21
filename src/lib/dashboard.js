@@ -30,6 +30,7 @@
  */
 
 import { dashboardSpecies, speciesBasis, boardNameFor } from './market/boardNames.js'
+import { seriesKey, fitAcross } from './market/legacyGrades.js'
 
 export { dashboardSpecies, speciesBasis }
 
@@ -69,30 +70,61 @@ export function priceRows(prices = [], species = [], { asOf, windowDays = 28 } =
       out.push({ species: appName, boardName, onBoard: false, grades: [] })
       continue
     }
-    const grades = [...new Set(mine.map(gradeKey))].sort()
+    /* KEYED ON `histKey`, SO FOUR YEARS DOES NOT STOP ON 19 OCTOBER.
+       Peterhead changed grade ladders on 21-10-2026. Keyed on what the board
+       printed, every new line had a null change and a null average because
+       its key did not exist the day before — measured on the real record as
+       0 of 19 lines carrying any history at all. */
+    /* ONE ROW PER LINE THE BOARD PRINTED ON THE LATEST DAY, with its history
+       looked up on the joined key. Grouping the display as well would undo the
+       point of the new ladder: Peterhead now prints haddock 1b and 1c as two
+       lines at two prices, and a blended one would hide what the market
+       changed ladders to publish. Where a species has not been on the board
+       since the change, its last printed lines are what show. */
+    const lines = mine.filter((r) => day(r.price_date) === latest)
+    const shown = (lines.length ? lines : mine).map(gradeKey)
+    const grades = [...new Set(shown)].sort()
     out.push({
       species: appName,
       boardName,
       onBoard: true,
-      grades: grades.map((g) => {
-        const today = mine.find((r) => gradeKey(r) === g && day(r.price_date) === latest)
-        const yday = previous
-          ? mine.find((r) => gradeKey(r) === g && day(r.price_date) === previous) : null
-        const window = mine.filter((r) => gradeKey(r) === g
+      grades: grades.map((label) => {
+        const self = (lines.length ? lines : mine).filter((r) => gradeKey(r) === label)
+        const g = histKey(self[0])
+        const on = (d) => mine.filter((r) => histKey(r) === g && day(r.price_date) === d)
+        const today = lines.length ? self : []
+        const yday = previous ? on(previous) : []
+        const window = mine.filter((r) => histKey(r) === g
           && day(r.price_date) >= from && day(r.price_date) < latest)
-        const avg = mean(window.map((r) => num(r.ave)))
-        const now = today ? num(today.ave) : null
+        /* The baseline is the mean of each DAY's figure. A group covers
+           several grades, so averaging its rows flat would weight a day by
+           how many of them happened to sell. */
+        const byDay = new Map()
+        for (const r of window) {
+          const d = day(r.price_date)
+          if (!byDay.has(d)) byDay.set(d, [])
+          byDay.get(d).push(r)
+        }
+        const avg = mean([...byDay.values()].map(aveOf).filter((v) => v != null))
+        const now = aveOf(today)
+        const was = aveOf(yday)
         return {
-          grade: g,
-          ave: now, low: today ? num(today.low) : null, high: today ? num(today.high) : null,
+          grade: label,
+          histKey: g,
+          /* A COLLAPSED LINE SAYS SO. Before the changeover one board line
+             covered this whole group, so the move is measured against a blend
+             of the grades rather than against this grade's own past price. */
+          fit: fitAcross(self[0], mine),
+          ave: now, low: edge(today.map((r) => r.low), Math.min),
+          high: edge(today.map((r) => r.high), Math.max),
           /* NULL, NEVER ZERO. A grade that did not sell yesterday has no price
              and no change — and a change of nought is a real and different
              thing, which `Number('') === 0` has turned into a lie six times in
              this repo already. */
-          onDay: now != null && yday && num(yday.ave) != null ? round2(now - num(yday.ave)) : null,
+          onDay: now != null && was != null ? round2(now - was) : null,
           onAvg: now != null && avg != null ? round2(now - avg) : null,
           avg,
-          days: window.length,
+          days: byDay.size,
         }
       }),
     })
@@ -251,6 +283,28 @@ export const isNewBoat = (blocks) =>
 
 /* ---- helpers ------------------------------------------------------------ */
 const gradeKey = (r) => [r.grade, r.subgrade].filter(Boolean).join(' ')
+
+/* THE KEY A GRADE'S HISTORY HANGS ON — see `market/legacyGrades.js`.
+ * `seriesKey` returns null for a line that cannot be carried across the ladder
+ * change, and falling back to the row's own key keeps those lines VISIBLE with
+ * the history they do have. Dropping them would take a tenth of the Peterhead
+ * record off the front page with nothing to say it had gone. */
+const histKey = (r) => seriesKey(r) || gradeKey(r)
+
+/* A group key covers several grades, so on any one day it has several rows.
+ * Its figure is the mean of them; taking whichever row came first would report
+ * one grade's price as the whole group's. */
+const aveOf = (rows) => mean(rows.map((r) => num(r.ave)))
+
+/* The lowest low or highest high across a group, or null where not one of them
+ * printed a figure. Guarded on the list being empty rather than on the result
+ * being falsy: `Math.min()` of nothing is Infinity, which is truthy — and
+ * nought is a real price, which is the `Number('') === 0` trap again. */
+function edge(vals, pick) {
+  const real = vals.map(num).filter((v) => v != null && Number.isFinite(v))
+  return real.length ? pick(...real) : null
+}
+
 const day = (d) => {
   const s = String(d || '').slice(0, 10)
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null

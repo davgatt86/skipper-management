@@ -1,5 +1,12 @@
 // Pure aggregation for the Daily Prices page: period keys, board deltas,
 // price/volume trend series, and month insights. No I/O, easy to reason about.
+//
+// GRADES ARE KEYED ON `histKey`, NOT ON WHAT THE BOARD PRINTED THAT DAY.
+// Peterhead changed ladders on 21-10-2026, so `grade + subgrade` exists on one
+// side of that date and not the other — every delta and every series would
+// break at the changeover. `legacyGrades.seriesKey` lands both ladders on one
+// key; see that file for which lines join and which cannot.
+import { seriesKey, fitAcross } from './legacyGrades.js'
 
 export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -55,13 +62,28 @@ export function gradesFor(prices, source, species) {
   for (const p of prices) {
     if (source !== 'Combined' && p.source !== source) continue
     if (p.species !== species) continue
-    set.add(p.subgrade ? `${p.grade} ${p.subgrade}` : p.grade)
+    set.add(histKey(p))
   }
   // natural-ish sort: A1, A2, ... then others
   return [...set].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
 }
 
 const gradeKey = p => (p.subgrade ? `${p.grade} ${p.subgrade}` : p.grade)
+
+/* THE KEY A GRADE'S HISTORY HANGS ON.
+ *
+ * `seriesKey` returns null for a line that cannot be joined across the
+ * changeover — haddock Round, a bare haddock A4, whiting, megrim B4. Falling
+ * back to the row's own key keeps those lines VISIBLE with their own four
+ * years, ending where the board stopped printing them. Dropping them instead
+ * would take a tenth of the Peterhead record out of every chart on the page
+ * with nothing to say it had gone. */
+const histKey = p => seriesKey(p) || gradeKey(p)
+
+/* A group key covers several grades, so on any one day it has several rows.
+ * Its figure is the MEAN of them — taking whichever row a lookup reached
+ * first would report one grade's price as the group's. */
+const aveOf = arr => mean(arr.map(p => p.ave).filter(v => v != null))
 
 // Board: latest day per source, each row with Δ vs previous day and vs 4-wk avg.
 export function buildBoard(prices, source) {
@@ -71,19 +93,38 @@ export function buildBoard(prices, source) {
   const latest = dates[dates.length - 1]
   const prev = dates[dates.length - 2]
   const cutoff28 = latest ? new Date(new Date(latest).getTime() - 28 * 86400000).toISOString().slice(0, 10) : null
-  const keyOf = p => `${p.species}|${gradeKey(p)}`
+  const keyOf = p => `${p.species}|${histKey(p)}`
+  /* One ARRAY per key per day, not one row: a group key carries several
+     grades, and both sides of the changeover have to average the same way. */
   const byKeyDate = {}
-  for (const p of rows) (byKeyDate[keyOf(p)] = byKeyDate[keyOf(p)] || {})[p.price_date] = p
+  for (const p of rows) {
+    const d = (byKeyDate[keyOf(p)] = byKeyDate[keyOf(p)] || {})
+    ;(d[p.price_date] = d[p.price_date] || []).push(p)
+  }
+  /* ONE ITEM PER LINE THE BOARD PRINTED TODAY, with its history looked up on
+     the joined key. Grouping the DISPLAY as well would undo the whole point of
+     the new ladder — on 21-10 Peterhead printed haddock 1b at 5.74 and 1c at
+     5.81, and showing one blended 5.78 line would hide the detail the market
+     changed ladders to publish. So the figures are as printed and only the
+     comparison reaches back across the changeover. */
   const items = []
   for (const p of rows.filter(p => p.price_date === latest)) {
-    const hist = byKeyDate[keyOf(p)]
-    const prevP = prev ? hist[prev] : null
-    const recent = Object.entries(hist).filter(([d]) => d > cutoff28 && d < latest).map(([, v]) => v.ave).filter(v => v != null)
+    const hist = byKeyDate[keyOf(p)] || {}
+    const prevAve = prev && hist[prev] ? aveOf(hist[prev]) : null
+    /* The four-week baseline is the mean of each DAY's figure, so a group is
+       not weighted by how many of its grades happened to sell that day. */
+    const recent = Object.entries(hist)
+      .filter(([d]) => d > cutoff28 && d < latest)
+      .map(([, arr]) => aveOf(arr)).filter(v => v != null)
     const avg4 = mean(recent)
     items.push({
-      species: p.species, grade: gradeKey(p),
+      species: p.species, grade: gradeKey(p), code: p.grade, histKey: histKey(p),
       low: p.low, high: p.high, ave: p.ave, unsold: p.unsold,
-      dDay: prevP && prevP.ave != null && p.ave != null ? r2(p.ave - prevP.ave) : null,
+      /* A BLENDED COMPARISON SAYS SO. Before 21-10-2026 one board line
+         covered this whole group, so the move is measured against a blend of
+         the grades rather than against this grade's own past price. */
+      fit: fitAcross(p, rows),
+      dDay: prevAve != null && p.ave != null ? r2(p.ave - prevAve) : null,
       d4wk: avg4 != null && p.ave != null ? r2(p.ave - avg4) : null,
     })
   }
@@ -103,12 +144,12 @@ export function buildPriceSeries(prices, { selections, source, gran, metric, com
   for (const p of prices) {
     if (source !== 'Combined' && p.source !== source) continue
     const grades = selMap[p.species]
-    if (!grades || !grades.has(gradeKey(p))) continue
+    if (!grades || !grades.has(histKey(p))) continue
     const v = p[metric]
     if (v == null) continue
     const pk = periodKey(p.price_date, gran)
     if (compareYears && years.length && !years.includes(pk.year)) continue
-    let key = `${p.species} ${gradeKey(p)}`
+    let key = `${p.species} ${histKey(p)}`
     if (source === 'Combined') key += ` ${p.source}`
     if (compareYears) key += ` ${pk.year}`
     const x = compareYears ? pk.oy : pk.full

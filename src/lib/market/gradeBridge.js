@@ -100,6 +100,7 @@ export const NOT_COMPARABLE = {
   Halibut: 'The Peterhead table gives halibut weight bands with no grade codes against them.',
   Turbot: 'The Peterhead table gives turbot weight bands with no grade codes against them.',
   Skate: 'Hanstholm lists longnosed skate only, which is not the same fish.',
+  Tusk: 'Neither table publishes a size band for tusk, though both markets price it.',
 }
 
 const near = (a, b) => a === b || (a != null && b != null && Math.abs(a - b) < 1e-9)

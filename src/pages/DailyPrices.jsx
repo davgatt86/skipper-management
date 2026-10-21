@@ -13,6 +13,7 @@ import {
   speciesFor, gradesFor, buildBoard, buildPriceSeries, buildVolumeSeries,
   monthInsights, monthLabel, latestDate, shiftDays, MONTHS,
 } from '../lib/market/marketAgg'
+import { compareBoards } from '../lib/market/compareBoards'
 
 const PALETTE = ['#1d4ed8', '#c2410c', '#15803d', '#7c3aed', '#db2777', '#0891b2', '#ca8a04', '#4b5563', '#be123c', '#2563eb', '#65a30d', '#9333ea']
 const gbp = n => n == null ? '—' : '£' + Number(n).toFixed(2)
@@ -253,51 +254,11 @@ function Board({ prices, days }) {
 }
 
 // ---------------- PD vs DK compare ----------------
-// PD is the benchmark. Similar grades are matched on the A-number; where the two
-// boards grade a species differently the sizes are blended to line up (e.g. a
-// single Peterhead U9 against Denmark's A0-A4, or haddock's sort tiers below).
-const HADDOCK_TIERS = [
-  { label: 'A1/A2 · Large',      pd: ['A1 Lge/Med', 'A2 Selected'], dk: ['A1'] },
-  { label: 'A3/A4 Chip · Medium', pd: ['A3 Seed', 'A4 Chipper'],    dk: ['A2'] },
-  { label: 'A4 Metro · Small',   pd: ['A4 Metro'],                  dk: ['A3', 'A4'] },
-]
-const SP_SYNONYM = { catfishes: 'catfish', wolffish: 'catfish', 'witch flounder': 'witch', coley: 'saithe', monk: 'monkfish', monks: 'monkfish', anglerfish: 'monkfish', lythe: 'pollack' }
-const canonSp = x => { const k = String(x || '').trim().toLowerCase(); return SP_SYNONYM[k] || k }
-const anum = g => { const m = String(g || '').match(/A(\d)/i); return m ? m[1] : null }
-const meanOf = arr => { const v = arr.filter(x => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null }
-
+// Peterhead is the benchmark, and the grades are lined up on the WEIGHT BANDS
+// both markets publish — see `compareBoards.js` for why matching on the
+// A-number was both broken as of 21-10-2026 and never the same fish anyway.
 function buildCompare(prices) {
-  const pd = buildBoard(prices, 'PD'), dk = buildBoard(prices, 'DK')
-  const pdBy = {}, dkBy = {}
-  for (const it of pd.items) (pdBy[canonSp(it.species)] = pdBy[canonSp(it.species)] || []).push(it)
-  for (const it of dk.items) (dkBy[canonSp(it.species)] = dkBy[canonSp(it.species)] || []).push(it)
-  const priceOf = (items, grades) => meanOf(items.filter(x => grades.includes(x.grade)).map(x => x.ave))
-  const groups = []
-  for (const sp of Object.keys(pdBy).filter(sp => dkBy[sp]).sort()) {
-    const pdItems = pdBy[sp], dkItems = dkBy[sp]
-    const rows = []
-    if (sp === 'haddock') {
-      for (const t of HADDOCK_TIERS) {
-        const p = priceOf(pdItems, t.pd), d = priceOf(dkItems, t.dk)
-        if (p != null && d != null) rows.push({ grade: t.label, pd: p, dk: d })
-      }
-    } else {
-      const pdUngraded = pdItems.every(x => anum(x.grade) == null)
-      const dkUngraded = dkItems.every(x => anum(x.grade) == null)
-      if (pdUngraded || dkUngraded) {
-        const p = meanOf(pdItems.map(x => x.ave)), d = meanOf(dkItems.map(x => x.ave))
-        if (p != null && d != null) rows.push({ grade: 'All sizes', pd: p, dk: d })
-      } else {
-        for (const n of [...new Set(pdItems.map(x => anum(x.grade)).filter(Boolean))].sort()) {
-          const p = meanOf(pdItems.filter(x => anum(x.grade) === n).map(x => x.ave))
-          const d = meanOf(dkItems.filter(x => anum(x.grade) === n).map(x => x.ave))
-          if (p != null && d != null) rows.push({ grade: 'A' + n, pd: p, dk: d })
-        }
-      }
-    }
-    if (rows.length) groups.push({ species: pdItems[0].species, rows })
-  }
-  return { date: pd.date, dkDate: dk.date, groups }
+  return compareBoards(buildBoard(prices, 'PD'), buildBoard(prices, 'DK'))
 }
 
 function CompareBoard({ cmp }) {
@@ -305,12 +266,13 @@ function CompareBoard({ cmp }) {
   return (
     <>
       <p className="muted" style={{ fontSize: '0.78rem', margin: '0 0 0.5rem' }}>
-        Denmark against Peterhead (the bench). <b style={{ color: 'var(--green)' }}>Green</b> = Denmark dearer, <b style={{ color: 'var(--red)' }}>red</b> = Denmark cheaper. Sizes blended where the two boards grade differently.
+        Denmark against Peterhead (the bench). <b style={{ color: 'var(--green)' }}>Green</b> = Denmark dearer, <b style={{ color: 'var(--red)' }}>red</b> = Denmark cheaper.
+        Lined up on the kilos each market grades to, not on the grade number. A row marked <b>blend</b> averages several grades to meet one size on the other board.
       </p>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.86rem' }}>
           <thead>
-            <tr><th style={th}>Species</th><th style={th}>Grade</th><th style={thR}>Peterhead</th><th style={thR}>Denmark</th><th style={thR}>Diff</th></tr>
+            <tr><th style={th}>Species</th><th style={th}>Grade</th><th style={th}>Size</th><th style={thR}>Peterhead</th><th style={thR}>Denmark</th><th style={thR}>Diff</th></tr>
           </thead>
           <tbody>
             {cmp.groups.map(g => g.rows.map((r, i) => {
@@ -319,7 +281,13 @@ function CompareBoard({ cmp }) {
               return (
                 <tr key={g.species + i}>
                   <td style={td}>{i === 0 ? g.species : ''}</td>
-                  <td style={td}>{r.grade}</td>
+                  <td style={td}>{r.grade}{' '}
+                    <span className="muted" style={{ fontSize: '0.74rem' }}>vs {r.dkGrade}</span>
+                    {/* An exact band match is the only pairing worth quoting
+                        without a caveat, so anything else carries its own word. */}
+                    {r.fit !== 'exact' && <span style={{ fontSize: '0.7rem', color: 'var(--brass)', marginLeft: '0.3rem' }}>{r.fit}</span>}
+                  </td>
+                  <td style={{ ...td, fontSize: '0.78rem', color: 'var(--mute)' }}>{r.band}</td>
                   <td style={{ ...tdR, fontWeight: 700 }}>{gbp(r.pd)}</td>
                   <td style={{ ...tdR, fontWeight: 700, color: col }}>{gbp(r.dk)}</td>
                   <td style={{ ...tdR, color: col, fontWeight: 600 }}>{pct == null ? '—' : (pct > 0 ? '+' : '') + pct.toFixed(0) + '%'}</td>
@@ -329,6 +297,22 @@ function CompareBoard({ cmp }) {
           </tbody>
         </table>
       </div>
+      {/* A SPECIES THAT COULD NOT BE LINED UP IS NAMED, WITH ITS OWN REASON.
+          Left out silently it reads as a species neither market landed, which
+          is a different fact — and one reason printed beside five names reads
+          as though it applied to all of them. */}
+      {!!cmp.skipped?.length && (
+        <div className="muted" style={{ fontSize: '0.76rem', marginTop: '0.6rem' }}>
+          <b>Both markets priced these, but not on a size we can line up:</b>
+          <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.1rem' }}>
+            {cmp.skipped.map(s => (
+              <li key={s.species}>
+                <b>{s.species}</b> — {s.note || 'one of the two tables publishes no size band for it.'}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </>
   )
 }
