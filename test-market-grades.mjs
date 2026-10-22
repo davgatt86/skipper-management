@@ -17,7 +17,7 @@
  */
 import assert from 'node:assert'
 import { parseMarketFromDoc } from './src/lib/market/parseMarket.js'
-import { pdSpecies, pdGuideName } from './src/lib/market/marketCanon.js'
+import { pdSpecies, pdGuideName, dkSplitPresentation, dkSpeciesAndPresentation } from './src/lib/market/marketCanon.js'
 
 let n = 0
 const ok = (c, m) => { assert.ok(c, m); n++ }
@@ -135,6 +135,67 @@ const find = (rs, sp, g) => rs.find(r => r.species === sp && r.grade === g)
   ok(pdSpecies('Cod/Sprag').known, 'a fish is known')
   ok(!pdSpecies('Boxes').known, 'a volumes label is not, so it can never be carried onto a price')
   eq(pdSpecies('Boxes').species, 'Boxes', 'and it is still returned verbatim rather than dropped')
+}
+
+/* ---- DENMARK WRITES THE PRESENTATION ON THE SPECIES ------------------ *
+ * David, Oct 2026: *"denmark label round as u/r."* `u/` is Danish *uden*,
+ * without. Left on the species it splits the fish in two, which is what the
+ * record shows: `Whiting u/r` was filed as a species of its own and never
+ * grouped with whiting. */
+{
+  const sp = (l) => dkSpeciesAndPresentation(l)
+  eq(sp('Whiting u/r'), { species: 'Whiting', presentation: 'Round' },
+    'round whiting is whiting, presented round')
+  eq(sp('Piked dogfish u/r'), { species: 'Dogfish', presentation: 'Round' },
+    'and the marker comes off before the species is looked up')
+  eq(sp('Whiting'), { species: 'Whiting', presentation: null }, 'a plain line carries none')
+
+  /* ONLY u/r IS TRANSLATED, because it is the only one David named. Reading
+     `u/h` as 'Headed' would be a guess written into a price record. */
+  eq(sp('Catfish u/h'), { species: 'Catfish', presentation: 'u/h' },
+    'an unnamed marker is carried verbatim rather than guessed at')
+
+  /* THE MAP USED TO CARRY 'flounder u/r' AND 'piked dogfish u/r' MAPPED ONTO
+     THE PLAIN SPECIES — the same fault answered the other way, collapsing the
+     marker away so round and gutted went into one line and could not be told
+     apart afterwards. Both entries are gone. */
+  eq(sp('Flounder u/r').presentation, 'Round', 'round flounder is no longer silently gutted')
+  eq(sp('Flounder').species, 'Flounder', 'and the plain fish still resolves')
+  eq(sp('Piked dogfish').species, 'Dogfish', 'as does the dogfish entry the marker was welded to')
+
+  /* NOT EVERY COMMA OR TAIL IS A MARKER. */
+  eq(dkSplitPresentation('Rochen, vingen').presentation, null, 'a Danish name with a comma is left alone')
+  eq(dkSplitPresentation('U/R').label, 'U/R', 'and a marker with no fish in front of it is not stripped to nothing')
+  eq(dkSplitPresentation('Norway lobster').presentation, null, 'nor is an ordinary two-word name')
+}
+
+/* ---- AND THROUGH THE REAL ENTRY POINT, not just the helper ----------- *
+ * The fiskeauktion export runs species / sort / kilo / avg / max / GBP, and
+ * the presentation is on the end of the species. Row shape taken from the
+ * parser's own reading of it: the last five tokens are the figures. */
+{
+  const dk = (y, toks) => [y, toks.map((t, i) => [38 + i * 60, t])]
+  const { prices, volumes, source } = await parseMarketFromDoc(fakePdf([
+    [810, [[38, 'www.fiskeauktion.dk'], [300, '21. oktober 2026']]],
+    dk(760, ['Whiting', '2', '1200,0', '2,60', '2,90', 'GBP']),
+    dk(750, ['Whiting', 'u/r', '3', '800,0', '1,16', '1,30', 'GBP']),
+    dk(740, ['Piked', 'dogfish', 'u/r', '-', '400,0', '0,46', '0,50', 'GBP']),
+  ]), 'dk.pdf')
+  eq(source, 'DK', 'the sheet is read as Denmark')
+  const w = prices.filter(p => p.species === 'Whiting')
+  eq(w.length, 2, 'both whiting lines are whiting — the round one is not a species of its own')
+  /* Named rather than reached into, so dropping the presentation fails here
+     saying what is missing instead of throwing on an undefined row. */
+  const round = w.find(p => p.subgrade === 'Round')
+  ok(round, 'the round whiting line carries its presentation')
+  eq(round && round.grade, 'A3', 'and keeps its own sort')
+  eq(w.find(p => p.subgrade === null).grade, 'A2', 'while the gutted line keeps its own')
+  ok(w[0].ave !== w[1].ave, 'so the two prices never meet')
+  eq(prices.find(p => p.species === 'Dogfish').subgrade, 'Round',
+    'and the species the map used to weld the marker onto now carries it')
+  /* VOLUME STAYS ONE FIGURE PER SPECIES, which is what it means. */
+  eq(volumes.find(v => v.label === 'Whiting').kg, 2000, 'whiting volume is the species, however presented')
+  ok(!volumes.some(v => v.label.includes('u/')), 'and no marker leaks into a volume label')
 }
 
 console.log(`market grades: ${n} checks passed`)

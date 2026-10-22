@@ -7,7 +7,7 @@
 // on the real June 2026 sheets), so it survives the run-together text that
 // plain extraction produces on the Danish reports.
 import {
-  pdSpecies, pdGuideName, dkSpecies, dkGrade, parsePdDate, parseDkDate, num,
+  pdSpecies, pdGuideName, dkSpeciesAndPresentation, dkGrade, parsePdDate, parseDkDate, num,
 } from './marketCanon.js'
 // One pdf.js for the whole app, bundled rather than fetched from a CDN — this
 // parser runs on a boat with a PDF already on the device.
@@ -276,8 +276,15 @@ function parseDkFisk(pages, fullText) {
       if (toks[toks.length - 1] === 'GBP' && toks.length >= 5) {
         const max = toks[toks.length - 2], avg = toks[toks.length - 3]
         const kilo = toks[toks.length - 4], sort = toks[toks.length - 5]
-        const sp = dkSpecies(toks.slice(0, toks.length - 5).join(' '))
-        prices.push({ source: 'DK', price_date, species: sp, grade: dkGrade(sort), subgrade: null, low: null, high: null, ave: num(avg) })
+        /* The presentation rides on the species label — "Whiting u/r". It goes
+           in `subgrade`, the way Peterhead's `A4 Round` does, so a round line
+           keys apart from its own gutted one instead of being blended into it
+           or filed as a species of its own. */
+        const { species: sp, presentation } = dkSpeciesAndPresentation(toks.slice(0, toks.length - 5).join(' '))
+        prices.push({ source: 'DK', price_date, species: sp, grade: dkGrade(sort), subgrade: presentation, low: null, high: null, ave: num(avg) })
+        /* VOLUME IS BY SPECIES AND STAYS THAT WAY. How much whiting crossed
+           the market is one figure however it was presented, and the round
+           rows used to sit under a species name that existed nowhere else. */
         const kg = num(kilo); if (kg != null) volBySp[sp] = (volBySp[sp] || 0) + kg
       }
       const line = toks.join(' ')
@@ -311,11 +318,11 @@ function parseDkHanstholm(pages, fullText) {
       if (/Avg\.?\s*price/i.test(line) || /Sort/i.test(line)) { started = true; continue }
       if (!started) continue
       const name = r.items.filter(i => i.x < 160 && /[A-Za-z]/.test(i.str)).map(i => i.str).join(' ').trim()
-      if (name) cur = dkSpecies(name)
+      if (name) cur = dkSpeciesAndPresentation(name)
       const sort = r.items.find(i => i.x >= 160 && i.x < 215 && /^\d+$/.test(i.str))?.str
       const decs = r.items.filter(i => /^\d+,\d{2}$/.test(i.str)).map(i => i.str)
       if (!cur || decs.length < 1 || !sort) continue
-      prices.push({ source: 'DK', price_date, species: cur, grade: dkGrade(sort), subgrade: null, low: null, high: null, ave: num(decs[0]) })
+      prices.push({ source: 'DK', price_date, species: cur.species, grade: dkGrade(sort), subgrade: cur.presentation, low: null, high: null, ave: num(decs[0]) })
     }
   }
   warnings.push('Hanstholm sheet: per-species volume not captured (use the fiskeauktion.dk export for Denmark volume)')

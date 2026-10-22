@@ -2797,20 +2797,60 @@ four-week baseline. `scripts/fixtures/pd-grade-census.json` is **the whole
 record**, not a sample, so a grade key the bridge has never been shown fails the
 suite.
 
-**STILL OPEN — and it is on the DENMARK side now.** David: *"denmark label
-round as u/r."* **Not one Danish row in the record carries a subgrade** — all
-7,824 are a bare `A0`-`A9`, so a `u/r` marker is being dropped by the parser
-rather than stored. Until it is read, a Danish price for a round fish is sitting
-in the same line as the gutted one, which is the fault just fixed on the
-Peterhead side, from the other end.
+#### DENMARK WRITES ROUND ON THE SPECIES — `u/r`, and it was going two ways
 
-**And `DK` grade `U` is NOT it**, which is worth saying because it looks like it.
-93 rows across 37 species, confined to **20 May – 10 June 2026** — three weeks
-and never again — and the prices do not behave like round fish: Halibut `U` at
-£17.52 is dearer than every one of its A grades, Trout £12.02, Lever £3.43.
-Species like Pouting, Sea Urchin and Stone King Crab appear under `U` and under
-nothing else. That is a parse artefact from a spell of board layout, and it is
-its own question.
+David: *"denmark label round as u/r."* `u/` is Danish *uden*, without, and it
+is written after the species on the fiskeauktion sheet: `Whiting u/r`,
+`Catfish u/h`, `Piked dogfish u/r`. The parser read the whole label as the
+species, and the marker went one of two ways — **both wrong, in opposite
+directions**:
+
+    left on      "Whiting u/r" became a SPECIES OF ITS OWN and never grouped
+                 with whiting at all. 2 rows.
+    welded off   DK_SPECIES carried 'flounder u/r' -> 'Flounder' and
+                 'piked dogfish u/r' -> 'Dogfish', so the marker was
+                 DROPPED and round went into the gutted line.
+
+**THE MAP ENTRIES ARE THE INTERESTING HALF.** Somebody met this before and
+answered it by adding the `u/r` spellings as map keys pointing at the plain
+fish — which reads as a tidy-up and is the same fault, from the other end. One
+split a species in two; the other blended two into one. Both are gone;
+`dkSplitPresentation` takes the marker off before the lookup and it is stored
+in `subgrade`, the way Peterhead's `A4 Round` is, so a round line keys apart
+from its own gutted one **on both boards**.
+
+**ONLY `u/r` IS TRANSLATED**, because it is the only one David named. `u/h` is
+most likely *uden hoved*, headed — and most likely is not good enough to write
+into a price record, so an unnamed marker is carried through verbatim.
+
+**AND THE REPAIR STOPS WHERE THE EVIDENCE DOES** (`supabase/dk_round_presentation.sql`,
+applied). The 2 whiting and 1 catfish still carry their label and were read
+back. **103 rows cannot be**: 80 dogfish and 23 flounder. The dogfish look
+recoverable — the old map had no plain `piked dogfish` entry, so a bare label
+would have survived verbatim and no such species is on record — but a sheet
+saying just `Dogfish` would ALSO have landed on exactly `Dogfish`, so the
+inference is strong and not sound, and **unlikely is not a reason to stamp 80
+rows**. Flounder is worse: there was never a plain entry either, so the two are
+identical today. One look at a real sheet settles both; the SQL to do it is
+written out in that file.
+
+**`DK` grade `U` IS NOT THIS, which is worth saying because it looks like it.**
+`dkGrade` maps a `-` sort to `U` — ungraded, not round. 93 rows across 37
+species in three weeks of May–June 2026, and the prices do not behave like round
+fish: Halibut `U` at £17.52 is dearer than every one of its A grades. **I
+first called it a parse artefact off the data alone and was wrong** — reading
+`dkGrade` settles in one line what the row counts only made suspicious.
+
+**The comparison deliberately does not pair a round Danish row**, and says so in
+`dkSort`. Their published sorts give one band per number and say nothing about
+presentation, so there is no stated band to pair against, and setting it beside
+a gutted Peterhead grade is the comparison `UNGUTTED` exists to refuse. Pair
+them round-to-round when there is a sheet to prove the bands against.
+
+`test-market-grades.mjs` 27 → **46**, including the real fiskeauktion row shape
+through `parseMarketFromDoc` rather than the helper alone — mutation-checked by
+dropping the presentation, which fails it by name rather than throwing on an
+undefined row.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 

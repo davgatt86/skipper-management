@@ -41,7 +41,16 @@ export const canonSp = (x) => {
 const bridgeName = (k) => k.charAt(0).toUpperCase() + k.slice(1)
 
 /* Denmark's board is keyed A0-A9 and its published sorts are numbered, so the
- * leading A comes off. A9 is their catch-all and matches no published band. */
+ * leading A comes off. A9 is their catch-all and matches no published band.
+ *
+ * A ROUND DANISH ROW IS DELIBERATELY NOT MATCHED. Denmark writes round as
+ * `u/r` after the species (David, Oct 2026) and the parser now keeps it, so
+ * such a row arrives as `A3 Round` and falls out here. That is the wanted
+ * behaviour for now rather than an oversight: their published sorts give one
+ * band per number and say nothing about presentation, so there is no stated
+ * band to pair a round price against, and setting it beside a gutted Peterhead
+ * grade would be the very comparison `UNGUTTED` exists to refuse. Pair them
+ * round-to-round once there is a sheet to prove the bands against. */
 const dkSort = (g) => {
   const m = String(g || '').match(/^A(\d)$/i)
   return m ? m[1] : null

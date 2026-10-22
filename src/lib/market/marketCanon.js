@@ -95,7 +95,6 @@ const DK_SPECIES = {
   'brill': 'Brill',
   'atlantic halibut': 'Halibut',
   'witch flounder': 'Witch',
-  'flounder u/r': 'Flounder',
   'common dab': 'Dab',
   'tusk': 'Tusk',
   'squid': 'Squid',
@@ -105,16 +104,58 @@ const DK_SPECIES = {
   'norway lobster': 'Nephrops', 'norwaylobster tail': 'Nephrops Tail',
   'hummer': 'Lobster', 'european lobster': 'Lobster',
   'crab claws': 'Crab',
-  'piked dogfish u/r': 'Dogfish',
+  'piked dogfish': 'Dogfish',
   'rays': 'Skate', 'sailray, wings': 'Skate', 'skate': 'Skate',
   'greater forkbeard': 'Forkbeard', 'greater forkbear': 'Forkbeard',
   'greater weever': 'Weever',
   'tub gurnard': 'Gurnard',
   'garfish': 'Garfish', 'pouting': 'Pouting', 'sea urchin': 'Sea Urchin', 'mixed': 'Mixed',
 }
+/* DENMARK WRITES THE PRESENTATION AFTER THE SPECIES — "Whiting u/r",
+ * "Catfish u/h", "Piked dogfish u/r". `u/` is Danish *uden*, without.
+ *
+ * David, Oct 2026: *"denmark label round as u/r."* So a round Danish fish is
+ * the same thing Peterhead prints as `4 Round`, and the two boards had better
+ * agree on the word.
+ *
+ * LEFT ON THE SPECIES IT SPLITS THE FISH IN TWO. `Whiting u/r` never matched
+ * the map, so it was filed as a species of its own and never grouped with
+ * whiting — 2 rows on record. **AND THE MAP ITSELF SHOWS THE OTHER HALF OF THE
+ * FAULT**: it carried `'flounder u/r': 'Flounder'` and
+ * `'piked dogfish u/r': 'Dogfish'`, which is the same problem answered the
+ * other way round — the marker collapsed away, so round flounder and round
+ * dogfish went into the same line as the gutted ones and cannot now be told
+ * apart. Both entries are gone; the marker is split off instead.
+ *
+ * ONLY `u/r` IS TRANSLATED, because it is the only one David named. Anything
+ * else is carried through verbatim rather than guessed at — `u/h` is most
+ * likely *uden hoved*, headed, and most likely is not good enough to write
+ * into a price record. */
+const DK_PRESENTATION = { 'u/r': 'Round' }
+
+/** Split a Danish species label into its fish and its presentation. */
+export function dkSplitPresentation(label) {
+  const t = String(label ?? '').replace(/\s+/g, ' ').trim()
+  const m = t.match(/^(.*?)[\s,]+(u\/[a-zæøå]+)$/i)
+  if (!m || !m[1]) return { label: t, presentation: null }
+  const mark = m[2].toLowerCase()
+  return { label: m[1].trim(), presentation: DK_PRESENTATION[mark] || mark }
+}
+
 export function dkSpecies(label) {
   const k = label.replace(/\s+/g, ' ').trim().toLowerCase()
   return DK_SPECIES[k] || label.replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * The Danish species AND how it was presented, which is what the board rows
+ * actually carry. The presentation goes in `subgrade`, the way Peterhead's
+ * `A4 Round` does, so one board's round fish keys apart from its own gutted
+ * line exactly as the other's does.
+ */
+export function dkSpeciesAndPresentation(label) {
+  const { label: name, presentation } = dkSplitPresentation(label)
+  return { species: dkSpecies(name), presentation }
 }
 
 // DK "Sort" -> grade. 0..5 -> A0..A5, '-' -> ungraded, anything else kept as A<n>.

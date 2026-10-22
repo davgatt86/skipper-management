@@ -161,6 +161,21 @@ eq(canonSp('Lythe'), 'pollack', 'and Lythe for pollack')
   eq(by('4 S Round').pd, 1.10, 'and the price is the board’s own, unaltered')
 }
 
+/* A ROUND DANISH ROW IS NOT SET BESIDE A GUTTED PETERHEAD ONE. Denmark marks
+   round as u/r after the species and the parser now keeps it, so the row
+   arrives as `A3 Round`. Their published sorts say nothing about presentation,
+   so there is no band to pair it against — and pairing it with the gutted
+   grade of the same number is the comparison UNGUTTED exists to refuse. */
+{
+  const pd = [{ species: 'Whiting', grade: '2 Medium', code: '2', ave: 2.72 }]
+  const rows = compareSpecies(pd, [
+    { species: 'Whiting', grade: 'A2', ave: 2.60 },
+    { species: 'Whiting', grade: 'A2 Round', ave: 1.05 },
+  ], 'whiting').rows
+  eq(rows.length, 1, 'only the gutted Danish line is paired')
+  eq(rows[0].dk, 2.60, 'and the round one never reaches the figure')
+}
+
 /* ---- NOTHING IS INVENTED WHERE A PRICE IS MISSING -------------------- */
 {
   const noDk = rows.filter((r) => r.source === 'PD').map((r) => ({ ...r, ave: null }))
