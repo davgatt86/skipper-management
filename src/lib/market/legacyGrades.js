@@ -28,7 +28,7 @@
  *
  * WHAT CANNOT BE JOINED IS NAMED, NEVER GUESSED — see `UNBRIDGED`.
  */
-import { PD_GRADES } from './gradeBridge.js'
+import { PD_GRADES, UNGUTTED } from './gradeBridge.js'
 
 /* Codes the BOARD prints for species the crew grading table gives no coded
  * bands for. The table lists halibut and turbot by weight with no codes
@@ -81,6 +81,8 @@ export const LEGACY_BRIDGE = {
     'A3 Seed': ['2a'],
     'A4 Chipper': ['2b'],
     'A4 Metro': ['3'],
+    /* Round is the SUFFIX form, so it keys apart from gutted 4 (Mini Metro). */
+    'A4 Round': ['4 Round'],
   },
   Hake: { A1: ['1a', '1b', '1c'], A2: ['2'], A3: ['3'], A4: ['4'], A5: ['5'] },
   Halibut: { U9: ['U9a', 'U9b'] },
@@ -113,49 +115,20 @@ export const LEGACY_BRIDGE = {
 
 /* WHAT IS NOT JOINED, AND WHY. A gap that says so is worth more than a series
  * joined onto the wrong grade, because a wrong join looks exactly like a real
- * price move. Measured, not estimated: 1,067 rows of the 39,774 graded PD rows
- * are here — 2.7%, and 38,707 join. */
+ * price move. Measured, not estimated: 313 rows of the 39,774 graded PD rows
+ * are here — 2.1%, and 39,461 join. */
 export const UNBRIDGED = {
   'Haddock|A3': 'One row, 04-08-2026, with no subgrade on it. The named A3 Seed line '
     + 'is joined; this one cannot be told from it.',
   'Haddock|A4': '145 rows, Sep 2024 to Oct 2026, carrying no subgrade — and a bare A4 '
     + 'shares a day with a NAMED A4 on 82 of those days, so it is not simply the only '
     + 'A4 line. Which of Chipper, Metro or Round each one is cannot be read back.',
-  /* NOT "there is no round haddock" — the sheet still carries the line (David,
-   * Oct 2026). It is waiting on a code, and the moment one sells it can be
-   * joined; see HADDOCK_ROUND below. */
-  'Haddock|A4 Round': 'Round is UNGUTTED haddock — the same thing as whiting Round, and '
-    + 'the cheapest line on the old board at 0.50-0.90 against Metro at 0.65-1.60. The '
-    + 'crew grading table gives haddock eight codes, 2.5 kg down to 0.17 kg, and no round '
-    + 'line — but the sheet still prints one. No board since the change has priced it, so '
-    + 'the code it now carries is not yet known and 754 rows wait on the first one that '
-    + 'sells. She has landed 21.7 t of it, filed on the notes as grade A4 presentation WHL.',
   'Megrim|B4': 'The old board ran a B-ladder as well as an A-ladder — second-quality '
     + 'fish. 167 rows of megrim B4, Aug 2022 to May 2026, averaging 1.21 against the '
     + 'A-grades. The grading table has no B code at all, so there is nothing to join it '
     + 'to; it keeps its own key and its own series, which ends in May 2026.',
 }
 
-/* THE ONE LINE WE KNOW IS COMING, so it is not met as a mystery.
- *
- * Whiting carries its round fish as codes 3 and 4 and haddock's table carries
- * none, yet the sheet still prints Hadd/Round. So a haddock code outside the
- * grading table is very likely that line rather than a reading fault, and
- * `test-legacy-grades.mjs` names this when a stranger turns up — the guard
- * stays strict, and whoever trips it is told what it probably is and what to
- * do about it. */
-export const HADDOCK_ROUND = 'The sheet still prints a Hadd/Round line (David, Oct 2026) '
-  + 'and no board since 21-10-2026 has priced it, so its code is unknown. A haddock code '
-  + 'the grading table does not list is most likely that line: add it to PD_GRADES with '
-  + 'the band the sheet gives, then bridge "Haddock|A4 Round" onto it and take this and '
-  + 'that entry out of UNBRIDGED.'
-
-/* THE B-LADDER COUNTS AS LEGACY, and leaving it out was a real fault. The old
- * board graded second-quality fish B1-B9 beside the A-ladder, and megrim B4
- * alone is 167 rows. Matched on A ONLY, `B4` fell through as though it were a
- * grading-table code, so a species that HAS a bridge reported it `newOnly` —
- * a 2022 grade described as one the old board never printed. Found by
- * censusing the real record rather than by reading the regex. */
 const LEGACY = /^([AB][0-9]|U9)$/
 
 /** The record's own key for a row: grade, plus subgrade where there is one. */
@@ -170,6 +143,35 @@ export function codeOf(species, grade) {
   const t = String(grade ?? '').trim()
   const a = CODE_ALIAS[species]
   return a && a[t] ? a[t] : t
+}
+
+/* ROUND IS A SUFFIX ON A SIZE CODE, NOT A SIZE OF ITS OWN.
+ *
+ * David, Oct 2026: *"a4 round is now 4 round, if a boat lands metros (3) round
+ * it would be 3 round."* So the board can print the same code twice — once
+ * gutted and once round — and they are different fish at the same size. On
+ * 21-10 haddock 4 made £1.93 gutted; round haddock ran £0.50-0.90 on the old
+ * board. Keyed on the code alone they would be averaged into one line the
+ * first time a round one priced, and nothing would say so.
+ *
+ * WHITING IS THE EXCEPTION, and that is why this takes the species. Its crew
+ * table NAMES the bottom two bands Round and S Round, with weights — the small
+ * whiting are always sold round, so it is the band's own name rather than a
+ * suffix. `UNGUTTED` holds those codes, and a "Round" beside one of them is
+ * read as the name it is.
+ *
+ * In practice only the bottom grades are ever landed round (David). A round
+ * line higher up the ladder is therefore something the board has never priced,
+ * and falls out as `newOnly` — which is exactly what it would be. */
+export function isRoundSuffix(species, grade, subgrade) {
+  if (!/\bround\b/i.test(String(subgrade ?? ''))) return false
+  return !(UNGUTTED[species] || []).includes(codeOf(species, grade))
+}
+
+/** The code a board row keys on — with ` Round` where that is a suffix. */
+export function boardGrade(species, grade, subgrade) {
+  const c = codeOf(species, grade)
+  return isRoundSuffix(species, grade, subgrade) ? `${c} Round` : c
 }
 
 /** The new codes one legacy line covered, or null if it is not joined. */
@@ -214,8 +216,9 @@ export function seriesKey(row) {
     const codes = codesForLegacy(species, legacyKeyOf(g, row.subgrade))
     return codes ? codes.join('+') : null
   }
-  const hit = legacyForCode(species, g)
-  return hit ? hit.codes.join('+') : codeOf(species, g)
+  const b = boardGrade(species, g, row.subgrade)
+  const hit = legacyForCode(species, b)
+  return hit ? hit.codes.join('+') : b
 }
 
 /**
@@ -241,13 +244,16 @@ export function seriesFit(row) {
     if (!codes) return 'unbridged'
     return codes.length > 1 ? 'group' : 'exact'
   }
-  const hit = legacyForCode(species, g)
+  const b = boardGrade(species, g, row.subgrade)
+  const hit = legacyForCode(species, b)
   if (!hit) {
     /* "NEW TO THE BOARD" IS A CLAIM, and it can only be made about a code the
-       grading table actually lists. A code we have never heard of is one we
-       cannot say anything about — and the one we KNOW is coming is the
-       Hadd/Round line, which carries 754 rows of history and would have been
-       announced as something the board had never priced before. */
+       grading table actually lists — a code we have never heard of is one we
+       can say nothing about.
+       A ROUND LINE HIGH UP THE LADDER LANDS HERE AND IS RIGHT TO. Only the
+       bottom grades are ever landed round (David, Oct 2026), and the old board
+       carried Round on A4 and nowhere else — so a `2b Round` really would be
+       something it had never priced. */
     const known = (codesOf(species) || []).includes(codeOf(species, g))
     return known && LEGACY_BRIDGE[species] ? 'newOnly' : 'unbridged'
   }

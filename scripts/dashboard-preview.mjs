@@ -98,20 +98,26 @@ for (const [sub, p] of [['Metro', 1.15], ['Round', 0.80]])
  * because all three outcomes have to be on screen somewhere —
  *   group     haddock 1b and 1c, which the old board sold as one A1 line
  *   newOnly   Mini Metro, which the old board never priced on its own
- *   unbridged the Hadd/Round line — see below
+ *   exact     4 Round beside it — see below
  * and each says something different at the foot of its card.
  *
- * THE ROUND LINE'S CODE IS A STAND-IN AND IS NOT A FACT. David confirmed
- * (Oct 2026) that the sheet still prints Hadd/Round, but no board since the
- * change has priced it, so nobody here knows what code it carries. `5` is
- * written below only to reach the unbridged state — when a real one sells,
- * take the code off the sheet, put it in PD_GRADES and bridge it. Whiting used
- * to stand in for this state and no longer can: it goes across one for one. */
+ * THE TWO HADDOCK 4s ARE THE POINT OF THIS PANE. Round is a suffix on a size
+ * code, not a size of its own (David, Oct 2026), so the board prints code 4
+ * twice — gutted Mini Metro at 1.93 and round at 0.80. They must render as two
+ * rows carrying different figures: keyed on the code alone the page would have
+ * averaged two different fish into one line the first time a round one priced,
+ * and nothing on it would have said so.
+ *
+ * `unbridged` HAS NO LIVE CASE ANY MORE and is not faked here. Every species
+ * the old board graded is now joined, so it would take a species the board
+ * starts pricing that this app has no bridge for — which is what the branch is
+ * defending against. An earlier draft of this fixture invented a haddock code
+ * `5` to reach it; that code never existed. */
 const CHANGEOVER = [
   ['Haddock', '1b', 'Large', 5.74], ['Haddock', '1c', 'Medium', 5.81],
   ['Haddock', '1d', 'Good Seed', 6.25], ['Haddock', '2a', 'Seed', 5.68],
   ['Haddock', '2b', 'Chipper', 4.74], ['Haddock', '3', 'Metro', 2.49],
-  ['Haddock', '4', 'Mini Metro', 1.93], ['Haddock', '5', 'Round', 0.80],
+  ['Haddock', '4', 'Mini Metro', 1.93], ['Haddock', '4', 'Round', 0.80],
   ['Cod', '1c', 'Large', 10.70], ['Cod', '2', 'Sprag', 10.24], ['Cod', '3', 'Medium', 9.74],
   ['Saithe', '1', 'Large', 4.00], ['Saithe', '4a', 'Small', 3.39],
   ['Whiting', '1b', 'Large', 3.56], ['Whiting', '2', 'Medium', 2.72],
@@ -360,13 +366,33 @@ has(6, 'as one line', 'and says the old board priced them together')
 /* NEW TO THE BOARD AND UNMATCHABLE ARE DIFFERENT FACTS, worded apart. */
 has(6, 'Mini Metro', 'Mini Metro is on the board')
 has(6, 'new to the board', 'and is named as new rather than left with a bare dash')
-has(6, 'not on the grade table held here'.replace(/ /g,' '), 'the Round line says it is not on the grade table held here')
-has(6, 'cannot be lined up with the old board', 'and that it cannot be lined up yet')
+/* ROUND IS A SUFFIX, SO THE SAME CODE APPEARS TWICE AND MUST NOT BE BLENDED.
+   Gutted Mini Metro made 1.93 on the real board and round haddock ran
+   0.50-0.90 on the old one — keyed on the code alone the page would have
+   averaged two different fish into one row and said nothing about it. */
+has(6, '4 Mini Metro', 'gutted Mini Metro is on the card')
+has(6, '4 Round', 'and the round line beside it')
+has(6, '1.93', 'each carrying its own figure')
+has(6, '0.80', 'rather than one blended row')
+/* And the round one JOINS where its gutted twin is new to the board — the old
+   A4 Round line is four years of history that keying on the code would have
+   thrown onto the wrong fish. */
+/* THE ASSERTION HAS TO DEPEND ON THE KEYING, and the row labels do not —
+   both rows render whether or not the key tells them apart. This does: keyed
+   on the code alone, 4 Round finds no bridge entry either and the sentence
+   becomes '4 Mini Metro, 4 Round are new to the board', throwing four years
+   of round history onto the wrong fish. Checked against that exact mutation. */
+has(6, '4 Mini Metro is new to the board', 'the gutted line alone is called new')
+hasnt(6, '4 Round are new', 'the round line is NOT — it has four years behind it')
+/* AND THIS IS THE ONE THAT DEPENDS ON THE KEY. The labels render either way;
+   these figures do not. Keyed on the bare code, 4 Round matches none of its
+   own A4 Round history and both rows come up as dashes. Mutation-checked. */
+has(6, '−0.12', 'the round line carries its own day-on-day move')
+has(6, '−0.02', 'and its own four-week figure, off four years of A4 Round')
 /* The two causes are different facts and must not be reported in the same
    words — one grade the old board never priced on its own, against a species
    whose old grades cannot be lined up with the new ones at all. */
 times('new to the board', 6, 1, 'the new-to-the-board sentence is used once')
-times('not on the grade table held here', 6, 1, 'and the unmatchable sentence once, separately')
 
 /* AND NOT ON EVERY CARD. A note that fires on a species whose grades map
    straight across is the noise this card refuses elsewhere — ling, monkfish

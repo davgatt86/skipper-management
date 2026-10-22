@@ -91,13 +91,22 @@ export const DK_SORTS = {
   Dab: [['1', 0.25, null], ['2', 0.13, 0.25]],
 }
 
-/* GRADES THAT ARE SOLD UNGUTTED, which the band alone does not say.
+/* GRADES WHOSE OWN NAME IS ROUND — whiting's bottom two, and nothing else.
  *
- * David, Oct 2026: *"a4 round is ungutted like whiting round"*. On whiting it
- * is the bottom of the size ladder — the small ones are round because they are
- * too small to gut — so the bands run straight on and nothing above gives it
- * away. The sales notes keep the two apart properly, as grade A4 presentation
- * WHL; only the BOARD welds them into one label.
+ * David, Oct 2026: *"a4 round is ungutted like whiting round"*, and then
+ * *"a4 round is now 4 round, if a boat lands metros (3) round it would be
+ * 3 round"*. So Round is normally a SUFFIX on a size code: the board can print
+ * one code twice, gutted and round, and they are different fish.
+ *
+ * WHITING IS THE EXCEPTION, and this list is what keeps it one. Its crew table
+ * names the bottom two bands ROUND 0.25-0.35 and S ROUND 0.11-0.25, with
+ * weights, because whiting that small is always sold round — so a "Round"
+ * beside whiting 3 or 4 is the band's own name and must NOT be stripped off
+ * into a suffix, or the line keys itself away from its own four years.
+ *
+ * `legacyGrades.isRoundSuffix` reads it for that. The sales notes never had
+ * the problem: they keep presentation and grade in separate columns, as WHL
+ * and A4. Only the BOARD welds them into one label.
  *
  * IT MATTERS FOR THE DENMARK COMPARISON AND NOWHERE ELSE SO FAR. An ungutted
  * fish carries its guts in the weight and sells cheaper by the kilo, so a

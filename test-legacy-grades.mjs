@@ -19,7 +19,7 @@ import {
   LEGACY_BRIDGE, UNBRIDGED, CODE_ALIAS, BOARD_ONLY_CODES,
   seriesKey, seriesFit, codesOf, codesForLegacy, legacyForCode,
   codesWithNoHistory, unbridgedReason, isLegacyGrade, legacyKeyOf, fitAcross,
-  HADDOCK_ROUND,
+  isRoundSuffix, boardGrade,
 } from './src/lib/market/legacyGrades.js'
 
 let n = 0
@@ -108,19 +108,40 @@ eq(key('Megrim', '1a', 'Large'), key('Megrim', 'A1', null),
 /* ---- WHAT IS NOT JOINED IS NAMED ------------------------------------- *
  * A wrong join looks exactly like a real price move, so a gap that says so
  * is worth more than a series stitched onto the nearest grade. */
-eq(key('Haddock', 'A4', 'Round'), null, 'haddock Round is still waiting on a code')
-eq(fit('Haddock', 'A4', 'Round'), 'unbridged', 'and is reported as unjoined')
-/* THE REASON IS NOT "there is no round haddock". David, Oct 2026: the sheet
-   still prints the line, so it is waiting on a code rather than gone — and a
-   reason that said otherwise would stop anyone looking for it. */
-ok(/sheet still prints one/.test(unbridgedReason('Haddock', 'A4', 'Round')),
-  'the reason says the line is still on the sheet')
-ok(/UNGUTTED/.test(unbridgedReason('Haddock', 'A4', 'Round')),
-  'and says what Round actually is, which is not re-derivable from the record')
-ok(/add it to PD_GRADES/.test(HADDOCK_ROUND), 'and what to do when its code turns up')
 eq(key('Haddock', 'A4', null), null, 'a bare A4 could be any of three lines')
 ok(/82 of those days/.test(unbridgedReason('Haddock', 'A4', null)),
   'and the reason is measured, not asserted — it shares a day with a named A4')
+
+/* ---- ROUND IS A SUFFIX, AND THE SAME CODE CAN CARRY BOTH ------------- *
+ * David, Oct 2026: *"a4 round is now 4 round, if a boat lands metros (3)
+ * round it would be 3 round."* So haddock 4 is Mini Metro gutted AND round,
+ * at two very different prices — £1.93 against £0.50-0.90 — and keyed on the
+ * code alone the board would have averaged them into one line the first time
+ * a round one sold, with nothing saying so. */
+eq(key('Haddock', 'A4', 'Round'), '4 Round', 'old A4 Round joins the round-suffixed key')
+eq(key('Haddock', '4', 'Round'), '4 Round', 'and so does a round line on the new board')
+eq(key('Haddock', '4', 'Mini Metro'), '4', 'while gutted Mini Metro keeps the bare code')
+ok(key('Haddock', '4', 'Round') !== key('Haddock', '4', 'Mini Metro'),
+  'so the two never meet — they are different fish at the same size')
+eq(fit('Haddock', 'A4', 'Round'), 'exact', 'and the join is one for one')
+eq(unbridgedReason('Haddock', 'A4', 'Round'), null, 'nothing of it is left unjoined')
+/* A ROUND LINE HIGHER UP THE LADDER is something the board has never priced —
+   only the bottom grades are landed round, and the old board carried Round on
+   A4 and nowhere else. */
+eq(fit('Haddock', '2b', 'Round'), 'newOnly', 'a round Chipper would be new to the board')
+eq(key('Haddock', '2b', 'Round'), '2b Round', 'and keyed apart from gutted Chipper')
+
+/* WHITING IS THE EXCEPTION, which is why this takes the species. Its crew
+   table NAMES the bottom two bands Round and S Round, with weights — so a
+   "Round" there is the band's own name and must NOT be read as a suffix, or
+   the line would key itself away from its own four years. */
+ok(!isRoundSuffix('Whiting', '3', 'Round'), 'whiting 3 is named Round; it is not a suffix')
+ok(!isRoundSuffix('Whiting', '4', 'S Round'), 'nor is S Round on whiting 4')
+ok(isRoundSuffix('Haddock', '4', 'Round'), 'but on haddock it is')
+eq(boardGrade('Whiting', '3', 'Round'), '3', 'so whiting keeps its bare code')
+eq(boardGrade('Haddock', '4', 'Round'), '4 Round', 'and haddock takes the suffix')
+eq(key('Whiting', '3', 'Round'), key('Whiting', 'A4', null),
+  'and whiting 3 still joins the four years of A4 behind it')
 
 /* ---- WHITING GOES ACROSS ONE FOR ONE --------------------------------- *
  * It read as unjoinable until David said what Round is: ungutted, the same
@@ -218,9 +239,9 @@ eq(seriesFit({ source: 'DK', species: 'Cod', grade: 'A1' }), 'exact', 'and DK is
   eq(noReason, [], 'and nothing is dropped without one')
   eq(census.legacy.length, 58, 'fifty-eight grade keys in four years of Peterhead boards')
   eq(rows, 39774, 'carrying 39,774 rows between them')
-  eq(unjoined, 1067, '1,067 rows are not joined — haddock Round and bare A4, megrim B4')
+  eq(unjoined, 313, '313 rows are not joined — a bare haddock A4 and megrim B4')
   eq(joined, rows - unjoined, 'and the rest are')
-  ok(unjoined / rows < 0.03, 'which is 2.7% of the graded Peterhead record, down from 10.2%')
+  ok(unjoined / rows < 0.01, 'which is 0.8% of the graded Peterhead record, down from 10.2%')
 }
 
 /* EVERY CODE THE BOARD HAS PRINTED IS KNOWN TO THE GRADING TABLE, or is an
@@ -249,7 +270,9 @@ eq(seriesFit({ source: 'DK', species: 'Cod', grade: 'A1' }), 'exact', 'and DK is
   for (const [species, map] of Object.entries(LEGACY_BRIDGE)) {
     const codes = codesOf(species) || []
     for (const [k, cs] of Object.entries(map))
-      for (const c of cs) if (!codes.includes(c)) bad.push(`${species} ${k} -> ${c}`)
+      /* A ROUND SUFFIX IS VALID WHERE ITS SIZE CODE IS. The check stays
+         strict on the code itself — "9 Round" would still fail. */
+      for (const c of cs) if (!codes.includes(c.replace(/ Round$/, ''))) bad.push(`${species} ${k} -> ${c}`)
   }
   eq(bad, [], 'every code the bridge names exists on the grading table')
 }

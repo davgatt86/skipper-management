@@ -2671,12 +2671,12 @@ one code the two documents disagree on is an explicit alias. The test fails on
 any board code that is neither on the table nor aliased, so a real megrim `1b`
 appearing later is a failure rather than a silent mis-join.
 
-**38,707 ROWS JOIN AND 1,067 DO NOT — 2.7%, named and never guessed:**
+**39,461 ROWS JOIN AND 313 DO NOT — 0.8%, named and never guessed:**
 
-    Haddock A4 Round   754   ungutted, and waiting on a code — see below
     Haddock bare A4    145   shares a day with a NAMED A4 on 82 days, so it
                              is not simply the only A4 line — unreadable back
     Megrim B4          167   the old board ran a B-ladder too; no B code exists
+    Haddock bare A3      1   one row, Aug 2026, no subgrade on it
 
 #### ROUND IS UNGUTTED, and that one fact joined 3,007 rows of whiting
 
@@ -2709,22 +2709,52 @@ round grade sold on 21-10, so the real board cannot reach that flag and the
 test exercises it directly: **a check that cannot reach the state is not
 testing it.**
 
-#### THE HADD/ROUND LINE IS STILL ON THE SHEET — it is waiting on a code
+#### ROUND IS A SUFFIX ON A SIZE CODE — and that nearly blended two fish
 
-Asked outright, because the haddock table has eight codes, 2.5 kg down to
-0.17 kg, and **no round line at all** where whiting gets two. David: it is still
-printed. No board since 21-10 has priced it, so its code is unknown, and 754
-rows wait on the first one that sells. She has landed **21.7 t** of it.
+**I asked the wrong question and got a "yes" to it.** Having found no round line
+on the haddock table, I asked whether *the sheet still prints a Hadd/Round
+line* and built the answer in as *"it is waiting on a code"*. David: **"what
+sheet? a4 round is now 4 round, if a boat lands metros (3) round it would be
+3 round."**
 
-**A CODE THE TABLE DOES NOT LIST IS UNKNOWN, NOT NEW**, and getting that round
-the wrong way was a real fault caught here. `seriesFit` returned `newOnly` for
-any unrecognised code of a bridged species — so the Round line, the moment it
-priced, would have been announced on the front page as *"new to the board — it
-never priced it on its own before"*, with 754 rows of history behind it.
-*"New"* is a claim, and it can only be made about a code the grading table
-actually carries. `HADDOCK_ROUND` says what to do when the stranger appears, and
-the census test prints it on failure rather than leaving whoever trips it to
-work it out.
+There is no fixed Round line anywhere. **Round is a suffix the board can hang
+on any size code**, so the same code is printed twice — once gutted, once
+round — and they are different fish:
+
+    haddock 4   Mini Metro, gutted   £1.93 on 21-10
+    haddock 4   Round                £0.50-0.90 through October
+
+**KEYED ON THE CODE ALONE THE PAGE WOULD HAVE AVERAGED THEM INTO ONE LINE**
+the first time a round one priced, and nothing on it would have said so. The
+board itself cannot save you here — it prints `4` on both. `boardGrade()` keys
+the round one as `4 Round`, old `A4 Round` joins it, and gutted Mini Metro keeps
+the bare code and its honest "new to the board".
+
+**AND A QUESTION ANSWERED YES IS NOT THE SAME AS A QUESTION WORTH ASKING.**
+"Is it still on the sheet" had a true answer that was useless, because the
+premise under it — a fixed line with a code of its own — was wrong. Second time
+in two days after megrim: **when an answer lands on a premise, check the
+premise.**
+
+**WHITING IS THE ONE EXCEPTION AND `UNGUTTED` IS WHAT KEEPS IT ONE.** Its crew
+table names the bottom two bands ROUND and S ROUND, with weights, because
+whiting that small is always sold round — so a "Round" there is the band's own
+name. Stripped off as a suffix it would key the line away from its own four
+years. Asserted both ways.
+
+**A ROUND LINE HIGHER UP THE LADDER IS GENUINELY NEW**, and falls out as such
+without a special case. Only the bottom grades are landed round (David), and
+the old board carried Round on **A4 and nowhere else** — measured, the only two
+Round lines in four years are `Haddock A4 Round` (754) and `Whiting A4 Round`
+(903). So a `2b Round` really would be something the board had never priced.
+
+**THE PREVIEW ASSERTION HAD TO BE CHANGED TWICE TO EARN ITS KEEP.** Asserting
+that both rows RENDER proves nothing — they render whether or not the key tells
+them apart. Asserting the *new to the board* sentence proved nothing either,
+because that reads `seriesFit`, which was not the half mutated. What discriminates
+is the round line's own **−0.12 / −0.02**: keyed on the bare code it matches none
+of its own history and both rows come up dashes. **Mutation-checked until it
+failed on the right thing** — twice it passed on a broken copy first.
 
 **THE B-LADDER WAS A REAL FAULT, found by censusing the record rather than
 reading the regex.** Matched on `A` only, `B4` fell through as a grading-table
@@ -2767,11 +2797,20 @@ four-week baseline. `scripts/fixtures/pd-grade-census.json` is **the whole
 record**, not a sample, so a grade key the bridge has never been shown fails the
 suite.
 
-**STILL OPEN, and it is one line rather than two.** When a **Hadd/Round** sells,
-read its code off the sheet, add it to `PD_GRADES.Haddock` with its band and
-bridge `Haddock|A4 Round` onto it. Until then it is flagged, and the dashboard
-fixture's `5` is a **stand-in to reach the state, not the code** — the comment
-beside it says so.
+**STILL OPEN — and it is on the DENMARK side now.** David: *"denmark label
+round as u/r."* **Not one Danish row in the record carries a subgrade** — all
+7,824 are a bare `A0`-`A9`, so a `u/r` marker is being dropped by the parser
+rather than stored. Until it is read, a Danish price for a round fish is sitting
+in the same line as the gutted one, which is the fault just fixed on the
+Peterhead side, from the other end.
+
+**And `DK` grade `U` is NOT it**, which is worth saying because it looks like it.
+93 rows across 37 species, confined to **20 May – 10 June 2026** — three weeks
+and never again — and the prices do not behave like round fish: Halibut `U` at
+£17.52 is dearer than every one of its A grades, Trout £12.02, Lever £3.43.
+Species like Pouting, Sea Urchin and Stone King Crab appear under `U` and under
+nothing else. That is a parse artefact from a spell of board layout, and it is
+its own question.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
