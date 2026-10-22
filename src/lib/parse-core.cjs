@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.7";
+  const VERSION = "1.3.8";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
@@ -209,9 +209,26 @@
   /* ------------------------------------------------------------------ *
    * Don Fishing "SALES NOTE" parser
    * ------------------------------------------------------------------ */
-  // Slash-token: SPECIES/PRES/GRADE. Grade may contain "+" (A+1..A+5) — the
-  // "+" in the class below is what keeps A+ grades from being silently dropped.
-  const SLASH_TOKEN = /\/[A-Z]+\/[A-Z0-9+]+$/;
+  /* Slash-token: SPECIES/PRES/GRADE.
+   *
+   * THE GRADE CLASS IS WHAT KEEPS ROWS FROM BEING SILENTLY DROPPED, and it has
+   * now had to grow twice for the same reason. The "+" was added for A+1..A+5;
+   * the lowercase letters are for the grading-table codes.
+   *
+   * Peterhead moved its PRICE BOARD onto those codes on 21-10-2026 — 1a, 2b,
+   * 4a, U9a — and the notes are still on the A-ladder as at 22-10. When they
+   * follow, `A4` becomes `2b` and a class of `[A-Z0-9+]` matches NONE of the
+   * lettered ones: measured through `parseDon`, 2b, 5a, 4a and U9a were every
+   * one dropped whole while a bare `3` came through. Six of haddock's eight
+   * codes and five of cod's eight are lettered, so most of a note would have
+   * gone, with the landing short by whatever those rows were worth and the
+   * only sign a negative reconcile.
+   *
+   * Widened BEFORE it happens rather than after, because this parser's other
+   * three silent-drop faults each cost real money and were invisible until
+   * somebody reconciled a note against its own printed total. Uppercase is
+   * allowed alongside in case the note prints `2B`. */
+  const SLASH_TOKEN = /\/[A-Z]+\/[A-Za-z0-9+]+$/;
 
   // Header / layout words that can never be a wrapped-buyer fragment.
   const FRAG_STOP = new Set(["SALES", "NOTE", "COMPANY", "VESSEL", "REGISTRATION", "NUMBER", "NAME",

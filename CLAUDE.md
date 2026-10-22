@@ -2428,7 +2428,7 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 ## Parsers
 
-**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.4**. The
+**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.8**. The
 CloudMailin webhook imports it and so does the browser upload, so a fix cannot
 reach one path and not the other.
 
@@ -2851,6 +2851,76 @@ them round-to-round when there is a sheet to prove the bands against.
 through `parseMarketFromDoc` rather than the helper alone — mutation-checked by
 dropping the presentation, which fails it by name rather than throwing on an
 undefined row.
+
+### THE SALES NOTES HAVE NOT FOLLOWED THE BOARD — 1.3.8, Oct 2026
+
+David: *"flag up any other potential repairs needed for this new grades from
+don company prices and fish sales sheets."*
+
+**THE TWO DON FISHING DOCUMENTS NOW DISAGREE.** Measured 22-10: the price board
+of 21-10 is on the grading codes and the SALES NOTE of the same day still reads
+`A+1..A+5, A1..A5, U9`. So nothing is broken today — and the notes will catch
+up, which is the whole of this section.
+
+**WHEN THEY DO, THE OLD TOKEN DROPPED MOST OF EVERY NOTE.** `SLASH_TOKEN` read
+the grade as `[A-Z0-9+]+`, uppercase only. Measured through `parseDon` with the
+old grades as controls:
+
+    A4 · A+4 · U9      parsed        the control, so it is the parser talking
+    2b · 5a · 4a · U9a DROPPED WHOLE
+    3                  parsed, being a bare digit
+
+**Six of haddock's eight codes and five of cod's eight are lettered**, so a note
+would have come in short by whatever those rows were worth, with no error and
+the only sign a negative reconcile against its own printed total. **Fourth
+silent-drop fault of this shape in this parser** after the wrapped row, the
+starred price and the page-break wrap — each of which cost real money and was
+invisible until somebody reconciled a note.
+
+Widened BEFORE it happens, which is the cheap half of this whole exercise:
+`[A-Za-z0-9+]+`, uppercase kept alongside in case a note prints `2B`. The
+comment on that line already said the `+` was *"what keeps A+ grades from being
+silently dropped"* — **the same class had to grow for the same reason twice.**
+`speciesWrap` shares the token, so the wrapped-row path took it in one edit.
+`test-parser-codes.mjs` — 46 checks, every old grade asserted beside every new
+one, because a run where the controls fail too is the harness talking.
+
+#### WHAT IS NOT FIXED, and will want doing when the notes change
+
+- **`price_vs_fleet_grades` groups on the raw note grade over a DATE RANGE.** A
+  range spanning the changeover splits one fish into `A4` and `2b/3/4` — both in
+  her own figure and against the fleet, and the fleets will not all change on
+  the same day. The board already has `legacyGrades`; the notes will want the
+  same bridge.
+- **A NOTE BRIDGE IS HARDER THAN THE BOARD ONE.** The note's `A4` haddock covers
+  Chipper, Metro and Mini Metro together — which is precisely why
+  `autoSplitA4Haddock` exists, reading the three bands out of the price spread.
+  On codes that guesswork disappears, so **the repair is to retire that feature,
+  not to patch it**: as written it filters `grade === 'A4'` and will simply
+  report *"No Haddock A4 rows in this landing"* for ever.
+- **`gradesFor` / `gradeLabel` on Fish Sales** list a species' grades as found,
+  so a period spanning the change shows both vocabularies as separate rows.
+
+#### Checked and SOUND — worth recording so they are not re-opened
+
+- **The buyer premium league is safe.** It scores every row against the same
+  species, same grade, **same day**, so the vocabulary is always consistent
+  inside the comparison. A changeover day cannot split it.
+- **The Estimator is already done** — `resolvePD` prefers the board's own code
+  where the board is on codes, and the A-ladder bridge still carries every sheet
+  on file.
+- **Market layout, the chalk sheet and the catalogue read the TALLY**, which has
+  always printed the grading codes. Nothing there moved.
+
+#### And one that is not about grades at all
+
+**A bare `Don Fishing` market gets no lumper box figure.** The Square Up lookup
+tests `/peterhead/i` on the market string, deliberately — matching "Don Fishing"
+would sweep in Ullapool, Scrabster and Kinlochbervie, where the lumpers are not
+on the Peterhead rate. But **30 landings carry the agent with no port**, so the
+port is not being read off those notes: Beryl 18, Boy John 4, Rosebloom 4,
+**Audacious 3 (all 2025)**, Boy Andrew 1. Low stakes for this boat and worth
+knowing before anyone reads the empty lumper box as a bug in Square Up.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
