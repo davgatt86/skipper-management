@@ -19,6 +19,7 @@ import {
   LEGACY_BRIDGE, UNBRIDGED, CODE_ALIAS, BOARD_ONLY_CODES,
   seriesKey, seriesFit, codesOf, codesForLegacy, legacyForCode,
   codesWithNoHistory, unbridgedReason, isLegacyGrade, legacyKeyOf, fitAcross,
+  HADDOCK_ROUND,
 } from './src/lib/market/legacyGrades.js'
 
 let n = 0
@@ -107,16 +108,32 @@ eq(key('Megrim', '1a', 'Large'), key('Megrim', 'A1', null),
 /* ---- WHAT IS NOT JOINED IS NAMED ------------------------------------- *
  * A wrong join looks exactly like a real price move, so a gap that says so
  * is worth more than a series stitched onto the nearest grade. */
-eq(key('Haddock', 'A4', 'Round'), null, 'haddock Round has no code on the grading table')
+eq(key('Haddock', 'A4', 'Round'), null, 'haddock Round is still waiting on a code')
 eq(fit('Haddock', 'A4', 'Round'), 'unbridged', 'and is reported as unjoined')
-ok(/not one of them is Round/.test(unbridgedReason('Haddock', 'A4', 'Round')),
-  'with the reason in words')
+/* THE REASON IS NOT "there is no round haddock". David, Oct 2026: the sheet
+   still prints the line, so it is waiting on a code rather than gone — and a
+   reason that said otherwise would stop anyone looking for it. */
+ok(/sheet still prints one/.test(unbridgedReason('Haddock', 'A4', 'Round')),
+  'the reason says the line is still on the sheet')
+ok(/UNGUTTED/.test(unbridgedReason('Haddock', 'A4', 'Round')),
+  'and says what Round actually is, which is not re-derivable from the record')
+ok(/add it to PD_GRADES/.test(HADDOCK_ROUND), 'and what to do when its code turns up')
 eq(key('Haddock', 'A4', null), null, 'a bare A4 could be any of three lines')
 ok(/82 of those days/.test(unbridgedReason('Haddock', 'A4', null)),
   'and the reason is measured, not asserted — it shares a day with a named A4')
-eq(key('Whiting', 'A4', 'Round'), null, 'whiting is not joined at all')
-ok(/question for the skipper/.test(unbridgedReason('Whiting', 'A2', null)),
-  'and says it is a question rather than guessing between the readings')
+
+/* ---- WHITING GOES ACROSS ONE FOR ONE --------------------------------- *
+ * It read as unjoinable until David said what Round is: ungutted, the same
+ * as haddock Round. The grading table then settles it, because whiting's five
+ * bands run straight down with no gap — so ROUND and S ROUND are SIZE bands
+ * at the foot of the ladder, not a presentation cutting across it. */
+eq(['A1', 'A2', 'A3', 'A4', 'A4 Round'].map((k) => codesForLegacy('Whiting', k)),
+  [['1a'], ['1b'], ['2'], ['3'], ['4']], 'five old whiting lines onto five new')
+eq(key('Whiting', 'A4', 'Round'), key('Whiting', '4', 'S Round'),
+  'and the two Round names meet at the foot of the ladder')
+eq(fit('Whiting', 'A4', 'Round'), 'exact', 'one for one, so nothing is blended')
+eq(codesWithNoHistory('Whiting'), [], 'every whiting code now has four years behind it')
+eq(unbridgedReason('Whiting', 'A2', null), null, 'and nothing of whiting is left unjoined')
 
 /* THE B-LADDER IS LEGACY, AND CALLING IT NEW WAS A REAL FAULT.
    Matched on A only, megrim B4 — 167 rows from 2022 — fell through as though
@@ -134,6 +151,13 @@ eq(codesWithNoHistory('Haddock'), ['4'], 'Mini Metro is the only haddock code wi
 eq(fit('Haddock', '4', 'Mini Metro'), 'newOnly', 'and it is reported as new rather than joined')
 eq(key('Haddock', '4', 'Mini Metro'), '4', 'keyed on itself, so its series simply starts late')
 eq(codesWithNoHistory('Skate'), ['1', '2', '4'], 'the board only ever priced A3 skate')
+/* AND A CODE THE TABLE DOES NOT LIST IS NOT "NEW", it is unknown. The
+   Hadd/Round line is the one we know is coming, and calling it new would
+   announce 754 rows of history as a grade the board had never priced. */
+eq(fit('Haddock', '7', 'Round'), 'unbridged',
+  'a haddock code off the grading table is unknown, not new')
+eq(fit('Haddock', '4', 'Mini Metro'), 'newOnly',
+  'while a code the table DOES list, with no old line, is genuinely new')
 for (const s of ['Cod', 'Hake', 'Lemon', 'Plaice', 'Saithe', 'Monkfish', 'Ling', 'Pollack', 'Megrim'])
   eq(codesWithNoHistory(s), [], `every ${s} code has four years behind it`)
 
@@ -194,9 +218,9 @@ eq(seriesFit({ source: 'DK', species: 'Cod', grade: 'A1' }), 'exact', 'and DK is
   eq(noReason, [], 'and nothing is dropped without one')
   eq(census.legacy.length, 58, 'fifty-eight grade keys in four years of Peterhead boards')
   eq(rows, 39774, 'carrying 39,774 rows between them')
-  eq(unjoined, 4074, '4,074 rows are not joined — haddock Round and bare A4, whiting, megrim B4')
+  eq(unjoined, 1067, '1,067 rows are not joined — haddock Round and bare A4, megrim B4')
   eq(joined, rows - unjoined, 'and the rest are')
-  ok(unjoined / rows < 0.11, 'which is 10.2% of the graded Peterhead record')
+  ok(unjoined / rows < 0.03, 'which is 2.7% of the graded Peterhead record, down from 10.2%')
 }
 
 /* EVERY CODE THE BOARD HAS PRINTED IS KNOWN TO THE GRADING TABLE, or is an

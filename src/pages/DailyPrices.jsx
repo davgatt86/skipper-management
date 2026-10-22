@@ -286,6 +286,10 @@ function CompareBoard({ cmp }) {
                     {/* An exact band match is the only pairing worth quoting
                         without a caveat, so anything else carries its own word. */}
                     {r.fit !== 'exact' && <span style={{ fontSize: '0.7rem', color: 'var(--brass)', marginLeft: '0.3rem' }}>{r.fit}</span>}
+                    {/* Peterhead sells this grade round; the guts are in the
+                        weight, and Denmark's sorts do not say how they grade
+                        it. Labelled, never adjusted. */}
+                    {r.ungutted && <span style={{ fontSize: '0.7rem', color: 'var(--brass)', marginLeft: '0.3rem' }}>ungutted</span>}
                   </td>
                   <td style={{ ...td, fontSize: '0.78rem', color: 'var(--mute)' }}>{r.band}</td>
                   <td style={{ ...tdR, fontWeight: 700 }}>{gbp(r.pd)}</td>

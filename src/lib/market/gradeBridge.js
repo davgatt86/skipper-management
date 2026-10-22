@@ -91,6 +91,23 @@ export const DK_SORTS = {
   Dab: [['1', 0.25, null], ['2', 0.13, 0.25]],
 }
 
+/* GRADES THAT ARE SOLD UNGUTTED, which the band alone does not say.
+ *
+ * David, Oct 2026: *"a4 round is ungutted like whiting round"*. On whiting it
+ * is the bottom of the size ladder — the small ones are round because they are
+ * too small to gut — so the bands run straight on and nothing above gives it
+ * away. The sales notes keep the two apart properly, as grade A4 presentation
+ * WHL; only the BOARD welds them into one label.
+ *
+ * IT MATTERS FOR THE DENMARK COMPARISON AND NOWHERE ELSE SO FAR. An ungutted
+ * fish carries its guts in the weight and sells cheaper by the kilo, so a
+ * Peterhead round price set beside a Danish size is not like for like unless
+ * Hanstholm grades that band round as well — and their published sorts do not
+ * say. So the row is marked rather than dropped or quietly compared. */
+export const UNGUTTED = {
+  Whiting: ['3', '4'],
+}
+
 /* SPECIES ON ONE MARKET AND NOT THE OTHER, said rather than left as a silent
  * blank — a species missing from the comparison looks the same as one that
  * matched nothing, and they are different facts. */

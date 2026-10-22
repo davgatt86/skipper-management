@@ -2671,15 +2671,60 @@ one code the two documents disagree on is an explicit alias. The test fails on
 any board code that is neither on the table nor aliased, so a real megrim `1b`
 appearing later is a failure rather than a silent mis-join.
 
-**35,700 ROWS JOIN AND 4,074 DO NOT — 10.2%, named and never guessed:**
+**38,707 ROWS JOIN AND 1,067 DO NOT — 2.7%, named and never guessed:**
 
-    Haddock A4 Round   754   the table has eight haddock codes, none is Round
+    Haddock A4 Round   754   ungutted, and waiting on a code — see below
     Haddock bare A4    145   shares a day with a NAMED A4 on 82 days, so it
                              is not simply the only A4 line — unreadable back
-    Whiting          3,007   old A1-A4 + Round against 1a,1b,2,3,4, and the
-                             board names 1b "Large" where the table says Med.
-                             A1 also stopped in Aug 2025 while A2 carried on
     Megrim B4          167   the old board ran a B-ladder too; no B code exists
+
+#### ROUND IS UNGUTTED, and that one fact joined 3,007 rows of whiting
+
+David, Oct 2026: *"a4 round is ungutted like whiting round."* Whiting had been
+left unjoined because nothing in the record said what Round was, and several
+readings of the ladder fitted. That fact settles it, via the crew grading table:
+
+    WHITING   1a LARGE 1+ kg · 1b MED 0.5-1 · 2 SMALL 0.35-0.5
+              3 ROUND 0.25-0.35 · 4 S ROUND 0.11-0.25
+
+**Five bands running straight down with no gap, so ROUND and S ROUND are SIZE
+bands at the FOOT of the ladder — not a presentation cutting across it.** The
+small whiting are round because they are too small to gut. A presentation would
+overlap every size; these do not overlap anything.
+
+**So whiting is one for one** — A1→1a, A2→1b, A3→2, A4→3, A4 Round→4 — and the
+record agrees on both counts: `A1` is **28 rows in four years**, which is what a
+1 kg whiting should be, and `A4 Round` is the commonest line at **903**,
+matching **179 t of WHL A4** on the sales notes against 37 t gutted.
+
+**THE SALES NOTES KEEP THE TWO APART PROPERLY and only the BOARD welds them.**
+A round whiting is `presentation WHL, grade A4` on the note; the board prints
+one label, `A4 Round`. Worth knowing before reading either.
+
+**AND IT IS A CAVEAT ON THE DENMARK COMPARISON.** An ungutted fish carries its
+guts in the weight and sells cheaper by the kilo, and Hanstholm's published
+sorts do not state a presentation — so a round Peterhead price beside a Danish
+size is **marked, never adjusted** (`UNGUTTED` in `gradeBridge.js`). Neither
+round grade sold on 21-10, so the real board cannot reach that flag and the
+test exercises it directly: **a check that cannot reach the state is not
+testing it.**
+
+#### THE HADD/ROUND LINE IS STILL ON THE SHEET — it is waiting on a code
+
+Asked outright, because the haddock table has eight codes, 2.5 kg down to
+0.17 kg, and **no round line at all** where whiting gets two. David: it is still
+printed. No board since 21-10 has priced it, so its code is unknown, and 754
+rows wait on the first one that sells. She has landed **21.7 t** of it.
+
+**A CODE THE TABLE DOES NOT LIST IS UNKNOWN, NOT NEW**, and getting that round
+the wrong way was a real fault caught here. `seriesFit` returned `newOnly` for
+any unrecognised code of a bridged species — so the Round line, the moment it
+priced, would have been announced on the front page as *"new to the board — it
+never priced it on its own before"*, with 754 rows of history behind it.
+*"New"* is a claim, and it can only be made about a code the grading table
+actually carries. `HADDOCK_ROUND` says what to do when the stranger appears, and
+the census test prints it on failure rather than leaving whoever trips it to
+work it out.
 
 **THE B-LADDER WAS A REAL FAULT, found by censusing the record rather than
 reading the regex.** Matched on `A` only, `B4` fell through as a grading-table
@@ -2714,16 +2759,19 @@ writes `A1 Lge/Med`), so the whole fixture read as unjoinable and the notes
 fired on every card. A sixth pane is the changeover itself, and panes 1-5 are
 asserted SILENT — reverting the rule fails ten of them.
 
-`supabase` untouched; this is all read-side. `test-legacy-grades.mjs` 93 ·
-`test-compare-boards.mjs` 49 · `scripts/compare-boards-preview.mjs` and
-`scripts/board-changeover-check.mjs` run both against the real boards.
-`scripts/fixtures/pd-grade-census.json` is **the whole record**, not a sample,
-so a grade key the bridge has never been shown fails the suite.
+`supabase` untouched; this is all read-side. `test-legacy-grades.mjs` 100 ·
+`test-compare-boards.mjs` 53 · `scripts/compare-boards-preview.mjs` and
+`scripts/board-changeover-check.mjs` run both against the real boards — where
+**0 of 22 lines had any history keyed the old way**, and 21 of 22 now carry a
+four-week baseline. `scripts/fixtures/pd-grade-census.json` is **the whole
+record**, not a sample, so a grade key the bridge has never been shown fails the
+suite.
 
-**STILL OPEN, and both are questions for David rather than guesses:** where old
-**haddock A4 Round** (754 rows) goes, since the grading table has no Round code
-for haddock; and the **whiting** ladder, where several readings fit and the top
-grade changes partway through the history.
+**STILL OPEN, and it is one line rather than two.** When a **Hadd/Round** sells,
+read its code off the sheet, add it to `PD_GRADES.Haddock` with its band and
+bridge `Haddock|A4 Round` onto it. Until then it is flagged, and the dashboard
+fixture's `5` is a **stand-in to reach the state, not the code** — the comment
+beside it says so.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 

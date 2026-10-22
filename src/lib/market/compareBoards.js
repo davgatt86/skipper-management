@@ -26,7 +26,7 @@
  * the haddock tiers were doing by hand. Derived from the bands, it also
  * covers every other species, and it cannot drift from the documents.
  */
-import { bridgeFor, NOT_COMPARABLE, bandText } from './gradeBridge.js'
+import { bridgeFor, NOT_COMPARABLE, bandText, UNGUTTED } from './gradeBridge.js'
 
 const SP_SYNONYM = {
   catfishes: 'catfish', wolffish: 'catfish', 'witch flounder': 'witch',
@@ -122,12 +122,19 @@ export function compareSpecies(pdItems, dkItems, speciesKey) {
     const blended = b.pd.length > 1 || b.sorts.length > 1
       || b.fits.has('pdFiner') || b.fits.has('dkFiner')
     const fit = blended ? 'blend' : (b.fits.has('exact') ? 'exact' : 'loose')
+    /* AN UNGUTTED PETERHEAD GRADE IS NOT THE SAME FISH as a Danish size of
+       the same kilos, because the guts are in the weight — so the row says so
+       instead of reading as a clean price difference. Hanstholm's published
+       sorts do not state a presentation, so this is a caveat and not a
+       correction: nothing is adjusted, only labelled. */
+    const ungutted = (UNGUTTED[bridgeName(speciesKey)] || [])
+      .some((c) => b.hits.some((h) => h.code === c))
     out.push({
       grade: b.names.join(' + '),
       dkGrade: b.sorts.map((s) => 'A' + s).join(' + '),
       band: spanOf(b.hits),
       from: Math.min(...b.hits.map((h) => h.from)),
-      pd, dk, fit,
+      pd, dk, fit, ungutted,
     })
   }
   /* BIGGEST FISH FIRST, which is how both boards read — sorted on the band's

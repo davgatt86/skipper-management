@@ -94,38 +94,61 @@ export const LEGACY_BRIDGE = {
   Skate: { A3: ['3'] },
   Turbot: { U9: ['U9a', 'U9b'] },
   Tusk: { U9: ['U9a', 'U9b'] },
+  /* WHITING IS ONE FOR ONE, five old lines onto five new (David, Oct 2026).
+   *
+   * It read as unjoinable until he said what Round actually is: *"a4 round is
+   * ungutted like whiting round"*. The crew grading table then settles the
+   * rest, because whiting's five bands run straight down with no gap —
+   * 1+ kg, 0.5-1, 0.35-0.5, 0.25-0.35, 0.11-0.25 — so ROUND and S ROUND are
+   * SIZE bands at the bottom of the ladder, not a presentation cutting across
+   * it. The small whiting are round because they are too small to gut.
+   *
+   * The record agrees on both counts. `A1` is 28 rows in four years, which is
+   * what a 1 kg whiting should be; `A4 Round` is the commonest line at 903,
+   * matching 179 t of WHL A4 on the sales notes against 37 t gutted. And the
+   * two Round names land together at the foot. */
+  Whiting: { A1: ['1a'], A2: ['1b'], A3: ['2'], A4: ['3'], 'A4 Round': ['4'] },
   Witch: { U9: ['U9a', 'U9b'] },
 }
 
-const WHITING = 'Whiting is not joined. The old board ran A1, A2, A3, A4 and A4 Round; '
-  + 'the grading table runs 1a Large, 1b Med, 2 Small, 3 Round, 4 S Round — and the '
-  + 'board of 21-10 names code 1b "Large" and code 2 "Medium", a step bigger than the '
-  + 'table does. A1 also stopped in Aug 2025 while A2 carried on, so which line is the '
-  + 'top grade changes partway through the history. Several readings fit and the record '
-  + 'cannot choose between them, so it is a question for the skipper rather than a guess.'
-
 /* WHAT IS NOT JOINED, AND WHY. A gap that says so is worth more than a series
  * joined onto the wrong grade, because a wrong join looks exactly like a real
- * price move. Measured, not estimated: 4,074 rows of the 39,774 graded PD rows
- * are here — 10.2%, and 35,700 join. */
+ * price move. Measured, not estimated: 1,067 rows of the 39,774 graded PD rows
+ * are here — 2.7%, and 38,707 join. */
 export const UNBRIDGED = {
   'Haddock|A3': 'One row, 04-08-2026, with no subgrade on it. The named A3 Seed line '
     + 'is joined; this one cannot be told from it.',
   'Haddock|A4': '145 rows, Sep 2024 to Oct 2026, carrying no subgrade — and a bare A4 '
     + 'shares a day with a NAMED A4 on 82 of those days, so it is not simply the only '
     + 'A4 line. Which of Chipper, Metro or Round each one is cannot be read back.',
-  'Haddock|A4 Round': 'The haddock grading table has eight codes and not one of them is '
-    + 'Round, so there is nothing on the new ladder to join 754 rows of it to.',
+  /* NOT "there is no round haddock" — the sheet still carries the line (David,
+   * Oct 2026). It is waiting on a code, and the moment one sells it can be
+   * joined; see HADDOCK_ROUND below. */
+  'Haddock|A4 Round': 'Round is UNGUTTED haddock — the same thing as whiting Round, and '
+    + 'the cheapest line on the old board at 0.50-0.90 against Metro at 0.65-1.60. The '
+    + 'crew grading table gives haddock eight codes, 2.5 kg down to 0.17 kg, and no round '
+    + 'line — but the sheet still prints one. No board since the change has priced it, so '
+    + 'the code it now carries is not yet known and 754 rows wait on the first one that '
+    + 'sells. She has landed 21.7 t of it, filed on the notes as grade A4 presentation WHL.',
   'Megrim|B4': 'The old board ran a B-ladder as well as an A-ladder — second-quality '
     + 'fish. 167 rows of megrim B4, Aug 2022 to May 2026, averaging 1.21 against the '
     + 'A-grades. The grading table has no B code at all, so there is nothing to join it '
     + 'to; it keeps its own key and its own series, which ends in May 2026.',
-  'Whiting|A1': WHITING,
-  'Whiting|A2': WHITING,
-  'Whiting|A3': WHITING,
-  'Whiting|A4': WHITING,
-  'Whiting|A4 Round': WHITING,
 }
+
+/* THE ONE LINE WE KNOW IS COMING, so it is not met as a mystery.
+ *
+ * Whiting carries its round fish as codes 3 and 4 and haddock's table carries
+ * none, yet the sheet still prints Hadd/Round. So a haddock code outside the
+ * grading table is very likely that line rather than a reading fault, and
+ * `test-legacy-grades.mjs` names this when a stranger turns up — the guard
+ * stays strict, and whoever trips it is told what it probably is and what to
+ * do about it. */
+export const HADDOCK_ROUND = 'The sheet still prints a Hadd/Round line (David, Oct 2026) '
+  + 'and no board since 21-10-2026 has priced it, so its code is unknown. A haddock code '
+  + 'the grading table does not list is most likely that line: add it to PD_GRADES with '
+  + 'the band the sheet gives, then bridge "Haddock|A4 Round" onto it and take this and '
+  + 'that entry out of UNBRIDGED.'
 
 /* THE B-LADDER COUNTS AS LEGACY, and leaving it out was a real fault. The old
  * board graded second-quality fish B1-B9 beside the A-ladder, and megrim B4
@@ -219,7 +242,15 @@ export function seriesFit(row) {
     return codes.length > 1 ? 'group' : 'exact'
   }
   const hit = legacyForCode(species, g)
-  if (!hit) return LEGACY_BRIDGE[species] ? 'newOnly' : 'unbridged'
+  if (!hit) {
+    /* "NEW TO THE BOARD" IS A CLAIM, and it can only be made about a code the
+       grading table actually lists. A code we have never heard of is one we
+       cannot say anything about — and the one we KNOW is coming is the
+       Hadd/Round line, which carries 754 rows of history and would have been
+       announced as something the board had never priced before. */
+    const known = (codesOf(species) || []).includes(codeOf(species, g))
+    return known && LEGACY_BRIDGE[species] ? 'newOnly' : 'unbridged'
+  }
   return hit.codes.length > 1 ? 'group' : 'exact'
 }
 

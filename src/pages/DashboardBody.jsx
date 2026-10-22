@@ -131,10 +131,15 @@ function LadderGaps({ grades }) {
         before, so there is nothing to compare yet.
       </>}
       {!!fresh.length && !!unmatched.length && ' '}
+      {/* TWO WAYS TO BE UNMATCHABLE — a species with no bridge at all, and a
+          code the grading table this app holds does not list, which is what
+          the Hadd/Round line will be when it next prices. One sentence that is
+          true of both, rather than a confident one that is right about half
+          the time. */}
       {!!unmatched.length && <>
-        The old grades for {unmatched.map((g) => g.grade).join(', ')} cannot be matched
-        to the new ones, so {unmatched.length > 1 ? 'those columns start' : 'that column starts'}
-        {' '}again from here.
+        {unmatched.map((g) => g.grade).join(', ')} {unmatched.length > 1 ? 'are' : 'is'} not
+        on the grade table held here, so {unmatched.length > 1 ? 'their columns' : 'its column'}
+        {' '}cannot be lined up with the old board yet.
       </>}
     </p>
   )

@@ -129,6 +129,38 @@ eq(canonSp('Lythe'), 'pollack', 'and Lythe for pollack')
       `${s} is on the Danish board only and is left out of both lists`)
 }
 
+/* ---- AN UNGUTTED GRADE IS NOT THE SAME FISH, AND THE ROW SAYS SO ----- *
+ * David, Oct 2026: *"a4 round is ungutted like whiting round"*. Peterhead's
+ * whiting 3 and 4 are the small ones, sold round because they are too small
+ * to gut — so the guts are in the weight and the price per kilo is not
+ * comparable with a Danish size unless they grade that band round too, which
+ * their published sorts do not say.
+ *
+ * EXERCISED HERE RATHER THAN OFF THE REAL BOARD, because neither round grade
+ * sold on 21-10 — so the fixture cannot reach the flag, and a check that
+ * cannot reach the state is not testing it. */
+{
+  const pd = [
+    { species: 'Whiting', grade: '1b Large', code: '1b', ave: 3.56 },
+    { species: 'Whiting', grade: '3 Round', code: '3', ave: 1.40 },
+    { species: 'Whiting', grade: '4 S Round', code: '4', ave: 1.10 },
+  ]
+  const dk = [
+    { species: 'Whiting', grade: 'A1', ave: 3.55 },
+    { species: 'Whiting', grade: 'A3', ave: 1.16 },
+    { species: 'Whiting', grade: 'A4', ave: 1.05 },
+  ]
+  const rows = compareSpecies(pd, dk, 'whiting').rows
+  const by = (g) => rows.find((r) => r.grade === g)
+  ok(by('3 Round')?.ungutted, 'a round whiting row is marked ungutted')
+  ok(by('4 S Round')?.ungutted, 'and so is S Round')
+  eq(by('1b Large').ungutted, false, 'a gutted grade is not')
+  /* MARKED, NEVER ADJUSTED. Hanstholm does not publish a presentation, so
+     there is nothing to correct it against — and a figure quietly scaled
+     would be a guess wearing a measurement's clothes. */
+  eq(by('4 S Round').pd, 1.10, 'and the price is the board’s own, unaltered')
+}
+
 /* ---- NOTHING IS INVENTED WHERE A PRICE IS MISSING -------------------- */
 {
   const noDk = rows.filter((r) => r.source === 'PD').map((r) => ({ ...r, ave: null }))
