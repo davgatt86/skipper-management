@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
+import { parseDayTally } from '../lib/market/parseDayTally'
+import { compareLadder, downgradeCandidates, bandTotalsFromTally, specWithBand } from '../lib/tallyVsNote'
+import TallyCheck, { Scroll, th, thR, td, tdR } from '../components/TallyCheck'
 import UploadSummary from '../UploadSummary'
 import SampleDocs from '../SampleDocs'
 import { summariseNote } from '../lib/salesChange'
@@ -45,14 +48,7 @@ function reconcileNote(l) {
     : 'Flagged, but the parsed rows agree with the printed total.'
 }
 
-const th = { textAlign: 'left', padding: '0.45rem 0.6rem', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap', color: 'var(--navy)' }
-const td = { padding: '0.45rem 0.6rem', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }
-const tdR = { ...td, textAlign: 'right' }
-const thR = { ...th, textAlign: 'right' }
 
-function Scroll({ children }) {
-  return <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>{children}</div>
-}
 
 function Kpi({ label, value, sub }) {
   return (
@@ -452,37 +448,78 @@ export default function Sales() {
     }))
   }
   async function autoSplit() {
-    const res = autoSplitHaddock(rows, splitSpec)
+    const res = autoSplitHaddock(rows, effSpec)
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
     /* The bands are per quality mark, because a pooled price ladder reads the
        A+ premium as bigger fish. Each mark states its own cuts, read off the
        spec so the dearest band is named rather than assumed to be Chipper. */
-    const top = splitSpec.bands[splitSpec.bands.length - 1]
+    const top = effSpec.bands[effSpec.bands.length - 1]
     const bands = Object.entries(res.bands)
       .map(([g, cuts]) => `${g}: ${cuts.map(c => `${c.band} ≤ £${c.max}/kg`).join(', ')}, ${top} above`)
       .join(' · ')
     const thin = res.thin && res.thin.length ? ` Not split: ${res.thin.join('; ')} — set those by hand.` : ''
     setNotice(`Auto-split done — ${bands}.${thin}`)
   }
+  /* ---- the day tally, read against this note ----
+     David, Oct 2026: *"i think the good seed was sold as A2 due to it not being
+     graded perfectly onboard that trip by the crew ... maybe the splitter should
+     allow for that. user could upload a tally to check against sales note?"*
+     The tally says what the CREW graded; the note says what the market SOLD.
+     Where the two disagree the auction read the fish differently, which is not
+     an error in either document. */
+  const tallyRef = useRef(null)
+  const [tally, setTally] = useState(null)
+  const [addedBand, setAddedBand] = useState(null)
+  /* A confirmed downgrade adds a band at the dear end. Memoised so it stays
+     referentially stable — the effect below depends on it. */
+  const effSpec = useMemo(() => specWithBand(splitSpec, addedBand), [splitSpec, addedBand])
+  const ladder = useMemo(
+    () => (tally && mode === 'landing' ? compareLadder(tally.lines, rows) : null),
+    [tally, rows, mode])
+  const downgrades = useMemo(() => (ladder ? downgradeCandidates(ladder) : []), [ladder])
+  /* The band is per TRIP, not a setting — the crew graded loosely that trip, so
+     it is forgotten when another landing is opened. */
+  useEffect(() => { setTally(null); setAddedBand(null) }, [landingId])
+
+  async function onTallyFile(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    try {
+      const buf = await f.arrayBuffer()
+      const res = await parseDayTally(new Uint8Array(buf))
+      if (!res?.lines?.length) { setNotice(`${f.name}: no tally lines read from that workbook.`); return }
+      setTally(res)
+      setNotice(`${f.name}: ${res.lines.length} tally lines read, ${res.total} boxes.`)
+    } catch (err) { setNotice(`${f.name}: ${err.message}`) }
+  }
+
   /* The totals are keyed by BAND NAME, so changing spec changes the boxes on
      screen rather than leaving a Metro figure behind on a note with no Metro
      in it. Re-keyed whenever the spec does — and `haddockSpec` returns one of
      two MODULE CONSTANTS rather than a fresh object, so this effect fires on a
      real change of ladder and not on every render. Build it a new object each
-     time and the boxes clear themselves as fast as they are typed in. */
+     time and the boxes clear themselves as fast as they are typed in.
+     WHAT IS ALREADY TYPED IS KEPT: adding a band must not wipe the two figures
+     he has just entered. */
   const [a4Tot, setA4Tot] = useState({})
+  /* WHERE THE TOTALS CAME FROM CHANGES WHAT A GAP MEANS. Typed by hand, a
+     difference is worth checking. Off the tally it is the documented gap
+     between a count at sea and the scales, and calling that an error every
+     trip is how a warning stops being read. */
+  const [fromTally, setFromTally] = useState(false)
   useEffect(() => {
-    setA4Tot(Object.fromEntries(splitSpec.bands.map(b => [b, ''])))
-  }, [splitSpec])
+    setA4Tot(prev => Object.fromEntries(effSpec.bands.map(b => [b, prev?.[b] ?? ''])))
+  }, [effSpec])
   async function applyTotals() {
-    const res = splitHaddockByTotals(a4Rows, a4Tot, splitSpec)
+    const res = splitHaddockByTotals(a4Rows, a4Tot, effSpec)
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
     /* WHAT WAS ACTUALLY LABELLED, never what was typed in. The old message
        echoed the entry — so a note where the allocation collapsed into one
        band still read as a tidy three-way split. */
-    const did = splitSpec.bands.map(b => `${b} ${res.assigned[b]}`).join(' / ')
+    const did = effSpec.bands.map(b => `${b} ${res.assigned[b]}`).join(' / ')
     const marks = res.marks.length > 1
       ? ` Ranked within each grade (${res.marks.map(m => `${m.mark} ${m.boxes} bx`).join(', ')}), because an A+ premium is better fish and not bigger fish.`
       : ''
@@ -491,7 +528,9 @@ export default function Sales() {
        only apportion the ratio you gave across what the note carries, and it
        says that rather than implying the figures agreed. */
     const warn = res.flag
-      ? ` ⚠ you entered ${res.entered} boxes against ${res.actual} ${splitSpec.family} boxes on this note (${res.diff > 0 ? '+' : ''}${res.diff}) — your ${splitSpec.bands.length} figures were applied as a ratio, so check the entry, or whether some of that fish sold under another grade.`
+      ? (fromTally
+        ? ` The tally counted ${res.entered} boxes against the ${res.actual} this note sold (${res.diff > 0 ? '+' : ''}${res.diff}) — it is counted at sea before anything is weighed, so a few per cent is expected. The shape of your grading is what was applied.`
+        : ` ⚠ you entered ${res.entered} boxes against ${res.actual} ${effSpec.family} boxes on this note (${res.diff > 0 ? '+' : ''}${res.diff}) — your ${effSpec.bands.length} figures were applied as a ratio, so check the entry, or whether some of that fish sold under another grade.`)
       : ''
     setNotice(`Split by totals done — ${did} boxes labelled by price.${marks}${warn}`)
   }
@@ -925,22 +964,30 @@ export default function Sales() {
           <div className="card">
             {/* SIZE 4, every quality mark — so the heading says so, and the
                 box count is stated because the entry is checked against it. */}
-            <h2>{splitSpec.family === 'size-2' ? 'Size-2' : 'Size-4'} haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-              {splitSpec.bands.slice().reverse().join(' / ')} · {r2(a4Rows.reduce((s, r) => s + (Number(r.boxes) || 0), 0))} boxes
+            <h2>{effSpec.family === 'size-2' ? 'Size-2' : 'Size-4'} haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
+              {effSpec.bands.slice().reverse().join(' / ')} · {r2(a4Rows.reduce((s, r) => s + (Number(r.boxes) || 0), 0))} boxes
               across {[...new Set(a4Rows.map(r => r.grade))].sort().join(', ')}
             </span></h2>
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <button className="secondary" onClick={autoSplit}>Auto-split by price bands</button>
               <button className="secondary" onClick={() => saveSubGrades(a4Rows.map(r => ({ id: r.id, sub_grade: null })))}>Clear split</button>
             </div>}
+            {isSkipper && <TallyCheck
+              ladder={ladder} downgrades={downgrades} addedBand={addedBand} loaded={!!tally}
+              onPick={() => tallyRef.current?.click()}
+              onAddBand={setAddedBand} onClearBand={() => setAddedBand(null)}
+              onUseTotals={() => { setFromTally(true); setA4Tot(Object.fromEntries(
+                Object.entries(bandTotalsFromTally(tally.lines, effSpec)).map(([k, v]) => [k, String(v)]))) }}
+            />}
+            <input ref={tallyRef} type="file" accept=".xlsx,.xls" onChange={onTallyFile} style={{ display: 'none' }} />
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <div>
                 <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>Or enter this trip's totals (boxes), allocated by price:</div>
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  {splitSpec.bands.slice().reverse().map(k => (
+                  {effSpec.bands.slice().reverse().map(k => (
                     <label key={k} style={{ fontSize: '0.8rem' }}>
                       <div style={{ color: 'var(--grey-400)' }}>{k}</div>
-                      <input type="number" min="0" step="1" value={a4Tot[k] ?? ''} onChange={e => setA4Tot({ ...a4Tot, [k]: e.target.value })} style={{ width: 90, padding: '0.25rem 0.5rem' }} />
+                      <input type="number" min="0" step="1" value={a4Tot[k] ?? ''} onChange={e => { setFromTally(false); setA4Tot({ ...a4Tot, [k]: e.target.value }) }} style={{ width: 90, padding: '0.25rem 0.5rem' }} />
                     </label>
                   ))}
                   <button className="secondary" style={{ alignSelf: 'flex-end' }} onClick={applyTotals}>Apply totals</button>
@@ -964,7 +1011,7 @@ export default function Sales() {
                           <option value="">—</option>
                           {/* Dearest first, so the list reads down the ladder the
                               way the table above it is sorted. */}
-                          {splitSpec.bands.slice().reverse().map(b => <option key={b}>{b}</option>)}
+                          {effSpec.bands.slice().reverse().map(b => <option key={b}>{b}</option>)}
                         </select>
                         <span className="print-only" style={{ display: 'none' }}>{r.sub_grade || '—'}</span>
                       </td>

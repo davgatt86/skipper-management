@@ -3159,9 +3159,116 @@ as the settlement review. Measured, not argued:
 
 Price cannot settle it: the whole top of that note sold under the board (A1
 realised £4.62 where the cheapest 1-code prints £5.07), so it does not
-discriminate. **Worth re-measuring on the next few notes** — if A1 keeps coming
-back at Chat+Pinger only, the office is cutting A1/A2 between 1c and 1d where
-it always did, and only the bottom three boundaries moved.
+discriminate.
+
+**ANSWERED, and the rule stands** — David: *"i think the good seed was sold as A2
+due to it not being graded perfectly onboard that trip by the crew. therefore it
+was sold as the same grade as seed on the eAuction."* So it is not a boundary in
+the wrong place, it is **one trip's grading being read down by the auction**, and
+the note is recording what the market did rather than what the crew intended.
+Good Seed is A1; that trip it sold as A2. See the next subsection, which is the
+check built to find exactly this.
+
+#### THE TALLY READ AGAINST THE NOTE — and a grade sold a size down
+
+David, Oct 2026, on the one boundary of four that disagreed: *"i think the good
+seed was sold as A2 due to it not being graded perfectly onboard that trip by
+the crew. therefore it was sold as the same grade as seed on the eAuction.
+maybe the splitter should allow for that. user could upload a tally to check
+against sales note?"*
+
+**SO THE RULE IS RIGHT AND THE NOTE IS RECORDING A DOWNGRADE.** The two
+documents answer two different questions, and the gap between them is the
+interesting part rather than an error in either:
+
+    the TALLY   what the crew graded, in the grading table's own codes
+    the NOTE    what the market SOLD it as, by A-number
+
+`src/lib/tallyVsNote.js` · `src/components/TallyCheck.jsx` ·
+`scripts/tally-check-preview.mjs` · `test-tally-note.mjs` (77 checks).
+
+**IT IS A COMPARISON OF SHARES, AND THE DOCUMENTS FORCE THAT.** Measured on
+trip 72's tally against the note of 28-10:
+
+    tally (wheelhouse)   305 haddock boxes   ·  1,094 all species
+    scales               279                 ·  1,037
+    note                 280                 ·  1,042
+
+The tally is the running count kept at sea **before anything is weighed**, so it
+sits about 5% above the landed figure and ~9% above on haddock. Box for box it
+would report a 25-box discrepancy every single trip and the real signal would be
+lost inside it. The boxes are still shown; the difference in them is just never
+called an error, and the panel says so **above** the table rather than leaving
+every row reading as a fault.
+
+**THE CHECK NAMES GOOD SEED WITHOUT BEING TOLD TO.** A downgrade shows as one
+size selling short and the next size down selling over by about the same, and
+the rung that moves is the **BOTTOM one of its size** — the fish nearest the
+boundary, so the one loose grading sends down:
+
+    digit 1   crew 14.4%   note  6.1%   -8.3 points short
+    digit 2   crew 17.4%   note 23.9%   +6.5 points over
+    bottom rung of digit 1 = 1d Good Seed, 20 boxes = 6.6% of the tally
+
+6.5 against 6.6 — the check reports it as accounting for **98%** of the gap, and
+that figure is the point: a rung far smaller than the offset does not explain it,
+and saying so is the difference between an answer and a shrug.
+
+**AND THE SECOND PIECE OF EVIDENCE IS THE SPLIT ITSELF.** Adding Good Seed as a
+band takes the crew's graded total for A2 from 53 to 73 against the 67 the note
+sold — from 14 short to 6 over, and the tally always runs over. Asserted by test.
+
+**OFFERED, NEVER CONCLUDED.** The app cannot tell loose grading from a wheelhouse
+miscount and the figures that would settle it are in neither document, so it
+names the rung and the skipper confirms — the invoice categoriser's rule. The
+preview asserts the panel never says *downgraded* or *confirmed* as a fact.
+
+**THE FLOOR IS 3 PERCENTAGE POINTS, set from the quiet half of this very pair.**
+Digits 3 and 4 are out by −1.2 and +3.0 purely because of the pre-landing count,
+so anything under 3 is that noise and must stay silent.
+
+**AND THE HIGHLIGHT MARKS ONLY WHAT A CANDIDATE NAMES, which only rendering
+showed.** Colouring every gap at or over the floor put brass on A4's +3 — pure
+noise, which the panel then says nothing about. **A mark that points at nothing
+is how a reader learns to ignore the marks that mean something.** Only the two
+sizes a candidate actually names are marked now.
+
+**A CONFIRMED DOWNGRADE ADDS A BAND AT THE DEAR END**, and the split functions
+needed no change for it: they count bands rather than knowing three. A2 that trip
+is Chipper < Seed < Good Seed (board 28-10: 2b £4.43 · 2a £4.91 · 1d £5.07).
+**It is per TRIP and not a setting** — the crew graded loosely that trip — so it
+is forgotten when another landing is opened, and `sub_grade` is free text with no
+CHECK constraint, so the new names save without a migration. That was read off
+`pg_constraint` rather than assumed: the `not_returning` enum was refused by a
+CHECK that listed its values, and this is the same shape of trap.
+
+**THE TOTALS COME OFF THE TALLY** instead of being typed — and **where they came
+from changes what a gap means**. Typed by hand a difference is worth checking;
+off the tally it is the documented gap between a count at sea and the scales, so
+the message says that rather than crying wolf every trip.
+
+**THE SPECIES MAP IS MEASURED, and `OTHER` is deliberately unmapped.** Every one
+of the nineteen names was corroborated against the real pair by its own box
+count. `OTHER` is the tally's catch-all — 7 boxes on trip 72 against the note's
+brill, halibut, john dory, turbot and tusk — so it cannot be matched to one fish
+and is reported as unmatchable rather than pinned on whichever looks closest.
+A rung the crew graded with no bracketed code is named for the same reason: a
+rung quietly dropped would make the shares add to less than the fish counted.
+
+**THE PANEL IS ITS OWN FILE SO IT CAN BE RENDERED**, the `SheetBody` and
+`Arrivals.jsx` rule — `Sales.jsx` drags the supabase client in and cannot be
+server-rendered, and this panel carries the whole of the downgrade reasoning.
+The four table style tokens are exported FROM it and imported by the page rather
+than copied: one definition, owned by the file that can be executed.
+
+**A MUTATION SURVIVED, AND IT WAS A FINDING ABOUT MY OWN CODE.** Replacing the
+`gap < 0 && next.gap > 0` guard with a plain box comparison left every assertion
+passing — because the guard is **provably redundant**: the offset is the smaller
+of the two gaps, so it cannot reach the floor unless one size is at least 3
+points short and the other at least 3 over. The line is kept for intent and as
+the only guard left if the floor is ever lowered, the comment says it is not
+load-bearing, and the test asserts the **invariant** instead. Same discipline as
+the Mini/Chipper tie order. Five other mutations are caught.
 
 #### Two more things the comparison found
 
