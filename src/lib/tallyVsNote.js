@@ -46,12 +46,11 @@ export const TALLY_SPECIES = {
   TURBOT: 'Turbot', BRILL: 'Brill', SKATE: 'Skate',
 }
 
-/* A split band's grading code, so the splitter's totals can come off the tally
- * instead of being typed. ONE map rather than a `codes` array running parallel
- * to `bands` — a parallel array is a second copy waiting to fall out of step. */
-export const BAND_CODE = {
-  'Mini Metro': '4', Metro: '3', Chipper: '2b', Seed: '2a', 'Good Seed': '1d',
-}
+/* A split band's grading code — ONE map, owned by `salesAgg` where the ladder
+ * itself lives, so the ordering on Fish Sales and the band totals here cannot
+ * disagree about what size a Good Seed is. */
+export { BAND_CODE } from './salesAgg.js'
+import { BAND_CODE } from './salesAgg.js'
 
 const num = (v) => Number(v) || 0
 

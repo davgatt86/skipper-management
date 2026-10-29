@@ -30,7 +30,7 @@
 import assert from 'node:assert'
 import {
   splitHaddockByTotals, autoSplitHaddock, familyRows, sizeMark,
-  haddockSpec, gradeSortKey, SPEC_A2, SPEC_A4, LADDER_CHANGEOVER,
+  haddockSpec, gradeSortKey, sortGrades, BAND_CODE, strandedSubGrades, SPEC_A2, SPEC_A4, LADDER_CHANGEOVER,
 } from './src/lib/salesAgg.js'
 
 let n = 0
@@ -315,6 +315,85 @@ eq(sizeMark(null, '4'), null, 'and neither is nothing at all')
 {
   const res = splitHaddockByTotals(NOTE, { 'Mini Metro': 8, Metro: 14, Chipper: 2 })
   eq(res.actual, 147, 'no spec means size 4')
+}
+
+/* ---- A SUB-GRADE LEFT ON A SIZE THIS LADDER NO LONGER SPLITS --------- *
+ * Found on the real 28-10 landing: its A+4 and A4 rows carry Metro and Mini
+ * Metro between them, from the old ladder where A4 covered three grades. On a
+ * note from 20-10-2026 A4 IS Mini Metro, so `A+4 · Metro` is 38 boxes of a fish
+ * that was never landed — and dating the split made those rows invisible to the
+ * one card that can clear them, while they go on counting in every breakdown. */
+{
+  const landing = [
+    ...NOTE.filter(r => /^A[+-]?2$/.test(r.grade)),
+    { id: 'm1', species_canon: 'Haddock', grade: 'A+4', boxes: 38, sub_grade: 'Metro' },
+    { id: 'm2', species_canon: 'Haddock', grade: 'A+4', boxes: 85, sub_grade: 'Mini Metro' },
+    { id: 'm3', species_canon: 'Haddock', grade: 'A4', boxes: 2, sub_grade: 'Metro' },
+    { id: 'm4', species_canon: 'Haddock', grade: 'A4', boxes: 22, sub_grade: 'Mini Metro' },
+    { id: 'm5', species_canon: 'Haddock', grade: 'A3', boxes: 18 },
+    { id: 'm6', species_canon: 'Cod', grade: 'A4', boxes: 9, sub_grade: 'Metro' },
+  ]
+  const s = strandedSubGrades(landing, SPEC_A2)
+  ok(s, 'the old A4 sub-grades are found on a note the new ladder splits at A2')
+  eq(s.boxes, 147, 'all 147 size-4 boxes of them')
+  eq(s.labels.map(l => l.label),
+    ['A+4 · Metro', 'A4 · Metro', 'A+4 · Mini Metro', 'A4 · Mini Metro'],
+    'named biggest first, by the same ordering as the table they appear in')
+  eq(s.labels[0].boxes, 38, 'with the boxes behind each')
+  ok(!s.rows.some(r => (r.species_canon || r.species) !== 'Haddock'),
+    'and a sub-graded COD row is not swept in')
+  ok(!s.rows.some(r => r.grade === 'A3'), 'nor a row carrying no sub-grade at all')
+  /* THE SIZE THIS LADDER DOES SPLIT IS NOT STRANDED — it is the live one. */
+  ok(!s.rows.some(r => /^A[+-]?2$/.test(r.grade)), 'the size-2 sub-grades are left alone')
+  /* And on the ladder those rows belong to, nothing is stranded at all. */
+  eq(strandedSubGrades(landing, SPEC_A4), null,
+    'read as an old note, the A4 sub-grades are exactly where they should be')
+  eq(strandedSubGrades([], SPEC_A2), null, 'an empty landing strands nothing')
+  eq(strandedSubGrades(NOTE.filter(r => !r.sub_grade), SPEC_A2), null,
+    'and so does one where nothing has been split')
+}
+
+/* ---- BIG TO SMALL, AND THE SUB-GRADE OUTRANKS THE MARK --------------- *
+ * David, Oct 2026, on the haddock breakdown: *"this should auto arrange from
+ * big to small. A1+, A1, Good seed +, G Seed, Seed +, Seed, Chipper +, etc"*.
+ * It was ordering A-number, then mark, then an alphabetical sub-grade — so
+ * Chipper came above Good Seed and every A+ sat above every plain grade. */
+{
+  const shuffled = [
+    'A4 · Mini Metro', 'A+2 · Chipper', 'A3', 'A+4 · Metro', 'A1', 'A2 · Seed',
+    'A+3', 'A2 · Good Seed', 'A+1', 'A4 · Metro', 'A+2 · Seed', 'A2 · Chipper',
+    'A+4 · Mini Metro', 'A+2 · Good Seed',
+  ]
+  eq(sortGrades(shuffled, x => x), [
+    'A+1', 'A1',
+    'A+2 · Good Seed', 'A2 · Good Seed',
+    'A+2 · Seed', 'A2 · Seed',
+    'A+2 · Chipper', 'A2 · Chipper',
+    'A+3', 'A3',
+    'A+4 · Metro', 'A4 · Metro',
+    'A+4 · Mini Metro', 'A4 · Mini Metro',
+  ], 'his real 28-10 breakdown, biggest fish first, each size with its own + beside it')
+}
+/* AND A PRE-CHANGEOVER NOTE MUST NOT REGRESS, which is why the A-NUMBER stays
+   the major key rather than the sub-grade's code. Before 20-10-2026 `A3` meant
+   2a Seed, so ranking `A4 · Chipper` on its code 2b would sort it ABOVE A3 —
+   backwards for every note in four years of history. */
+{
+  const old = ['A4 · Metro', 'A2', 'A4 · Chipper', 'A1', 'A4 · Mini Metro', 'A3', 'A+4 · Chipper']
+  eq(sortGrades(old, x => x),
+    ['A1', 'A2', 'A3', 'A+4 · Chipper', 'A4 · Chipper', 'A4 · Metro', 'A4 · Mini Metro'],
+    'A3 still sits above every A4 sub-grade on an old note')
+}
+/* THE ORDER IS DERIVED FROM THE CODES, not written out a second time. */
+{
+  eq(BAND_CODE, { 'Good Seed': '1d', Seed: '2a', Chipper: '2b', Metro: '3', 'Mini Metro': '4' },
+    'one map of band to grading code')
+  const bySize = Object.entries(BAND_CODE).sort((a, b) => a[1].localeCompare(b[1])).map(([n]) => n)
+  eq(bySize, ['Good Seed', 'Seed', 'Chipper', 'Metro', 'Mini Metro'],
+    'and sorting those codes IS the size order, biggest first')
+  /* An unknown sub-grade sorts after the ones with a code, never at the top. */
+  eq(sortGrades(['A2 · Nondescript', 'A2 · Seed'], x => x), ['A2 · Seed', 'A2 · Nondescript'],
+    'a band nobody has a code for goes last within its grade')
 }
 
 /* ---- THE MINUS MARK SORTS WHERE IT BELONGS --------------------------- *

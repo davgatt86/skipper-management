@@ -13,7 +13,7 @@ import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 // buyer names identically, and they were two inline copies of the same code.
 import { canonBuyerFrom } from '../lib/buyerAliases'
 import { fetchAll } from '../lib/fetchAll'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitHaddock, splitHaddockByTotals, familyRows, haddockSpec, r2,
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitHaddock, splitHaddockByTotals, familyRows, haddockSpec, strandedSubGrades, r2,
   withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
@@ -436,6 +436,12 @@ export default function Sales() {
      each split function — so the page counted 24 size-4 boxes on a note
      carrying 147 and no single edit could have put it right. */
   const a4Rows = useMemo(() => mode === 'landing' ? familyRows(rows, splitSpec.digit) : [], [rows, mode, splitSpec])
+  /* A sub-grade left on a size this ladder no longer splits — the old A4
+     three-way on a note from 20-10 onwards. Dating the split made those
+     invisible to the one card that can clear them, while they go on counting
+     in every grade breakdown. */
+  const stranded = useMemo(
+    () => (mode === 'landing' ? strandedSubGrades(rows, splitSpec) : null), [rows, mode, splitSpec])
 
   async function saveSubGrades(updates) {
     for (const u of updates) {
@@ -970,7 +976,7 @@ export default function Sales() {
         )}
 
         {/* A4 haddock split — single landing scope */}
-        {mode === 'landing' && a4Rows.length > 0 && (
+        {mode === 'landing' && (a4Rows.length > 0 || stranded) && (
           <div className="card">
             {/* SIZE 4, every quality mark — so the heading says so, and the
                 box count is stated because the entry is checked against it. */}
@@ -981,6 +987,22 @@ export default function Sales() {
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <button className="secondary" onClick={autoSplit}>Auto-split by price bands</button>
               <button className="secondary" onClick={() => saveSubGrades(a4Rows.map(r => ({ id: r.id, sub_grade: null })))}>Clear split</button>
+            </div>}
+            {/* A SUB-GRADE ON A SIZE THIS LADDER DOES NOT SPLIT. Reported, not
+                cleared — a sub-grade is the skipper's answer, and the app
+                deciding one is stale is a different thing from saying so. */}
+            {stranded && <div style={{ marginBottom: '0.75rem', padding: '0.5rem 0.6rem', border: '1px solid var(--brass)', borderRadius: 4, fontSize: '0.85rem' }}>
+              <strong>{num(stranded.boxes)} boxes carry a sub-grade from the old ladder.</strong>{' '}
+              {stranded.labels.map(l => `${l.label} ${num(l.boxes)}`).join(', ')} — on this note
+              A{splitSpec.digit === '2' ? '4 is Mini Metro alone' : "'s sizes split differently"},
+              so those came off a split that no longer applies and are counting as fish that was
+              not landed.
+              {isSkipper && <div className="no-print" style={{ marginTop: '0.3rem' }}>
+                <button className="secondary" style={{ padding: '0.15rem 0.5rem', fontSize: '0.78rem' }}
+                  onClick={() => saveSubGrades(stranded.rows.map(r => ({ id: r.id, sub_grade: null })))}>
+                  Clear those sub-grades
+                </button>
+              </div>}
             </div>}
             {isSkipper && <TallyCheck
               ladder={ladder} downgrades={downgrades} addedBand={addedBand} loaded={!!tally} kind={tally?.kind}

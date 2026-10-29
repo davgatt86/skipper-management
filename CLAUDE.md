@@ -3169,6 +3169,73 @@ the note is recording what the market did rather than what the crew intended.
 Good Seed is A1; that trip it sold as A2. See the next subsection, which is the
 check built to find exactly this.
 
+#### BIG TO SMALL — the sub-grade outranks the quality mark (Oct 2026)
+
+David, on the haddock breakdown after the A2 split ran: *"this should auto
+arrange from big to small. A1+, A1, Good seed +, G Seed, Seed +, Seed, Chipper
++, etc, etc"*. It was coming out A-number, then mark, then an ALPHABETICAL
+sub-grade — so Chipper sat above Good Seed, and every A+ grade above every
+plain one:
+
+    was                        now
+    A+2 · Chipper              A+1
+    A+2 · Good Seed            A1
+    A+2 · Seed                 A+2 · Good Seed
+    A2 · Chipper               A2 · Good Seed
+    A2 · Good Seed             A+2 · Seed
+    A2 · Seed                  A2 · Seed
+    A+3                        A+2 · Chipper
+    ...                        A2 · Chipper  ...
+
+**THE MARK VARIES FASTEST**, so each size sits with its own plus beside it.
+
+**THE ORDER IS DERIVED FROM THE CODES, not written out again.** `BAND_CODE`
+gives Good Seed 1d · Seed 2a · Chipper 2b · Metro 3 · Mini Metro 4, and sorting
+those codes IS the size order. A band added later slots into its own place with
+nothing edited. It lives in `salesAgg` beside the specs and `tallyVsNote` imports
+it, so the Fish Sales ordering and the tally check's band totals cannot disagree
+about what size a Good Seed is.
+
+**AND THE A-NUMBER STAYS THE MAJOR KEY, which is the care in it.** Ranking rows
+on the sub-grade's code alone looks tidier and is wrong for history: before
+20-10-2026 `A3` meant 2a Seed, so a pre-changeover `A4 · Chipper` ranked on code
+2b would sort ABOVE A3 — backwards for every note in four years. The A-number's
+DIGIT has always been the size rank under both ladders; only the kilo bands
+moved. So each row stays under its own A-number and the sub-grades order within
+it, which is right on both sides of the change and is asserted both ways.
+
+Mutation-checked against four weakened copies — the mark back above the
+sub-grade, the bands ordered alphabetically, an unknown band sorting first, and
+Good Seed given the wrong code. All four caught.
+
+#### A SUB-GRADE LEFT ON A SIZE THE LADDER NO LONGER SPLITS
+
+**His own table is what showed it.** The 28-10 landing carries `A+4 · Metro` 38
+boxes and `A4 · Metro` 2 — **on a note where A4 is Mini Metro alone**. All 147
+of its size-4 boxes are one grade now, so those rows are counting as a fish that
+was never landed. They came off the old three-way split, run before the ladder
+was dated.
+
+**AND THE PANEL COULD NOT REACH THEM, which is the part worth building for.**
+Dating the split was right, and it also means the card shows only size-2 rows on
+a new note — so a sub-grade written under the old rules became **invisible to
+the one screen that could clear it** while still counting in every grade
+breakdown. Same shape as the invoice bundle that sat `read` with no invoices:
+past every list at once, and only findable by noticing a figure that should not
+exist.
+
+`strandedSubGrades()` names them on the split card with their boxes, ordered the
+same way as the table they appear in, and offers one button. **Reported, never
+cleared on its own** — a sub-grade is the skipper's answer, and the app deciding
+one is stale is a different thing from it saying so.
+
+It is scoped tightly: haddock only, a real A-grade only, and only a size the
+CURRENT ladder does not split — read as an old note the very same rows strand
+nothing, which is asserted, because on an old note they are exactly where they
+belong.
+
+`test-haddock-split.mjs` 108 → **123**.
+
 #### THE TALLY READ AGAINST THE NOTE — and a grade sold a size down
 
 David, Oct 2026, on the one boundary of four that disagreed: *"i think the good

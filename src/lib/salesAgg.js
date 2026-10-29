@@ -36,8 +36,33 @@ export function gradeLabel(r) {
  * foot of the list with the unrecognised labels. The mark decides the order
  * WITHIN a size \u2014 A+ above the plain grade, A- below it \u2014 which is the same
  * reading the A4 split uses: the digit is the size, the mark is the quality. */
-const SUB_ORDER = { 'Chipper': 1, 'Metro': 2, 'Mini Metro': 3 }
+/* EVERY SUB-GRADE IS A GRADING CODE, so one map serves the ordering here and
+ * the tally check's band totals. The code IS the size \u2014 the sheet's own foot
+ * says the names beside them are "PROVIDED AS A GUIDE ONLY" \u2014 so the order
+ * below is derived by sorting the codes rather than written out a second time.
+ * A band added later slots into its own place without this being edited. */
+export const BAND_CODE = {
+  'Good Seed': '1d', Seed: '2a', Chipper: '2b', Metro: '3', 'Mini Metro': '4',
+}
+const SUB_ORDER = Object.fromEntries(Object.entries(BAND_CODE)
+  .sort((a, b) => a[1].localeCompare(b[1]))
+  .map(([name], i) => [name, i + 1]))
+
 const MARK_ORDER = { '+': 0, '': 1, '-': 2 }
+
+/* THE SUB-GRADE OUTRANKS THE QUALITY MARK, which is the order David asked for:
+ * *"this should auto arrange from big to small. A1+, A1, Good seed +, G Seed,
+ * Seed +, Seed, Chipper +, etc"*. So the mark varies fastest and each size sits
+ * with its own plus and minus beside it, rather than every A+ grade being
+ * listed before every plain one.
+ *
+ * AND THE A-NUMBER STAYS THE MAJOR KEY, deliberately, rather than ranking rows
+ * on the sub-grade's code alone. The A-number is what the NOTE says, and its
+ * digit has always been the size rank under both ladders \u2014 where the codes have
+ * not: before 20-10-2026 `A3` meant 2a Seed, so ranking a pre-changeover
+ * `A4 \u00b7 Chipper` on its code 2b would sort it ABOVE A3, which is backwards for
+ * every note in four years of history. Keeping each row under its own A-number
+ * and ordering the sub-grades within it is right on both sides of the change. */
 export function gradeSortKey(label) {
   const [g, sub] = String(label).split(' \u00b7 ').map(s => s.trim())
   let major = 900, minor = 5
@@ -47,8 +72,10 @@ export function gradeSortKey(label) {
     const s = g.match(/^Sort\s*(\d+)/i)
     if (s) { major = 500 + Number(s[1]); minor = 0 }
   }
+  /* A sub-grade nobody has a code for sorts after the ones that do, rather than
+     at the top where a 0 would put it. */
   const subOrd = sub ? (SUB_ORDER[sub] || 9) : 0
-  return String(major).padStart(3, '0') + minor + String(subOrd) + g
+  return String(major).padStart(3, '0') + String(subOrd) + minor + g
 }
 export const sortGrades = (list, get = x => x.grade) =>
   [...list].sort((x, y) => gradeSortKey(get(x)).localeCompare(gradeSortKey(get(y))))
@@ -262,6 +289,43 @@ const amountOf = (r, measure) => measure === 'kg'
   ? Number(r.total_weight ?? r.weight_kg ?? 0) || 0
   : Number(r.boxes || 0)
 const boxesOf = r => amountOf(r, 'boxes')
+
+/* --------------------------------------------------------------------------
+ * SUB-GRADES LEFT ON A SIZE THIS LADDER NO LONGER SPLITS
+ *
+ * Found on the real 28-10 landing: its A+4 and A4 rows carry Metro and Mini
+ * Metro between them — 147 boxes — from the old ladder where A4 covered three
+ * grades. On a note from 20-10-2026 A4 IS Mini Metro, one grade, so `A+4 ·
+ * Metro` is 38 boxes of a fish that was never landed.
+ *
+ * THE PANEL COULD NOT REACH THEM, which is the part that made this worth
+ * building rather than fixing by hand. Dating the split was right, and it also
+ * meant the card shows only size-2 rows on a new note — so a sub-grade written
+ * under the old rules became invisible to the one screen that could clear it,
+ * while still being counted in every grade breakdown. Same shape as the invoice
+ * bundle that sat `read` with no invoices: past every list at once.
+ *
+ * It reports and never clears on its own. A sub-grade is a skipper's answer,
+ * and the app deciding one is stale is a different thing from it saying so.
+ * ------------------------------------------------------------------------ */
+export function strandedSubGrades(rows, spec = SPEC_A4) {
+  const stranded = (rows || []).filter(r =>
+    (r.species_canon || r.species) === 'Haddock' &&
+    r.sub_grade && sizeMark(r.grade, spec.digit) == null &&
+    /^A[+-]?\d$/i.test(String(r.grade || '').trim()))
+  if (!stranded.length) return null
+  const byLabel = new Map()
+  for (const r of stranded) {
+    const k = gradeLabel(r)
+    byLabel.set(k, r2((byLabel.get(k) || 0) + (Number(r.boxes) || 0)))
+  }
+  return {
+    rows: stranded,
+    boxes: r2(stranded.reduce((s, r) => s + (Number(r.boxes) || 0), 0)),
+    labels: [...byLabel.entries()].map(([label, boxes]) => ({ label, boxes }))
+      .sort((a, b) => gradeSortKey(a.label).localeCompare(gradeSortKey(b.label))),
+  }
+}
 
 /* --------------------------------------------------------------------------
  * Auto-split by price band.
