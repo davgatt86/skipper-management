@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 import { parseDayTally } from '../src/lib/market/parseDayTally.js'
 import { compareLadder, downgradeCandidates } from '../src/lib/tallyVsNote.js'
+import { parseCatchOverviewPages } from '../src/lib/market/parseCatchOverview.js'
 
 const TALLY = 'C:/Users/davga/OneDrive/Desktop/Day Totals/day tally trip 72.xlsx'
 const NOTE = 'C:/Users/davga/Downloads/AUDACIOUS BF83 (2).pdf'
@@ -47,10 +48,21 @@ const agreeTally = [
 ].map(([grade, boxes]) => ({ species: 'HADDOCK', grade, boxes }))
 const clean = compareLadder(agreeTally, NOTE_ROWS)
 
+/* The catch overview — the scales, compared on WEIGHT because its box column
+   is an OCR casualty while its weights reconcile to the printed total. */
+const co = parseCatchOverviewPages(
+  JSON.parse(readFileSync('scripts/fixtures/catch-overview-trip72.json', 'utf8')))
+const NOTE_KG = [
+  ['A+1', 1, 40], ['A1', 16, 613], ['A+2', 23, 896], ['A2', 44, 1746],
+  ['A+3', 31, 1214], ['A3', 18, 720], ['A+4', 123, 4907], ['A4', 24, 960],
+].map(([grade, boxes, total_weight], i) => ({ id: 'k' + i, species_canon: 'Haddock', grade, boxes, total_weight }))
+const coCmp = compareLadder(co.lines, NOTE_KG, { measure: 'kg' })
+
 const PANES = [
   { title: 'Nothing uploaded yet', props: { ladder: null, downgrades: [], loaded: false } },
   { title: 'The real pair — Good Seed offered', props: { ladder: real, downgrades: cands, loaded: true } },
   { title: 'The same, with Good Seed added', props: { ladder: real, downgrades: cands, loaded: true, addedBand: 'Good Seed' } },
+  { title: 'The catch overview — compared on weight', props: { ladder: coCmp, downgrades: downgradeCandidates(coCmp), loaded: true, kind: 'catch overview' } },
   { title: 'A tally that agrees — nothing offered', props: { ladder: clean, downgrades: downgradeCandidates(clean), loaded: true } },
   {
     title: 'A rung with no code, and one too small to explain the gap',
@@ -98,18 +110,18 @@ for (const p of panes) {
   console.log(`\n== ${p.title}`)
   const t = strip(p.html)
   if (p.title.startsWith('Nothing')) {
-    must(/Check against the day tally/.test(t), 'offers the upload')
+    must(/Check against the day tally or catch overview/.test(t), 'offers both documents')
     must(!/Share gap/.test(t), 'and draws no table before there is one')
     continue
   }
-  must(/Check against a different tally/.test(t), 'the button changes once a tally is loaded')
+  must(/Check against a different document/.test(t), 'the button changes once a document is loaded')
   must(/Share gap/.test(t), 'the ladder table is drawn')
   /* THE TOTALS ARE NOT MEANT TO AGREE, and the panel must say so before the
      table or every row reads as an error. */
-  must(/compared by share rather than box for box/.test(t), 'it says why the totals differ')
+  must(/compared by SHARE rather than figure for figure/.test(t), 'it says why the totals differ')
 
   if (p.title.includes('real pair')) {
-    must(/Good Seed \(1d\) 20/.test(t), 'the crew’s own rungs are named with their codes')
+    must(/Good Seed \(1d\) 20\b/.test(t), 'the crew’s own rungs are named with their codes')
     must(/A1 sold 6.5 points short and A2 the same over/.test(t), 'the offset is stated')
     must(/accounts for 98% of the gap/.test(t), 'and how much the named rung explains')
     must(/Add Good Seed to the A2 split/.test(t), 'the band is OFFERED')
@@ -120,13 +132,20 @@ for (const p of panes) {
     must(/Take it back out/.test(t), 'and can be undone — it is per trip, not a setting')
     must(!/Add Good Seed to the A2 split/.test(t), 'the offer is gone once taken')
   }
+  if (p.title.includes('catch overview')) {
+    must(/11,123 kg of haddock/.test(t), 'weights are shown in kilos, never bare numbers')
+    must(/its box column does not/.test(t), 'and it says why weight is what is compared')
+    must(/Good Seed \(1d\), 732 kg/.test(t), 'the rung is named in the same unit')
+    must(/accounts for 97% of the gap/.test(t), 'and finds the same thing boxes did')
+    must(!/ bx/.test(t), 'with no box figure anywhere on a weight comparison')
+  }
   if (p.title.includes('agrees')) {
     must(/No grade looks to have sold a size down/.test(t), 'nothing found reads as an ANSWER')
     must(!/points short/.test(t), 'and nothing is offered')
   }
   if (p.title.includes('no code')) {
     must(/Not on the ladder, so not compared: Odds 5/.test(t), 'an uncoded rung is named, not dropped')
-    must(/Good Seed \(1d\), 2 boxes/.test(t), 'the rung is still named')
+    must(/Good Seed \(1d\), 2 bx/.test(t), 'the rung is still named')
     must(/accounts for 5% of the gap/.test(t), 'but it is reported as explaining almost none of it')
   }
   /* It must never claim to have decided. */

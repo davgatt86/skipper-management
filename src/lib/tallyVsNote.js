@@ -72,14 +72,14 @@ export function tallyCode(grade) {
 }
 
 /** One species' tally lines, folded onto their grading codes. */
-export function tallyLadder(tallyLines, species = 'HADDOCK') {
+export function tallyLadder(tallyLines, species = 'HADDOCK', measure = 'boxes') {
   const out = new Map()
   for (const l of tallyLines || []) {
     if (String(l.species || '').toUpperCase() !== species) continue
     const { name, code, digit } = tallyCode(l.grade)
     const k = code || `?${name}`
     const cur = out.get(k) || { code, digit, name, boxes: 0 }
-    cur.boxes += num(l.boxes)
+    cur.boxes += num(l[measure])
     out.set(k, cur)
   }
   return [...out.values()].sort((a, b) =>
@@ -87,14 +87,14 @@ export function tallyLadder(tallyLines, species = 'HADDOCK') {
 }
 
 /** A note's rows for one species, folded onto the A-number's size digit. */
-export function noteLadder(noteRows, species = 'Haddock') {
+export function noteLadder(noteRows, species = 'Haddock', measure = 'boxes') {
   const out = new Map()
   for (const r of noteRows || []) {
     if ((r.species_canon || r.species) !== species) continue
     const m = String(r.grade || '').trim().match(/^A[+-]?([0-9])$/i)
     if (!m) continue
     const d = m[1]
-    out.set(d, (out.get(d) || 0) + num(r.boxes))
+    out.set(d, (out.get(d) || 0) + num(measure === 'kg' ? (r.total_weight ?? r.weight_kg) : r.boxes))
   }
   return out
 }
@@ -109,10 +109,10 @@ const share = (v, total) => (total ? Math.round((v / total) * 1000) / 10 : null)
  * share less the tally's — positive means the market sold more under that
  * A-number than the crew graded into it.
  * ------------------------------------------------------------------------ */
-export function compareLadder(tallyLines, noteRows, { species = 'HADDOCK' } = {}) {
+export function compareLadder(tallyLines, noteRows, { species = 'HADDOCK', measure = 'boxes' } = {}) {
   const noteName = TALLY_SPECIES[species] || species
-  const rungs = tallyLadder(tallyLines, species)
-  const note = noteLadder(noteRows, noteName)
+  const rungs = tallyLadder(tallyLines, species, measure)
+  const note = noteLadder(noteRows, noteName, measure)
   const tallyTotal = rungs.reduce((s, r) => s + r.boxes, 0)
   const noteTotal = [...note.values()].reduce((s, v) => s + v, 0)
 
@@ -138,7 +138,7 @@ export function compareLadder(tallyLines, noteRows, { species = 'HADDOCK' } = {}
      ladder. Named rather than dropped — a rung quietly missing would make the
      shares add up to less than the fish landed. */
   const unplaced = rungs.filter(r => !r.digit)
-  return { species, noteName, rows, tallyTotal, noteTotal, unplaced }
+  return { species, noteName, measure, rows, tallyTotal, noteTotal, unplaced }
 }
 
 /* --------------------------------------------------------------------------
@@ -205,8 +205,8 @@ export function downgradeCandidates(cmp) {
  * splitter then apportions as nothing, correctly, rather than being handed a
  * blank it would read as "no totals at all".
  * ------------------------------------------------------------------------ */
-export function bandTotalsFromTally(tallyLines, spec, species = 'HADDOCK') {
-  const rungs = tallyLadder(tallyLines, species)
+export function bandTotalsFromTally(tallyLines, spec, species = 'HADDOCK', measure = 'boxes') {
+  const rungs = tallyLadder(tallyLines, species, measure)
   const byCode = new Map(rungs.map(r => [r.code, r.boxes]))
   const out = {}
   for (const b of spec.bands) out[b] = byCode.get(BAND_CODE[b]) ?? 0

@@ -24,13 +24,20 @@ export function Scroll({ children }) {
 }
 
 export default function TallyCheck({
-  ladder, downgrades = [], addedBand, loaded,
+  ladder, downgrades = [], addedBand, loaded, kind = 'tally',
   onPick, onAddBand, onClearBand, onUseTotals,
 }) {
+  /* A KILO AND A BOX MUST NOT READ ALIKE. The day tally counts boxes; the
+     catch overview is a scan whose box column comes back 960 of 1,037, so it
+     is compared on weight — and every figure on the page says which. */
+  const kg = ladder?.measure === 'kg'
+  const bare = (v) => (v == null ? '—' : kg ? Math.round(v).toLocaleString('en-GB') : String(v))
+  /* Spelled out where the figure sits in a sentence rather than a column. */
+  const unit = (v) => (v == null ? '—' : `${bare(v)} ${kg ? 'kg' : 'bx'}`)
   return (
     <div className="no-print" style={{ marginBottom: '0.75rem' }}>
       <button className="secondary" onClick={onPick}>
-        {loaded ? 'Check against a different tally' : 'Check against the day tally'}
+        {loaded ? 'Check against a different document' : 'Check against the day tally or catch overview'}
       </button>
       {ladder && (() => {
       /* ONLY THE SIZES A CANDIDATE ACTUALLY NAMES ARE MARKED. Colouring every
@@ -45,23 +52,35 @@ export default function TallyCheck({
             before anything is weighed: 305 boxes of haddock against the 280 the
             note sold, on the trip this was built against. */}
         <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.3rem' }}>
-          What the crew graded against what the market sold. The tally counted{' '}
-          {ladder.tallyTotal} boxes of {ladder.noteName.toLowerCase()} at sea and the note sold{' '}
-          {ladder.noteTotal}, so the two are compared by share rather than box for box.
+          What the crew graded against what the market sold. The {kind} has{' '}
+          {unit(ladder.tallyTotal)} of {ladder.noteName.toLowerCase()} against the {unit(ladder.noteTotal)}{' '}
+          the note sold, so the two are compared by SHARE rather than figure for figure.
+          {kg
+            ? ' This one is a scan: its weights reconcile to the total printed on it, but its box column does not, so weight is what is compared.'
+            : ' The tally is counted at sea before anything is weighed, so it runs a few per cent high.'}
         </div>
         <Scroll>
           <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '0.82rem' }}>
             <thead><tr>
               <th style={th}>Sold as</th><th style={th}>Graded by the crew</th>
-              <th style={thR}>Crew</th><th style={thR}>Note</th><th style={thR}>Share gap</th>
+              {/* THE UNIT GOES IN THE HEADING, not in every cell. Spelling it out
+                  per cell widened the table enough to push the Share gap column —
+                  the one the whole check is about — off the side on a laptop.
+                  Only rendering it showed that. */}
+              <th style={thR}>Crew ({kg ? 'kg' : 'bx'})</th>
+              <th style={thR}>Note ({kg ? 'kg' : 'bx'})</th>
+              <th style={thR}>Share gap</th>
             </tr></thead>
             <tbody>
               {ladder.rows.map(r => (
                 <tr key={r.digit}>
                   <td style={td}>A{r.digit}</td>
-                  <td style={td}>{r.codes.map(c => `${c.name} (${c.code}) ${c.boxes}`).join(', ') || '—'}</td>
-                  <td style={tdR}>{r.tallyBoxes} · {r.tallyShare}%</td>
-                  <td style={tdR}>{r.noteBoxes} · {r.noteShare}%</td>
+                  {/* The figures here carry no unit either — the Crew column
+                      beside them states it once, and repeating it per rung was
+                      what pushed the gap column off the side. */}
+                  <td style={td}>{r.codes.map(c => `${c.name} (${c.code}) ${bare(c.boxes)}`).join(', ') || '—'}</td>
+                  <td style={tdR}>{bare(r.tallyBoxes)} · {r.tallyShare}%</td>
+                  <td style={tdR}>{bare(r.noteBoxes)} · {r.noteShare}%</td>
                   {/* Brass, not rust: a gap is a question about the auction's
                       reading of the fish, not a fault in either document. */}
                   <td style={{ ...tdR, color: flagged.has(r.digit) ? 'var(--brass)' : undefined }}>
@@ -76,7 +95,7 @@ export default function TallyCheck({
             rather than dropped — the shares would otherwise add to less than
             the fish counted. */}
         {ladder.unplaced?.length > 0 && <div className="muted" style={{ fontSize: '0.78rem', marginTop: '0.3rem' }}>
-          Not on the ladder, so not compared: {ladder.unplaced.map(u => `${u.name} ${u.boxes}`).join(', ')}.
+          Not on the ladder, so not compared: {ladder.unplaced.map(u => `${u.name} ${unit(u.boxes)}`).join(', ')}.
         </div>}
 
         {/* OFFERED, NEVER CONCLUDED. The app cannot tell loose grading from a
@@ -85,7 +104,7 @@ export default function TallyCheck({
           <div key={c.code} style={{ marginTop: '0.5rem', padding: '0.5rem 0.6rem', border: '1px solid var(--brass)', borderRadius: 4 }}>
             <div style={{ fontSize: '0.85rem' }}>
               <strong>A{c.fromDigit} sold {c.offset} points short and A{c.toDigit} the same over.</strong>{' '}
-              The smallest grade in A{c.fromDigit} is <strong>{c.name} ({c.code})</strong>, {c.boxes} boxes,
+              The smallest grade in A{c.fromDigit} is <strong>{c.name} ({c.code})</strong>, {unit(c.boxes)},
               which accounts for {c.explains}% of the gap. If the crew graded it loosely it would have sold
               as A{c.toDigit}.
             </div>
@@ -107,7 +126,7 @@ export default function TallyCheck({
           ordinary difference between a count at sea and the scales.
         </div>}
         <button className="secondary" style={{ marginTop: '0.5rem' }} onClick={onUseTotals}>
-          Use the tally's boxes as the totals
+          Use the {kind}'s figures as the totals
         </button>
       </div>
       })()}

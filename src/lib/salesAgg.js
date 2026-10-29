@@ -251,7 +251,17 @@ const marksOf = (tgt, digit) => {
   return m
 }
 const pxOf = r => Number(r.price_per_kg || 0) || Number(r.price_per_box || 0)
-const boxesOf = r => Number(r.boxes || 0)
+/* THE SPLIT IS MEASURED IN WHATEVER THE TOTALS ARE MEASURED IN, and the two
+ * documents differ. The wheelhouse tally counts BOXES; the catch overview is an
+ * OCR text layer whose box column comes back 960 of 1,037 while every weight
+ * reconciles exactly to the printed total, so it can only be trusted on KG.
+ * The allocation itself is a ratio either way, so this changes no answer on the
+ * boxes path — what it changes is that `entered` and `actual` are then the same
+ * kind of thing, instead of comparing 1,898 kg against 67 boxes and flagging it. */
+const amountOf = (r, measure) => measure === 'kg'
+  ? Number(r.total_weight ?? r.weight_kg ?? 0) || 0
+  : Number(r.boxes || 0)
+const boxesOf = r => amountOf(r, 'boxes')
 
 /* --------------------------------------------------------------------------
  * Auto-split by price band.
@@ -322,9 +332,10 @@ export function autoSplitHaddock(rows, spec = SPEC_A4) {
  * than the entry: reporting the intention is what made the old message claim a
  * split it had not performed.
  * ------------------------------------------------------------------------ */
-export function splitHaddockByTotals(rows, totals, spec = SPEC_A4) {
+export function splitHaddockByTotals(rows, totals, spec = SPEC_A4, measure = 'boxes') {
   const tgt = familyRows(rows, spec.digit)
   if (!tgt.length) return { error: noneMsg(spec) }
+  const amt = (r) => amountOf(r, measure)
   const want = spec.bands.map(b => Math.max(0, Number((totals || {})[b]) || 0))
   const entered = r2(want.reduce((s, v) => s + v, 0))
   /* NO TOTALS IS NOT A SPLIT INTO NOTHING. With every box unassigned the
@@ -332,13 +343,13 @@ export function splitHaddockByTotals(rows, totals, spec = SPEC_A4) {
      labelling the whole landing one band by default. */
   if (!entered) return { error: `Enter the boxes of ${spec.bands.join(' and ')} for this trip first.` }
 
-  const actual = r2(tgt.reduce((s, r) => s + boxesOf(r), 0))
+  const actual = r2(tgt.reduce((s, r) => s + amt(r), 0))
   const assigned = {}, marks = []
   for (const b of spec.bands) assigned[b] = 0
   const updates = []
   for (const [mark, group] of marksOf(tgt, spec.digit)) {
     const sorted = [...group].sort((a, b) => pxOf(a) - pxOf(b))      // cheapest first
-    const n = sorted.reduce((s, r) => s + boxesOf(r), 0)
+    const n = sorted.reduce((s, r) => s + amt(r), 0)
     /* Running ceilings in BOXES: band i ends once its share of the entered
        ratio is used up. The shares sum to exactly n, so the last band always
        takes the remainder and no row can fall off the end. */
@@ -348,7 +359,7 @@ export function splitHaddockByTotals(rows, totals, spec = SPEC_A4) {
     for (const b of spec.bands) mine[b] = 0
     let cum = 0
     for (const r of sorted) {
-      const b = boxesOf(r)
+      const b = amt(r)
       const mid = cum + b / 2
       cum += b
       /* THE CUTS CANNOT CROSS, by construction — the shares are a partition of
@@ -368,7 +379,7 @@ export function splitHaddockByTotals(rows, totals, spec = SPEC_A4) {
   }
   for (const k of Object.keys(assigned)) assigned[k] = r2(assigned[k])
   const diff = r2(entered - actual)
-  return { updates, actual, entered, diff, flag: Math.abs(diff) > 3, assigned, marks }
+  return { updates, actual, entered, diff, flag: Math.abs(diff) > 3, assigned, marks, measure }
 }
 
 /* Best-paying buyer per species + grade (item 2). For each species/grade

@@ -3270,6 +3270,83 @@ the only guard left if the floor is ever lowered, the comment says it is not
 load-bearing, and the test asserts the **invariant** instead. Same discipline as
 the Mini/Chipper tie order. Five other mutations are caught.
 
+##### AND THE CATCH OVERVIEW IS THE BETTER DOCUMENT — `parseCatchOverview.js`
+
+David: *"upload only accepts xsls. not pdf"*. The PDF he has is the catch
+overview out of the logbook export, and it is the better of the two for this
+job: the **weighed** landing rather than the wheelhouse count, so it sits beside
+the sales note instead of 9% above it.
+
+    tally (wheelhouse)   305 haddock boxes   ·  1,094 all species
+    catch overview       279                 ·  1,037
+    note                 280                 ·  1,042
+
+**IT CARRIES AN OCR TEXT LAYER, NOT A BORN-DIGITAL ONE.** One generated font
+(`g_d0_f1`), stray question marks where digits belong — `732.00?`, `681.00???` —
+and cells run together, `1.160849.00` being the CF column and the living weight
+with nothing between them. So nothing in it may be taken on trust, and most of
+the parser is about which half can be.
+
+**MEASURED, AND THE TWO COLUMNS ARE NOT ALIKE:**
+
+    WEIGHT   every species reconciles EXACTLY to its own printed total
+    BOXES    960 of the printed 1,037 — 28 rows lose theirs, silently
+
+**So the comparison runs on WEIGHT**, and that is not a compromise: the note
+carries a weight per row too, the check is of shares either way, and it is the
+QUIETER reading. A4 comes out **+0.9 points against the note where boxes give
++3.0**, because a weighed kilo matches a weighed kilo. The same candidate is
+found — Good Seed, explaining 97% against boxes' 98%.
+
+**ONE QUESTION MARK HID THE ENTIRE FINDING.** `MONEY` was anchored
+(`/^[\d,]+\.\d{2}$/`), so the Good Seed weight printed `732.00?` failed it and
+came back **null** — and with that one null A1 read **−0.2 points instead of
+−6.4** and no candidate was raised at all. It is a prefix match now.
+
+**WHAT MAKES THAT SAFE IS THE RECONCILE, NOT THE REGEX.** A layer that appends
+a question mark can equally drop a digit, so the parse is checked against the
+total the document prints on itself — the sales note's own discipline — and a
+document that does not add up is **refused rather than compared against**. On
+the real export: 38,115 parsed against 38,115 printed, diff 0.
+
+Three things that follow from reconciling being the guard:
+
+- **AN UNCODED GRADE IS STILL READ.** Redfish grades `Medium` / `Selected` /
+  `Small` and tusk reads `Mix`. They sit on no A-ladder rung — but they are real
+  landed weight, and dropping them would break the reconcile for a reason that
+  has nothing to do with a misread digit, which is the one check standing
+  between this scan and a confident wrong answer.
+- **AND THE HEADER ROW CAME IN WITH THEM.** Widening the grade cell to *any*
+  text swept the word `GRADE` itself in on every page. It carried no weight so
+  it broke no total, **which is exactly how it would have gone unnoticed**.
+- **A BOX COUNT THE OCR LOST IS NULL, NEVER 0.** Eighth outing for
+  `Number('') === 0` in this repo.
+
+**COLUMNS ARE CALIBRATED OFF EACH PAGE'S OWN HEADER**, never hard-coded: the
+three pages are at different scales — GRADE sits at x=117 on page 1 and x=110 on
+page 2 — so a fixed band would read page 1 and quietly miss page 2. Same
+anchoring as the P&J note's Withdrawn flag.
+
+**THE READING IS SPLIT FROM THE PDF**, `parseCatchOverviewPages` from
+`parseCatchOverview`, the way parse-core splits `parseExtracted` from
+`parsePdf`. `ensurePdfjs` resolves a worker URL and needs a browser, so a parser
+welded to it could only be checked by uploading a file on a real login — and the
+hard half here is picking columns out of an OCR layer.
+`scripts/fixtures/catch-overview-trip72.json` is the real extraction item for
+item, so every artefact in the test is one the document actually carries.
+
+**THE SPLITTER TAKES ITS MEASURE TOO**, or it would compare 1,898 kg against 67
+boxes and flag the units as a disagreement. The allocation is a ratio either
+way, so the boxes path is unchanged and its 108 checks still pass.
+
+**A KILO AND A BOX MUST NOT READ ALIKE**, so every figure on the panel carries
+its unit — in the COLUMN HEADING rather than the cell. Spelling it out per cell
+widened the table enough to push the **Share gap** column, the one the whole
+check is about, off the side of a laptop. Found by measuring the rendered table
+against its container, not by looking at it.
+
+`test-catch-overview.mjs` 37 checks · the preview renders it as a fifth pane.
+
 #### Two more things the comparison found
 
 **THE SCALES AND THE NOTE AGREE TO 1.2%** — 38,115 kg / 1,037 bx off the catch

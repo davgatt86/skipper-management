@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { parseDayTally } from '../lib/market/parseDayTally'
+import { parseCatchOverview } from '../lib/market/parseCatchOverview'
 import { compareLadder, downgradeCandidates, bandTotalsFromTally, specWithBand } from '../lib/tallyVsNote'
 import TallyCheck, { Scroll, th, thR, td, tdR } from '../components/TallyCheck'
 import UploadSummary from '../UploadSummary'
@@ -475,22 +476,48 @@ export default function Sales() {
      referentially stable — the effect below depends on it. */
   const effSpec = useMemo(() => specWithBand(splitSpec, addedBand), [splitSpec, addedBand])
   const ladder = useMemo(
-    () => (tally && mode === 'landing' ? compareLadder(tally.lines, rows) : null),
+    () => (tally && mode === 'landing'
+      ? compareLadder(tally.lines, rows, { measure: tally.measure })
+      : null),
     [tally, rows, mode])
   const downgrades = useMemo(() => (ladder ? downgradeCandidates(ladder) : []), [ladder])
   /* The band is per TRIP, not a setting — the crew graded loosely that trip, so
      it is forgotten when another landing is opened. */
   useEffect(() => { setTally(null); setAddedBand(null) }, [landingId])
 
+  /* TWO DOCUMENTS, TWO MEASURES, and the file type decides which.
+       the day tally (.xlsx)       the wheelhouse count, in BOXES
+       the catch overview (.pdf)   the scales, and only trustworthy in KG
+     The second is the better document — it is the weighed landing, so it sits
+     beside the note instead of 9% above it — but it carries an OCR text layer
+     whose box column comes back 960 of 1,037. Weight reconciles exactly. */
   async function onTallyFile(e) {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
     try {
-      const buf = await f.arrayBuffer()
-      const res = await parseDayTally(new Uint8Array(buf))
+      const buf = new Uint8Array(await f.arrayBuffer())
+      if (/\.pdf$/i.test(f.name)) {
+        const res = await parseCatchOverview(buf)
+        if (!res?.lines?.length) {
+          setNotice(`${f.name}: no graded rows read. A catch overview prints a GRADE column per species — if this is the day tally, upload the spreadsheet instead.`)
+          return
+        }
+        /* REFUSED IF IT DOES NOT ADD UP, rather than compared against. One OCR
+           question mark on the Good Seed weight was enough to hide a downgrade
+           entirely on the real pair, and a confident wrong comparison is worse
+           than none. The printed total is what catches it. */
+        if (!res.reconciles) {
+          setNotice(`${f.name}: read ${num(res.total)} kg against the ${res.printedTotal == null ? 'total printed on it' : `${num(res.printedTotal)} kg it prints`}${res.diff == null ? '' : ` — out by ${num(res.diff)} kg`}. It is a scan, so a figure has been misread; not compared.`)
+          return
+        }
+        setTally({ lines: res.lines, measure: 'kg', kind: 'catch overview', name: f.name })
+        setNotice(`${f.name}: ${res.lines.length} graded rows, ${num(res.total)} kg — reconciles to the total printed on it.`)
+        return
+      }
+      const res = await parseDayTally(buf)
       if (!res?.lines?.length) { setNotice(`${f.name}: no tally lines read from that workbook.`); return }
-      setTally(res)
+      setTally({ lines: res.lines, measure: 'boxes', kind: 'day tally', name: f.name })
       setNotice(`${f.name}: ${res.lines.length} tally lines read, ${res.total} boxes.`)
     } catch (err) { setNotice(`${f.name}: ${err.message}`) }
   }
@@ -513,7 +540,9 @@ export default function Sales() {
     setA4Tot(prev => Object.fromEntries(effSpec.bands.map(b => [b, prev?.[b] ?? ''])))
   }, [effSpec])
   async function applyTotals() {
-    const res = splitHaddockByTotals(a4Rows, a4Tot, effSpec)
+    /* The totals are in whatever the document they came from measures in, so
+       the split reports like against like rather than kilos against boxes. */
+    const res = splitHaddockByTotals(a4Rows, a4Tot, effSpec, fromTally ? (tally?.measure || 'boxes') : 'boxes')
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
     /* WHAT WAS ACTUALLY LABELLED, never what was typed in. The old message
@@ -973,11 +1002,11 @@ export default function Sales() {
               <button className="secondary" onClick={() => saveSubGrades(a4Rows.map(r => ({ id: r.id, sub_grade: null })))}>Clear split</button>
             </div>}
             {isSkipper && <TallyCheck
-              ladder={ladder} downgrades={downgrades} addedBand={addedBand} loaded={!!tally}
+              ladder={ladder} downgrades={downgrades} addedBand={addedBand} loaded={!!tally} kind={tally?.kind}
               onPick={() => tallyRef.current?.click()}
               onAddBand={setAddedBand} onClearBand={() => setAddedBand(null)}
               onUseTotals={() => { setFromTally(true); setA4Tot(Object.fromEntries(
-                Object.entries(bandTotalsFromTally(tally.lines, effSpec)).map(([k, v]) => [k, String(v)]))) }}
+                Object.entries(bandTotalsFromTally(tally.lines, effSpec, 'HADDOCK', tally.measure)).map(([k, v]) => [k, String(v)]))) }}
             />}
             <input ref={tallyRef} type="file" accept=".xlsx,.xls" onChange={onTallyFile} style={{ display: 'none' }} />
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
