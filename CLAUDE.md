@@ -3347,6 +3347,96 @@ against its container, not by looking at it.
 
 `test-catch-overview.mjs` 37 checks · the preview renders it as a fifth pane.
 
+##### AND THE TALLY AS A PDF — `parseTallyPdf.js`, reversing a decision here
+
+David: *"yes take tally in pdf too"*. So the check takes any of three:
+
+    day tally .xlsx       the wheelhouse count          BOXES
+    day tally .pdf        the same sheet exported       BOXES
+    catch overview .pdf   the scales, logbook export    KG
+
+**THIS REVERSES A NOTE IN THIS FILE, and it is his to reverse.** The day-tag
+section read: *"The PDF export is readable and is NOT parsed ... It is not
+worth a second parser: the spreadsheet is the same figures without a
+text-extraction step between them, and two readers for one document is the
+parse-core failure again."* That was written about MARKET LAYOUT, where the
+workbook is always to hand. The tally check is a different situation — it is
+read beside a sales note, often from a phone, and what you have is whatever was
+exported last.
+
+**THE PARSE-CORE WARNING IS ANSWERED RATHER THAN IGNORED.** That failure was two
+copies of one READER drifting — 1.2.1 against 1.3.2 for months, because the copy
+that mattered lived on a server nobody looked at. Here there is one reader per
+FORMAT, both emitting the identical line shape, and
+`scripts/tally-two-readers.mjs` parses the real trip 71 PDF beside the real trip
+71 workbook and asserts they agree. On that pair:
+
+    PDF   110 lines · 1,580 boxes · reconciles to its own GRAND TOTAL
+    XLSX  110 lines · 1,580 boxes · reconciles
+    all 110 species/grade/day keys agree · tag colours agree
+
+**A drift fails that the same day**, which is exactly what the parse-core split
+never had.
+
+**IT IS A FAR KINDER DOCUMENT THAN THE CATCH OVERVIEW** — born-digital, five
+real fonts, no OCR artefacts — and the grade already reads `XL (1a)`, the
+workbook's own spelling, so `tallyCode` needed nothing added.
+
+**CELLS GO TO THE NEAREST COLUMN, NOT ONE WITHIN A TOLERANCE**, and that was the
+whole difficulty. The headings are CENTRED over their columns while the data is
+not: `GRADE` prints at x=128 with every grade under it at x=107, and `DAY 1-3`
+at x=308 with its figures at 319–323. A fixed band read the whole document as
+**ZERO rows while still finding the grand total** — an empty tally rather than a
+visible failure, which is the worst way for this to go wrong. The columns are
+50–80pt apart and the worst offset is 21pt, so nearest-wins cannot reach a
+neighbour.
+
+**THE TAG COLOUR IS READ OFF THE SHEET, NEVER DERIVED FROM THE DAY** — the
+Purple band STARTS on day 4 and day 4 is ORANGE in the old ten-colour table, so
+deriving it mis-colours three bands in four. **Two narrower tests for the colour
+row both failed on the real sheet**: requiring every item on it to be uppercase
+tripped over its own `TAG COLOUR` label, and ignoring that tripped over the `→`
+beside it, which sits 22pt from the first day column and so counts as being on
+it. Both left the tags null while every other figure parsed perfectly. It is now
+the row carrying a bare WORD on two or more distinct day columns.
+
+**A BAND OF NOUGHT IS NOT A LINE**, the way the workbook reader has it — a run
+of zeroes would make every fish look landed on every day.
+
+**EVERY ROW CHECKS AGAINST ITS OWN PRINTED TOTAL** as well as the grand total. A
+day cell read into the wrong column would still add up across the sheet; this
+catches it on the row it happened on. **A row that disagrees is KEPT and
+flagged**, never dropped: the boxes were landed either way.
+
+**AND THE SUBTOTAL GUARD IS BELT-AND-BRACES, which it says rather than
+claiming otherwise.** Measured: every `… TOTAL` label on the sheet is
+right-aligned into the SIZE or BOX column — `HADDOCK TOTAL` at x=210 against
+SIZE at 205 — so none has a cell under SPECIES and the species/grade test
+already drops it. Removing the guard changes neither the line count nor the
+total. It is kept for the day the export left-aligns that label, which is the
+day it would start counting fish twice, and the test asserts the fact that is
+actually doing the work.
+
+#### ONE DOOR, AND THE PDF IS SNIFFED — `readGradingDoc.js`
+
+Two PDFs that look nothing alike, so the extension is not enough. **Routing one
+into the other's reader would not error** — it would read one layout's columns
+out of the other and return a confident set of wrong figures. The catch overview
+is tested FIRST, being the more distinctive (`PRODUCT GROUP`, `LIVING WEIGHT`,
+which the grading sheet never prints), and **neither matching is its own answer
+rather than a fall-through to a guess**. The pages come off the PDF once and go
+to whichever reader wins.
+
+Both readers then reconcile against the total printed on their own document, so
+a mis-routed file fails that as well.
+
+`test-tally-pdf.mjs` 41 checks against the frozen real extraction,
+**mutation-checked against six weakened copies** — nearest-column back to a
+fixed band, subtotals read as rows, a nought band becoming a line, the tag not
+read off the sheet, row totals unchecked, and reconcile always true. Five are
+caught; the sixth is the redundant guard above, which is documented as redundant
+rather than left looking load-bearing.
+
 #### Two more things the comparison found
 
 **THE SCALES AND THE NOTE AGREE TO 1.2%** — 38,115 kg / 1,037 bx off the catch
@@ -4322,11 +4412,19 @@ Trip 71 renders with day chips reading `1-3`, `4-5`, `6-7` (and `4-5/1-3` where
 a stack spans two bands), and its catalogue prints Black, Purple and Red with
 no stale colour anywhere.
 
-**The PDF export is readable and is NOT parsed.** David started exporting one
-alongside; it carries a real text layer (699 text items on page 1, the banded
-headers among them), so it could be read. It is not worth a second parser: the
-spreadsheet is the same figures without a text-extraction step between them,
-and two readers for one document is the parse-core failure again.
+**The PDF export is readable, and IT IS PARSED NOW — for the tally check, not
+for this page.** David started exporting one alongside; it carries a real text
+layer (699 text items on page 1, the banded headers among them).
+
+This note used to end *"It is not worth a second parser: the spreadsheet is the
+same figures without a text-extraction step between them, and two readers for
+one document is the parse-core failure again."* **David reversed that in Oct
+2026** — *"yes take tally in pdf too"* — and the reasoning still holds HERE,
+where Market Layout always has the workbook to hand. It did not hold for the
+tally check beside a sales note, which is read from a phone with whatever was
+exported last. `src/lib/market/parseTallyPdf.js`, and the parse-core warning is
+answered by `scripts/tally-two-readers.mjs` rather than ignored — see **AND THE
+TALLY AS A PDF**. Market Layout itself still takes the spreadsheet.
 
 `src/lib/market/parseDayTally.js` · `tagOf` in `catalogue.js` ·
 `test-day-tally.mjs` 16 checks · `test-catalogue.mjs` 45 → **58**.

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
-import { parseDayTally } from '../lib/market/parseDayTally'
-import { parseCatchOverview } from '../lib/market/parseCatchOverview'
+import { readGradingDoc } from '../lib/market/readGradingDoc'
 import { compareLadder, downgradeCandidates, bandTotalsFromTally, specWithBand } from '../lib/tallyVsNote'
 import TallyCheck, { Scroll, th, thR, td, tdR } from '../components/TallyCheck'
 import UploadSummary from '../UploadSummary'
@@ -496,29 +495,11 @@ export default function Sales() {
     e.target.value = ''
     if (!f) return
     try {
-      const buf = new Uint8Array(await f.arrayBuffer())
-      if (/\.pdf$/i.test(f.name)) {
-        const res = await parseCatchOverview(buf)
-        if (!res?.lines?.length) {
-          setNotice(`${f.name}: no graded rows read. A catch overview prints a GRADE column per species — if this is the day tally, upload the spreadsheet instead.`)
-          return
-        }
-        /* REFUSED IF IT DOES NOT ADD UP, rather than compared against. One OCR
-           question mark on the Good Seed weight was enough to hide a downgrade
-           entirely on the real pair, and a confident wrong comparison is worse
-           than none. The printed total is what catches it. */
-        if (!res.reconciles) {
-          setNotice(`${f.name}: read ${num(res.total)} kg against the ${res.printedTotal == null ? 'total printed on it' : `${num(res.printedTotal)} kg it prints`}${res.diff == null ? '' : ` — out by ${num(res.diff)} kg`}. It is a scan, so a figure has been misread; not compared.`)
-          return
-        }
-        setTally({ lines: res.lines, measure: 'kg', kind: 'catch overview', name: f.name })
-        setNotice(`${f.name}: ${res.lines.length} graded rows, ${num(res.total)} kg — reconciles to the total printed on it.`)
-        return
-      }
-      const res = await parseDayTally(buf)
-      if (!res?.lines?.length) { setNotice(`${f.name}: no tally lines read from that workbook.`); return }
-      setTally({ lines: res.lines, measure: 'boxes', kind: 'day tally', name: f.name })
-      setNotice(`${f.name}: ${res.lines.length} tally lines read, ${res.total} boxes.`)
+      const res = await readGradingDoc({ name: f.name, data: new Uint8Array(await f.arrayBuffer()) })
+      if (res.error) { setNotice(res.error); return }
+      setTally({ lines: res.lines, measure: res.measure, kind: res.kind, name: f.name })
+      const unit = res.measure === 'kg' ? 'kg' : 'boxes'
+      setNotice(`${f.name}: read as the ${res.kind} — ${res.lines.length} graded rows, ${num(Math.round(res.total))} ${unit}, reconciling to the total printed on it.`)
     } catch (err) { setNotice(`${f.name}: ${err.message}`) }
   }
 
@@ -1008,7 +989,7 @@ export default function Sales() {
               onUseTotals={() => { setFromTally(true); setA4Tot(Object.fromEntries(
                 Object.entries(bandTotalsFromTally(tally.lines, effSpec, 'HADDOCK', tally.measure)).map(([k, v]) => [k, String(v)]))) }}
             />}
-            <input ref={tallyRef} type="file" accept=".xlsx,.xls" onChange={onTallyFile} style={{ display: 'none' }} />
+            <input ref={tallyRef} type="file" accept=".xlsx,.xls,.pdf" onChange={onTallyFile} style={{ display: 'none' }} />
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <div>
                 <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>Or enter this trip's totals (boxes), allocated by price:</div>
