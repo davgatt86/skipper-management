@@ -10,7 +10,7 @@ import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 // buyer names identically, and they were two inline copies of the same code.
 import { canonBuyerFrom } from '../lib/buyerAliases'
 import { fetchAll } from '../lib/fetchAll'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, r2,
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, a4FamilyRows, r2,
   withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
@@ -427,9 +427,11 @@ export default function Sales() {
   }
 
   /* ---------------- A4 haddock split ---------------- */
-  const a4Rows = useMemo(() => mode === 'landing'
-    ? rows.filter(r => (r.species_canon || r.species) === 'Haddock' && r.grade === 'A4')
-    : [], [rows, mode])
+  /* ONE DEFINITION OF THE A4 FAMILY, imported rather than written out again.
+     This was the third copy of `grade === 'A4'` — the page's, and one inside
+     each split function — so the page counted 24 size-4 boxes on a note
+     carrying 147 and no single edit could have put it right. */
+  const a4Rows = useMemo(() => mode === 'landing' ? a4FamilyRows(rows) : [], [rows, mode])
 
   async function saveSubGrades(updates) {
     for (const u of updates) {
@@ -445,17 +447,34 @@ export default function Sales() {
     const res = autoSplitA4Haddock(rows)
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
-    setNotice(`Auto-split done — Mini Metro ≤ £${res.bands.miniMax}/kg, Metro ≤ £${res.bands.metroMax}/kg, Chipper above.`)
+    /* The bands are per quality mark, because a pooled price ladder reads the
+       A+ premium as bigger fish. Each mark states its own cuts. */
+    const bands = Object.entries(res.bands)
+      .map(([g, b]) => `${g}: Mini Metro ≤ £${b.miniMax}/kg, Metro ≤ £${b.metroMax}/kg, Chipper above`)
+      .join(' · ')
+    const thin = res.thin && res.thin.length ? ` Not split: ${res.thin.join('; ')} — set those by hand.` : ''
+    setNotice(`Auto-split done — ${bands}.${thin}`)
   }
   const [a4Tot, setA4Tot] = useState({ mini: '', metro: '', chipper: '' })
   async function applyTotals() {
     const res = splitA4ByTotals(a4Rows, a4Tot)
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
-    const warn = res.flag
-      ? ` ⚠ your totals (${res.entered}) differ from the ${res.actual} A4 boxes landed by ${res.diff > 0 ? '+' : ''}${res.diff} — check the entry.`
+    /* WHAT WAS ACTUALLY LABELLED, never what was typed in. The old message
+       echoed the entry — so a note where the allocation collapsed into one
+       band still read as a tidy three-way split. */
+    const did = `Mini Metro ${res.assigned['Mini Metro']} / Metro ${res.assigned.Metro} / Chipper ${res.assigned.Chipper}`
+    const marks = res.marks.length > 1
+      ? ` Ranked within each grade (${res.marks.map(m => `${m.mark} ${m.boxes} bx`).join(', ')}), because an A+ premium is better fish and not bigger fish.`
       : ''
-    setNotice(`Split by totals done — Mini ${a4Tot.mini || 0} / Metro ${a4Tot.metro || 0} / Chipper ${a4Tot.chipper || 0} boxes allocated by price.${warn}`)
+    /* THE DISAGREEMENT IS REPORTED, NEVER RESOLVED. Your 221 against the
+       note's 147 is a real question about where the rest of the fish sold;
+       the split can only apportion the ratio you gave across what the note
+       carries, and it says that rather than implying the figures agreed. */
+    const warn = res.flag
+      ? ` ⚠ you entered ${res.entered} boxes against ${res.actual} size-4 boxes on this note (${res.diff > 0 ? '+' : ''}${res.diff}) — your 3 figures were applied as a ratio, so check the entry, or whether some of that fish sold under another grade.`
+      : ''
+    setNotice(`Split by totals done — ${did} boxes labelled by price.${marks}${warn}`)
   }
 
   /* ---------------- derived ---------------- */
@@ -885,7 +904,12 @@ export default function Sales() {
         {/* A4 haddock split — single landing scope */}
         {mode === 'landing' && a4Rows.length > 0 && (
           <div className="card">
-            <h2>A4 haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>Mini Metro / Metro / Chipper</span></h2>
+            {/* SIZE 4, every quality mark — so the heading says so, and the
+                box count is stated because the entry is checked against it. */}
+            <h2>Size-4 haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
+              Mini Metro / Metro / Chipper · {r2(a4Rows.reduce((s, r) => s + (Number(r.boxes) || 0), 0))} boxes
+              across {[...new Set(a4Rows.map(r => r.grade))].sort().join(', ')}
+            </span></h2>
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
               <button className="secondary" onClick={autoSplit}>Auto-split by price bands</button>
               <button className="secondary" onClick={() => saveSubGrades(a4Rows.map(r => ({ id: r.id, sub_grade: null })))}>Clear split</button>
@@ -906,11 +930,14 @@ export default function Sales() {
             </div>}
             <Scroll>
               <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                <thead><tr><th style={th}>Buyer</th><th style={thR}>Boxes</th><th style={thR}>£/kg</th><th style={th}>Sub-grade</th></tr></thead>
+                <thead><tr><th style={th}>Buyer</th><th style={th}>Grade</th><th style={thR}>Boxes</th><th style={thR}>£/kg</th><th style={th}>Sub-grade</th></tr></thead>
                 <tbody>
                   {[...a4Rows].sort((a, b) => b.price_per_kg - a.price_per_kg).map(r => (
                     <tr key={r.id}>
                       <td style={td}>{r.buyer}</td>
+                      {/* The grade is shown because the price ranking runs WITHIN a
+                          mark: A4 and A+4 are two ladders, not one. */}
+                      <td style={td}>{r.grade}</td>
                       <td style={tdR}>{num(r.boxes)}</td>
                       <td style={tdR}>{gbp(r.price_per_kg)}</td>
                       <td style={td}>

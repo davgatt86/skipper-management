@@ -2428,7 +2428,7 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 ## Parsers
 
-**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.8**. The
+**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.9**. The
 CloudMailin webhook imports it and so does the browser upload, so a fix cannot
 reach one path and not the other.
 
@@ -2896,8 +2896,11 @@ one, because a run where the controls fail too is the harness talking.
   Chipper, Metro and Mini Metro together — which is precisely why
   `autoSplitA4Haddock` exists, reading the three bands out of the price spread.
   On codes that guesswork disappears, so **the repair is to retire that feature,
-  not to patch it**: as written it filters `grade === 'A4'` and will simply
-  report *"No Haddock A4 rows in this landing"* for ever.
+  not to patch it**. **This note used to say it filtered `grade === 'A4'` and
+  would one day report "No Haddock A4 rows" for ever — that was a LIVE bug, not
+  a future one: it missed every `A+4` row, on three copies of the filter. Fixed
+  Oct 2026, see THE MINUS MARK below.** On codes it will report that the note
+  carries no size-4 row, which is honest and still the sign to retire it.
 - **`gradesFor` / `gradeLabel` on Fish Sales** list a species' grades as found,
   so a period spanning the change shows both vocabularies as separate rows.
 
@@ -2921,6 +2924,131 @@ on the Peterhead rate. But **30 landings carry the agent with no port**, so the
 port is not being read off those notes: Beryl 18, Boy John 4, Rosebloom 4,
 **Audacious 3 (all 2025)**, Boy Andrew 1. Low stakes for this boat and worth
 knowing before anyone reads the empty lumper box as a bug in Square Up.
+
+### THE MINUS MARK — 1.3.9, and the A4 split could not see A+4 (28-10-2026)
+
+David, on the note of 28-10: the re-upload banner reading **short £67**, and
+*"Split by totals done — Mini 144 / Metro 52 / Chipper 25 boxes allocated by
+price. ⚠ your totals (221) differ from the 24 A4 boxes landed by +197"* —
+*"also this error. fish sold as A4+ not coming through the haddock split part."*
+
+**TWO FAULTS, AND THE SECOND SENTENCE HID THREE.**
+
+#### A THIRD QUALITY MARK — the fifth silent drop, and the same character class
+
+The office has started printing `A-` beside `A+` and plain `A`:
+
+    Whitelink Seafoods Megrim/GUT/A+2 1.00 17 93.16 17 93.16
+    Whitelink Seafoods Megrim/GUT/A-2 1.00  9 20.88  9 20.88   <- dropped
+    Seafood Ecosse Limited Megrim/GUT/A2 2.00 28 134.96 56 269.92
+
+`SLASH_TOKEN` read the grade as `[A-Za-z0-9+]+`, so `A-2` and `A-3` had no
+token to anchor on and `parseDonLine` returned null for both. **Those two rows
+are the WHOLE of what the landing was short** — 2 boxes, 25 kg and £66.96
+against its own printed total, which is 20.88 + 46.08 to the penny. After the
+fix: 217 rows, 1,042 boxes, 37,652 kg, £139,737.80, **diffs 0/0/0**.
+
+**FIFTH SILENT-DROP FAULT OF THIS SHAPE, AND THE THIRD TIME THIS ONE CHARACTER
+CLASS HAS HAD TO GROW** — `+` for the A+ grades, lowercase for the grading-table
+codes, now `-`. The lesson is not "add the minus": a grade is whatever the office
+decides to print, so the class is now every character a grade could plausibly be
+made of rather than a list of the marks seen so far.
+
+**MEASURED, NOT ASSUMED: `A-` IS NEW.** No `A-` grade exists anywhere in four
+years of Audacious rows (the ladder on file is A+1–A+5, A+9, A1–A5, A9, B1, B3,
+B4, B9, U9), and she has exactly ONE landing carrying a value diff. So nothing
+but reconciling this note against its printed total could have found it — which
+is the fourth time that is the only thing that would have.
+
+**155 OF 156 PDFs ON DISK PARSE BYTE-IDENTICALLY**, and the one that moved is
+the one that was broken. `scripts/note-fingerprint.mjs` is what proves it: it
+hashes every row's buyer/species/presentation/grade/boxes/weight/value per file
+and diffs two runs, so a widened token that started reading rows out of an
+invoice or a chalk sheet would show up. **The 148 files that are NOT sales notes
+are the point of running it over the whole folder** — a build passing says
+nothing about a false positive.
+
+**AND `gradeSortKey` MATCHED NOTHING EITHER.** `A(\+)?(\d+)` fails on `A-2`, so
+it fell to the unrecognised bucket at major 900 and sorted below every real
+grade, at the foot of the list. The mark decides the order WITHIN a size — A+
+above the plain grade, A- below it.
+
+#### THE A4 SPLIT SAW 24 OF 147 BOXES — and `grade === 'A4'` was in three places
+
+**THE DIGIT IS THE SIZE; THE +/-/NOTHING IS THE QUALITY MARK.** Mini Metro,
+Metro and Chipper are a SIZE distinction inside size 4, so they apply to `A+4`
+exactly as to `A4`. The note carries **147 size-4 haddock boxes, 123 of them
+A+4**, and the split could see 24.
+
+**The filter was written out THREE times** — `Sales.jsx`, `autoSplitA4Haddock`
+and `splitA4ByTotals` — so no single edit could have put it right.
+`a4FamilyRows()` / `a4Mark()` are the one definition now, imported by all three.
+`A-4` is included although none has landed: leaving it out is the same bug
+waiting on one box of fish.
+
+**THE PRICE RANKING RUNS WITHIN ONE MARK AND NEVER ACROSS IT, which is the whole
+care in the change.** The split reads SIZE out of the price spread; across marks
+the spread is partly QUALITY. Measured on this note, every A4 row (£2.04–£2.21)
+is cheaper than every A+4 row (£2.39–£2.66) — so one pooled ladder would have
+labelled all 24 A4 boxes Mini Metro purely for being the A-quality ones, and
+given Chipper nothing at all. Pooled, the largest price gap is the A/A+ step
+itself, so the band detector would have found the QUALITY boundary and called it
+a size band.
+
+#### THE ALLOCATION COLLAPSED INTO ONE BAND, AND THE MESSAGE CLAIMED IT HAD NOT
+
+The cuts were absolute box counts — `miniCut = mini` — so when more boxes were
+entered than the note carried, **every row fell under the Mini cut**. All 24
+boxes came back Mini Metro, and all four are still in the record that way.
+
+**The page then reported the ENTRY**: *"Mini 144 / Metro 52 / Chipper 25 boxes
+allocated by price"* — a three-way split that never took place. Tenth instance
+of reporting the intention rather than the outcome, after the market floors that
+made a working button look broken.
+
+What the skipper knows is the SHAPE of his grading, 144:52:25, so that ratio is
+applied to the rows the note really carries. **Where the totals match the landed
+boxes it is arithmetically identical to the old absolute cut** — a
+generalisation, not a change of answer, asserted by test. The notice now names
+what was actually labelled: *"Mini Metro 96 / Metro 49 / Chipper 2 boxes
+labelled by price"*.
+
+**THE 221 AGAINST 147 IS REPORTED, NEVER RESOLVED.** It is a real question —
+where did the other 74 boxes sell? — and the message asks it rather than
+implying the figures agreed. The ratio cannot be expressed exactly on nine rows
+of 1 to 59 boxes either, and reporting the outcome is what lets that be seen.
+
+**THE TIE IS THE ONE THING THE CUTS CAN STILL PRODUCE.** Proportional cuts
+cannot cross (mini/entered + chipper/entered ≤ 1 by construction), so the order
+of the Mini and Chipper tests is **not** load-bearing — mutation-checked, and
+swapping them leaves every assertion passing, so no comment claims otherwise.
+They do MEET when no Metro was graded, and a row landing on that line goes to
+Mini Metro: calling a box Chipper when it was Mini overstates the dear grade,
+and this record is what later trips get priced off.
+
+**A MARK WITH TOO LITTLE SPREAD IS NAMED, not skipped quietly** — a mark left
+unsplit while another is split reads as fish that never landed. And the panel
+shows the GRADE per row now, with its box count in the heading, because the two
+marks are two ladders and nine rows with no grade column cannot be read.
+
+**The four wrong sub-grades are the bug's own output**, all four Mini Metro on
+24 boxes while 123 A+4 boxes carried none, so there is nothing to carry across:
+re-uploading the note clears them and the split can be run again.
+
+`test-a4-split.mjs` — 55 checks on the real note's own figures,
+**mutation-checked against four weakened copies** (the family narrowed back to
+plain A4, the cuts back to absolute, one pooled ladder, the tie reversed); the
+first three were caught, and the fourth was NOT until the tie was given a test
+that discriminates. `test-parser-codes.mjs` 46 → **57**.
+
+#### What this does NOT change
+
+- **The board and the Estimator.** `A+`/`A-` are NOTE marks; the board has never
+  printed one, so `estimatorPrices` reading `g.grade === 'A4'` is the board's
+  own grade and is untouched.
+- **`gradesFor` on Fish Sales** lists `A-2` as its own row, which is honest.
+- **The note bridge** is still flagged-not-fixed above, and `A-` joins the list
+  of what it will have to carry.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
@@ -8955,6 +9083,27 @@ what. Re-uploading any of those notes will fill it in.
   never reaches another** — in the webhook that filter is explicit, because it
   holds the service-role key and RLS is not scoping the read the way it does in
   the browser.
+
+## Checking a parser change against every note on disk
+
+`scripts/note-fingerprint.mjs` — the regression tool for `parse-core`. It
+hashes every row of every PDF in a folder (buyer, species, presentation,
+grade, boxes, weight, value) alongside the market, vessel, date, row count
+and reconcile, and `--diff` compares two runs:
+
+    node scripts/note-fingerprint.mjs <dir>... > before.json
+    # change the parser
+    node scripts/note-fingerprint.mjs <dir>... > after.json
+    node scripts/note-fingerprint.mjs --diff before.json after.json
+
+**POINT IT AT THE WHOLE FOLDER, not at the sales notes.** The Don grade class
+has had to grow three times and every widening is a chance to start matching
+something that is not a fish — so the ~150 PDFs that are invoices, chalk
+sheets and certificates are the useful half of the run. On 1.3.9: 155 of 156
+byte-identical, the one that moved being the one that was broken.
+
+It writes JSON to stdout, so pdf.js is given `verbosity: 0` — that library
+puts its font warnings on STDOUT, which corrupts the output otherwise.
 
 ## Toolchain
 

@@ -46,6 +46,28 @@ for (const g of ['A1', 'A2', 'A3', 'A4', 'A5', 'U9', 'B4', 'A9'])
 for (const g of ['A+1', 'A+2', 'A+3', 'A+4', 'A+5'])
   eq(`control: ${g} still parses`, grade(g), g)
 
+/* ---- AND THE MINUS MARK, which arrived on the note of 28-10-2026 ------ *
+ * The office prints a third quality mark beside A+ and A. Two rows on that
+ * note — `Megrim/GUT/A-2` and `Megrim/GUT/A-3` — were dropped whole, and they
+ * were the ENTIRE 2 boxes / 25 kg / GBP 66.96 the landing was short of its own
+ * printed total. No `A-` grade existed anywhere in four years of record, so
+ * nothing but reconciling that note could have found it.
+ *
+ * Asserted across every size, not only the two that happened to land: a mark
+ * the office has started using will turn up on the rest of the ladder next. */
+for (const g of ['A-1', 'A-2', 'A-3', 'A-4', 'A-5', 'A-9'])
+  eq(`minus mark ${g} parses`, grade(g), g)
+eq('and on another species', grade('A-2', 'Megrim'), 'A-2')
+/* THE TWO REAL ROWS, verbatim off the note, through the real entry point. */
+{
+  const { rows } = PC.parseDon(['Whitelink Seafoods Megrim/GUT/A-2 1.00 9 20.88 9 20.88'])
+  eq('the real A-2 row parses', rows.length, 1)
+  eq('with its money', rows[0] && rows[0].total_value, 20.88)
+  eq('and its grade', rows[0] && rows[0].grade, 'A-2')
+}
+eq('the real A-3 row parses too',
+  PC.parseDon(['Seafood Ecosse Limited Megrim/GUT/A-3 1.00 16 46.08 16 46.08']).rows[0]?.total_value, 46.08)
+
 /* ---- AND THE GRADING-TABLE CODES, which is what changes --------------- *
  * Every code on the crew grading table, all fifteen species' worth of
  * shapes: a bare digit, a digit plus a letter, and the U9 sizes. */

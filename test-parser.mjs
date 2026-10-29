@@ -194,7 +194,7 @@ eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1
   eq('and the real row in between is the one kept', Number(rows[0].total_value), 1555.20)
 }
 
-eq('the version was bumped', PC.VERSION, '1.3.8')
+eq('the version was bumped', PC.VERSION, '1.3.9')
 
 /* ---- SPECIES NAMES ARE CANONICALISED (1.3.6) -------------------------
  * Measured across every landing on the record, not guessed. The species

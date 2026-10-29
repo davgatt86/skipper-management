@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.8";
+  const VERSION = "1.3.9";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
@@ -227,8 +227,27 @@
    * Widened BEFORE it happens rather than after, because this parser's other
    * three silent-drop faults each cost real money and were invisible until
    * somebody reconciled a note against its own printed total. Uppercase is
-   * allowed alongside in case the note prints `2B`. */
-  const SLASH_TOKEN = /\/[A-Z]+\/[A-Za-z0-9+]+$/;
+   * allowed alongside in case the note prints `2B`.
+   *
+   * AND THEN THE MINUS ARRIVED — 1.3.9, on the real note of 28-10-2026.
+   * The office has started printing a THIRD quality mark beside A+ and A:
+   *
+   *     Whitelink Seafoods Megrim/GUT/A+2 1.00 17 93.16 17 93.16
+   *     Whitelink Seafoods Megrim/GUT/A-2 1.00  9 20.88  9 20.88   <- dropped
+   *     Seafood Ecosse Limited Megrim/GUT/A2 2.00 28 134.96 56 269.92
+   *
+   * Two rows, `A-2` and `A-3`, and they are the WHOLE of what that note was
+   * short: 2 boxes, 25 kg and GBP 66.96 against its own printed total, which
+   * is 20.88 + 46.08 to the penny. No `A-` grade exists anywhere in the
+   * record, so 28-10 is the first note to carry one.
+   *
+   * THAT IS THE FIFTH SILENT-DROP FAULT OF THIS SHAPE, and the THIRD time
+   * this one character class has had to grow. The lesson is not "add the
+   * minus" — it is that a grade is whatever the office decides to print, so
+   * the class is now every character a grade could plausibly be made of
+   * rather than a list of the marks seen so far. The `-` sits last in the
+   * class, where it cannot open a range. */
+  const SLASH_TOKEN = /\/[A-Z]+\/[A-Za-z0-9+-]+$/;
 
   // Header / layout words that can never be a wrapped-buyer fragment.
   const FRAG_STOP = new Set(["SALES", "NOTE", "COMPANY", "VESSEL", "REGISTRATION", "NUMBER", "NAME",
