@@ -2892,15 +2892,15 @@ one, because a run where the controls fail too is the harness talking.
   her own figure and against the fleet, and the fleets will not all change on
   the same day. The board already has `legacyGrades`; the notes will want the
   same bridge.
-- **A NOTE BRIDGE IS HARDER THAN THE BOARD ONE.** The note's `A4` haddock covers
-  Chipper, Metro and Mini Metro together — which is precisely why
-  `autoSplitA4Haddock` exists, reading the three bands out of the price spread.
-  On codes that guesswork disappears, so **the repair is to retire that feature,
-  not to patch it**. **This note used to say it filtered `grade === 'A4'` and
-  would one day report "No Haddock A4 rows" for ever — that was a LIVE bug, not
-  a future one: it missed every `A+4` row, on three copies of the filter. Fixed
-  Oct 2026, see THE MINUS MARK below.** On codes it will report that the note
-  carries no size-4 row, which is honest and still the sign to retire it.
+- ~~**A NOTE BRIDGE IS HARDER THAN THE BOARD ONE.**~~ — **ANSWERED, and the
+  split MOVED rather than being retired.** The note's `A4` haddock used to cover
+  Chipper, Metro and Mini Metro together, which is why `autoSplitA4Haddock`
+  existed. From 20-10-2026 A4 is Mini Metro alone and the split lives on **A2**,
+  which carries Seed and Chipper. So the feature is dated, not deleted — see
+  **THE LADDER MOVED FROM A4 TO A2** below. The earlier note here said it
+  filtered `grade === 'A4'` and would one day report "No Haddock A4 rows" for
+  ever; that was a LIVE bug rather than a future one, missing every `A+4` row on
+  three copies of the filter.
 - **`gradesFor` / `gradeLabel` on Fish Sales** list a species' grades as found,
   so a period spanning the change shows both vocabularies as separate rows.
 
@@ -3049,6 +3049,151 @@ that discriminates. `test-parser-codes.mjs` 46 → **57**.
 - **`gradesFor` on Fish Sales** lists `A-2` as its own row, which is honest.
 - **The note bridge** is still flagged-not-fixed above, and `A-` joins the list
   of what it will have to carry.
+
+### THE LADDER MOVED FROM A4 TO A2 — Don notes, 20-10-2026
+
+David: *"Good seed on Don Company sales notes from 20/10/26 onwards is A1. seed
+and chippers are A2 (create a new split for these), A3 is metro, A4 is mini. do
+not change sales notes from before 20/10/26 as old split was accurate for older
+sales note."*
+
+**THE NOTE'S A-NUMBER IS NOW THE GRADING CODE'S LEADING DIGIT.** The board went
+onto the codes on 21-10 (see above); the note kept printing `A1..A5` and
+**changed what each number means**, which is a far sneakier change than the
+board's — the tokens are identical, the parser is happy, and the note of 28-10
+reconciles 0/0/0.
+
+    A1 -> 1a 1b 1c 1d   XL · Chat · Pinger · Good Seed
+    A2 -> 2a 2b         Seed · Chipper          <- the split lives here now
+    A3 -> 3             Metro                   one grade, nothing to split
+    A4 -> 4             Mini Metro              one grade, nothing to split
+
+**FOUND BY COMPARING THE SCALES AGAINST THE NOTE**, not by reading either on its
+own. David sent the trip-72 catch overview beside the 28-10 note and asked
+whether Don had changed the haddock codes. The catch overview is on the grading
+codes, so the two documents could be lined up rung by rung.
+
+**THREE INDEPENDENT MEASUREMENTS, WHICH IS WHY THIS IS SETTLED AND NOT LIKELY:**
+
+- **THE CUT POINTS NEST.** Running cumulative down the ladder, the note's four
+  boundaries land on the scales' boundaries within **2.6%, 0.9%, 2.1% and
+  0.2%**. Four cuts agreeing is not coincidence.
+- **HER OWN HISTORY DATES IT.** Size 4 was **79-91% of haddock boxes on every
+  note from August to 19-10**, then **53%** on 28-10 — which is her Mini Metro
+  share on that trip (144 of 279). The old A4 at ~80% is Chipper+Metro+Mini.
+- **THE PRICE PROVES WHICH FISH IT IS, TO THE PENNY.** Her A4 realised
+  **£2.430**/kg; the board's 4 Mini Metro average on 28-10 is **£2.43**. On
+  19-10 the same `A4` token realised **£1.159** against the old board's A4 Metro
+  at £1.15.
+
+> The identical label `A4` was £1.16 fish on 19 October and £2.43 fish on 28
+> October. The market did not move 110% — it is a different fish.
+
+**SO THE GRADE SERIES BREAKS AT THE CHANGEOVER for A2, A3 and A4.** Anything
+keyed on the raw note grade across that date compares different fish —
+`price_vs_fleet_grades` over a range, and the grade rows on Fish Sales. The
+buyer premium league is safe, because it scores within the same day.
+
+#### CHIPPER IS THE DEAREST BAND IN A4 AND THE CHEAPEST IN A2
+
+The one thing that had to be got right. The word has not changed and its company
+has: inside size 4 (Chipper 2b / Metro 3 / Mini 4) it is the **biggest** fish,
+and inside size 2 (Seed 2a / Chipper 2b) it is the **smaller** of two. Copying
+the old split's orientation would have put every label the wrong way round while
+looking perfectly tidy.
+
+**Measured on the board rather than reasoned about** — Seed beats Chipper on
+every one of the six days since the ladder changed:
+
+    21-10  Seed 5.68  Chipper 4.74      26-10  Seed 4.64  Chipper 3.21
+    22-10  Seed 5.39  Chipper 3.44      28-10  Seed 4.91  Chipper 4.43
+    23-10  Seed 4.95  Chipper 3.46      29-10  Seed 4.57  Chipper 3.90
+
+`SPEC_A4.bands` and `SPEC_A2.bands` are both **cheapest first**, which is what
+makes a price ranking a size ranking and is the only ordering either split
+function knows.
+
+#### The date decides, and the agent gates it
+
+`haddockSpec(market, landingDate)` in `salesAgg.js`. Both split functions and
+the page take a spec, so there is one implementation over two ladders rather
+than a second copy — the `grade === 'A4'` filter was written out three times and
+no single edit could put it right.
+
+- **Before 20-10-2026 nothing changes**, which is what he asked for. The old
+  three-way split was accurate for those notes and relabelling four years of
+  history on a rule that started in October would be inventing a record.
+- **IT IS DON'S CHANGE, so a P&J note keeps the old ladder whatever the date.**
+  645 size-4 haddock rows in this record came off P&J notes and nothing says
+  that firm has re-cut anything. Hanstholm's A2 is a Danish sort with nothing to
+  do with Peterhead grading.
+- **A BARE `Don Fishing` MARKET IS STILL A DON NOTE, and that case decides the
+  gate.** 161 size-4 haddock rows sit on it because the PORT is not being read
+  off those notes, so gating on *Peterhead* would have left a post-changeover
+  note on the old split, silently labelling 147 boxes of Mini Metro as three
+  different fish. Gating on *Don* is his own wording and covers it.
+- **NO DATE MEANS OLD.** A note that cannot be shown to be on or after 20-10 has
+  not been shown to need changing. An undated note is its own fault to fix — the
+  Shetland tally layout filed one with no date at all — not a reason to guess.
+
+**UNTESTED, AND WORTH KNOWING: only the PETERHEAD note has been measured.**
+`Don Fishing · Scrabster` and `· Ullapool` have no note after the changeover, so
+whether Don prints the re-cut ladder on those is taken from his wording rather
+than from a document. One Scrabster note in November settles it.
+
+#### The disagreement the record holds, and it is NOT resolved
+
+**The 28-10 note put the Good Seed in A2, where his rule puts it in A1.** Three
+of the four boundaries agree with the rule to within 3 boxes; A1 is 19 boxes
+short and A2 is 20 over, and Good Seed is 18 boxes / 732 kg — one block, one
+rung. His rule is what the app follows, so the A2 split on that note is offered
+67 boxes against the 47 the boat graded as Seed and Chipper, and the page
+**reports the 20-box gap rather than resolving it**, which is the same discipline
+as the settlement review. Measured, not argued:
+
+                  note        his rule            what that note did
+    A1    653 kg / 17 bx   1b+1c+1d 1,368/36    1b+1c      636/18
+    A2  2,642 kg / 67 bx   2a+2b    1,898/47    1d+2a+2b 2,630/65
+    A3  1,934 kg / 49 bx   3 Metro  2,071/52  agrees
+    A4  5,867 kg /147 bx   4 Mini   5,786/144 agrees
+
+Price cannot settle it: the whole top of that note sold under the board (A1
+realised £4.62 where the cheapest 1-code prints £5.07), so it does not
+discriminate. **Worth re-measuring on the next few notes** — if A1 keeps coming
+back at Chat+Pinger only, the office is cutting A1/A2 between 1c and 1d where
+it always did, and only the bottom three boundaries moved.
+
+#### Two more things the comparison found
+
+**THE SCALES AND THE NOTE AGREE TO 1.2%** — 38,115 kg / 1,037 bx off the catch
+overview against 37,652 kg / 1,042 bx on the note. Of that 463 kg, **135 kg
+never reached the note at all**: Redfish 125 kg and Greater forkbeard 10 kg are
+on the scales and nowhere on the sales note. The rest is ordinary drainage of
+0.2-4.4% per species — except **squid, which GAINS 111 kg (+8.8%)** where
+everything else lost weight. Squid is sold whole, so there is no gutting loss
+either way. Both are questions for the office rather than faults here.
+
+**A SPACE BEFORE THE SLASH LOST A SPECIES.** The note prints
+`Common sole /GUT/U9` — with a space, where every other row is
+`Lemon Sole/GUT/A+3`. `parseDonLine` anchors on the slash-token and takes
+everything before it as the buyer, so the row filed as buyer
+**"JK Thomson Common sole"** with a **blank species**: 1 box, 8 kg, £73.28. The
+money is in and the note reconciles, so it is small — but it invents a phantom
+buyer in the league and puts £73 against no species. **One row in her whole
+record**, and the first common sole she has landed. `SPECIES_PREFIX` is keyed
+head-word -> ONE sequence and `SOLE` already maps to `['LEMON']`, so fixing it
+properly means that map holding alternatives per head word. Not done.
+
+`test-haddock-split.mjs` — **108 checks** on the real note's own figures,
+replacing `test-a4-split.mjs` (the name was a lie once the split moved).
+**Mutation-checked against five weakened copies** — Seed and Chipper flipped,
+the agent gate removed, the changeover a day early, an undated note treated as
+new, and the tie given to the dearer band — and all five are caught.
+
+**`haddockSpec` returns one of two MODULE CONSTANTS, not a fresh object**, which
+is load-bearing on the page: the effect that re-keys the totals boxes fires on a
+real change of ladder and not on every render. Build a new object each time and
+the boxes clear themselves as fast as they are typed in.
 
 ### A NOTE WITH NO TEXT IN IT — and the message that said nothing (Oct 2026)
 
@@ -3353,8 +3498,14 @@ Rules learned the hard way:
 
 ## Domain rules that affect code
 
-- A4 haddock sub-grades: mini = cheapest boxes, chipper = dearest, metro = the
-  remainder. Never the other way round.
+- **Haddock sub-grades, and the ladder MOVED on 20-10-2026.** On a Don note
+  before that date the split is on **A4**: mini = cheapest boxes, chipper =
+  dearest, metro = the remainder. From 20-10 A4 is Mini Metro alone and the
+  split is on **A2**: **chipper = cheapest, seed = dearest.** Chipper is the
+  dearest band in the old ladder and the cheapest in the new, because its
+  company changed — within size 4 it is the biggest fish, within size 2 the
+  smaller of two. Never the other way round in either, and never the same way
+  round in both. See **THE LADDER MOVED FROM A4 TO A2**.
 - **MINI METRO IS A LINE ON THE BOARD NOW — 21 Oct 2026. THE RULE BELOW IS
   RETIRED.** Peterhead used to print ONE Metro row and both boat grades were
   blends of its three columns — David, Oct 2026: *"mini is the low/avg blend

@@ -10,7 +10,7 @@ import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 // buyer names identically, and they were two inline copies of the same code.
 import { canonBuyerFrom } from '../lib/buyerAliases'
 import { fetchAll } from '../lib/fetchAll'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitA4Haddock, splitA4ByTotals, a4FamilyRows, r2,
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitHaddock, splitHaddockByTotals, familyRows, haddockSpec, r2,
   withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
@@ -426,12 +426,20 @@ export default function Sales() {
     await loadLandings()
   }
 
-  /* ---------------- A4 haddock split ---------------- */
-  /* ONE DEFINITION OF THE A4 FAMILY, imported rather than written out again.
+  /* ---------------- the haddock sub-grade split ---------------- */
+  /* WHICH SIZE IS SPLIT DEPENDS ON THE NOTE, so the spec comes off the landing
+     itself rather than from today's date. A Don note from 20-10-2026 splits
+     A2 into Seed and Chipper; anything earlier, and any other agent, keeps the
+     old A4 three-way. An old note re-opened next year has to read as old. */
+  const splitSpec = useMemo(() => {
+    const l = landingById[landingId]
+    return haddockSpec(l?.market, l?.landing_date)
+  }, [landingById, landingId])
+  /* ONE DEFINITION OF THE SIZE FAMILY, imported rather than written out again.
      This was the third copy of `grade === 'A4'` — the page's, and one inside
      each split function — so the page counted 24 size-4 boxes on a note
      carrying 147 and no single edit could have put it right. */
-  const a4Rows = useMemo(() => mode === 'landing' ? a4FamilyRows(rows) : [], [rows, mode])
+  const a4Rows = useMemo(() => mode === 'landing' ? familyRows(rows, splitSpec.digit) : [], [rows, mode, splitSpec])
 
   async function saveSubGrades(updates) {
     for (const u of updates) {
@@ -444,35 +452,46 @@ export default function Sales() {
     }))
   }
   async function autoSplit() {
-    const res = autoSplitA4Haddock(rows)
+    const res = autoSplitHaddock(rows, splitSpec)
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
     /* The bands are per quality mark, because a pooled price ladder reads the
-       A+ premium as bigger fish. Each mark states its own cuts. */
+       A+ premium as bigger fish. Each mark states its own cuts, read off the
+       spec so the dearest band is named rather than assumed to be Chipper. */
+    const top = splitSpec.bands[splitSpec.bands.length - 1]
     const bands = Object.entries(res.bands)
-      .map(([g, b]) => `${g}: Mini Metro ≤ £${b.miniMax}/kg, Metro ≤ £${b.metroMax}/kg, Chipper above`)
+      .map(([g, cuts]) => `${g}: ${cuts.map(c => `${c.band} ≤ £${c.max}/kg`).join(', ')}, ${top} above`)
       .join(' · ')
     const thin = res.thin && res.thin.length ? ` Not split: ${res.thin.join('; ')} — set those by hand.` : ''
     setNotice(`Auto-split done — ${bands}.${thin}`)
   }
-  const [a4Tot, setA4Tot] = useState({ mini: '', metro: '', chipper: '' })
+  /* The totals are keyed by BAND NAME, so changing spec changes the boxes on
+     screen rather than leaving a Metro figure behind on a note with no Metro
+     in it. Re-keyed whenever the spec does — and `haddockSpec` returns one of
+     two MODULE CONSTANTS rather than a fresh object, so this effect fires on a
+     real change of ladder and not on every render. Build it a new object each
+     time and the boxes clear themselves as fast as they are typed in. */
+  const [a4Tot, setA4Tot] = useState({})
+  useEffect(() => {
+    setA4Tot(Object.fromEntries(splitSpec.bands.map(b => [b, ''])))
+  }, [splitSpec])
   async function applyTotals() {
-    const res = splitA4ByTotals(a4Rows, a4Tot)
+    const res = splitHaddockByTotals(a4Rows, a4Tot, splitSpec)
     if (res.error) { setNotice(res.error); return }
     await saveSubGrades(res.updates)
     /* WHAT WAS ACTUALLY LABELLED, never what was typed in. The old message
        echoed the entry — so a note where the allocation collapsed into one
        band still read as a tidy three-way split. */
-    const did = `Mini Metro ${res.assigned['Mini Metro']} / Metro ${res.assigned.Metro} / Chipper ${res.assigned.Chipper}`
+    const did = splitSpec.bands.map(b => `${b} ${res.assigned[b]}`).join(' / ')
     const marks = res.marks.length > 1
       ? ` Ranked within each grade (${res.marks.map(m => `${m.mark} ${m.boxes} bx`).join(', ')}), because an A+ premium is better fish and not bigger fish.`
       : ''
-    /* THE DISAGREEMENT IS REPORTED, NEVER RESOLVED. Your 221 against the
-       note's 147 is a real question about where the rest of the fish sold;
-       the split can only apportion the ratio you gave across what the note
-       carries, and it says that rather than implying the figures agreed. */
+    /* THE DISAGREEMENT IS REPORTED, NEVER RESOLVED. 221 against the note's 147
+       is a real question about where the rest of the fish sold; the split can
+       only apportion the ratio you gave across what the note carries, and it
+       says that rather than implying the figures agreed. */
     const warn = res.flag
-      ? ` ⚠ you entered ${res.entered} boxes against ${res.actual} size-4 boxes on this note (${res.diff > 0 ? '+' : ''}${res.diff}) — your 3 figures were applied as a ratio, so check the entry, or whether some of that fish sold under another grade.`
+      ? ` ⚠ you entered ${res.entered} boxes against ${res.actual} ${splitSpec.family} boxes on this note (${res.diff > 0 ? '+' : ''}${res.diff}) — your ${splitSpec.bands.length} figures were applied as a ratio, so check the entry, or whether some of that fish sold under another grade.`
       : ''
     setNotice(`Split by totals done — ${did} boxes labelled by price.${marks}${warn}`)
   }
@@ -906,8 +925,8 @@ export default function Sales() {
           <div className="card">
             {/* SIZE 4, every quality mark — so the heading says so, and the
                 box count is stated because the entry is checked against it. */}
-            <h2>Size-4 haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
-              Mini Metro / Metro / Chipper · {r2(a4Rows.reduce((s, r) => s + (Number(r.boxes) || 0), 0))} boxes
+            <h2>{splitSpec.family === 'size-2' ? 'Size-2' : 'Size-4'} haddock split <span className="muted" style={{ fontWeight: 400, fontSize: '0.85rem' }}>
+              {splitSpec.bands.slice().reverse().join(' / ')} · {r2(a4Rows.reduce((s, r) => s + (Number(r.boxes) || 0), 0))} boxes
               across {[...new Set(a4Rows.map(r => r.grade))].sort().join(', ')}
             </span></h2>
             {isSkipper && <div className="no-print" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
@@ -918,10 +937,10 @@ export default function Sales() {
               <div>
                 <div className="muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>Or enter this trip's totals (boxes), allocated by price:</div>
                 <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                  {['mini', 'metro', 'chipper'].map(k => (
+                  {splitSpec.bands.slice().reverse().map(k => (
                     <label key={k} style={{ fontSize: '0.8rem' }}>
-                      <div style={{ textTransform: 'capitalize', color: 'var(--grey-400)' }}>{k === 'mini' ? 'Mini Metro' : k}</div>
-                      <input type="number" min="0" step="1" value={a4Tot[k]} onChange={e => setA4Tot({ ...a4Tot, [k]: e.target.value })} style={{ width: 90, padding: '0.25rem 0.5rem' }} />
+                      <div style={{ color: 'var(--grey-400)' }}>{k}</div>
+                      <input type="number" min="0" step="1" value={a4Tot[k] ?? ''} onChange={e => setA4Tot({ ...a4Tot, [k]: e.target.value })} style={{ width: 90, padding: '0.25rem 0.5rem' }} />
                     </label>
                   ))}
                   <button className="secondary" style={{ alignSelf: 'flex-end' }} onClick={applyTotals}>Apply totals</button>
@@ -943,9 +962,9 @@ export default function Sales() {
                       <td style={td}>
                         <select className="no-print" disabled={!isSkipper} value={r.sub_grade || ''} onChange={e => saveSubGrades([{ id: r.id, sub_grade: e.target.value || null }])} style={{ width: 'auto', padding: '0.25rem 0.5rem' }}>
                           <option value="">—</option>
-                          <option>Chipper</option>
-                          <option>Metro</option>
-                          <option>Mini Metro</option>
+                          {/* Dearest first, so the list reads down the ladder the
+                              way the table above it is sorted. */}
+                          {splitSpec.bands.slice().reverse().map(b => <option key={b}>{b}</option>)}
                         </select>
                         <span className="print-only" style={{ display: 'none' }}>{r.sub_grade || '—'}</span>
                       </td>

@@ -141,42 +141,110 @@ export function shortMarket(m) {
 }
 
 /* --------------------------------------------------------------------------
- * THE A4 FAMILY — size 4, whatever quality mark the office printed.
+ * THE HADDOCK SPLIT MOVED FROM A4 TO A2 — Don notes, 20-10-2026
+ *
+ * David, Oct 2026: *"Good seed on Don Company sales notes from 20/10/26
+ * onwards is A1. seed and chippers are A2 (create a new split for these), A3
+ * is metro, A4 is mini. do not change sales notes from before 20/10/26 as old
+ * split was accurate for older sales note."*
+ *
+ * So the note's A-number is now the grading code's leading DIGIT:
+ *
+ *     A1 -> 1a 1b 1c 1d   XL · Chat · Pinger · Good Seed
+ *     A2 -> 2a 2b         Seed · Chipper          <- the split lives here now
+ *     A3 -> 3             Metro                   <- one grade, nothing to split
+ *     A4 -> 4             Mini Metro              <- one grade, nothing to split
+ *
+ * BEFORE the changeover A4 was Chipper + Metro + Mini together, which is the
+ * whole reason a split existed at all. Those notes are untouched — the old
+ * three-way split was right for them and re-labelling four years of history on
+ * a rule that started in October would be inventing a record.
+ *
+ * CHIPPER IS THE DEAREST BAND IN A4 AND THE CHEAPEST IN A2, and that is the
+ * one thing to get right here. The word has not changed and its company has:
+ * inside size 4 (Chipper 2b / Metro 3 / Mini 4) it is the BIGGEST fish, and
+ * inside size 2 (Seed 2a / Chipper 2b) it is the smaller of the two. Measured
+ * on the board rather than reasoned about — every one of the six days since
+ * the ladder changed prints Seed above Chipper:
+ *
+ *     21-10  Seed 5.68  Chipper 4.74      26-10  Seed 4.64  Chipper 3.21
+ *     22-10  Seed 5.39  Chipper 3.44      28-10  Seed 4.91  Chipper 4.43
+ *     23-10  Seed 4.95  Chipper 3.46      29-10  Seed 4.57  Chipper 3.90
+ *
+ * Copying the old split's orientation would have put every label the wrong way
+ * round, and the record is what later trips get priced off.
+ * ------------------------------------------------------------------------ */
+export const LADDER_CHANGEOVER = '2026-10-20'
+
+/* Bands are always CHEAPEST FIRST — that is what makes the price ranking a
+   size ranking, and it is the only ordering either split function knows. */
+export const SPEC_A4 = { digit: '4', family: 'size-4', bands: ['Mini Metro', 'Metro', 'Chipper'] }
+export const SPEC_A2 = { digit: '2', family: 'size-2', bands: ['Chipper', 'Seed'] }
+
+/* --------------------------------------------------------------------------
+ * WHICH SPLIT A LANDING GETS — the date decides, and the agent gates it.
+ *
+ * IT IS DON'S CHANGE, so a P&J note keeps the old ladder whatever the date:
+ * 645 size-4 haddock rows in this record came off P&J notes and nothing says
+ * that firm has re-cut anything. Hanstholm's A2 is a Danish sort and has
+ * nothing to do with Peterhead grading at all.
+ *
+ * NO DATE MEANS OLD, which is the conservative direction and the one David
+ * asked for — a note that cannot be shown to be on or after 20-10 has not been
+ * shown to need changing. An undated note is its own fault to fix (the
+ * Shetland tally layout filed one with no date at all), not a reason to guess.
+ * ------------------------------------------------------------------------ */
+export function haddockSpec(market, landingDate) {
+  const isDon = /don fishing/i.test(String(market == null ? '' : market))
+  if (!isDon) return SPEC_A4
+  const d = String(landingDate == null ? '' : landingDate).slice(0, 10)
+  return d >= LADDER_CHANGEOVER ? SPEC_A2 : SPEC_A4
+}
+
+/* --------------------------------------------------------------------------
+ * THE SIZE FAMILY — one size digit, whatever quality mark the office printed.
  *
  * David, Oct 2026: *"fish sold as A4+ not coming through the haddock split
  * part."* Both split functions and the page filtered `grade === 'A4'`, so on
  * the note of 28-10-2026 the split saw 24 boxes of the 147 size-4 haddock
  * actually landed — 123 of them sold as A+4 and were invisible to it.
  *
- * THE DIGIT IS THE SIZE; THE +/-/NOTHING IS THE QUALITY MARK. Mini Metro,
- * Metro and Chipper are a SIZE distinction inside size 4, so they apply to
- * A+4 and A-4 exactly as they do to A4. `A-4` has not landed yet; the note of
- * 28-10 is the first to carry any minus mark at all, and leaving it out would
- * be the same bug waiting on one box of fish.
+ * THE DIGIT IS THE SIZE; THE +/-/NOTHING IS THE QUALITY MARK. The sub-grades
+ * are a SIZE distinction inside one digit, so they apply to `A+2` and `A-2`
+ * exactly as to `A2`. `A-` is new — the note of 28-10 is the first to carry a
+ * minus mark at all — and leaving it out is the same bug waiting on one box.
  * ------------------------------------------------------------------------ */
-const A4_GRADE = /^A([+-]?)4$/i
-/** The quality mark of a size-4 grade: '+', '-', '' — or null if not size 4. */
-export function a4Mark(grade) {
-  const m = String(grade == null ? '' : grade).trim().match(A4_GRADE)
+/** The quality mark of a grade at this size digit: '+', '-', '' — else null. */
+export function sizeMark(grade, digit) {
+  const m = String(grade == null ? '' : grade).trim()
+    .match(new RegExp('^A([+-]?)' + digit + '$', 'i'))
   return m ? (m[1] || '') : null
 }
-/** Every size-4 haddock row of a landing, any quality mark. */
-export function a4FamilyRows(rows) {
+/** Every haddock row of a landing at this size digit, any quality mark. */
+export function familyRows(rows, digit) {
   return (rows || []).filter(r =>
-    (r.species_canon || r.species) === 'Haddock' && a4Mark(r.grade) != null)
+    (r.species_canon || r.species) === 'Haddock' && sizeMark(r.grade, digit) != null)
 }
-const A4_NONE = 'No size-4 Haddock rows in this landing (A4, A+4 or A-4).'
+/* The size-4 pair kept by name, because three callers and the pre-changeover
+   path all mean exactly that and a digit argument would read as a choice. */
+export const a4Mark = (grade) => sizeMark(grade, '4')
+export const a4FamilyRows = (rows) => familyRows(rows, '4')
+
+const markName = (k, digit) => 'A' + k + digit
+const noneMsg = (spec) => `No ${spec.family} Haddock rows in this landing (${
+  ['', '+', '-'].map(k => markName(k, spec.digit)).join(', ')}).`
+
 /* THE PRICE RANKING HAPPENS WITHIN ONE QUALITY MARK AND NEVER ACROSS IT, and
- * that is the whole care in this change. The split reads SIZE out of the price
+ * that is the whole care in this area. The split reads SIZE out of the price
  * spread; across marks the spread is partly QUALITY, so a pooled ranking would
  * read the A+ premium as bigger fish. Measured on the real note of 28-10: every
  * A4 row (£2.04–£2.21/kg) is cheaper than every A+4 row (£2.39–£2.66), so one
  * pooled ladder would have labelled all 24 A4 boxes Mini Metro purely for being
  * the A-quality ones. Within a mark, cheapest really does mean smallest. */
-const marksOf = (tgt) => {
+const marksOf = (tgt, digit) => {
   const m = new Map()
   for (const r of tgt) {
-    const k = a4Mark(r.grade)
+    const k = sizeMark(r.grade, digit)
     if (!m.has(k)) m.set(k, [])
     m.get(k).push(r)
   }
@@ -184,113 +252,119 @@ const marksOf = (tgt) => {
 }
 const pxOf = r => Number(r.price_per_kg || 0) || Number(r.price_per_box || 0)
 const boxesOf = r => Number(r.boxes || 0)
-const markName = (k) => (k === '+' ? 'A+4' : k === '-' ? 'A-4' : 'A4')
 
 /* --------------------------------------------------------------------------
- * A4 haddock auto-split by price band (PD notes).
- * Sort the rows by £/kg, find the 2 largest gaps between distinct price
- * levels -> 3 bands: top = Chipper, middle = Metro, bottom = Mini Metro.
- * Returns {updates:[{id, sub_grade}], bands} or {error} when the price spread
- * can't support 3 bands (then it's a manual job).
+ * Auto-split by price band.
+ * Sort a mark's rows by £/kg and cut at the largest gaps between distinct
+ * price levels — one cut fewer than there are bands. Bands are cheapest first,
+ * so the bottom band is the smallest fish.
  *
  * Done per QUALITY MARK, for the reason above — pooled, the largest gap on the
  * 28-10 note is the A/A+ boundary itself, so the detector would have found the
  * quality step and called it a size band.
  * ------------------------------------------------------------------------ */
-export function autoSplitA4Haddock(rows) {
-  const tgt = a4FamilyRows(rows)
-  if (!tgt.length) return { error: A4_NONE }
+export function autoSplitHaddock(rows, spec = SPEC_A4) {
+  const tgt = familyRows(rows, spec.digit)
+  if (!tgt.length) return { error: noneMsg(spec) }
+  const need = spec.bands.length
   const updates = [], bands = {}, thin = []
-  for (const [mark, group] of marksOf(tgt)) {
+  for (const [mark, group] of marksOf(tgt, spec.digit)) {
     const prices = [...new Set(group.map(r => r2(pxOf(r))))].sort((a, b) => a - b)
-    if (prices.length < 3) {
+    if (prices.length < need) {
       /* NAMED, NOT SILENTLY SKIPPED. A mark left unsplit while another is
          split would otherwise read as fish that was never landed. */
-      thin.push(`${markName(mark)} has only ${prices.length} distinct price level(s)`)
+      thin.push(`${markName(mark, spec.digit)} has only ${prices.length} distinct price level(s), and ${need} bands need ${need}`)
       continue
     }
     const gaps = []
     for (let i = 1; i < prices.length; i++) gaps.push({ at: i, gap: prices[i] - prices[i - 1] })
     gaps.sort((a, b) => b.gap - a.gap)
-    const cuts = [gaps[0].at, gaps[1].at].sort((a, b) => a - b)   // indices into prices[]
-    const lowMax = prices[cuts[0] - 1], midMax = prices[cuts[1] - 1]
+    const cuts = gaps.slice(0, need - 1).map(g => g.at).sort((a, b) => a - b)
+    /* The ceiling of each band but the dearest. A row at or below cuts[i]'s
+       price sits in band i; anything above the last ceiling is the top band. */
+    const ceil = cuts.map(c => prices[c - 1])
     for (const r of group) {
       const p = r2(pxOf(r))
-      updates.push({ id: r.id, sub_grade: p <= lowMax ? 'Mini Metro' : p <= midMax ? 'Metro' : 'Chipper' })
+      let i = 0
+      while (i < ceil.length && p > ceil[i]) i++
+      updates.push({ id: r.id, sub_grade: spec.bands[i] })
     }
-    bands[markName(mark)] = { miniMax: lowMax, metroMax: midMax }
+    bands[markName(mark, spec.digit)] = ceil.map((c, i) => ({ band: spec.bands[i], max: c }))
   }
   if (!updates.length) return { error: `Not enough price spread to detect bands — ${thin.join('; ')}. Set sub-grades manually.` }
   return { updates, bands, thin }
 }
 
 /* --------------------------------------------------------------------------
- * A4 haddock split by MANUAL trip totals.
- * The skipper keys the boxes of Mini Metro / Metro / Chipper he graded that
- * trip; they are allocated across the landing's size-4 rows by price rank —
- * cheapest boxes Mini, dearest Chipper, the middle Metro. Whole rows are
- * assigned by where their box-midpoint falls, so a row never gets two labels.
+ * Split by MANUAL trip totals.
+ * The skipper keys the boxes of each band he graded that trip; they are
+ * allocated across the landing's rows by price rank. Whole rows are assigned
+ * by where their box-midpoint falls, so a row never gets two labels.
  *
  * THE TOTALS ARE APPORTIONED, NOT TAKEN AS BOX COUNTS, and that is the second
  * fault this fixes. The cuts used to be absolute — `miniCut = mini` — so when
  * the entered totals exceeded what the note carried, EVERY row fell under the
- * Mini cut and the whole landing came out one band. That is what happened on
+ * bottom cut and the whole landing came out one band. That is what happened on
  * 28-10: 221 boxes entered against 24 the page could see, and all 24 came back
  * Mini Metro while the page reported *"Mini 144 / Metro 52 / Chipper 25
  * allocated by price"* — a three-way split that never took place.
  *
- * What the skipper actually knows is the SHAPE of his grading, 144:52:25, so
- * that ratio is what is applied to the rows the note really carries. Where the
- * totals do match the landed boxes this is arithmetically identical to the old
- * absolute cut, which is asserted by test — it is a generalisation, not a
- * change of answer.
+ * What the skipper actually knows is the SHAPE of his grading, so that ratio is
+ * what is applied to the rows the note really carries. Where the totals do
+ * match the landed boxes this is arithmetically identical to the old absolute
+ * cut, which is asserted by test — a generalisation, not a change of answer.
+ *
+ * `totals` is keyed by BAND NAME, so there is one vocabulary rather than a
+ * {mini, metro, chipper} shorthand that would need a second mapping per spec.
  *
  * Returns { updates, actual, entered, diff, flag, assigned, marks } where
  * `assigned` is what was ACTUALLY labelled. The page must report that rather
  * than the entry: reporting the intention is what made the old message claim a
  * split it had not performed.
  * ------------------------------------------------------------------------ */
-export function splitA4ByTotals(rows, totals) {
-  const tgt = a4FamilyRows(rows)
-  if (!tgt.length) return { error: A4_NONE }
-  const mini = Math.max(0, Number(totals.mini) || 0)
-  const metro = Math.max(0, Number(totals.metro) || 0)
-  const chipper = Math.max(0, Number(totals.chipper) || 0)
-  const entered = r2(mini + metro + chipper)
+export function splitHaddockByTotals(rows, totals, spec = SPEC_A4) {
+  const tgt = familyRows(rows, spec.digit)
+  if (!tgt.length) return { error: noneMsg(spec) }
+  const want = spec.bands.map(b => Math.max(0, Number((totals || {})[b]) || 0))
+  const entered = r2(want.reduce((s, v) => s + v, 0))
   /* NO TOTALS IS NOT A SPLIT INTO NOTHING. With every box unassigned the
      ratio is undefined, so there is nothing to apportion and saying so beats
-     labelling the whole landing Metro by default. */
-  if (!entered) return { error: 'Enter the boxes of Mini Metro, Metro and Chipper for this trip first.' }
+     labelling the whole landing one band by default. */
+  if (!entered) return { error: `Enter the boxes of ${spec.bands.join(' and ')} for this trip first.` }
 
   const actual = r2(tgt.reduce((s, r) => s + boxesOf(r), 0))
-  const updates = [], assigned = { 'Mini Metro': 0, Metro: 0, Chipper: 0 }, marks = []
-  for (const [mark, group] of marksOf(tgt)) {
+  const assigned = {}, marks = []
+  for (const b of spec.bands) assigned[b] = 0
+  const updates = []
+  for (const [mark, group] of marksOf(tgt, spec.digit)) {
     const sorted = [...group].sort((a, b) => pxOf(a) - pxOf(b))      // cheapest first
     const n = sorted.reduce((s, r) => s + boxesOf(r), 0)
-    const miniCut = n * (mini / entered)
-    const chipperStart = n - n * (chipper / entered)
+    /* Running ceilings in BOXES: band i ends once its share of the entered
+       ratio is used up. The shares sum to exactly n, so the last band always
+       takes the remainder and no row can fall off the end. */
+    let acc = 0
+    const ceil = want.map(v => (acc += n * (v / entered)))
+    const mine = {}
+    for (const b of spec.bands) mine[b] = 0
     let cum = 0
-    const mine = { 'Mini Metro': 0, Metro: 0, Chipper: 0 }
     for (const r of sorted) {
       const b = boxesOf(r)
       const mid = cum + b / 2
       cum += b
-      /* THE TWO CUTS CAN NO LONGER CROSS, which is what the absolute version
-         could not promise: mini/entered + chipper/entered is at most 1 by
-         construction, so miniCut never passes chipperStart and the order of
-         these two tests cannot change an answer. Mutation-checked — swapping
-         them leaves every assertion passing, so no comment here claims the
-         order is load-bearing.
-         They do MEET, exactly, when the skipper graded no Metro at all, and a
-         row whose midpoint lands on that line is a genuine tie. It goes to
-         Mini Metro: labelling a box Chipper when it was Mini overstates the
-         dear grade, and this record is what later trips are priced off. */
-      const sub = mid <= miniCut ? 'Mini Metro' : mid >= chipperStart ? 'Chipper' : 'Metro'
+      /* THE CUTS CANNOT CROSS, by construction — the shares are a partition of
+         n, so the ceilings only ever increase. They do MEET, exactly, where a
+         band was graded as nothing, and a row whose midpoint lands on that line
+         goes to the CHEAPER band: calling a box Seed when it was Chipper, or
+         Chipper when it was Mini, overstates the dear grade, and this record is
+         what later trips are priced off. `<=` is what keeps that true. */
+      let i = 0
+      while (i < spec.bands.length - 1 && mid > ceil[i]) i++
+      const sub = spec.bands[i]
       updates.push({ id: r.id, sub_grade: sub })
       mine[sub] += b
       assigned[sub] += b
     }
-    marks.push({ mark: markName(mark), boxes: r2(n), assigned: { ...mine } })
+    marks.push({ mark: markName(mark, spec.digit), boxes: r2(n), assigned: { ...mine } })
   }
   for (const k of Object.keys(assigned)) assigned[k] = r2(assigned[k])
   const diff = r2(entered - actual)
