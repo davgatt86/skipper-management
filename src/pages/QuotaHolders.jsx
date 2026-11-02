@@ -6,7 +6,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import {
   ALL, league, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown,
-  fmtUnits, fmtT, fmtPct, NO_PO,
+  fmtUnits, fmtT, fmtPct, NO_PO, poLabel,
 } from '../lib/quota/ukHolders.js'
 
 /* UK QUOTA HOLDERS — who holds the UK's fixed quota allocation (FQA) units.
@@ -42,6 +42,11 @@ const td = { padding: '0.45rem 0.6rem', borderBottom: '1px solid var(--line-2)',
 const num = { fontFamily: 'var(--font-mono)', textAlign: 'right' }
 const scroller = { maxHeight: '68vh', overflow: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--line)', borderRadius: 4 }
 const lbl = { display: 'grid', gap: 2, fontSize: '0.75rem' }
+/* Every control in a filter row is the same height and type size, so the row
+ * lines up: the global input/select rule is width 100% at body size, and a
+ * select inside a 0.75rem label inherits the small size while a button does not. */
+const ctl = { fontSize: '0.85rem', height: '2.3rem', padding: '0 0.6rem', width: 'auto', boxSizing: 'border-box' }
+const DASH = <span className="muted">–</span>
 const signed = (v) => ({ color: v > 0.05 ? 'var(--kelp)' : v < -0.05 ? 'var(--rust)' : 'var(--mute)' })
 
 function loadPct() { try { return JSON.parse(localStorage.getItem(PCT_KEY)) || {} } catch { return {} } }
@@ -126,26 +131,26 @@ export default function QuotaHolders() {
         <div className="card qs-filters" style={{ padding: '0.8rem 1rem', marginBottom: '0.8rem' }}>
           <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'end' }}>
             <label className="muted" style={lbl}>Tonnes for year
-              <select value={year ?? ''} onChange={(e) => setYear(e.target.value === 'next' ? 'next' : Number(e.target.value))}>
+              <select style={ctl} value={year ?? ''} onChange={(e) => setYear(e.target.value === 'next' ? 'next' : Number(e.target.value))}>
                 {latest && <option value="next">{latest + 1} (estimate)</option>}
                 {years.map((y) => <option key={y} value={y}>{y}</option>)}
               </select></label>
             <label className="muted" style={lbl}>PO
-              <select value={po} onChange={(e) => setPo(e.target.value)}>
+              <select style={ctl} value={po} onChange={(e) => setPo(e.target.value)}>
                 <option value={ALL}>All POs</option>
-                {pos.map((p) => <option key={p} value={p}>{p}</option>)}
+                {pos.map((p) => <option key={p} value={p}>{poLabel(p)}</option>)}
               </select></label>
             <label className="muted" style={lbl}>Holding type
-              <select value={htype} onChange={(e) => setHtype(e.target.value)} style={{ maxWidth: 260 }}>
+              <select value={htype} onChange={(e) => setHtype(e.target.value)} style={{ ...ctl, maxWidth: 260 }}>
                 <option value={ALL}>All holding types</option>
                 {htypes.map((p) => <option key={p} value={p}>{p}</option>)}
               </select></label>
             <label className="muted" style={lbl}>Administration
-              <select value={admin} onChange={(e) => setAdmin(e.target.value)} style={{ maxWidth: 240 }}>
+              <select value={admin} onChange={(e) => setAdmin(e.target.value)} style={{ ...ctl, maxWidth: 240 }}>
                 <option value={ALL}>All administrations</option>
                 {admins.map((p) => <option key={p} value={p}>{p}</option>)}
               </select></label>
-            <button type="button" className="secondary" style={{ padding: '0.4rem 0.9rem' }}
+            <button type="button" className="secondary" style={{ ...ctl, padding: '0 0.9rem' }}
               onClick={() => { setPo(ALL); setHtype(ALL); setAdmin(ALL); setYear(latest ?? null) }}>Reset</button>
             {busy && <span className="muted" style={{ fontSize: '0.8rem' }}>Loading…</span>}
           </div>
@@ -228,7 +233,7 @@ function SpeciesPicker({ speciesList, value, onChange, single = false, rates }) 
   if (single) {
     return (
       <label className="muted" style={lbl}>Stock
-        <select value={value[0] || ''} onChange={(e) => onChange([e.target.value])} style={{ maxWidth: 260 }}>
+        <select value={value[0] || ''} onChange={(e) => onChange([e.target.value])} style={{ ...ctl, maxWidth: 260 }}>
           {speciesList.map((s) => <option key={s.species} value={s.species}>{s.species}{rates && !rates.has(s.species) ? ' (units only)' : ''}</option>)}
         </select></label>
     )
@@ -239,8 +244,8 @@ function SpeciesPicker({ speciesList, value, onChange, single = false, rates }) 
   const label = !value.length ? 'All stocks' : value.length === 1 ? value[0] : `${value.length} stocks`
   return (
     <div style={{ position: 'relative' }}>
-      <span className="muted" style={{ fontSize: '0.75rem', display: 'block' }}>Stocks</span>
-      <button type="button" className="secondary" onClick={() => setOpen(!open)} style={{ padding: '0.35rem 0.8rem', minWidth: 160, textAlign: 'left' }}>
+      <span className="muted" style={{ fontSize: '0.75rem', display: 'block', marginBottom: 2 }}>Stocks</span>
+      <button type="button" className="secondary" onClick={() => setOpen(!open)} style={{ ...ctl, minWidth: 180, textAlign: 'left', fontWeight: 400 }}>
         {label} ▾</button>
       {open && (
         <div className="card" style={{ position: 'absolute', zIndex: 5, top: '100%', left: 0, width: 'min(26rem, 90vw)', margin: '0.2rem 0 0', padding: '0.7rem',
@@ -255,9 +260,10 @@ function SpeciesPicker({ speciesList, value, onChange, single = false, rates }) 
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a stock" style={{ width: '100%', marginBottom: '0.4rem' }} />
           <div style={{ maxHeight: '16rem', overflow: 'auto' }}>
             {shown.map((s) => (
-              <label key={s.species} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.82rem', padding: '0.1rem 0' }}>
-                <input type="checkbox" checked={set.has(s.species)} onChange={() => toggle(s.species)} />
-                {s.species}{rates && !rates.has(s.species) && <span className="muted" style={{ fontSize: '0.72rem' }}>units only</span>}
+              <label key={s.species} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: '0.82rem', padding: '0.2rem 0', cursor: 'pointer' }}>
+                <input type="checkbox" checked={set.has(s.species)} onChange={() => toggle(s.species)} style={{ width: 'auto', padding: 0, margin: 0, flex: 'none' }} />
+                <span style={{ flex: 1 }}>{s.species}</span>
+                {rates && !rates.has(s.species) && <span className="muted" style={{ fontSize: '0.72rem', whiteSpace: 'nowrap' }}>units only</span>}
               </label>
             ))}
           </div>
@@ -300,20 +306,20 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
       </p>
       <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'end', marginBottom: '0.6rem' }}>
         {!leasable && <label className="muted" style={lbl}>Rank
-          <select value={by} onChange={(e) => { setBy(e.target.value); setOpenKey(null) }}>
+          <select style={ctl} value={by} onChange={(e) => { setBy(e.target.value); setOpenKey(null) }}>
             <option value="holder">Holders</option><option value="boat">Boats</option><option value="po">POs</option>
           </select></label>}
         <SpeciesPicker speciesList={speciesList} value={species} onChange={(v) => { setSpecies(v); setOpenKey(null) }} rates={rates} />
         <label className="muted" style={lbl}>Rank on
-          <select value={metric} onChange={(e) => setMetric(e.target.value)}>
+          <select style={ctl} value={metric} onChange={(e) => setMetric(e.target.value)}>
             <option value="tonnes">Estimated tonnes</option><option value="units">FQA units</option>
           </select></label>
         <label className="muted" style={lbl}>Show
-          <select value={top} onChange={(e) => setTop(Number(e.target.value))}>
+          <select style={ctl} value={top} onChange={(e) => setTop(Number(e.target.value))}>
             {TOPS.map((t) => <option key={t} value={t}>{t ? `Top ${t}` : 'Everyone'}</option>)}
           </select></label>
-        {mode === 'holder' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.82rem' }}>
-          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} /> Each holding separately</label>}
+        {mode === 'holder' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.82rem', height: '2.3rem', cursor: 'pointer' }}>
+          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} style={{ width: 'auto', padding: 0, margin: 0, flex: 'none' }} /> Each holding separately</label>}
       </div>
       {noRate.length > 0 && <p className="muted" style={{ fontSize: '0.78rem' }}>No tonnes estimate for {noRate.join(', ')}: the uptake report does not cover {noRate.length > 1 ? 'them' : 'it'}. Units still count.</p>}
       {by === 'boat' && !leasable && L.offBoat > 0 && <p className="muted" style={{ fontSize: '0.78rem' }}>{fmtUnits(L.offBoat)} units sit on PO dummy licences with no vessel and are not in this table.</p>}
@@ -347,7 +353,7 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
                     <td style={{ ...td, ...num }}>{r.tonnes ? fmtT(r.tonnes) : '–'}{r.missing > 0 && r.tonnes ? '*' : ''}</td>
                     <td style={{ ...td, ...num }}>{fmtPct(r.share)}</td>
                     {perCols.map((s) => <td key={s} style={{ ...td, ...num }}>{r.per[s] ? (metric === 'tonnes' ? fmtT(r.per[s].tonnes) : fmtUnits(r.per[s].units)) : ''}</td>)}
-                    {mode !== 'po' && <td style={{ ...td, whiteSpace: 'normal', fontSize: '0.8rem' }}>{r.pos.join(', ')}</td>}
+                    {mode !== 'po' && <td style={{ ...td, whiteSpace: 'normal', fontSize: '0.8rem' }}>{r.pos.map(poLabel).join(', ')}</td>}
                     {mode === 'holder' && <td style={{ ...td, whiteSpace: 'normal', fontSize: '0.8rem', maxWidth: '18rem' }}>
                       {r.vessels.length ? r.vessels.slice(0, 4).join(', ') + (r.vessels.length > 4 ? ` +${r.vessels.length - 4}` : '') : '—'}
                       <span className="muted"> · {r.lics.length} licence{r.lics.length === 1 ? '' : 's'}</span></td>}
@@ -392,7 +398,7 @@ function Holdings({ rows, species, rates }) {
           return (
             <tr key={h.id}>
               <td style={td}>{h.lt ? `${h.lt} ` : ''}{h.lic}</td><td style={td}>{h.vessel || '—'}</td>
-              <td style={{ ...td, whiteSpace: 'normal' }}>{h.holder}</td><td style={td}>{h.po}</td>
+              <td style={{ ...td, whiteSpace: 'normal' }}>{h.holder}</td><td style={td}>{poLabel(h.po)}</td>
               <td style={{ ...td, whiteSpace: 'normal', maxWidth: '16rem' }}>{h.htype}</td>
               <td style={{ ...td, ...num }}>{fmtUnits(u)}</td><td style={{ ...td, ...num }}>{t ? fmtT(t) : '–'}</td>
             </tr>
@@ -423,26 +429,26 @@ export function PoMakeup({ rows, speciesList, rates, balances, yearLabel, swapsY
       </p>
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'end', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
         <SpeciesPicker single speciesList={speciesList} value={[sp.species]} onChange={(v) => { setSpecies(v); setPick(null) }} rates={rates} />
-        <span className="muted" style={{ fontSize: '0.8rem' }}>{r ? `≈${(r * 1000).toFixed(1)} kg per unit in ${yearLabel}` : 'No tonnes estimate for this stock'}</span>
+        <span className="muted" style={{ fontSize: '0.8rem', lineHeight: '2.3rem' }}>{r ? `≈${(r * 1000).toFixed(1)} kg per unit in ${yearLabel}` : 'No tonnes estimate for this stock'}</span>
       </div>
       <div style={scroller}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
           <thead><tr>
-            {[['PO'], ['FQA units', 1], ['Share of units', 1], [`Quota (TAC share) ${swapsYear} t`, 1], ['Swapped in t', 1], ['Swapped out t', 1], ['Net swaps t', 1], ['Net as % of quota', 1], ['Landed t', 1]]
+            {[['PO'], ['FQA units', 1], ['Share of units', 1], [`Quota ${swapsYear} (t)`, 1], ['Swapped in (t)', 1], ['Swapped out (t)', 1], ['Net swaps (t)', 1], ['Net % of quota', 1], ['Landed (t)', 1]]
               .map(([h, n]) => <th key={h} style={n ? { ...th, textAlign: 'right' } : th}>{h}</th>)}
           </tr></thead>
           <tbody>
             {shares.map((s) => (
               <tr key={s.po} onClick={() => setPick(pick === s.po ? null : s.po)} style={{ cursor: 'pointer', background: pick === s.po ? 'var(--line-2)' : undefined }}>
-                <td style={{ ...td, fontWeight: 600 }}>{s.po}</td>
+                <td style={{ ...td, fontWeight: 600 }}>{s.label}</td>
                 <td style={{ ...td, ...num }}>{fmtUnits(s.units)}</td>
                 <td style={{ ...td, ...num }}>{fmtPct(s.unitShare)}</td>
-                <td style={{ ...td, ...num }}>{s.tac_t != null ? fmtT(s.tac_t) : ''}</td>
-                <td style={{ ...td, ...num }}>{s.swaps_in_t ? fmtT(s.swaps_in_t) : ''}</td>
-                <td style={{ ...td, ...num }}>{s.swaps_out_t ? fmtT(s.swaps_out_t) : ''}</td>
-                <td style={{ ...td, ...num, ...signed(s.net_swaps_t || 0) }}>{s.net_swaps_t != null ? fmtT(s.net_swaps_t) : ''}</td>
-                <td style={{ ...td, ...num, ...signed(s.netOfTac || 0) }}>{s.netOfTac != null ? fmtPct(s.netOfTac) : ''}</td>
-                <td style={{ ...td, ...num }}>{s.landed_t != null ? fmtT(s.landed_t) : ''}</td>
+                <td style={{ ...td, ...num }}>{s.tac_t != null ? fmtT(s.tac_t) : DASH}</td>
+                <td style={{ ...td, ...num }}>{s.swaps_in_t ? fmtT(s.swaps_in_t) : DASH}</td>
+                <td style={{ ...td, ...num }}>{s.swaps_out_t ? fmtT(s.swaps_out_t) : DASH}</td>
+                <td style={{ ...td, ...num, ...signed(s.net_swaps_t || 0) }}>{s.net_swaps_t ? fmtT(s.net_swaps_t) : DASH}</td>
+                <td style={{ ...td, ...num, ...signed(s.netOfTac || 0) }}>{s.netOfTac != null && Math.abs(s.netOfTac) >= 0.0005 ? fmtPct(s.netOfTac) : DASH}</td>
+                <td style={{ ...td, ...num }}>{s.landed_t != null ? fmtT(s.landed_t) : DASH}</td>
               </tr>
             ))}
             {!shares.length && <tr><td colSpan={9} style={td} className="muted">No units for this stock.</td></tr>}
@@ -450,11 +456,16 @@ export function PoMakeup({ rows, speciesList, rates, balances, yearLabel, swapsY
         </table>
       </div>
       {!sp.code && <p className="muted" style={{ fontSize: '0.78rem' }}>This stock is not in the uptake report, so there is no quota or swaps column.</p>}
+      <p className="muted" style={{ fontSize: '0.78rem', margin: '0.5rem 0 0' }}>
+        <b>Not in a PO (non-sector)</b> is real, not missing data: licences of boats outside every PO, plus administration pool licences. Their quota line is the
+        uptake report’s Non Sector groups added together, and it is usually tiny against the units because most non-sector units are leased into POs.
+        So there is no net % for it, and those units are left out of the tonnes-per-unit rate.
+      </p>
     </div>
     {inside && (
       <div className="card">
-        <h2>{pick}: who holds its {sp.species} units</h2>
-        <p className="muted" style={{ fontSize: '0.8rem' }}>{inside.count} holders, {fmtUnits(inside.totalUnits)} units{inside.totalTonnes ? `, ≈${fmtT(inside.totalTonnes)} t in ${yearLabel}` : ''}.{pick === NO_PO ? ' Units held outside any PO.' : ''}</p>
+        <h2>{poLabel(pick)}: who holds its {sp.species} units</h2>
+        <p className="muted" style={{ fontSize: '0.8rem' }}>{inside.count} holders, {fmtUnits(inside.totalUnits)} units{inside.totalTonnes ? `, ≈${fmtT(inside.totalTonnes)} t in ${yearLabel}` : ''}.{pick === NO_PO ? ' Non-sector licences and administration pool licences: boats outside every PO, whose quota the MMO or Marine Scotland manages. Its quota and swaps are the uptake report\u2019s Non Sector lines added together.' : ''}</p>
         <div style={scroller}>
           <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
             <thead><tr>{['#', 'Holder', 'Units', 'Est. t', 'Share of PO', 'Boats / licences'].map((h, i) => <th key={h} style={i && i < 5 && i !== 1 ? { ...th, textAlign: 'right' } : th}>{h}</th>)}</tr></thead>
@@ -512,7 +523,7 @@ export function Lookup({ rows, rates, yearLabel }) {
       <div className="card">
         <h2>{sel[0].holder}</h2>
         <p className="muted" style={{ fontSize: '0.8rem' }}>
-          {sel.length} holding{sel.length === 1 ? '' : 's'} · {[...new Set(sel.map((r) => r.po))].join(', ')} · {fmtUnits(tot.u)} units, ≈{fmtT(tot.t)} t in {yearLabel} where an estimate exists.
+          {sel.length} holding{sel.length === 1 ? '' : 's'} · {[...new Set(sel.map((r) => poLabel(r.po)))].join(', ')} · {fmtUnits(tot.u)} units, ≈{fmtT(tot.t)} t in {yearLabel} where an estimate exists.
         </p>
         <Holdings rows={sel} species={[]} rates={rates} />
         <h3 style={{ marginTop: '1rem' }}>By stock</h3>

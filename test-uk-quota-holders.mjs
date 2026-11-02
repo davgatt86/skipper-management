@@ -85,7 +85,7 @@ near(projectRates(rates, { 'NS haddock': '' }).get('NS haddock'), 0.1, 'a blank 
   ok(L.rows.every((r) => r.vessels.length === 1), 'boats are vessel licences only')
   eq(L.offBoat, 500, 'the 500 units on a licence with no vessel are reported, not dropped silently')
   const P = league(rows, { by: 'po', species: ['NS haddock'], metric: 'units', rates, top: 0 })
-  eq(P.rows.map((r) => r.name), ['SFO', 'Fife', 'No PO'], 'POs ranked 2,200 / 500 / 300')
+  eq(P.rows.map((r) => r.name), ['SFO', 'Fife', 'Not in a PO (non-sector)'], 'POs ranked 2,200 / 500 / 300, and no-PO units are named as non-sector, never a bare "No PO"')
   const per = league(rows, { species: ['NS haddock', 'NS saithe'], metric: 'units', rates, top: 0 }).rows.find((r) => r.name.startsWith('Alpha'))
   eq(per.per['NS saithe'].units, 100, 'the per-stock columns carry each stock')
 }
@@ -105,7 +105,12 @@ eq(applyRowFilters(rows, { po: 'Fife' }).length, 2, 'the PO filter')
   near(fife.netOfTac, -20 / 50, 'Fife swapped out 40% of its haddock quota')
   ok(!s.some((r) => r.po === 'UK total' || r.po === 'Non Sector Scotland'), 'groups that are not POs are not listed as POs')
   eq(poShares(rows, [...balances, { po: 'Orkney', stock: 'HAD/2AC4.', tac_t: 0.2, net_swaps_t: 65 }], species[0]).find((r) => r.po === 'Orkney').netOfTac, null, 'no % against a quota under 10 t')
-  eq(s.find((r) => r.po === 'No PO').tac_t, null, 'units outside any PO have no quota line — null, not 0')
+  const np = s.find((r) => r.po === 'No PO')
+  eq(np.tac_t, 5000, 'units outside any PO are set against the Non Sector groups\u2019 quota')
+  eq(np.label, 'Not in a PO (non-sector)', 'and labelled as non-sector')
+  eq(np.netOfTac, null, 'but no net-% for it: its units are not what that quota is cut from')
+  eq(poShares(rows, balances.filter((b) => !/^Non Sector/.test(b.po)), species[0]).find((r) => r.po === 'No PO').tac_t, null,
+    'with no Non Sector line in the report the quota is null, not 0')
 }
 
 /* ---- look-up ------------------------------------------------------------------ */

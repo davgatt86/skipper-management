@@ -33,6 +33,22 @@ export const isLeasable = (r) => !ACTIVE_TYPES.has(r.htype)
 
 export const NO_PO = 'No PO'
 
+/* A holding with no PO on the register is a NON-SECTOR licence (an over-10 m
+ * boat outside every PO, its quota managed by the MMO or Marine Scotland) or an
+ * administration pool licence. It is not missing data, so it is never shown as
+ * a bare "No PO", and its quota line is the uptake report's Non Sector groups. */
+export const NO_PO_LABEL = 'Not in a PO (non-sector)'
+export const poLabel = (po) => (po === NO_PO ? NO_PO_LABEL : po)
+const isNonSector = (g) => /^non sector/i.test(g || '')
+
+/* Several uptake groups added into one balance line. */
+function sumBal(list) {
+  if (!list.length) return null
+  const add = (k) => list.reduce((a, b) => (b[k] == null ? a : (a ?? 0) + b[k]), null)
+  return { tac_t: add('tac_t'), swaps_in_t: add('swaps_in_t'), swaps_out_t: add('swaps_out_t'),
+    net_swaps_t: add('net_swaps_t'), landed_t: add('landed_t'), used_pct: null }
+}
+
 /* Units a holding carries for the species asked for (all species when none picked). */
 export function unitsOf(row, species) {
   const u = row.u || {}
@@ -126,7 +142,7 @@ export function league(rows, { by = 'holder', species = [], metric = 'units', ra
         holders: new Set(), lics: new Set(), per: {} }
       g.set(k, e)
     }
-    const nm = by === 'po' ? r.po : by === 'boat' ? boatName(r) : r.holder
+    const nm = by === 'po' ? poLabel(r.po) : by === 'boat' ? boatName(r) : r.holder
     e.names.set(nm, (e.names.get(nm) || 0) + units)
     e.units += units; e.tonnes += t; e.missing += missing; e.holdings++
     e.pos.add(r.po); if (r.vessel) e.vessels.add(r.vessel); e.holders.add(r.holder); e.lics.add(r.lic)
@@ -170,19 +186,24 @@ export function poShares(rows, balances, { species, code }) {
     if (!n) continue
     units.set(r.po, (units.get(r.po) || 0) + n); total += n
   }
-  const bal = new Map((balances || []).filter((b) => b.stock === code).map((b) => [b.po, b]))
-  const pos = new Set([...units.keys(), ...[...bal.keys()].filter((p) => PO_GROUPS.has(p))])
+  const forStock = (balances || []).filter((b) => b.stock === code)
+  const bal = new Map(forStock.map((b) => [b.po, b]))
+  const ns = sumBal(forStock.filter((b) => isNonSector(b.po)))
+  if (ns) bal.set(NO_PO, ns)
+  const pos = new Set([...units.keys(), ...[...bal.keys()].filter((p) => PO_GROUPS.has(p) || p === NO_PO)])
   const out = []
   for (const po of pos) {
     const b = bal.get(po) || {}
     const n = units.get(po) || 0
     const tac = b.tac_t ?? null
     out.push({
-      po, units: n, unitShare: total ? n / total : 0, tac_t: tac,
+      po, label: poLabel(po), units: n, unitShare: total ? n / total : 0, tac_t: tac,
       swaps_in_t: b.swaps_in_t ?? null, swaps_out_t: b.swaps_out_t ?? null, net_swaps_t: b.net_swaps_t ?? null,
       // Against a quota of a few tonnes the % says nothing (65 t swapped onto
       // 0.2 t reads 32,500%), so it is only shown from 10 t of quota up.
-      netOfTac: tac >= 10 && b.net_swaps_t != null ? b.net_swaps_t / tac : null,
+      // Nor for the non-sector line: its units are not what its quota is cut
+      // from (69,000 NS haddock units against 10 t), so the % would be noise.
+      netOfTac: po !== NO_PO && tac >= 10 && b.net_swaps_t != null ? b.net_swaps_t / tac : null,
       landed_t: b.landed_t ?? null, used_pct: b.used_pct ?? null,
     })
   }
