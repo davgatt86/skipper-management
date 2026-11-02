@@ -33,6 +33,13 @@ export const isLeasable = (r) => !ACTIVE_TYPES.has(r.htype)
 
 export const NO_PO = 'No PO'
 
+/* The grouping key for a holder. The export's key already folds case,
+ * punctuation and Limited/Ltd; this also folds Co into Company, which the
+ * register spells both ways for one firm ("Lunar Fishing Co Ltd" and
+ * "LUNAR FISHING COMPANY LIMITED"). Applied when the page loads, so it needs no
+ * reload of the data. */
+export const normHolderKey = (k) => String(k || '').replace(/\bCO\b/g, 'COMPANY').replace(/\s+/g, ' ').trim()
+
 /* A holding with no PO on the register is a NON-SECTOR licence (an over-10 m
  * boat outside every PO, its quota managed by the MMO or Marine Scotland) or an
  * administration pool licence. It is not missing data, so it is never shown as

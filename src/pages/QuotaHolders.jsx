@@ -6,7 +6,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import {
   ALL, league, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown,
-  fmtUnits, fmtT, fmtPct, poLabel, poOverview, poSpecies,
+  fmtUnits, fmtT, fmtPct, poLabel, poOverview, poSpecies, normHolderKey,
 } from '../lib/quota/ukHolders.js'
 
 /* UK QUOTA HOLDERS — who holds the UK's fixed quota allocation (FQA) units.
@@ -98,7 +98,7 @@ export default function QuotaHolders() {
       })
   }, [rateYear])
 
-  const holdings = data.fqa_holdings || []
+  const holdings = useMemo(() => (data.fqa_holdings || []).map((r) => ({ ...r, hkey: normHolderKey(r.hkey) })), [data.fqa_holdings])
   const speciesList = data.fqa_species || []
   const meta = (data.fqa_meta || [])[0]
   const balances = bal[rateYear] || []
@@ -302,7 +302,7 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
         {leasable
           ? 'Units not on a fishing boat’s own licence: held by agents and owners, private persons, companies, PO pools and quota schemes. These are the units most likely to be leased out. With one stock picked, the last columns show whether the holder’s PO has been a net giver of that stock this year on the swaps page.'
           : 'Biggest holders of the stocks picked. A holder with units on several licences and POs is added together; tick "Each holding separately" to split them. Boats count vessel licences only.'}
-        {' '}Tonnes are for {yearLabel}. Tap a row for the holdings behind it.
+        {' '}Tonnes are for {yearLabel}. Tap a row for everything behind it: boats, licences, POs, every holding, and every stock in units and estimated tonnes.
       </p>
       <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'end', marginBottom: '0.6rem' }}>
         {!leasable && <label className="muted" style={lbl}>Rank
@@ -362,8 +362,15 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
                       <td style={{ ...td, ...num, ...(b ? signed(b.net_swaps_t) : null) }}>{b ? fmtT(b.net_swaps_t) : r.pos.length > 1 ? 'several POs' : ''}</td>
                       <td style={{ ...td, ...num }}>{b ? fmtT(b.swaps_out_t) : ''}</td></>}
                   </tr>
-                  {openKey === r.key && <tr><td colSpan={20} style={{ ...td, background: 'var(--surface-2, var(--line-2))', whiteSpace: 'normal' }}>
-                    <Holdings rows={src.filter((h) => keyOf(h, mode, split) === r.key)} species={species} rates={rates} />
+                  {openKey === r.key && <tr><td colSpan={20} style={{ ...td, background: 'var(--surface)', whiteSpace: 'normal', padding: '0.8rem 1rem 1rem 2.4rem' }}>
+                    {/* The same panel as PO make-up and look-up: who, which boats,
+                        licences and POs, every holding, and every stock in units
+                        and estimated tonnes. A PO row would list hundreds of
+                        holdings, so it gets the stock breakdown only. */}
+                    <div style={{ position: 'sticky', left: 0, width: 'min(60rem, 80vw)' }}>
+                      <HolderDetail rows={src.filter((h) => keyOf(h, mode, split) === r.key)} rates={rates} yearLabel={yearLabel}
+                        stocksOnly={mode === 'po'} />
+                    </div>
                   </td></tr>}
                 </Fragment>
               )
@@ -542,7 +549,7 @@ function HolderRows({ po, species, rows, rates, yearLabel, depth, openHolder, se
 
 /* Everything one holder has: who, which boats and licences, which POs, and
  * every stock with units and estimated tonnes. Used by PO make-up and look-up. */
-function HolderDetail({ rows, rates, yearLabel }) {
+function HolderDetail({ rows, rates, yearLabel, stocksOnly = false }) {
   const bd = useMemo(() => breakdown(rows, rates), [rows, rates])
   if (!rows.length) return null
   const tot = bd.reduce((a, b) => ({ u: a.u + b.units, t: a.t + (b.tonnes || 0) }), { u: 0, t: 0 })
@@ -558,13 +565,16 @@ function HolderDetail({ rows, rates, yearLabel }) {
     ['Category', [...new Set(rows.map((r) => r.cat).filter(Boolean))].join('; ') || '—'],
     ['Total', `${fmtUnits(tot.u)} FQA units in ${bd.length} stocks · ≈${fmtT(tot.t)} t in ${yearLabel} where an estimate exists`],
   ]
+  const shown = stocksOnly ? facts.filter(([k]) => k === 'Total') : facts
   return (<>
     <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '0.25rem 1rem', fontSize: '0.84rem', marginBottom: '0.8rem' }}>
-      {facts.map(([k, v]) => <Fragment key={k}><span className="muted">{k}</span><span style={{ fontWeight: k === 'Holder' ? 700 : 400 }}>{v}</span></Fragment>)}
+      {shown.map(([k, v]) => <Fragment key={k}><span className="muted">{k}</span><span style={{ fontWeight: k === 'Holder' ? 700 : 400 }}>{v}</span></Fragment>)}
     </div>
-    <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.9rem' }}>Holdings</h3>
-    <Holdings rows={rows} species={[]} rates={rates} />
-    <h3 style={{ margin: '0.9rem 0 0.4rem', fontSize: '0.9rem' }}>By stock</h3>
+    {!stocksOnly && <>
+      <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.9rem' }}>Holdings</h3>
+      <Holdings rows={rows} species={[]} rates={rates} />
+    </>}
+    <h3 style={{ margin: stocksOnly ? '0 0 0.4rem' : '0.9rem 0 0.4rem', fontSize: '0.9rem' }}>By stock</h3>
     <div style={{ ...scroller, maxHeight: '40vh' }}>
       <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.84rem' }}>
         <thead><tr><th style={th}>Stock</th><th style={{ ...th, textAlign: 'right' }}>FQA units</th><th style={{ ...th, textAlign: 'right' }}>Est. tonnes {yearLabel}</th></tr></thead>
