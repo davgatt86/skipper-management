@@ -70,6 +70,13 @@ export const NAV = [
     label: 'Quota',
     items: [
       { to: '/quota', label: 'Quota Position', access: 'skipper' },
+      /* UK-WIDE, NOT THIS BOAT'S. Who is swapping what with whom, from the
+         Marine Directorate uptake report the SWFPA forwards each week. One
+         shared copy read by every fleet (David, Nov 2026), so skippers AND
+         viewers — but NOT the demo, which goes to strangers: the read policy
+         in supabase/uk_quota_swaps.sql refuses demo fleets, and a page that
+         can only say "no data" comes off the menu too. */
+      { to: '/quota-swaps', label: 'UK Quota Swaps', access: 'fleetTools', notOnDemo: true },
     ],
   },
   {
