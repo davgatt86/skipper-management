@@ -10,7 +10,7 @@
  */
 import assert from 'node:assert'
 import {
-  league, normHolderKey, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
+  league, normHolderKey, compare, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
 } from './src/lib/quota/ukHolders.js'
 import { accessForPath, NAV } from './src/nav.js'
 
@@ -133,6 +133,21 @@ eq(applyRowFilters(rows, { po: 'Fife' }).length, 2, 'the PO filter')
 /* ---- one firm, two spellings ---------------------------------------------------- */
 eq(normHolderKey('LUNAR FISHING CO LTD'), normHolderKey('LUNAR FISHING COMPANY LTD'), 'Co and Company group as one holder')
 eq(normHolderKey('COMPANY  CONSTRUCT LTD'), 'COMPANY CONSTRUCT LTD', 'only the whole word CO is touched')
+
+/* ---- side by side ----------------------------------------------------------------- */
+{
+  const C = compare([rows[0], rows[1]], [rows[2]], rates)
+  const had = C.lines.find((l) => l.species === 'NS haddock')
+  eq([had.ua, had.ub], [1500, 1200], 'A = Alpha over both its holdings, B = Beta')
+  near(had.dt, 30, 'A holds 30 t more haddock')
+  eq(C.lines.find((l) => l.species === 'NS saithe').ub, 0, 'a stock only A holds is still listed, B at nought units')
+  const neph = C.lines.find((l) => l.species === 'Nephrops VII')
+  ok(neph.ta === null && neph.dt === null, 'a units-only stock has no tonnes and no tonnes difference')
+  eq(C.lines[C.lines.length - 1].species, 'Nephrops VII', 'and sits after every stock with an estimate')
+  eq([C.ua, C.ub], [1640, 1200], 'unit totals')
+  near(C.ta - C.tb, 150 + 50 - 120, 'tonne totals: A 200 t against B 120 t')
+  eq([C.onlyA, C.onlyB], [2, 0], 'A holds two stocks B does not')
+}
 
 /* ---- look-up ------------------------------------------------------------------ */
 eq(search(rows, 'alpha').length, 2, 'by name, both spellings')
