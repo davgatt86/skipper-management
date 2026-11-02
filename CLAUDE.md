@@ -9705,6 +9705,61 @@ including the `ITQ CATCHES` dispatcher) · A4 haddock manual totals
   made an incomplete table look complete — a quiet buyer and a missing one
   looked identical. Now the gap is stated, with the landings named.
 
+### UK QUOTA SWAPS — `/quota-swaps` (Nov 2026)
+
+David, Nov 2026: *"i want to learn about the movements of quota's. to really see
+how is trading with who it needs looking at each speices each week. who
+transfered out, who recieved it."* — then: *"could it be a page on there?"*
+
+**IT IS NOT ANY FLEET'S DATA.** The Marine Directorate's weekly quota uptake
+report (the .xlsx the SWFPA forwards every Wednesday) covers every UK PO and
+group. It is loaded ONCE into `quota_swaps_data` and read by every non-demo
+fleet's skippers and viewers — the second cross-fleet page after Price vs
+Fleet, and the only one whose rows no fleet entered. David chose "every fleet
+on the app". Demo, officer and cook are refused at the policy, not just the menu.
+
+**THE REPORT NEVER SAYS WHO TRADED WITH WHOM.** It gives each group's
+"Change in year" per stock; a week's swap is the difference between two
+consecutive reports. The PO-to-PO grid is an INFERENCE and every match carries
+how sure it is — `Certain` (one side of the stock-week had a single group),
+`Likely` (exact tonnage match), `Estimate` (the rest, pro rata). UK TOTAL's
+change is shown as the party "International". **Never show an Estimate as a
+fact**: the confidence travels with every figure built from `pairs`, and the
+grid can be narrowed to certain/likely only. `src/lib/quota/ukSwaps.js`.
+
+**HOW IT GETS IN.** Not from this app. A Claude scheduled task (Thursdays)
+reads every uptake email in David's Gmail, rebuilds the whole history (so a
+late or AMENDED report is picked up), and calls `quota_swaps_load()` per
+(dataset, year) with a loader token. Only the token's sha256 is in the
+database (`quota_swaps_loader`); the token lives in the task, NEVER in this
+repo, which is public. `quota_swaps_prune()` drops any (dataset, year) the
+build no longer produces. Schema, policy and both functions:
+`supabase/uk_quota_swaps.sql`. The pipeline scripts (parse, build, inference)
+live in the claude.ai project "Audacious BF83" under `claude/quota-pipeline/`.
+
+**ONE ROW PER (dataset, year)**, a JSON array: the page asks for year 0 (lists,
+headline, this week) then the year picked, so it moves ~1–2 MB, not the
+history. Datasets: `weekly` (each group's swap per stock per report, with
+`ytd_t` and a best single counterparty), `pairs`, `balances` (TAC share,
+banked, swaps in/out, quota, landed, left at the latest report),
+`intl_weekly`/`intl_ytd`, `flex_ytd`, `noalloc` (weekly landings for stocks no
+PO holds — Rockall cod, Western spurdog, Norway demersal — plus WoS pollack,
+which David asked for), `runout` (current year: quota left vs what the same
+group landed after this date last year).
+
+**THE STOCK CHART IS A STEP, NOT A SLOPE.** `weekly` has a row only when a
+group's swaps CHANGED; `stockSeries` gives every report date a point holding
+the last value, drawn `stepAfter`. A line through the change points alone
+would slope between them and say quota moved in weeks it did not.
+
+Known gap: the 16 Jul 2025 email (~8.5 MB) is too large for the Gmail
+connector, so its swaps sit in the 23 Jul 2025 week. The report's own
+"Change in week" column is blank or stale in some issues (13 May 2026) — the
+build differences "Change in year" instead, which always reconciles.
+
+`test-uk-quota-swaps.mjs` (45 checks, synthetic rows only — the real figures
+are SWFPA-distributed PO data and stay out of a public repo).
+
 ### `reconcile_ok` does NOT mean the money is wrong
 
 Worth knowing before chasing one. The flag compares the parsed rows against

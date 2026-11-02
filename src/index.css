@@ -969,3 +969,10 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
   font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--mute); margin: 0.7rem 0 0;
 }
+
+/* ---- UK quota swaps (/quota-swaps) ----------------------------------------
+   The filter box sticks while a long table scrolls, but only where there is
+   room for it: below 900px it is a third of a phone screen, so it scrolls away
+   with the page instead of sitting on top of the figures. */
+.qs-filters { position: sticky; top: 0; z-index: 3; }
+@media (max-width: 900px) { .qs-filters { position: static; } }
