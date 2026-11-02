@@ -6,7 +6,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import {
   ALL, league, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown,
-  fmtUnits, fmtT, fmtPct, NO_PO, poLabel,
+  fmtUnits, fmtT, fmtPct, poLabel, poOverview, poSpecies,
 } from '../lib/quota/ukHolders.js'
 
 /* UK QUOTA HOLDERS — who holds the UK's fixed quota allocation (FQA) units.
@@ -409,80 +409,175 @@ function Holdings({ rows, species, rates }) {
   )
 }
 
-/* PO make-up: each PO's share of a stock's units against its quota and swaps,
- * then who holds the units inside the PO picked. */
-export function PoMakeup({ rows, speciesList, rates, balances, yearLabel, swapsYear, estimate }) {
-  const [species, setSpecies] = useState(['NS haddock'])
-  const [pick, setPick] = useState(null)
-  const sp = speciesList.find((s) => s.species === species[0]) || speciesList[0]
-  const shares = useMemo(() => (sp ? poShares(rows, sp.code ? balances : [], sp) : []), [rows, balances, sp])
-  const inside = useMemo(() => (pick && sp ? league(rows.filter((r) => r.po === pick), { by: 'holder', species: [sp.species], metric: 'units', rates, top: 0 }) : null),
-    [rows, pick, sp, rates])
-  if (!sp) return null
-  const r = rates.get(sp.species)
+/* PO make-up, drilled like Fish Sales: every PO across every stock; tap a PO
+ * for its stocks; tap a stock for the holders whose units make it up; tap a
+ * holder for everything that holder has, in every PO. Picking one stock at the
+ * top skips straight to that stock's PO table. */
+const COLS = ['FQA units', 'Share', 'Est. t', 'Quota (t)', 'Swapped in (t)', 'Swapped out (t)', 'Net swaps (t)', 'Net % of quota', 'Landed (t)']
+function Figures({ s }) {
   return (<>
+    <td style={{ ...td, ...num }}>{fmtUnits(s.units)}</td>
+    <td style={{ ...td, ...num }}>{fmtPct(s.unitShare)}</td>
+    <td style={{ ...td, ...num }}>{s.tonnes ? fmtT(s.tonnes) : DASH}</td>
+    <td style={{ ...td, ...num }}>{s.tac_t ? fmtT(s.tac_t) : DASH}</td>
+    <td style={{ ...td, ...num }}>{s.swaps_in_t ? fmtT(s.swaps_in_t) : DASH}</td>
+    <td style={{ ...td, ...num }}>{s.swaps_out_t ? fmtT(s.swaps_out_t) : DASH}</td>
+    <td style={{ ...td, ...num, ...signed(s.net_swaps_t || 0) }}>{s.net_swaps_t ? fmtT(s.net_swaps_t) : DASH}</td>
+    <td style={{ ...td, ...num, ...signed(s.netOfTac || 0) }}>{s.netOfTac != null && Math.abs(s.netOfTac) >= 0.0005 ? fmtPct(s.netOfTac) : DASH}</td>
+    <td style={{ ...td, ...num }}>{s.landed_t ? fmtT(s.landed_t) : DASH}</td>
+  </>)
+}
+const caret = (open) => (open ? '▾ ' : '▸ ')
+const sub = { background: 'var(--grey-50, var(--line-2))' }
+
+export function PoMakeup({ rows, speciesList, rates, balances, yearLabel, swapsYear, estimate }) {
+  const [stock, setStock] = useState(ALL)
+  const [openPo, setOpenPo] = useState('')
+  const [openSp, setOpenSp] = useState('')
+  const [openHolder, setOpenHolder] = useState('')
+  const sp = isAllStock(stock) ? null : speciesList.find((s) => s.species === stock)
+  const top = useMemo(() => (sp ? poShares(rows, sp.code ? balances : [], sp).map((x) => ({ ...x, tonnes: rates.has(sp.species) ? x.units * rates.get(sp.species) : null }))
+    : poOverview(rows, balances, speciesList, rates)), [rows, balances, speciesList, rates, sp])
+  const togglePo = (po) => { setOpenPo(openPo === po ? '' : po); setOpenSp(sp ? sp.species : ''); setOpenHolder('') }
+  const r = sp ? rates.get(sp.species) : null
+  return (
     <div className="card">
       <h2>PO make-up</h2>
       <p className="muted" style={{ fontSize: '0.8rem' }}>
-        Each PO's share of the register's units for one stock, beside its {swapsYear} quota and swaps from the uptake report{estimate ? ` (swaps are ${swapsYear}'s, not the estimate year's)` : ''}.
-        A PO swapping out a large part of its quota is long on that stock. Tap a PO for the holders whose units make up its quota.
+        Every PO's FQA units and estimated tonnes, beside its {swapsYear} quota and swaps from the uptake report{estimate ? ` (quota and swaps are ${swapsYear}'s, not the estimate year's)` : ''}.
+        Tap a PO for its stocks, a stock for the holders whose units make it up, and a holder for everything that holder has.
+        {sp ? ' Share = the PO’s share of this stock’s units.' : ' Share = the PO’s share of all estimated tonnes; inside a PO, its share of each stock’s units.'}
       </p>
       <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'end', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
-        <SpeciesPicker single speciesList={speciesList} value={[sp.species]} onChange={(v) => { setSpecies(v); setPick(null) }} rates={rates} />
-        <span className="muted" style={{ fontSize: '0.8rem', lineHeight: '2.3rem' }}>{r ? `≈${(r * 1000).toFixed(1)} kg per unit in ${yearLabel}` : 'No tonnes estimate for this stock'}</span>
+        <label className="muted" style={lbl}>Stock
+          <select value={stock} onChange={(e) => { setStock(e.target.value); setOpenPo(''); setOpenSp(''); setOpenHolder('') }} style={{ ...ctl, maxWidth: 260 }}>
+            <option value={ALL}>All stocks</option>
+            {speciesList.map((s) => <option key={s.species} value={s.species}>{s.species}{!rates.has(s.species) ? ' (units only)' : ''}</option>)}
+          </select></label>
+        {sp && <span className="muted" style={{ fontSize: '0.8rem', lineHeight: '2.3rem' }}>{r ? `≈${(r * 1000).toFixed(1)} kg per unit in ${yearLabel}` : 'No tonnes estimate for this stock'}</span>}
       </div>
       <div style={scroller}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
           <thead><tr>
-            {[['PO'], ['FQA units', 1], ['Share of units', 1], [`Quota ${swapsYear} (t)`, 1], ['Swapped in (t)', 1], ['Swapped out (t)', 1], ['Net swaps (t)', 1], ['Net % of quota', 1], ['Landed (t)', 1]]
-              .map(([h, n]) => <th key={h} style={n ? { ...th, textAlign: 'right' } : th}>{h}</th>)}
+            <th style={th}>{sp ? 'PO' : 'PO › stock › holder'}</th>
+            {/* Headings may wrap: nine figures plus a name have to fit a laptop
+                without the last column sliding out of sight. */}
+            {COLS.map((h) => <th key={h} style={{ ...th, textAlign: 'right', whiteSpace: 'normal', verticalAlign: 'bottom' }}>{h === 'Quota (t)' ? `Quota ${swapsYear} (t)` : h}</th>)}
           </tr></thead>
           <tbody>
-            {shares.map((s) => (
-              <tr key={s.po} onClick={() => setPick(pick === s.po ? null : s.po)} style={{ cursor: 'pointer', background: pick === s.po ? 'var(--line-2)' : undefined }}>
-                <td style={{ ...td, fontWeight: 600 }}>{s.label}</td>
-                <td style={{ ...td, ...num }}>{fmtUnits(s.units)}</td>
-                <td style={{ ...td, ...num }}>{fmtPct(s.unitShare)}</td>
-                <td style={{ ...td, ...num }}>{s.tac_t != null ? fmtT(s.tac_t) : DASH}</td>
-                <td style={{ ...td, ...num }}>{s.swaps_in_t ? fmtT(s.swaps_in_t) : DASH}</td>
-                <td style={{ ...td, ...num }}>{s.swaps_out_t ? fmtT(s.swaps_out_t) : DASH}</td>
-                <td style={{ ...td, ...num, ...signed(s.net_swaps_t || 0) }}>{s.net_swaps_t ? fmtT(s.net_swaps_t) : DASH}</td>
-                <td style={{ ...td, ...num, ...signed(s.netOfTac || 0) }}>{s.netOfTac != null && Math.abs(s.netOfTac) >= 0.0005 ? fmtPct(s.netOfTac) : DASH}</td>
-                <td style={{ ...td, ...num }}>{s.landed_t != null ? fmtT(s.landed_t) : DASH}</td>
-              </tr>
+            {top.map((p) => (
+              <PoRows key={p.po} p={p} open={openPo === p.po} onToggle={() => togglePo(p.po)} sp={sp}
+                rows={rows} balances={balances} speciesList={speciesList} rates={rates} yearLabel={yearLabel}
+                openSp={openSp} setOpenSp={(v) => { setOpenSp(v); setOpenHolder('') }} openHolder={openHolder} setOpenHolder={setOpenHolder} />
             ))}
-            {!shares.length && <tr><td colSpan={9} style={td} className="muted">No units for this stock.</td></tr>}
+            {!top.length && <tr><td colSpan={10} style={td} className="muted">No units for this stock.</td></tr>}
           </tbody>
         </table>
       </div>
-      {!sp.code && <p className="muted" style={{ fontSize: '0.78rem' }}>This stock is not in the uptake report, so there is no quota or swaps column.</p>}
+      {sp && !sp.code && <p className="muted" style={{ fontSize: '0.78rem' }}>This stock is not in the uptake report, so there is no quota or swaps column.</p>}
       <p className="muted" style={{ fontSize: '0.78rem', margin: '0.5rem 0 0' }}>
         <b>Not in a PO (non-sector)</b> is real, not missing data: licences of boats outside every PO, plus administration pool licences. Their quota line is the
         uptake report’s Non Sector groups added together, and it is usually tiny against the units because most non-sector units are leased into POs.
-        So there is no net % for it, and those units are left out of the tonnes-per-unit rate.
+        So there is no net % for it, and those units are left out of the tonnes-per-unit rate. With all stocks, quota and swaps are added over the stocks both
+        the register and the uptake report cover.
       </p>
     </div>
-    {inside && (
-      <div className="card">
-        <h2>{poLabel(pick)}: who holds its {sp.species} units</h2>
-        <p className="muted" style={{ fontSize: '0.8rem' }}>{inside.count} holders, {fmtUnits(inside.totalUnits)} units{inside.totalTonnes ? `, ≈${fmtT(inside.totalTonnes)} t in ${yearLabel}` : ''}.{pick === NO_PO ? ' Non-sector licences and administration pool licences: boats outside every PO, whose quota the MMO or Marine Scotland manages. Its quota and swaps are the uptake report\u2019s Non Sector lines added together.' : ''}</p>
-        <div style={scroller}>
-          <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
-            <thead><tr>{['#', 'Holder', 'Units', 'Est. t', 'Share of PO', 'Boats / licences'].map((h, i) => <th key={h} style={i && i < 5 && i !== 1 ? { ...th, textAlign: 'right' } : th}>{h}</th>)}</tr></thead>
-            <tbody>
-              {inside.rows.map((h) => (
-                <tr key={h.key}>
-                  <td style={{ ...td, ...num }}>{h.rank}</td><td style={{ ...td, fontWeight: 600, whiteSpace: 'normal' }}>{h.name}</td>
-                  <td style={{ ...td, ...num }}>{fmtUnits(h.units)}</td><td style={{ ...td, ...num }}>{h.tonnes ? fmtT(h.tonnes) : '–'}</td>
-                  <td style={{ ...td, ...num }}>{fmtPct(h.share)}</td>
-                  <td style={{ ...td, whiteSpace: 'normal', fontSize: '0.8rem' }}>{h.vessels.join(', ') || '—'}<span className="muted"> · {h.lics.join(', ')}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    )}
+  )
+}
+const isAllStock = (v) => v == null || v === '' || v === ALL
+
+function PoRows({ p, open, onToggle, sp, rows, balances, speciesList, rates, yearLabel, openSp, setOpenSp, openHolder, setOpenHolder }) {
+  const stocks = useMemo(() => (open && !sp ? poSpecies(rows, balances, p.po, speciesList, rates) : []), [open, sp, rows, balances, p.po, speciesList, rates])
+  return (<>
+    <tr onClick={onToggle} style={{ cursor: 'pointer', background: open ? 'var(--line-2)' : undefined }}>
+      <td style={{ ...td, fontWeight: 600, color: 'var(--navy)', whiteSpace: 'normal', minWidth: '11rem' }}>{caret(open)}{p.label}</td>
+      <Figures s={p} />
+    </tr>
+    {open && sp && <HolderRows po={p.po} species={sp.species} rows={rows} rates={rates} yearLabel={yearLabel} depth={1}
+      openHolder={openHolder} setOpenHolder={setOpenHolder} />}
+    {open && !sp && stocks.map((s) => (
+      <Fragment key={s.species}>
+        <tr onClick={() => setOpenSp(openSp === s.species ? '' : s.species)} style={{ ...sub, cursor: 'pointer' }}>
+          <td style={{ ...td, paddingLeft: '1.6rem', fontWeight: 600, whiteSpace: 'normal', minWidth: '11rem' }}>{caret(openSp === s.species)}{s.species}
+            {!s.code && <span className="muted" style={{ fontWeight: 400, fontSize: '0.72rem' }}> · units only</span>}</td>
+          <Figures s={s} />
+        </tr>
+        {openSp === s.species && <HolderRows po={p.po} species={s.species} rows={rows} rates={rates} yearLabel={yearLabel} depth={2}
+          openHolder={openHolder} setOpenHolder={setOpenHolder} />}
+      </Fragment>
+    ))}
+    {open && !sp && !stocks.length && <tr style={sub}><td colSpan={10} style={{ ...td, paddingLeft: '1.6rem' }} className="muted">No stocks.</td></tr>}
+  </>)
+}
+
+/* The holders behind one PO's stock, and — tapped — everything one of them holds. */
+function HolderRows({ po, species, rows, rates, yearLabel, depth, openHolder, setOpenHolder }) {
+  const L = useMemo(() => league(rows.filter((r) => r.po === po), { by: 'holder', species: [species], metric: 'units', rates, top: 0 }), [rows, po, species, rates])
+  const pad = depth === 1 ? '1.6rem' : '3.2rem'
+  return (<>
+    {L.rows.map((h) => (
+      <Fragment key={h.key}>
+        <tr onClick={() => setOpenHolder(openHolder === h.key ? '' : h.key)} style={{ ...sub, cursor: 'pointer' }}>
+          <td style={{ ...td, paddingLeft: pad, whiteSpace: 'normal', minWidth: '11rem' }}>{caret(openHolder === h.key)}{h.name}
+            <div className="muted" style={{ fontSize: '0.74rem', paddingLeft: '1rem' }}>{h.vessels.join(', ') || 'no vessel'} · licence {h.lics.join(', ')}</div></td>
+          <td style={{ ...td, ...num }}>{fmtUnits(h.units)}</td>
+          <td style={{ ...td, ...num }}>{fmtPct(h.share)}</td>
+          <td style={{ ...td, ...num }}>{h.tonnes ? fmtT(h.tonnes) : DASH}</td>
+          <td colSpan={6} style={td} />
+        </tr>
+        {openHolder === h.key && <tr><td colSpan={10} style={{ ...td, whiteSpace: 'normal', background: 'var(--surface)', padding: '0.8rem 1rem 1rem ' + pad }}>
+          {/* Pinned to the left and capped, so opening a holder never widens the
+              table and pushes the PO figures off the side. */}
+          <div style={{ position: 'sticky', left: 0, width: 'min(60rem, 80vw)' }}>
+            <HolderDetail rows={rows.filter((r) => r.hkey === h.key)} rates={rates} yearLabel={yearLabel} />
+          </div>
+        </td></tr>}
+      </Fragment>
+    ))}
+    {!L.rows.length && <tr style={sub}><td colSpan={10} style={{ ...td, paddingLeft: pad }} className="muted">No holder in this PO has units in {species}.</td></tr>}
+    {L.rows.length > 0 && <tr style={sub}><td colSpan={10} style={{ ...td, paddingLeft: pad, fontSize: '0.75rem' }} className="muted">
+      Share = the holder's share of this PO's {species} units.</td></tr>}
+  </>)
+}
+
+/* Everything one holder has: who, which boats and licences, which POs, and
+ * every stock with units and estimated tonnes. Used by PO make-up and look-up. */
+function HolderDetail({ rows, rates, yearLabel }) {
+  const bd = useMemo(() => breakdown(rows, rates), [rows, rates])
+  if (!rows.length) return null
+  const tot = bd.reduce((a, b) => ({ u: a.u + b.units, t: a.t + (b.tonnes || 0) }), { u: 0, t: 0 })
+  const vessels = [...new Set(rows.map((r) => r.vessel).filter(Boolean))]
+  const names = [...new Set(rows.map((r) => r.holder))]
+  const facts = [
+    ['Holder', names.join(' / ')],
+    ['Vessels', vessels.join(', ') || 'none — units on PO or dummy licences only'],
+    ['Licences', [...new Set(rows.map((r) => (r.lt ? `${r.lt} ` : '') + r.lic))].join(', ')],
+    ['POs', [...new Set(rows.map((r) => poLabel(r.po)))].join(', ')],
+    ['Holding types', [...new Set(rows.map((r) => r.htype))].join('; ')],
+    ['Administration', [...new Set(rows.map((r) => r.admin).filter(Boolean))].join(', ') || '—'],
+    ['Category', [...new Set(rows.map((r) => r.cat).filter(Boolean))].join('; ') || '—'],
+    ['Total', `${fmtUnits(tot.u)} FQA units in ${bd.length} stocks · ≈${fmtT(tot.t)} t in ${yearLabel} where an estimate exists`],
+  ]
+  return (<>
+    <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: '0.25rem 1rem', fontSize: '0.84rem', marginBottom: '0.8rem' }}>
+      {facts.map(([k, v]) => <Fragment key={k}><span className="muted">{k}</span><span style={{ fontWeight: k === 'Holder' ? 700 : 400 }}>{v}</span></Fragment>)}
+    </div>
+    <h3 style={{ margin: '0 0 0.4rem', fontSize: '0.9rem' }}>Holdings</h3>
+    <Holdings rows={rows} species={[]} rates={rates} />
+    <h3 style={{ margin: '0.9rem 0 0.4rem', fontSize: '0.9rem' }}>By stock</h3>
+    <div style={{ ...scroller, maxHeight: '40vh' }}>
+      <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.84rem' }}>
+        <thead><tr><th style={th}>Stock</th><th style={{ ...th, textAlign: 'right' }}>FQA units</th><th style={{ ...th, textAlign: 'right' }}>Est. tonnes {yearLabel}</th></tr></thead>
+        <tbody>
+          {bd.map((b) => (
+            <tr key={b.species}>
+              <td style={td}>{b.species}</td><td style={{ ...td, ...num }}>{fmtUnits(b.units)}</td>
+              <td style={{ ...td, ...num }}>{b.tonnes == null ? <span className="muted">units only</span> : fmtT(b.tonnes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   </>)
 }
 
@@ -499,9 +594,7 @@ export function Lookup({ rows, rates, yearLabel }) {
     }
     return [...m.values()].sort((a, b) => a.name.localeCompare(b.name))
   }, [hits])
-  const sel = pick ? rows.filter((r) => r.hkey === pick) : []
-  const bd = useMemo(() => breakdown(sel, rates), [sel, rates])
-  const tot = bd.reduce((a, b) => ({ u: a.u + b.units, t: a.t + (b.tonnes || 0) }), { u: 0, t: 0 })
+  const sel = useMemo(() => (pick ? rows.filter((r) => r.hkey === pick) : []), [rows, pick])
   return (<>
     <div className="card">
       <h2>Holder look-up</h2>
@@ -522,24 +615,7 @@ export function Lookup({ rows, rates, yearLabel }) {
     {pick && sel.length > 0 && (
       <div className="card">
         <h2>{sel[0].holder}</h2>
-        <p className="muted" style={{ fontSize: '0.8rem' }}>
-          {sel.length} holding{sel.length === 1 ? '' : 's'} · {[...new Set(sel.map((r) => poLabel(r.po)))].join(', ')} · {fmtUnits(tot.u)} units, ≈{fmtT(tot.t)} t in {yearLabel} where an estimate exists.
-        </p>
-        <Holdings rows={sel} species={[]} rates={rates} />
-        <h3 style={{ marginTop: '1rem' }}>By stock</h3>
-        <div style={scroller}>
-          <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
-            <thead><tr><th style={th}>Stock</th><th style={{ ...th, textAlign: 'right' }}>FQA units</th><th style={{ ...th, textAlign: 'right' }}>Est. tonnes {yearLabel}</th></tr></thead>
-            <tbody>
-              {bd.map((b) => (
-                <tr key={b.species}>
-                  <td style={td}>{b.species}</td><td style={{ ...td, ...num }}>{fmtUnits(b.units)}</td>
-                  <td style={{ ...td, ...num }}>{b.tonnes == null ? <span className="muted">units only</span> : fmtT(b.tonnes)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <HolderDetail rows={sel} rates={rates} yearLabel={yearLabel} />
       </div>
     )}
   </>)
