@@ -308,6 +308,32 @@ export function breakdown(rows, rates) {
   }).sort((a, b) => (b.tonnes ?? -1) - (a.tonnes ?? -1) || b.units - a.units)
 }
 
-export const fmtUnits = (v) => (v == null ? '' : Math.round(v).toLocaleString('en-GB'))
+/* SIDE BY SIDE: two holders, boats, licences or POs, stock by stock. Each side
+ * is a set of holdings; a stock either holds appears once, with both sides'
+ * units and estimated tonnes. A units-only stock has null tonnes on both sides
+ * and is listed after every stock that has an estimate. */
+export function compare(rowsA, rowsB, rates) {
+  const add = (m, rows, side) => {
+    for (const r of rows || []) {
+      for (const [k, v] of Object.entries(r.u || {})) {
+        const e = m.get(k) || { species: k, ua: 0, ub: 0 }
+        e[side] += v
+        m.set(k, e)
+      }
+    }
+  }
+  const m = new Map()
+  add(m, rowsA, 'ua'); add(m, rowsB, 'ub')
+  const lines = [...m.values()].map((e) => {
+    const r = rates.get(e.species)
+    const ta = r == null ? null : e.ua * r, tb = r == null ? null : e.ub * r
+    return { ...e, ta, tb, dt: r == null ? null : ta - tb, du: e.ua - e.ub }
+  }).sort((x, y) => (Math.max(y.ta ?? -1, y.tb ?? -1) - Math.max(x.ta ?? -1, x.tb ?? -1)) || (Math.max(y.ua, y.ub) - Math.max(x.ua, x.ub)))
+  const sum = (k) => lines.reduce((a, l) => a + (l[k] || 0), 0)
+  return { lines, ua: sum('ua'), ub: sum('ub'), ta: sum('ta'), tb: sum('tb'),
+    onlyA: lines.filter((l) => l.ua && !l.ub).length, onlyB: lines.filter((l) => l.ub && !l.ua).length }
+}
+
+export const fmtUnits =(v) => (v == null ? '' : Math.round(v).toLocaleString('en-GB'))
 export const fmtT = (v) => (v == null ? '–' : Math.abs(v) >= 100 ? Math.round(v).toLocaleString('en-GB') : v.toFixed(1))
 export const fmtPct = (v) => (v == null ? '' : (v * 100).toFixed(1) + '%')

@@ -6,7 +6,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import {
   ALL, league, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown,
-  fmtUnits, fmtT, fmtPct, poLabel, poOverview, poSpecies, normHolderKey,
+  fmtUnits, fmtT, fmtPct, poLabel, poOverview, poSpecies, normHolderKey, compare,
 } from '../lib/quota/ukHolders.js'
 
 /* UK QUOTA HOLDERS — who holds the UK's fixed quota allocation (FQA) units.
@@ -287,6 +287,7 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
   const [top, setTop] = useState(20)
   const [split, setSplit] = useState(false)
   const [openKey, setOpenKey] = useState(null)
+  const [cmp, setCmp] = useState([])            // up to two {key, name}, in the order ticked
 
   const src = useMemo(() => applyRowFilters(rows, { leasable }), [rows, leasable])
   const L = useMemo(() => league(src, { by: leasable ? 'holder' : by, species, metric, rates, split, top }), [src, by, species, metric, rates, split, top, leasable])
@@ -306,7 +307,7 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
       </p>
       <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'end', marginBottom: '0.6rem' }}>
         {!leasable && <label className="muted" style={lbl}>Rank
-          <select style={ctl} value={by} onChange={(e) => { setBy(e.target.value); setOpenKey(null) }}>
+          <select style={ctl} value={by} onChange={(e) => { setBy(e.target.value); setOpenKey(null); setCmp([]) }}>
             <option value="holder">Holders</option><option value="boat">Boats</option><option value="po">POs</option>
           </select></label>}
         <SpeciesPicker speciesList={speciesList} value={species} onChange={(v) => { setSpecies(v); setOpenKey(null) }} rates={rates} />
@@ -319,10 +320,12 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
             {TOPS.map((t) => <option key={t} value={t}>{t ? `Top ${t}` : 'Everyone'}</option>)}
           </select></label>
         {mode === 'holder' && <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.82rem', height: '2.3rem', cursor: 'pointer' }}>
-          <input type="checkbox" checked={split} onChange={(e) => setSplit(e.target.checked)} style={{ width: 'auto', padding: 0, margin: 0, flex: 'none' }} /> Each holding separately</label>}
+          <input type="checkbox" checked={split} onChange={(e) => { setSplit(e.target.checked); setCmp([]) }} style={{ width: 'auto', padding: 0, margin: 0, flex: 'none' }} /> Each holding separately</label>}
       </div>
       {noRate.length > 0 && <p className="muted" style={{ fontSize: '0.78rem' }}>No tonnes estimate for {noRate.join(', ')}: the uptake report does not cover {noRate.length > 1 ? 'them' : 'it'}. Units still count.</p>}
       {by === 'boat' && !leasable && L.offBoat > 0 && <p className="muted" style={{ fontSize: '0.78rem' }}>{fmtUnits(L.offBoat)} units sit on PO dummy licences with no vessel and are not in this table.</p>}
+      {cmp.length > 0 && <CompareBar cmp={cmp} setCmp={setCmp} />}
+      {cmp.length === 2 && <ComparePanel a={cmp[0]} b={cmp[1]} rows={src} mode={mode} split={split} rates={rates} yearLabel={yearLabel} species={species} />}
       <p style={{ fontSize: '0.85rem', margin: '0 0 0.5rem' }}>
         {L.count.toLocaleString('en-GB')} {mode === 'po' ? 'POs' : mode === 'boat' ? 'boats' : split ? 'holdings' : 'holders'} hold {fmtUnits(L.totalUnits)} units
         {L.totalTonnes ? ` (≈${fmtT(L.totalTonnes)} t)` : ''}.{top ? ` The ${Math.min(top, L.count)} shown hold ${fmtPct(L.shownShare)}.` : ''}
@@ -330,6 +333,7 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
       <div style={scroller}>
         <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
           <thead><tr>
+            <th style={{ ...th, textAlign: 'center', fontSize: '0.72rem' }} title="Tick two to compare side by side">Compare</th>
             <th style={{ ...th, textAlign: 'right' }}>#</th>
             <th style={th}>{mode === 'po' ? 'PO' : mode === 'boat' ? 'Boat (licence)' : 'Holder'}</th>
             <th style={{ ...th, textAlign: 'right' }}>FQA units</th>
@@ -347,6 +351,12 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
               return (
                 <Fragment key={r.key}>
                   <tr onClick={() => setOpenKey(openKey === r.key ? null : r.key)} style={{ cursor: 'pointer', background: openKey === r.key ? 'var(--line-2)' : undefined }}>
+                    <td style={{ ...td, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                      <input type="checkbox" aria-label={`Compare ${r.name}`} checked={cmp.some((c) => c.key === r.key)}
+                        onChange={(e) => setCmp(e.target.checked
+                          ? [...cmp, { key: r.key, name: r.name }].slice(-2)      // a third tick replaces the oldest
+                          : cmp.filter((c) => c.key !== r.key))}
+                        style={{ width: 'auto', padding: 0, margin: 0, cursor: 'pointer' }} /></td>
                     <td style={{ ...td, ...num }}>{r.rank}</td>
                     <td style={{ ...td, fontWeight: 600, whiteSpace: 'normal', minWidth: '12rem' }}>{r.name}</td>
                     <td style={{ ...td, ...num }}>{fmtUnits(r.units)}</td>
@@ -380,6 +390,98 @@ export function League({ rows, speciesList, rates, yearLabel, leasable = false, 
         </table>
       </div>
       {L.rows.some((r) => r.missing > 0 && r.tonnes) && <p className="muted" style={{ fontSize: '0.75rem', margin: '0.4rem 0 0' }}>* part of this holder's units are in stocks with no tonnes estimate.</p>}
+    </div>
+  )
+}
+
+function CompareBar({ cmp, setCmp }) {
+  return (
+    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap', margin: '0 0 0.6rem', padding: '0.5rem 0.8rem',
+      border: '1px solid var(--border)', borderRadius: 4, background: 'var(--hull-pale, var(--line-2))', fontSize: '0.85rem' }}>
+      <b>Compare:</b>
+      <span>{cmp[0].name}</span>
+      <span className="muted">vs</span>
+      <span>{cmp[1] ? cmp[1].name : <span className="muted">tick one more row</span>}</span>
+      <button type="button" className="secondary" style={{ ...ctl, height: '1.9rem', marginLeft: 'auto' }} onClick={() => setCmp([])}>Clear</button>
+    </div>
+  )
+}
+
+/* Two rows of the league side by side: who they are, then every stock either
+ * holds in units and estimated tonnes, with the difference. */
+function ComparePanel({ a, b, rows, mode, split, rates, yearLabel, species }) {
+  const [picked, setPicked] = useState(true)
+  const ra = useMemo(() => rows.filter((h) => keyOf(h, mode, split) === a.key), [rows, mode, split, a.key])
+  const rb = useMemo(() => rows.filter((h) => keyOf(h, mode, split) === b.key), [rows, mode, split, b.key])
+  const C = useMemo(() => compare(ra, rb, rates), [ra, rb, rates])
+  const narrow = species.length > 0 && picked
+  const lines = narrow ? C.lines.filter((l) => species.includes(l.species)) : C.lines
+  const tot = narrow
+    ? lines.reduce((t, l) => ({ ua: t.ua + l.ua, ub: t.ub + l.ub, ta: t.ta + (l.ta || 0), tb: t.tb + (l.tb || 0) }), { ua: 0, ub: 0, ta: 0, tb: 0 })
+    : C
+  const who = (rs) => {
+    const set = (f) => [...new Set(rs.map(f).filter(Boolean))]
+    return [
+      ['Vessels', set((r) => r.vessel).join(', ') || '—'],
+      ['Licences', set((r) => (r.lt ? `${r.lt} ` : '') + r.lic).join(', ')],
+      ['POs', set((r) => poLabel(r.po)).join(', ')],
+    ]
+  }
+  const wa = who(ra), wb = who(rb)
+  const diff = (v, unit) => (v == null ? DASH : Math.abs(v) < 0.05 ? <span className="muted">level</span>
+    : <span style={signed(v)}>{v > 0 ? '+' : '−'}{unit === 't' ? fmtT(Math.abs(v)) : fmtUnits(Math.abs(v))}</span>)
+  const hA = { ...th, textAlign: 'right', background: 'color-mix(in srgb, var(--hull) 8%, var(--surface))' }
+  const hB = { ...th, textAlign: 'right', background: 'color-mix(in srgb, var(--brass) 12%, var(--surface))' }
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '0.8rem 1rem', marginBottom: '0.8rem' }}>
+      <h3 style={{ margin: '0 0 0.5rem' }}>Side by side</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(18rem, 1fr))', gap: '0.6rem 1.2rem', fontSize: '0.82rem', marginBottom: '0.7rem' }}>
+        {[[a, wa, ra, tot.ua, tot.ta], [b, wb, rb, tot.ub, tot.tb]].map(([x, w, rs, u, t], i) => (
+          <div key={x.key} style={{ borderLeft: `4px solid ${i ? 'var(--brass)' : 'var(--hull)'}`, paddingLeft: '0.6rem' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{i ? 'B' : 'A'} · {x.name}</div>
+            {w.map(([k, v]) => <div key={k}><span className="muted">{k}: </span>{v}</div>)}
+            <div style={{ marginTop: 2 }}><b>{fmtUnits(u)}</b> units · <b>≈{fmtT(t)} t</b> in {yearLabel} · {rs.length} holding{rs.length === 1 ? '' : 's'}</div>
+          </div>
+        ))}
+      </div>
+      {species.length > 0 && <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.82rem', marginBottom: '0.4rem', cursor: 'pointer' }}>
+        <input type="checkbox" checked={picked} onChange={(e) => setPicked(e.target.checked)} style={{ width: 'auto', padding: 0, margin: 0 }} />
+        Only the stocks picked ({species.length})</label>}
+      <div style={{ ...scroller, maxHeight: '50vh' }}>
+        <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.84rem' }}>
+          <thead><tr>
+            <th style={th}>Stock</th>
+            <th style={hA}>A units</th><th style={hA}>A est. t</th>
+            <th style={hB}>B units</th><th style={hB}>B est. t</th>
+            <th style={{ ...th, textAlign: 'right' }}>A − B (t)</th>
+            <th style={{ ...th, textAlign: 'right' }}>A − B (units)</th>
+          </tr></thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.species}>
+                <td style={td}>{l.species}{l.ta == null && <span className="muted" style={{ fontSize: '0.72rem' }}> · units only</span>}</td>
+                <td style={{ ...td, ...num }}>{l.ua ? fmtUnits(l.ua) : DASH}</td>
+                <td style={{ ...td, ...num }}>{l.ua && l.ta != null ? fmtT(l.ta) : DASH}</td>
+                <td style={{ ...td, ...num }}>{l.ub ? fmtUnits(l.ub) : DASH}</td>
+                <td style={{ ...td, ...num }}>{l.ub && l.tb != null ? fmtT(l.tb) : DASH}</td>
+                <td style={{ ...td, ...num }}>{diff(l.dt, 't')}</td>
+                <td style={{ ...td, ...num }}>{diff(l.du, 'u')}</td>
+              </tr>
+            ))}
+            <tr>
+              <td style={{ ...td, fontWeight: 700 }}>Total</td>
+              <td style={{ ...td, ...num, fontWeight: 700 }}>{fmtUnits(tot.ua)}</td><td style={{ ...td, ...num, fontWeight: 700 }}>{fmtT(tot.ta)}</td>
+              <td style={{ ...td, ...num, fontWeight: 700 }}>{fmtUnits(tot.ub)}</td><td style={{ ...td, ...num, fontWeight: 700 }}>{fmtT(tot.tb)}</td>
+              <td style={{ ...td, ...num, fontWeight: 700 }}>{diff(tot.ta - tot.tb, 't')}</td>
+              <td style={{ ...td, ...num, fontWeight: 700 }}>{diff(tot.ua - tot.ub, 'u')}</td>
+            </tr>
+            {!lines.length && <tr><td colSpan={7} style={td} className="muted">Neither holds any of the stocks picked.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted" style={{ fontSize: '0.75rem', margin: '0.4rem 0 0' }}>
+        Every stock either holds, biggest first. A − B in green = A holds more. Tonnes are estimates for {yearLabel}; units-only stocks count in units but not tonnes.
+      </p>
     </div>
   )
 }
