@@ -210,6 +210,72 @@ export function poShares(rows, balances, { species, code }) {
   return out.sort((a, b) => b.units - a.units)
 }
 
+/* One PO line: its units and estimated tonnes beside a balance from the uptake
+ * report (one stock, or several added together). */
+function poLine(po, units, unitShare, tonnes, b) {
+  const tac = b?.tac_t ?? null
+  return {
+    po, label: poLabel(po), units, unitShare, tonnes, tac_t: tac,
+    swaps_in_t: b?.swaps_in_t ?? null, swaps_out_t: b?.swaps_out_t ?? null, net_swaps_t: b?.net_swaps_t ?? null,
+    netOfTac: po !== NO_PO && tac >= 10 && b?.net_swaps_t != null ? b.net_swaps_t / tac : null,
+    landed_t: b?.landed_t ?? null,
+  }
+}
+
+/* The uptake balances one PO (or the non-sector groups) has for a stock code. */
+function balFor(balances, po, code) {
+  const list = (balances || []).filter((b) => b.stock === code && (po === NO_PO ? isNonSector(b.po) : b.po === po))
+  return sumBal(list)
+}
+
+/* PO MAKE-UP, ALL STOCKS: every PO's units and estimated tonnes across every
+ * stock, beside its quota and swaps added over the stocks the register and the
+ * uptake report share — so the quota column covers the same stocks the units do,
+ * not a PO's area VII lines that no tonnes figure here can match. */
+export function poOverview(rows, balances, speciesList, rates) {
+  const codes = new Set((speciesList || []).map((s) => s.code).filter(Boolean))
+  const units = new Map(), tonnes = new Map()
+  let totalT = 0
+  for (const r of rows || []) {
+    const n = unitsOf(r, [])
+    if (!n) continue
+    units.set(r.po, (units.get(r.po) || 0) + n)
+    const { t } = tonnesOf(r, [], rates)
+    tonnes.set(r.po, (tonnes.get(r.po) || 0) + t); totalT += t
+  }
+  const inScope = (balances || []).filter((b) => codes.has(b.stock))
+  const pos = new Set([...units.keys(), ...inScope.map((b) => (isNonSector(b.po) ? NO_PO : b.po)).filter((p) => PO_GROUPS.has(p) || p === NO_PO)])
+  const out = []
+  for (const po of pos) {
+    const b = sumBal(inScope.filter((x) => (po === NO_PO ? isNonSector(x.po) : x.po === po)))
+    const t = tonnes.get(po) || 0
+    out.push(poLine(po, units.get(po) || 0, totalT ? t / totalT : 0, t, b))
+  }
+  return out.sort((a, b) => b.tonnes - a.tonnes || b.units - a.units)
+}
+
+/* PO MAKE-UP, ONE PO: its stocks, each with the PO's share of that stock's
+ * units on the register, its estimated tonnes, and its quota and swaps. */
+export function poSpecies(rows, balances, po, speciesList, rates) {
+  const ukUnits = new Map(), mine = new Map()
+  for (const r of rows || []) {
+    for (const [k, v] of Object.entries(r.u || {})) {
+      ukUnits.set(k, (ukUnits.get(k) || 0) + v)
+      if (r.po === po) mine.set(k, (mine.get(k) || 0) + v)
+    }
+  }
+  const out = []
+  for (const s of speciesList || []) {
+    const n = mine.get(s.species) || 0
+    const b = s.code ? balFor(balances, po, s.code) : null
+    if (!n && !(b && (b.tac_t || b.swaps_in_t || b.swaps_out_t))) continue
+    const r = rates.get(s.species)
+    const line = poLine(po, n, ukUnits.get(s.species) ? n / ukUnits.get(s.species) : 0, r == null ? null : n * r, b)
+    out.push({ ...line, species: s.species, code: s.code })
+  }
+  return out.sort((a, b) => (b.tonnes ?? -1) - (a.tonnes ?? -1) || b.units - a.units)
+}
+
 /* PO MAKE-UP, part 2: who holds a PO's units for a stock (or all stocks). */
 export function poHolders(rows, po, species, rates) {
   return league((rows || []).filter((r) => r.po === po), { by: 'holder', species, metric: 'units', rates, top: 0 })

@@ -10,7 +10,7 @@
  */
 import assert from 'node:assert'
 import {
-  league, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
+  league, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
 } from './src/lib/quota/ukHolders.js'
 import { accessForPath, NAV } from './src/nav.js'
 
@@ -111,6 +111,23 @@ eq(applyRowFilters(rows, { po: 'Fife' }).length, 2, 'the PO filter')
   eq(np.netOfTac, null, 'but no net-% for it: its units are not what that quota is cut from')
   eq(poShares(rows, balances.filter((b) => !/^Non Sector/.test(b.po)), species[0]).find((r) => r.po === 'No PO').tac_t, null,
     'with no Non Sector line in the report the quota is null, not 0')
+}
+
+/* ---- PO make-up across all stocks, and one PO's stocks ------------------------ */
+{
+  const o = poOverview(rows, balances, species, rates)
+  const sfo = o.find((r) => r.po === 'SFO'), fife = o.find((r) => r.po === 'Fife')
+  near(sfo.tonnes, 2200 * 0.1 + 100 * 0.5, 'SFO: haddock and saithe tonnes together')
+  near(sfo.tac_t, 270, 'SFO quota added over the two stocks (220 + 50)')
+  near(fife.tonnes, 500 * 0.1 + 900 * 0.5, 'Fife: its nephrops VII units add no tonnes')
+  near(o.reduce((a, r) => a + r.unitShare, 0), 1, 'shares of all tonnes add to 100%')
+  eq(o[0].po, 'Fife', 'ranked by estimated tonnes, all stocks')
+  eq(o.find((r) => r.po === 'No PO').tac_t, 5000, 'the non-sector line takes the Non Sector groups')
+  const st = poSpecies(rows, balances, 'Fife', species, rates)
+  eq(st.map((r) => r.species), ['NS saithe', 'NS haddock', 'Nephrops VII'], 'Fife\u2019s stocks, biggest tonnes first, units-only last')
+  near(st.find((r) => r.species === 'NS haddock').unitShare, 500 / 3000, 'share of that stock\u2019s UK units')
+  eq(st.find((r) => r.species === 'Nephrops VII').tonnes, null, 'a units-only stock has null tonnes, not 0')
+  near(st.find((r) => r.species === 'NS haddock').netOfTac, -0.4, 'with its quota and swaps')
 }
 
 /* ---- look-up ------------------------------------------------------------------ */
