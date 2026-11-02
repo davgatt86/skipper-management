@@ -31,6 +31,7 @@ import assert from 'node:assert'
 import {
   splitHaddockByTotals, autoSplitHaddock, familyRows, sizeMark,
   haddockSpec, gradeSortKey, sortGrades, BAND_CODE, strandedSubGrades, SPEC_A2, SPEC_A4, LADDER_CHANGEOVER,
+  landingSale,
 } from './src/lib/salesAgg.js'
 
 let n = 0
@@ -406,6 +407,48 @@ eq(sizeMark(null, '4'), null, 'and neither is nothing at all')
     'each size runs A+ then plain then A-')
   ok(gradeSortKey('A-2') < gradeSortKey('Nephrops'),
     'and a real grade still sorts above an unrecognised label')
+}
+
+/* ---- HOW SHE REACHED THE MARKET, AND HOW IT SOLD (Nov 2026) -----------
+ *
+ * David: *"some will be consigned, some will be private, some will be landed
+ * in PD"*. Two independent facts off two lines of the note, not three values
+ * of one field — and the screen says only what is NOT the ordinary case,
+ * because `(consigned)` on all 402 landings is what started this.
+ */
+{
+  const L = (o) => landingSale(o)
+
+  eq(L({ consigned: false, port: 'Peterhead', sale_type: 'auction' }).note, '',
+    'landed at PD through the auction says nothing — the market already names the port')
+  eq(L({ consigned: true, port: 'Ullapool', sale_type: 'auction' }).note, 'consigned',
+    'consigned says so')
+  eq(L({ consigned: false, port: 'Peterhead', sale_type: 'private' }).note, 'private',
+    'a private sale says so')
+  eq(L({ consigned: true, port: 'Scrabster', sale_type: 'private' }).note, 'consigned · private',
+    'and both at once says both — they are independent')
+
+  eq(L({ consigned: false, port: 'Peterhead', sale_type: 'auction' }).where, 'Landed Peterhead',
+    'the full phrase names the port')
+  eq(L({ consigned: true, port: 'Fraserburgh', sale_type: 'auction' }).where, 'Consigned Fraserburgh',
+    'and names where she was consigned from')
+  eq(L({ consigned: false, port: 'Peterhead', sale_type: 'private' }).full, 'Landed Peterhead · private sale',
+    'the tooltip spells it out')
+
+  /* A NOTE NOBODY HAS READ IS NOT AN AUCTION. 133 Don landings carry no
+     sale_type because the file is not on this machine, and the column must
+     never let that read as a positive answer. */
+  const unread = L({ consigned: false, port: 'Peterhead', sale_type: null })
+  eq(unread.note, '', 'an unread note adds nothing to the row')
+  eq(unread.known, false, 'and says it is not known')
+  eq(L({ consigned: false, port: 'Peterhead', sale_type: 'auction' }).known, true,
+    'where an auction IS known, it says so')
+  eq(unread.isPrivate, false, 'and is never reported as private')
+
+  /* A LANDING WITH NO PORT still reads, rather than printing "Landed ". */
+  eq(L({ consigned: false, port: '', sale_type: null }).where, 'Landed', 'no port, no dangling space')
+  eq(L({ consigned: true, port: null, sale_type: null }).where, 'Consigned', 'and the same consigned')
+  eq(L(null).note, '', 'and nothing at all is nothing')
 }
 
 console.log(`haddock split: ${n} checks passed`)

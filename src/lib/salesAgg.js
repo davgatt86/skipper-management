@@ -615,6 +615,44 @@ export function scopeLandingIds(landings, scope) {
   return landings.filter((l) => (scope === 'dk' ? isDanish(l) : !isDanish(l)))
 }
 
+/* ---------------- how she reached the market, and how it sold ----------------
+ *
+ * David: *"some will be consigned, some will be private, some will be landed in
+ * PD"*. Those are not three values of one field. The Don note prints TWO
+ * independent facts on two different lines — the port line says landed or
+ * consigned and from where, the vessel line carries a " - Private" suffix —
+ * and all four combinations occur across the 109 notes on disk.
+ *
+ * ONLY "PRIVATE" AND "CONSIGNED" ARE WORTH A WORD ON SCREEN. Landed at
+ * Peterhead through the auction is the ordinary case and the market column
+ * already names the port; a qualifier true of most rows carries no information,
+ * which is exactly what `(consigned)` on all 402 landings was.
+ *
+ * AND `sale_type` NULL IS NOT 'auction'. 133 Don landings are notes nobody has
+ * read — the file is not on this machine — so the column says nothing about
+ * them, and neither does this. `known` is what separates the two for anything
+ * that needs to; the screen treats both as "nothing to say".
+ */
+export function landingSale(l) {
+  const port = String(l?.port || '').trim()
+  const consigned = !!l?.consigned
+  const sale = l?.sale_type || null
+  const where = consigned
+    ? (port ? `Consigned ${port}` : 'Consigned')
+    : (port ? `Landed ${port}` : 'Landed')
+  const notes = []
+  if (consigned) notes.push('consigned')
+  if (sale === 'private') notes.push('private')
+  return {
+    consigned, port, sale,
+    where,                                    // "Landed Peterhead"
+    full: sale === 'private' ? `${where} · private sale` : where,
+    note: notes.length ? notes.join(' · ') : '',   // what the table appends
+    isPrivate: sale === 'private',
+    known: sale != null,
+  }
+}
+
 /* ---------------- per vessel ----------------
  * A pair team is two boats in ONE fleet, told apart by the vessel label on the
  * landing — not two fleets, and not something that needs a vessels table.

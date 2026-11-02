@@ -2428,7 +2428,7 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 ## Parsers
 
-**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.4.0**. The
+**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.4.1**. The
 CloudMailin webhook imports it and so does the browser upload, so a fix cannot
 reach one path and not the other.
 
@@ -3070,15 +3070,18 @@ it.
 they agree on **57**, and the other 50 are **1 to 10 days apart**. Copying one
 into the other would be the invoice work-date failure exactly.
 
-**BUT THE SPLIT IS BY NOTE SIZE, AND IT IS CLEAN:**
+**THE CAUSE IS `sale_type`, AND IT WAS FOUND THE NEXT DAY** — see **AUCTION OR
+PRIVATE** below. This section first recorded the split as *">= 20 rows: 56
+notes, 0 where sold <> landed; < 20 rows: 51 notes, 50 where sold <> landed"*
+and said the 20 was a correlate rather than a cause. It was. The cause is the
+note's own **private-sale marker**, which separates them perfectly:
 
-    >= 20 rows   56 notes,  0 where sold <> landed
-    <  20 rows   51 notes, 50 where sold <> landed
+    auction   sold === landed on 57 of 57
+    PRIVATE   sold  <>  landed on 50 of 50, by 1 to 10 days
 
-The main landing sells the morning it comes ashore; the small tail notes go days
-later. **The 20-row figure is NOT in the code** — it is a correlate, not a cause,
-and this repo already learned that from the engine limits, where a threshold off
-history alone would have flagged the correct readings.
+An auction lot sells the morning it lands; a private sale goes directly, days
+later. Small notes are mostly private, which is why size looked like the answer.
+**Neither figure is in the code** — the substitution is marked, not gated.
 
 **AND A BLANK DATE IS NOT A SAFE RESTING STATE EITHER**, which is what decided
 it. An undated landing takes the **RETIRED A4 haddock ladder** — `haddockSpec`
@@ -3138,6 +3141,103 @@ to a whole-text match, consigned never true, and no fallback at all. All seven
 caught, each by the assertion meant to catch it.
 `scripts/upload-panel-preview.mjs` renders a fourth card for it and asserts the
 other three are **not** marked — a mark on every card is one nobody reads.
+
+### AUCTION OR PRIVATE, AND THE BOAT WAS NEVER STAMPED — 1.4.1 (Nov 2026)
+
+David: *"stamp vessel ID's and fix consigned label. some will be consigned,
+some will be private, some will be landed in PD"*.
+
+#### THE THREE ARE NOT THREE VALUES OF ONE FIELD
+
+The note prints **two independent facts on two different lines**:
+
+    the port line     "Landed Peterhead 20-May-2026" / "Consigned Ullapool ..."
+    the vessel line   "The Don Fishing Co Ltd - Pd AUDACIOUS BF83 - Private"
+
+All four combinations occur across the 109 notes on disk — **landed/auction 43,
+landed/private 34, consigned/auction 16, consigned/private 16** — so a single
+enum would have been wrong for half of them. `sales_landings.sale_type`
+(`supabase/sales_landing_sale_type.sql`, applied) sits beside `consigned`.
+
+**AND IT EXPLAINS THE DATE GAP THE PREVIOUS SECTION WAS BUILT AROUND**, which
+is the better half of this finding: auction notes have sold === landed on
+**57 of 57**, private notes differ on **50 of 50**. Note size was the correlate;
+this is the cause.
+
+**ABSENCE MEANS AUCTION, and that is not read off the layout alone.** The dates
+corroborate the marker independently — every unmarked note behaves like an
+auction and every marked one like a private sale — which is what makes reading
+the silence safe. **`sale_type` is NULL on every other market** (Shetland,
+Hanstholm, LHD, P&J print no such thing) and on the **133 Don notes nobody has
+read**, because the file is not on this machine and nothing else says.
+
+**ONLY WHAT IS NOT ORDINARY GETS A WORD.** `landingSale()` in `salesAgg.js` is
+the one definition; the market column already names the port, so a landing at PD
+through the auction says nothing and only *consigned* and *private* appear.
+`(consigned)` on all 402 landings is what started this.
+
+#### FRASERBURGH WAS NEVER IN THE PORT LIST
+
+Found while backfilling. `parseDon` matched the port against five hard-coded
+names — Peterhead, Scrabster, Ullapool, Kinlochbervie, Lerwick — so a note
+reading **"Consigned Fraserburgh"** fell through to the `"Peterhead"` default
+and was filed under the wrong port, which also made it read as landed. **A
+vocabulary list rots the first time the boat lands somewhere new**, the same
+lesson as the page-break stop condition. 1.4.1 takes the port off the line
+itself, so a port nobody has seen reads correctly.
+
+#### A SALE NUMBER IS NOT A NOTE — and I made that mistake here
+
+The first backfill keyed `sale_type` on **`sale_no` alone**. Don's sale numbers
+run across the whole agent, so **15 of them reach more than one fleet** — and
+"private", read off the Audacious note, was written onto Beryl's and Boy
+Andrew's landings on the same number. Each boat's note carries its own marker;
+one says nothing about another.
+
+**It is the invoice-currency fault verbatim** — a Fraserburgh bill re-priced
+into euros because an invoice number is only unique within a firm — committed
+one section after writing that lesson down, and for the same reason: the correct
+key was in the first draft and dropped to make the migration smaller.
+
+Caught by asking whether any stamped number spanned two fleets, re-keyed on
+**(vessel, sale_no)**, and checked after: **0 stamped on a boat whose notes were
+never read, 0 contradictions.** Only three boats' notes are on this machine, so
+only those three are stamped — 117 landings, the extra 8 being TEST FLEET rows
+loaded from those very files.
+
+    consigned   266 (all of them)  ->  67     landed  0 -> 201
+    sale_type   117 read (50 private, 67 auction), 133 honestly null
+
+#### THE BOAT IS STAMPED BY A TRIGGER, NOT BY TWO UPLOAD PATHS
+
+35 landings across four fleets carried no `vessel_id` — **every one filed since
+the stage-1 backfill of 16-10-2026**. Nothing in either upload path ever set it;
+the backfill stamped history once and the gap re-opened behind it.
+
+It cost nothing on Fish Sales, which matches on the vessel LABEL — but it is the
+documented shape, *"a filter and a stamp are one feature"*, and the quota page
+already proved what it costs the moment anything filters on the id.
+
+**`stamp_sales_landing_vessel()` is a BEFORE trigger, and that is the point.**
+The browser upload, the CloudMailin webhook and the demo seed all write this
+table, and this repo's recurring fault is one rule living in two places. The
+rule needs nothing the client knows — the row already carries `fleet_id` and the
+boat's name as the note printed it, and `vessels.label` is the same canonical
+"NAME REG" `canonVessel()` produces. **It only ever fills a null**, and a label
+naming no boat in that fleet is left null rather than guessed. Probed both ways;
+**402 of 402 stamped, 0 null, 0 pointing across a fleet boundary.**
+
+**The regression is the 295 PDFs on disk**, fingerprinted before and after:
+every row hash, vessel, market, row count, reconcile **and `consigned`**
+identical — only two `port` values moved, `Peterhead → Fraserburgh`, exactly the
+two predicted. `consigned` agreeing under both the old whole-note test and the
+new port-line read is independent confirmation on all 109.
+
+`test-parser.mjs` 85 → **103**, mutation-checked against **6 weakened copies**
+(the port back to the name list, the date left on the port, the private marker
+unanchored, every note an auction, consigned from anywhere, the port taken from
+the heading) — all six caught. `test-haddock-split.mjs` 123 → **137** for the
+label, including that an unread note never reads as an auction.
 
 ### THE LADDER MOVED FROM A4 TO A2 — Don notes, 20-10-2026
 

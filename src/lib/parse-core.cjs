@@ -39,7 +39,7 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.4.0";
+  const VERSION = "1.4.1";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
@@ -504,10 +504,20 @@
      * The note prints LANDING DATE with a month name, in the port line under
      * that heading — "Landed Peterhead 20-May-2026" — and DATE SOLD as plain
      * figures at the top. Measured over 107 real Don notes carrying both:
-     * they agree on only 57. The other 50 are 1 to 10 days apart, and they
-     * are the small tail notes — the main landing sells the morning it comes
-     * ashore, the leftovers go days later. So the sold date is NOT the
-     * landing date and must never quietly stand in for it.
+     * they agree on only 57. So the sold date is NOT the landing date and
+     * must never quietly stand in for it.
+     *
+     * AND THE THING THAT DECIDES IT IS `saleType`, not the size of the note.
+     * This comment first recorded the split as "the small tail notes", flagged
+     * as a correlate rather than a cause. The cause is below, and it separates
+     * the two perfectly over all 109 notes on disk:
+     *
+     *     PRIVATE   50 notes, sold === landed on  0 of 50, gap 1-10 days
+     *     auction   59 notes, sold === landed on 57 of 57, gap 0
+     *
+     * An auction lot sells the morning it comes ashore; a private sale is sold
+     * directly, days later. Small notes are mostly private, which is why size
+     * looked like the answer.
      *
      * BUT A BLANK LANDING DATE IS NOT A SAFE RESTING STATE EITHER. Don
      * printed the notes of 02-11-2026 with that box empty, and an undated
@@ -537,16 +547,55 @@
       for (const p of ["Peterhead", "Scrabster", "Ullapool", "Kinlochbervie", "Lerwick"]) if (ln.includes(p)) port = p;
     }
     const dateBasis = iso ? "landed" : (sold ? "sold" : null);
-    /* THE WORD HAS TO START THE PORT LINE, not merely appear somewhere on the
-       note. The column heading is "LANDED / CONSIGNED PORT LANDING DATE", so
-       a test over the whole text matched the HEADING and every Don note ever
-       filed came back consigned — 402 landings, including the 109 on disk
-       whose own port line reads "Landed Peterhead". A flag that is true on
-       every row carries no information. */
-    const consigned = allLines.some(l => /^\s*Consigned\b/i.test(l));
+
+    /* HOW SHE REACHED THE MARKET, AND FROM WHERE — one line says both.
+     *
+     *     "Landed Peterhead 20-May-2026"      "Consigned Ullapool 14-Jan-2026"
+     *
+     * READ OFF THE LINE UNDER THE HEADING, which is where the document puts
+     * it. A test over the whole note matched the HEADING — "LANDED /
+     * CONSIGNED PORT LANDING DATE" — so every Don note ever filed came back
+     * consigned, 402 landings, including the 77 on disk that say "Landed
+     * Peterhead". A flag true on every row carries no information.
+     *
+     * AND THE PORT COMES OFF THE SAME LINE rather than a list of port names.
+     * The list was Peterhead/Scrabster/Ullapool/Kinlochbervie/Lerwick, and the
+     * office consigns from FRASERBURGH too — so those notes fell through to
+     * the "Peterhead" default and were filed under the wrong port, which also
+     * made them look landed. A vocabulary list rots the first time the boat
+     * lands somewhere new; the line's own shape does not. The old scan stays
+     * as the fallback for a note printing no port line at all.
+     */
+    const hdr = allLines.findIndex(l => /LANDED\s*\/\s*CONSIGNED/i.test(l));
+    const portLine = hdr >= 0 ? String(allLines[hdr + 1] || "") : "";
+    const pm = portLine.match(/^\s*(Landed|Consigned)\s+(.+?)\s*$/i);
+    const consigned = pm ? /^c/i.test(pm[1]) : allLines.some(l => /^\s*Consigned\b/i.test(l));
+    if (pm) {
+      const named = pm[2].replace(/\s*\d{1,2}[-/][A-Za-z]{3}[A-Za-z]*[-/]\d{2,4}\s*$/, "").trim();
+      if (named) port = named;
+    }
+
+    /* AUCTION OR PRIVATE, and it is on the VESSEL line, not the port line:
+     *
+     *     "The Don Fishing Co Ltd - Pd AUDACIOUS BF83 - Private"
+     *
+     * The two facts are INDEPENDENT — all four combinations occur on the notes
+     * on disk (landed/auction 43, landed/private 34, consigned/auction 16,
+     * consigned/private 16) — so this is a second column and not a third value
+     * of the first.
+     *
+     * ABSENCE MEANS AUCTION, and that is not an assumption off the layout
+     * alone: the 59 notes with no marker ALL have their sold date equal to
+     * their landing date, and the 50 with it are ALL 1 to 10 days apart. The
+     * dates corroborate the marker independently, which is what makes reading
+     * the silence safe. Only `parseDon` sets it; every other market leaves it
+     * undefined, because no other note carries the distinction.
+     */
+    const saleType = allLines.some(l => /-\s*Private\s*$/i.test(l)) ? "private" : "auction";
+
     const headerText = allLines.slice(0, 18).join("  ");
     const vessel = detectVessel(headerText) || detectVessel(allLines.join("  "));
-    return { rows, meta: { saleNo, isoDate: iso || sold, landedDate: iso, soldDate: sold, dateBasis, port, vessel, consigned }, reconcile: reconcileDon(allLines, rows) };
+    return { rows, meta: { saleNo, isoDate: iso || sold, landedDate: iso, soldDate: sold, dateBasis, port, vessel, consigned, saleType }, reconcile: reconcileDon(allLines, rows) };
   }
 
   // Printed control totals: last "TOTAL <boxes> <wt> <value>" line of the note.

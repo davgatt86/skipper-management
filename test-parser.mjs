@@ -194,7 +194,94 @@ eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1
   eq('and the real row in between is the one kept', Number(rows[0].total_value), 1555.20)
 }
 
-eq('the version was bumped', PC.VERSION, '1.4.0')
+eq('the version was bumped', PC.VERSION, '1.4.1')
+
+/* ---- LANDED OR CONSIGNED, AND FROM WHERE (1.4.1, Nov 2026) ------------
+ *
+ * The port came off a hard-coded list of five names, and the office consigns
+ * from FRASERBURGH too — so those notes fell through to the "Peterhead"
+ * default and were filed under the wrong port. A vocabulary list rots the
+ * first time the boat lands somewhere new; the port line's own shape does not.
+ */
+{
+  const withPort = (portLine) => PC.parseDon([
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    portLine,
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+
+  eq('the port is read off the line, not a list of names',
+    withPort('Consigned Fraserburgh 09-Sep-2025').port, 'Fraserburgh')
+  eq('and that note is consigned',
+    withPort('Consigned Fraserburgh 09-Sep-2025').consigned, true)
+  eq('a port nobody has ever seen still reads',
+    withPort('Consigned Lochinver 09-Sep-2025').port, 'Lochinver')
+  eq('the date is not left on the end of the port',
+    withPort('Landed Peterhead 28-Oct-2026').port, 'Peterhead')
+  eq('nor when the box is blank',
+    withPort('Landed Peterhead').port, 'Peterhead')
+
+  /* THE HEADING IS NOT THE PORT LINE. "LANDED / CONSIGNED PORT LANDING DATE"
+     begins with the word LANDED, so anything matching on that word alone
+     reads the heading — which is how all 402 landings came back consigned. */
+  const headingOnly = PC.parseDon([
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+  eq('the heading alone never sets consigned', headingOnly.consigned, false)
+  eq('nor is it read as a port', headingOnly.port, 'Peterhead')
+}
+
+/* ---- AUCTION OR PRIVATE (1.4.1) --------------------------------------
+ *
+ * David: *"some will be consigned, some will be private, some will be landed
+ * in PD"*. The marker is on the VESSEL line, not the port line, so the two
+ * are independent — all four combinations occur across the 109 notes on disk.
+ *
+ * And private is what explains the DATE GAP `date_basis` was built around:
+ * auction notes have sold === landed on 57 of 57, private notes differ on
+ * 50 of 50. An auction lot sells the morning it lands.
+ */
+{
+  const note = (vesselLine, portLine) => PC.parseDon([
+    'The Don Fishing Company Ltd.',
+    'DATE SOLD 02/11/26',
+    'SALES NOTE NUMBER 3356678',
+    vesselLine,
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    portLine,
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+
+  const PLAIN = 'The Don Fishing Co Ltd - Pd AUDACIOUS BF83'
+  const PRIV = 'The Don Fishing Co Ltd - Pd AUDACIOUS BF83 - Private'
+
+  eq('a private sale is read off the vessel line',
+    note(PRIV, 'Landed Peterhead 28-Oct-2026').saleType, 'private')
+  eq('and the absence of it is an auction',
+    note(PLAIN, 'Landed Peterhead 28-Oct-2026').saleType, 'auction')
+
+  /* INDEPENDENT OF THE PORT LINE, which is the whole reason this is a second
+     field and not a third value of the first. */
+  eq('private does not make it consigned',
+    note(PRIV, 'Landed Peterhead 28-Oct-2026').consigned, false)
+  eq('and a private sale can be consigned too',
+    note(PRIV, 'Consigned Ullapool 14-Jan-2026').saleType, 'private')
+  eq('with the port still read',
+    note(PRIV, 'Consigned Ullapool 14-Jan-2026').port, 'Ullapool')
+  eq('an auction note can be consigned',
+    note(PLAIN, 'Consigned Scrabster 29-Dec-2025').consigned, true)
+  eq('and says so', note(PLAIN, 'Consigned Scrabster 29-Dec-2025').saleType, 'auction')
+
+  /* THE WORD HAS TO END THE LINE. "Private" inside a buyer's name is not a
+     marker — the suffix is the document's own, at the end of the vessel line. */
+  eq('a buyer with Private in its name is not a private sale',
+    PC.parseDon([
+      'LANDED / CONSIGNED PORT LANDING DATE',
+      'Landed Peterhead 28-Oct-2026',
+      'Private Label Seafoods Ltd Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+    ]).meta.saleType, 'auction')
+}
 
 /* ---- TWO DATES, AND THEY ARE DIFFERENT FACTS (1.4.0, Nov 2026) --------
  *

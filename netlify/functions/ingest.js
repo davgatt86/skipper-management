@@ -400,6 +400,9 @@ export const handler = async (event) => {
           // is standing in — see supabase/sales_landing_date_basis.sql. Both
           // upload paths must record it or an emailed note loses the fact.
           date_basis: res.meta.dateBasis || null,
+          // As on the browser path — both must record it or an emailed note
+          // loses the fact. Null on every market that does not print it.
+          sale_type: res.meta.saleType || null,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
           // Keep WHAT differed, not just that something did. The landing's own
           // totals are the row sum, so they can never disagree with the rows —

@@ -13,7 +13,7 @@ import { parseSalesPdf, dedupKey, applyFxRate } from '../lib/parseCore'
 // buyer names identically, and they were two inline copies of the same code.
 import { canonBuyerFrom } from '../lib/buyerAliases'
 import { fetchAll } from '../lib/fetchAll'
-import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitHaddock, splitHaddockByTotals, familyRows, haddockSpec, strandedSubGrades, r2,
+import { kpis, bySpecies, gradesFor, byBuyer, buyerSpecies, buyerSpeciesGrades, monthlySeries, landingSeries, shortMarket, autoSplitHaddock, splitHaddockByTotals, familyRows, haddockSpec, strandedSubGrades, landingSale, r2,
   withShares, SALES_SCOPES, scopeRows, scopeLandingIds, byVessel, pairedDays,
   samedayPriceGap, speciesMixDivergence, vesselMarketSplit } from '../lib/salesAgg'
 import { exportSalesExcel } from '../lib/salesExcel'
@@ -251,6 +251,10 @@ export default function Sales() {
           // is standing in — see supabase/sales_landing_date_basis.sql. A
           // substituted date must never read like one off the document.
           date_basis: res.meta.dateBasis || null,
+          // Two independent facts off two lines of the note: how she reached
+          // the market, and how the fish sold. Only Don prints the second, so
+          // every other market leaves it null rather than claiming 'auction'.
+          sale_type: res.meta.saleType || null,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
           // See supabase/sales_reconcile_diff.sql — the landing totals are the
           // row sum, so the note's printed TOTAL is the only real check.
@@ -964,11 +968,17 @@ export default function Sales() {
                             style={{ color: 'var(--brass)', cursor: 'help' }}
                           > (date sold)</span>
                         )}
-                        {l.consigned ? ' (consigned)' : ''}
                       </td>
                       <td style={td}>{l.vessel}</td>
+                      {/* The market already names the port, so only the two
+                          facts that are NOT the ordinary case get a word:
+                          consigned from somewhere else, and sold privately
+                          rather than through the auction. */}
                       <td style={td}>
                         {l.market}
+                        {landingSale(l).note && (
+                          <span className="muted" title={landingSale(l).full}> · {landingSale(l).note}</span>
+                        )}
                         {l.reconcile_ok === false && (
                           <span title={reconcileNote(l)} style={{ color: 'var(--brass)', cursor: 'help' }}> ⚠</span>
                         )}
