@@ -266,6 +266,77 @@ export function accessForPath(pathname) {
   return best ? best.access : null
 }
 
+/* --------------------------------------------------------------------------
+ * WHERE A PAGE GOES BACK TO.
+ *
+ * David, Oct 2026: *"whilst dredging through the crew pages. there wasn't
+ * sufficient <- back buttons. it's easy to go into areas of the app then only
+ * way of geting to where i was is start from the side menu"*
+ *
+ * THIS IS NOT THE OLD BackNav COMING BACK, and the difference is the whole
+ * reason it is safe to add. That was a "← Dashboard" link on top of every
+ * page, and it was deleted because the sidebar already carried every one of
+ * those destinations — it duplicated the menu and said nothing.
+ *
+ * What is missing is narrower. SEVEN routes exist that the sidebar does NOT
+ * list, and for those the menu genuinely cannot get you back. Five of them are
+ * one workflow: Contracts, Landings, Month closeout, One-off bonuses and Bonus
+ * settings are the five steps of /contracted-crew, each reached from a card on
+ * it, and not one of them had a way home. That is the page David was dredging
+ * through.
+ *
+ * SO THE RULE IS: a page the menu does not list needs a way back to the page
+ * that leads to it; a page the menu lists does not, because the sidebar is
+ * already showing it. That is what stops this becoming furniture on all fifty
+ * again, and it is checked by test rather than remembered.
+ *
+ * IT IS THE PARENT, NEVER history.back(). Going back in history is a different
+ * promise and a worse one: it depends on how you arrived, it has nowhere to go
+ * on a reload or a pasted link, and after a save that redirected it walks
+ * straight into the form you just left. The parent is the same every time,
+ * which is the only kind of way back anybody learns.
+ *
+ * A `/base/*` key is the drill-in beneath `/base` — `/contracts/:id` goes back
+ * to the list, not past it to the workflow.
+ * ------------------------------------------------------------------------ */
+export const PARENT = {
+  '/contracts': { to: '/contracted-crew', label: 'Contracted crew' },
+  '/contracts/*': { to: '/contracts', label: 'Contracts' },
+  '/landings': { to: '/contracted-crew', label: 'Contracted crew' },
+  '/closeout': { to: '/contracted-crew', label: 'Contracted crew' },
+  '/one-offs': { to: '/contracted-crew', label: 'Contracted crew' },
+  // Bonus settings — step 5 of that workflow, and the ONLY way into it. Nothing
+  // else in the app links to /settings at all.
+  '/settings': { to: '/contracted-crew', label: 'Contracted crew' },
+}
+
+/* Routes off the menu that deliberately get NO back link, with the reason —
+ * so the test below can tell a considered exception from one that was missed.
+ *
+ * /password is reached from the sidebar footer, which is on screen the whole
+ * time. There is no page it came FROM, so the only honest parent would be the
+ * Dashboard — which is precisely the "← Dashboard" link that was deleted for
+ * saying nothing. */
+export const NO_PARENT = {
+  '/password': 'reached from the sidebar footer, which is always on screen',
+}
+
+// The back link for a pathname, or null. Longest match wins, so a deeper
+// drill-in beats the base it sits under.
+export function parentOf(pathname) {
+  if (!pathname) return null
+  if (PARENT[pathname]) return PARENT[pathname]
+  let best = null, bestLen = -1
+  for (const key of Object.keys(PARENT)) {
+    if (!key.endsWith('/*')) continue
+    const base = key.slice(0, -2)
+    if (pathname.startsWith(base + '/') && base.length > bestLen) {
+      best = PARENT[key]; bestLen = base.length
+    }
+  }
+  return best
+}
+
 // Groups with nothing visible to this user are dropped entirely, so a viewer
 // never sees an empty "Quota" heading.
 export function navFor(appUser) {

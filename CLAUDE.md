@@ -6608,12 +6608,17 @@ boats regardless, since comparing a boat with itself is meaningless:
   instead would bury the boat, which is the one thing the photo is there to show.
   On narrow screens the crop is pulled to 28% so the boat stays in shot.
 - Every page is a sidebar shell (`AppShell.jsx` + `nav.js`), not a tile wall.
-  The menu is the only way back — there is no BackNav — so `nav.js` must always
-  carry a Dashboard entry (`to: '/'` with `end: true`, or NavLink marks it
-  active everywhere). The sidebar wordmark links home as a second route.
+  The menu is how you get back **from a page the menu lists** — there is no
+  BackNav — so `nav.js` must always carry a Dashboard entry (`to: '/'` with
+  `end: true`, or NavLink marks it active everywhere). The sidebar wordmark
+  links home as a second route.
   Pages open with `PageHeader` (title, optional sub and eyebrow, actions on the
-  right) — the sidebar handles getting back, so no page carries a BackNav or a
-  "← Dashboard" link. `AppShell` takes `maxWidth` for pages built narrow.
+  right), and **no page carries a "← Dashboard" link** — the sidebar already
+  holds every destination the old BackNav offered.
+  **A page the menu does NOT list is the exception, and it gets a back link to
+  its parent** — see **A PAGE OFF THE MENU NEEDS A WAY BACK** below. That is
+  not the BackNav returning: the old one duplicated the sidebar, and these
+  routes are the seven the sidebar cannot reach at all. `AppShell` takes `maxWidth` for pages built narrow.
   Permission-denied early returns must also render inside `AppShell`, or a
   viewer who hits a skipper-only page lands on a bare screen with no menu.
   The menu groups the same destinations the tiles offered, with the same role
@@ -6670,6 +6675,99 @@ inset as **0**, so the portrait case cannot be reproduced directly; a clone
 carrying the same calc with the iPhone's real 59px substituted lands at
 **top 69, bottom 113**, clear of the bar. The web path is unchanged at top 10,
 which is what makes this safe to ship.
+
+### A PAGE OFF THE MENU NEEDS A WAY BACK — and seven of them had none (Oct 2026)
+
+David: *"whilst dredging through the crew pages. there wasn't sufficient <- back
+buttons. it's easy to go into areas of the app then only way of geting to where
+i was is start from the side menu"*
+
+**SEVEN ROUTES EXIST THAT THE SIDEBAR DOES NOT LIST**, measured off `App.jsx`
+against `nav.js` rather than assumed, and **five of them are one workflow**:
+
+    /contracts        step 1 of /contracted-crew      no way back
+    /landings         step 2                          no way back
+    /closeout         step 3                          no way back
+    /one-offs         step 4                          no way back
+    /settings         step 5, and the ONLY route in   no way back
+    /contracts/:id    the drill-in beneath /contracts  had one, written 3x
+    /password         reached from the sidebar footer
+
+Every one of those five is reached from a card on Contracted crew, and not one
+of them could get you back to it. That is the page he was dredging through.
+
+**THIS IS NOT THE OLD BackNav COMING BACK, and the difference is the whole
+reason it is safe.** That was a "← Dashboard" link on top of every page, and it
+was deleted because the sidebar already carried every one of those destinations
+— it duplicated the menu and said nothing. These routes the sidebar cannot
+reach **at all**.
+
+**SO THE RULE IS DERIVED, NOT A LIST OF PAGES: a page the menu does not list
+needs a way back to the page that leads to it; a page the menu lists does not.**
+`accessForPath` already answers "is this on the menu", so the same function that
+guards a route now decides whether it needs a back link — one fact, read twice.
+
+**PageHeader RENDERS IT OFF THE PATH, so no page is asked to remember.** The
+whole class of bug here is a page shipping stranded, and fifty pages each
+remembering to pass a prop is how that recurs. `parentOf(pathname)` reads
+`PARENT` in `nav.js`; adding a route to that map is the only edit.
+
+**IT IS THE PARENT, NEVER `history.back()`.** Going back in history is a
+different promise and a worse one: it depends on how you arrived, it has nowhere
+to go on a reload or a pasted link, and after a save that redirected it walks
+straight into the form you just left. The parent is the same every time, which
+is the only kind of way back anybody learns. A `/base/*` key is the drill-in
+beneath `/base`, so `/contracts/:id` goes back to the LIST and not past it to
+the workflow.
+
+**A STATED EXCEPTION BEATS A MISSING ONE.** `/password` deliberately gets
+nothing and `NO_PARENT` records why — it is reached from the sidebar footer,
+which is on screen the whole time, so the only honest parent would be the
+Dashboard, which is exactly the link that was deleted for saying nothing. The
+test reads that map, so a considered exception and an oversight do not look
+alike.
+
+**THREE THINGS THE SWEEP FOUND that the complaint did not mention:**
+
+- **`Closeout.jsx` and `Settings.jsx` IMPORTED `PageHeader` AND RENDERED
+  NOTHING**, each with a hand-rolled `<header>` instead — so two of the five
+  would have got no link from this change at all. Dead imports are listed in
+  this file as harmless; these two were load-bearing by their absence.
+- **`/settings` is reached from nowhere else in the app.** It is step 5 of that
+  workflow and there is no other link to it, so losing the way back to Contracted
+  crew also lost the only context the page has.
+- **`ContractDetail.jsx` wrote its back link THREE TIMES** — once for loading,
+  once for not-found, once for the real page — which is the one page that had
+  one. It is `PageHeader`'s job now, which also puts the link on the two failure
+  states: a contract that will not load is exactly when you most want out.
+
+**The in-page drill-ins were checked and need nothing.** Sales, Trips, Gear Log,
+Quota and the rest open a row with a TOGGLE — the list stays on screen and
+clicking again closes it — so there is nothing to go back to. Settlements and
+Stowage Plan replace their list and already carry their own `← All settlements`
+/ `← Trips`. Only route changes lose you.
+
+`parentOf` / `PARENT` / `NO_PARENT` in `src/nav.js` · the link in
+`src/PageHeader.jsx` · `.pagehead-back` in `index.css`, **44px high** like the
+menu button, because it is pressed with a wet thumb on a moving boat.
+
+**THE SWEEP IS THE GUARD, not the six individual cases.** `test-roles.mjs` reads
+the REAL routes out of `App.jsx` and fails on any one the menu does not list
+that has neither a parent nor a stated reason — so a page added next month that
+nothing links to fails the suite rather than shipping stranded. It also refuses a
+back link that points at a dead end, one with no label, and one on a page the
+sidebar DOES list, which is the furniture regression. **Mutation-checked against
+five weakened copies** — the parent dropped, a new orphan route added, a parent
+pointed at nothing, a label removed, and an in-menu page given a link — and all
+five are caught.
+
+`scripts/pagehead-back-preview.mjs` renders the real header at six addresses and
+reads the link out of the markup, because every page that uses it is behind a
+login. Half of what it asserts is where the link must NOT appear. Mutation-checked
+both ways: pointing a parent at the wrong page and stopping the component
+rendering the link are each caught.
+
+`test-roles.mjs` → **+20 checks**.
 
 ## Agreed next build (Aug 2026) — crew, logs and vessel certs
 
@@ -7024,6 +7122,51 @@ In the order agreed:
    the app. `CrewList.jsx` defaults each man to the rank on his own record and
    takes its rank options from `crew_ranks`, so a voyage is no longer a list of
    Deckhands.
+
+   #### THE NAME WAS THE ONE FIELD THAT COULD NOT BE CORRECTED (Oct 2026)
+
+   David, on a crewman entered under a shortened name: *"i have a crewman with
+   the wrong name but can't edit it."*
+
+   **`full_name` WAS NOT IN `CrewDetails.FIELDS`.** The panel edited nationality,
+   date and place of birth, four passport fields, the embarked date, next of kin
+   and the rank — and not the name. So the add form on Crew Status took a name,
+   told you to *"use the name exactly as it appears in the passport — a crew
+   list is a border document"*, and then nothing in the app could ever change
+   it. **Every other field on his record could be corrected and the one that
+   prints on a border document could not.**
+
+   It is editable now, carrying the add form's own sentence about the passport
+   under the box, and **refused in words before it is sent** rather than coming
+   back as a NOT NULL constraint name: a required field is trimmed and never
+   nulled, where every other field still nulls on blank.
+
+   **AND `crew.notes` WAS RENDERED NOWHERE.** It has existed since the table was
+   built and no page showed it, so anything written there went where nobody
+   could read it — the shape of the bond-saved-as-zero failure. It is on the
+   panel now, which is what makes it a usable place for a full name given
+   verbally before the passport turns up.
+
+   **A RENAME DOES NOT REACH A SAVED CREW LIST, and that is worth knowing before
+   doing one.** Contracts, landings, payments and month closeouts all key on
+   `crew_id`, so they follow a rename with nothing to do. `crew_list_members`
+   stores the name as TEXT, by design — a saved list is the record of a document
+   that was lodged, not a view of the crew table. The first rename through this
+   panel left **nine real lists** carrying the old name, for departures over two
+   months out of two ports.
+
+   That was reported rather than fixed automatically, and **David then said to
+   change them** — so the nine were updated on his word. The asking is the part
+   to keep: this file's rule is that a saved list is *"left exactly as saved"*,
+   and it was written about a list whose contents were junk. Nine lodged
+   documents carrying a name that was never the man's are a different question,
+   and the answer happened to be yes — but **it is his answer, not a side effect
+   of correcting a typo.** A rename still does not reach them on its own, and
+   still should not.
+
+   **The passport is what settles it eventually.** None of the nine carries a
+   passport number, so if it reads differently again the name on the crew record
+   is what moves — and these nine will want the same conversation.
 
    **All five sections are built**, and so is the 42-point familiarisation
    list — `Familiarisation.jsx` at `/familiarisation`, 42 items in three

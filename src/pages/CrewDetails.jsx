@@ -7,7 +7,19 @@ import { supabase } from '../supabaseClient'
 // crew_voyage_fields.sql / crew_aegir_migration.sql. Before those, the crew
 // list had to ask for a rank on every voyage and defaulted everyone to
 // Deckhand; rank now belongs to the crewman.
+//
+// THE NAME IS EDITABLE HERE, AND IT WAS NOT UNTIL OCT 2026. The add form on
+// Crew Status takes a name and tells you to use the one in the passport — and
+// nothing in the app could change it afterwards, so a man entered under a
+// wrong or shortened name was stuck with it. David: *"i have a crewman with
+// the wrong name but can't edit it."* Every other field on his record could be
+// corrected and the one that prints on a border document could not.
 const FIELDS = [
+  /* First, because it is the identity rather than a detail of it — and
+     `required`, because `crew.full_name` is NOT NULL and a man with no name
+     cannot appear on a crew list at all. */
+  { key: 'full_name', label: 'Full name', ph: 'e.g. Lorenzo Rusiana', required: true, wide: true,
+    hint: 'Exactly as it appears in the passport — a crew list is a border document.' },
   { key: 'nationality', label: 'Nationality', ph: 'Filipino' },
   { key: 'date_of_birth', label: 'Date of birth', type: 'date' },
   { key: 'place_of_birth', label: 'Place of birth', ph: 'Oslob, Cebu' },
@@ -17,6 +29,12 @@ const FIELDS = [
   { key: 'passport_issued_at', label: 'Passport issued at', ph: 'Manila' },
   { key: 'embarked_date', label: 'Embarked', type: 'date' },
   { key: 'emergency_contact', label: 'Next of kin (name & phone)', ph: 'e.g. Maria Rusiana — +63 …', wide: true },
+  /* `notes` has existed on `crew` since the table was built and was rendered
+     NOWHERE, so anything written there went where nobody could read it. It is
+     the obvious place for a full name given verbally before the passport turns
+     up, which is no use at all if the page will not show it back. */
+  { key: 'notes', label: 'Notes', rows: 3, wide: true,
+    hint: 'Anything worth keeping that has no box of its own — a full name given before the passport arrives, say.' },
 ]
 
 // The rank lookup is shared and identical for every fleet, so it is fetched
@@ -48,9 +66,22 @@ export function CrewDetails({ crew, canEdit, onSaved }) {
 
   async function save() {
     if (!canEdit) return
+    /* REFUSED BEFORE IT IS SENT. `full_name` is NOT NULL, so a blank would come
+       back from the database as a constraint name — and the answer is the same
+       either way, so it is said in words here instead. */
+    const missing = FIELDS.filter((f) => f.required && !String(form[f.key] ?? '').trim())
+    if (missing.length) {
+      setMsg(`${missing[0].label} can’t be left empty — it is what prints on the crew list.`)
+      return
+    }
     setSaving(true); setMsg('')
     const payload = {}
-    for (const f of FIELDS) payload[f.key] = form[f.key] === '' ? null : form[f.key]
+    for (const f of FIELDS) {
+      /* A required field is TRIMMED and never nulled; everything else keeps the
+         value as typed, so a date input is not mangled on its way through. */
+      if (f.required) payload[f.key] = String(form[f.key]).trim()
+      else payload[f.key] = form[f.key] === '' ? null : form[f.key]
+    }
     payload.rank_code = form.rank_code === '' ? null : form.rank_code
     const { error } = await supabase.from('crew').update(payload).eq('id', crew.id)
     setSaving(false)
@@ -79,14 +110,29 @@ export function CrewDetails({ crew, canEdit, onSaved }) {
         {FIELDS.map((f) => (
           <label key={f.key} style={{ ...labelStyle, gridColumn: f.wide ? '1 / -1' : undefined }}>
             {f.label}
-            <input
-              type={f.type || 'text'}
-              value={form[f.key]}
-              placeholder={f.ph}
-              disabled={!canEdit}
-              onChange={(e) => set(f.key, e.target.value)}
-              style={inputStyle}
-            />
+            {f.rows ? (
+              <textarea
+                value={form[f.key]}
+                rows={f.rows}
+                placeholder={f.ph}
+                disabled={!canEdit}
+                onChange={(e) => set(f.key, e.target.value)}
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            ) : (
+              <input
+                type={f.type || 'text'}
+                value={form[f.key]}
+                placeholder={f.ph}
+                disabled={!canEdit}
+                onChange={(e) => set(f.key, e.target.value)}
+                style={inputStyle}
+              />
+            )}
+            {/* The hint sits UNDER the box it belongs to. The add form carries
+                the same sentence about the passport, and a man is far more
+                likely to be renamed here than added twice. */}
+            {f.hint && <span className="muted" style={{ fontWeight: 400, fontSize: '0.75rem' }}>{f.hint}</span>}
           </label>
         ))}
       </div>

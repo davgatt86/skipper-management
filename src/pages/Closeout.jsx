@@ -291,15 +291,17 @@ export default function Closeout() {
 
   return (
     <AppShell>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <h1 style={{ marginBottom: 0 }}>Month Closeout</h1>
+      {/* PageHeader rather than a hand-rolled <header>: it is what carries the
+          way back to Contracted crew, which this page is step 3 of. The
+          PageHeader import was already here and rendered nothing. */}
+      <PageHeader title="Month Closeout">
         <input
           type="month"
           value={month}
           onChange={(e) => setMonth(e.target.value)}
           style={{ width: 'auto' }}
         />
-      </header>
+      </PageHeader>
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 

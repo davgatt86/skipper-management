@@ -40,6 +40,10 @@ export default function Settings() {
   if (!isSkipper) {
     return (
       <AppShell>
+        {/* The header goes on the refusal too. A man told he cannot change
+            these is the one who most needs the way out of the page, and this
+            route is not in the sidebar for him to leave by. */}
+        <PageHeader title="Crew Bonus Settings" />
         <div className="card"><p className="muted">Bonus rates can only be changed by the skipper.</p></div>
       </AppShell>
     )
@@ -81,13 +85,15 @@ export default function Settings() {
 
   return (
     <AppShell>
+      {/* Lifted out of the card so the page opens the way every other one does
+          — and so it carries the back link to Contracted crew, which this is
+          step 5 of and the only route into. */}
+      <PageHeader
+        title="Crew Bonus Settings"
+        sub="Rates for this boat. Changes apply to open and future months only — months you've already closed keep the amounts they were settled at, so your history never changes."
+      />
 
       <div className="card" style={{ maxWidth: 520 }}>
-        <h1 style={{ marginBottom: '0.25rem' }}>Crew Bonus Settings</h1>
-        <p className="muted" style={{ marginBottom: '1.25rem' }}>
-          Rates for this boat. Changes apply to open and future months only — months you've already
-          closed keep the amounts they were settled at, so your history never changes.
-        </p>
 
         {loading ? <p className="muted">Loading…</p> : (
           <form onSubmit={save}>

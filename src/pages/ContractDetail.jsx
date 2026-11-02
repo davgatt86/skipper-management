@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import AppShell from '../AppShell'
+import PageHeader from '../PageHeader'
 import { useAuth } from '../AuthContext'
 import { bonusState, halfLabel, halfColour } from '../lib/crew/bonus'
 
@@ -111,12 +112,14 @@ export default function ContractDetail() {
     loadAll()
   }, [id])
 
+  /* THE WAY BACK IS ON ALL THREE STATES, including the two that failed. A
+     contract that will not load is exactly when you most want out of the page,
+     and it used to be the one place this link was written three times over —
+     it is PageHeader's job now, off the PARENT map in nav.js. */
   if (loading) {
     return (
       <AppShell>
-        <div style={{ marginBottom: '1rem' }}>
-          <Link to="/contracts" style={{ fontSize: '0.9rem' }}>← Back to Contracts</Link>
-        </div>
+        <PageHeader title="Contract" />
         <div className="card"><p className="muted">Loading…</p></div>
       </AppShell>
     )
@@ -125,9 +128,7 @@ export default function ContractDetail() {
   if (!contract) {
     return (
       <AppShell>
-        <div style={{ marginBottom: '1rem' }}>
-          <Link to="/contracts" style={{ fontSize: '0.9rem' }}>← Back to Contracts</Link>
-        </div>
+        <PageHeader title="Contract" />
         <div className="card"><p className="error">{error || 'Contract not found.'}</p></div>
       </AppShell>
     )
@@ -155,22 +156,20 @@ export default function ContractDetail() {
 
   return (
     <AppShell>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link to="/contracts" style={{ fontSize: '0.9rem' }}>← Back to Contracts</Link>
-      </div>
-
-      <header style={{ marginBottom: '1rem' }}>
-        <h1 style={{ marginBottom: 0 }}>{contract.crew?.full_name || 'Contract'}</h1>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          {fmtDate(contract.start_date)} → {contract.end_date ? fmtDate(contract.end_date) : 'ongoing'}
-          {contract.return_date ? ` · returned ${fmtDate(contract.return_date)}` : ''}
-          {contract.not_returning_on ? ` · not returning, told ${fmtDate(contract.not_returning_on)}` : ''}
-          {' · '}
-          <span style={{ color: STATUS_COLOR[contract.status], fontWeight: 600 }}>
-            {STATUS_LABEL[contract.status] || contract.status}
-          </span>
-        </p>
-      </header>
+      <PageHeader
+        title={contract.crew?.full_name || 'Contract'}
+        sub={
+          <>
+            {fmtDate(contract.start_date)} → {contract.end_date ? fmtDate(contract.end_date) : 'ongoing'}
+            {contract.return_date ? ` · returned ${fmtDate(contract.return_date)}` : ''}
+            {contract.not_returning_on ? ` · not returning, told ${fmtDate(contract.not_returning_on)}` : ''}
+            {' · '}
+            <span style={{ color: STATUS_COLOR[contract.status], fontWeight: 600 }}>
+              {STATUS_LABEL[contract.status] || contract.status}
+            </span>
+          </>
+        }
+      />
 
       {error && <div className="card" style={{ borderColor: 'var(--red)' }}><p className="error">{error}</p></div>}
 

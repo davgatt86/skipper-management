@@ -548,6 +548,24 @@ h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.75rem; }
 .pagehead-a { display: flex; gap: 8px; flex-wrap: wrap; }
 .pagehead-a button { padding: 0.5rem 0.9rem; font-size: 0.85rem; }
 
+/* The way back out of a page the sidebar does not list — see PARENT in nav.js.
+   Pressed with a wet thumb on a moving boat, so the row is 44px high the way
+   the menu button is, with the negative inset keeping the text aligned with
+   the heading under it rather than indented away from it. */
+.pagehead-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  margin: -10px 0 0 -8px;
+  padding: 0 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--hull);
+  text-decoration: none;
+}
+.pagehead-back:hover { text-decoration: underline; }
+
 .eyebrow {
   font-family: var(--font-mono);
   font-size: 0.6rem;

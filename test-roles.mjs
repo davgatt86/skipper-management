@@ -1,4 +1,5 @@
-import { NAV, canSee, accessForPath, navFor } from './src/nav.js'
+import { readFileSync } from 'node:fs'
+import { NAV, canSee, accessForPath, navFor, parentOf, PARENT, NO_PARENT } from './src/nav.js'
 import { keepsLogs, keepsCrewRecords, keepsStores, homeFor, isOfficer, isCook, isSkipper } from './src/lib/roles.js'
 
 let fail = 0
@@ -182,6 +183,53 @@ eq('homeFor(cook)', homeFor(cook), '/stores')
 eq('isSkipper(cook)', isSkipper(cook), false)
 eq('isOfficer(cook)', isOfficer(cook), false)
 
+
+
+// --- THE WAY BACK OUT OF A PAGE THE MENU DOES NOT LIST ---------------------
+//
+// David, Oct 2026: "it's easy to go into areas of the app then only way of
+// geting to where i was is start from the side menu". Seven routes exist that
+// the sidebar does not list, five of them the contracted-crew workflow, and
+// not one of those five could get you back to it.
+//
+// THE SWEEP IS THE POINT, not the individual cases: it reads the REAL routes
+// out of App.jsx, so a page added next month that nothing in the menu links to
+// fails here rather than shipping stranded. That is the half nobody remembers.
+eq("parentOf('/contracts')", parentOf('/contracts')?.to, '/contracted-crew')
+eq("parentOf('/closeout')", parentOf('/closeout')?.to, '/contracted-crew')
+eq("parentOf('/settings')", parentOf('/settings')?.to, '/contracted-crew')
+// A drill-in goes back to its LIST, never past it to the workflow.
+eq("parentOf('/contracts/abc-123')", parentOf('/contracts/abc-123')?.to, '/contracts')
+eq("parentOf('/contracts/abc-123') label", parentOf('/contracts/abc-123')?.label, 'Contracts')
+// A page the sidebar DOES list gets nothing - that is what keeps this from
+// becoming a "back to Dashboard" link on all fifty pages again.
+eq("parentOf('/sales')", parentOf('/sales'), null)
+eq("parentOf('/crew')", parentOf('/crew'), null)
+eq("parentOf('/contracted-crew')", parentOf('/contracted-crew'), null)
+eq("parentOf('/')", parentOf('/'), null)
+eq('parentOf(undefined)', parentOf(undefined), null)
+
+const appSrc = readFileSync(new URL('./src/App.jsx', import.meta.url), 'utf8')
+const routes = [...appSrc.matchAll(/path="([^"]+)"/g)].map((m) => m[1])
+  // The signed-out routes sit outside the shell, and * is the catch-all.
+  .filter((r) => !['*', '/login', '/reset-password', '/crew-hub'].includes(r))
+eq('App.jsx routes found', routes.length > 40, true)
+
+const orphans = routes.filter((r) => accessForPath(r) === null)
+const stranded = orphans.filter((r) => !parentOf(r) && !NO_PARENT[r])
+eq('every route off the menu has a way back (or a stated reason)', stranded, [])
+
+// A parent must land somewhere you can actually leave from: on the menu, or on
+// a page that itself has a parent. A chain into nothing is the same bug one
+// step further along.
+const danglers = Object.values(PARENT)
+  .map((v) => v.to)
+  .filter((to) => accessForPath(to) === null && !parentOf(to))
+eq('no back link points at a dead end', [...new Set(danglers)], [])
+
+// Every back link says where it goes. "Back" on its own is what the old
+// BackNav said, and saying nothing is why it was deleted.
+eq('every back link is labelled', Object.values(PARENT).filter((v) => !v.label || !v.to), [])
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
