@@ -113,6 +113,11 @@ export function summariseNote(res, opts = {}) {
     market: res?.market || '',
     vessel: meta.vessel || '',
     date: meta.isoDate || null,
+    /* WHERE THAT DATE CAME FROM. 'sold' means the note's LANDING DATE box was
+     * blank and its DATE SOLD is standing in — a different fact, and the one
+     * thing on this panel that is not read straight off the document. Null on
+     * every market but Don, which is the only one printing two dates. */
+    dateBasis: meta.dateBasis || null,
     saleNo: meta.saleNo || '',
     isNew: opts.isNew !== false,
     rows: rows.length,

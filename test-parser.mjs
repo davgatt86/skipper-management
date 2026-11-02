@@ -194,7 +194,130 @@ eq('a following row is not eaten as a continuation', notAFragment.rows.length, 1
   eq('and the real row in between is the one kept', Number(rows[0].total_value), 1555.20)
 }
 
-eq('the version was bumped', PC.VERSION, '1.3.9')
+eq('the version was bumped', PC.VERSION, '1.4.0')
+
+/* ---- TWO DATES, AND THEY ARE DIFFERENT FACTS (1.4.0, Nov 2026) --------
+ *
+ * Don prints LANDING DATE in the port line with a month name, and DATE SOLD
+ * at the top in plain figures. Every note the office has sent since 2023
+ * carries DATE SOLD; the landing date is the one that can be missing, and on
+ * 02-11-2026 it was — Boy John's and Rosebloom's notes came through with that
+ * box empty, which left both landings undated.
+ *
+ * MEASURED over the 107 real Don notes on disk carrying both: they agree on
+ * 57, and the other 50 are 1 to 10 days apart. So DATE SOLD is not the landing
+ * date, it is only the best thing left when the landing date is not printed —
+ * and the result says which it was, rather than the two reading alike.
+ */
+{
+  const head = (portLine) => [
+    'The Don Fishing Company Ltd.',
+    'DATE SOLD 02/11/26',
+    'SALES NOTE NUMBER 3356678',
+    'VESSEL NAME AND REGISTRATION NUMBER',
+    'NAME OF FISH SALES COMPANY',
+    'The Don Fishing Co Ltd - Pd BOY JOHN INS110',
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    portLine,
+    'UNITS TOTAL',
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]
+
+  /* THE LANDING DATE STILL WINS WHERE IT IS PRINTED — this is the shape of
+     every one of the 107 notes already filed, and none of them may move. */
+  const full = PC.parseDon(head('Landed Peterhead 28-Oct-2026')).meta
+  eq('the landing date is read off the port line', full.isoDate, '2026-10-28')
+  eq('and is NOT displaced by the date sold', full.landedDate, '2026-10-28')
+  eq('the sold date is read as well, as its own fact', full.soldDate, '2026-11-02')
+  eq('and the basis says the box was read', full.dateBasis, 'landed')
+
+  /* THE REAL 02-11-2026 SHAPE: the box is empty. */
+  const blank = PC.parseDon(head('Landed Peterhead')).meta
+  eq('a blank landing-date box falls back to the date sold', blank.isoDate, '2026-11-02')
+  eq('the basis says so', blank.dateBasis, 'sold')
+  eq('and the landed date stays empty rather than being invented', blank.landedDate, '')
+
+  /* NEITHER PRINTED IS NO DATE AT ALL, and the basis must not claim one. */
+  const none = PC.parseDon(['AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60']).meta
+  eq('no date anywhere leaves the date empty', none.isoDate, '')
+  eq('and the basis is null, not a guess', none.dateBasis, null)
+
+  /* THE LABEL IS THE ANCHOR, AND IT IS LOAD-BEARING — measured, not assumed.
+     Swept over the Don paperwork on disk, a bare dd/mm/yy matches 24 lines
+     that are not the DATE SOLD line: "Due Date 12/09/2026" on the company's
+     own invoice layout, "Credit Date", an "OUR REFERENCE" stamp, and the
+     insurance clause numbers ("Institute Fishing Vessel Clauses 1/11/95").
+     Reading the first of those as the landing date is the shape of every
+     silent-drop fault in this parser's history — a token matching where it
+     had no business. */
+  const otherDates = PC.parseDon([
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    'Landed Peterhead',
+    'Invoice Address Don Fishing Co., 1 Bath Street, Peterhead, AB42 1DX Due Date 12/09/2026',
+    'Institute Fishing Vessel Clauses 1/11/95 (with Clauses 8,10,11,12 and 13 deleted).',
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+  eq('a Due Date is not the landing date', otherDates.isoDate, '')
+  eq('nor an insurance clause number', otherDates.soldDate, '')
+  eq('and no basis is claimed off them', otherDates.dateBasis, null)
+
+  /* The real DATE SOLD must still be found with those lines around it. */
+  const mixed = PC.parseDon([
+    'Invoice Address Don Fishing Co., 1 Bath Street, Peterhead, AB42 1DX Due Date 12/09/2026',
+    'DATE SOLD 02/11/26',
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    'Landed Peterhead',
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+  eq('the labelled date is still read past the others', mixed.isoDate, '2026-11-02')
+
+  /* AN IMPOSSIBLE DATE IS DROPPED WHOLE, never rolled forward. `landing_date`
+     is a Postgres date, so 31/02 would be refused at the END of an upload,
+     after every row had been built — and a date silently rolled to 3 March
+     would be worse still. Same refusal as the invoice page ranges. */
+  const impossible = PC.parseDon([
+    'DATE SOLD 31/02/26',
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    'Landed Peterhead',
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+  eq('31 February is not a date', impossible.isoDate, '')
+  eq('and is not rolled on to 3 March', impossible.soldDate, '')
+  eq('so nothing claims a basis for it', impossible.dateBasis, null)
+}
+
+/* ---- CONSIGNED IS READ OFF THE PORT LINE, NOT THE HEADING (1.4.0) -----
+ *
+ * The test was `/\bConsigned\b/i` over the whole note. The column heading is
+ * "LANDED / CONSIGNED PORT LANDING DATE", so it matched the HEADING: all 402
+ * landings on the record came back consigned, including the 77 notes on disk
+ * whose own port line reads "Landed Peterhead". A flag true on every row
+ * carries no information.
+ *
+ * Both directions are asserted against real document shapes — the port-line
+ * census over the 109 Don notes on disk is 77 "Landed Peterhead" against 32
+ * consigned from Ullapool, Scrabster, Lerwick, Fraserburgh and Kinlochbervie.
+ */
+{
+  const withPort = (portLine) => PC.parseDon([
+    'LANDED / CONSIGNED PORT LANDING DATE',
+    portLine,
+    'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+  ]).meta
+
+  eq('a landed note is not consigned', withPort('Landed Peterhead 28-Oct-2026').consigned, false)
+  eq('even with the box blank', withPort('Landed Peterhead').consigned, false)
+  eq('a consigned note is', withPort('Consigned Ullapool 14-Jan-2026').consigned, true)
+  eq('from any of the real ports', withPort('Consigned Kinlochbervie 23-Jan-2025').consigned, true)
+  eq('and the port is still read', withPort('Consigned Scrabster 29-Dec-2025').port, 'Scrabster')
+
+  /* THE HEADING ALONE MUST NEVER SET IT — the bug, stated as a test. */
+  eq('the heading on its own does not make a note consigned',
+    PC.parseDon([
+      'LANDED / CONSIGNED PORT LANDING DATE',
+      'AG D Duff & Partners Monkfish/GUT/A+2 3.00 40 257.20 120 771.60',
+    ]).meta.consigned, false)
+}
 
 /* ---- SPECIES NAMES ARE CANONICALISED (1.3.6) -------------------------
  * Measured across every landing on the record, not guessed. The species

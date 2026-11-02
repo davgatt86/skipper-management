@@ -41,7 +41,18 @@ export default function UploadSummary({ items = [] }) {
           <div key={i} className="card" style={{ borderLeft: `3px solid ${chk.tone}` }}>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'baseline' }}>
               <strong>{s.vessel || 'Unknown vessel'}</strong>
+              {/* A DATE THAT STOOD IN SAYS SO, HERE AND NOWHERE ELSE IS IT
+                  VISIBLE. Don prints LANDING DATE and DATE SOLD separately,
+                  and where the first box is blank the second is used — so the
+                  one figure on this panel not read straight off the document
+                  is marked, and in brass rather than muted grey. */}
               <span className="muted">{s.date || 'no date'}</span>
+              {s.dateBasis === 'sold' && (
+                <span
+                  title="This note's LANDING DATE box was blank, so the date shown is its DATE SOLD. On a full landing note the two are normally the same day; on a small tail note they can be a week apart."
+                  style={{ color: 'var(--brass)', fontSize: '0.78rem', cursor: 'help' }}
+                >· date sold — the landing-date box was blank</span>
+              )}
               <span className="muted">· {s.market}</span>
               {s.saleNo && <span className="muted">· sale {s.saleNo}</span>}
               {/* Replacing a note in place is the normal way a parser fix

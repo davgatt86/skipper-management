@@ -396,6 +396,10 @@ export const handler = async (event) => {
           dedup_key: dkey, vessel: res.meta.vessel || '', market: res.market || '', port: res.meta.port || '',
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: name,
           boxes: tot.boxes, weight_kg: tot.weight, value: dkk ? 0 : tot.value,
+          // 'sold' means the note's LANDING DATE box was blank and DATE SOLD
+          // is standing in — see supabase/sales_landing_date_basis.sql. Both
+          // upload paths must record it or an emailed note loses the fact.
+          date_basis: res.meta.dateBasis || null,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
           // Keep WHAT differed, not just that something did. The landing's own
           // totals are the row sum, so they can never disagree with the rows —

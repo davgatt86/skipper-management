@@ -247,6 +247,10 @@ export default function Sales() {
           dedup_key: key, vessel: res.meta.vessel || '', market: res.market || '', port: res.meta.port || '',
           sale_no: res.meta.saleNo || '', landing_date: res.meta.isoDate || null, filename: f.name,
           boxes: tot.boxes, weight_kg: tot.weight, value: tot.value,
+          // 'sold' means the note's LANDING DATE box was blank and DATE SOLD
+          // is standing in — see supabase/sales_landing_date_basis.sql. A
+          // substituted date must never read like one off the document.
+          date_basis: res.meta.dateBasis || null,
           consigned: !!res.meta.consigned, reconcile_ok: rec.found ? rec.ok : null,
           // See supabase/sales_reconcile_diff.sql — the landing totals are the
           // row sum, so the note's printed TOTAL is the only real check.
@@ -946,7 +950,22 @@ export default function Sales() {
                 <tbody>
                   {scopeLandings.map(l => (
                     <tr key={l.id}>
-                      <td style={td}>{fmtDate(l.landing_date)}{l.consigned ? ' (consigned)' : ''}</td>
+                      {/* A SUBSTITUTED DATE SAYS SO. Where the note's LANDING
+                          DATE box was blank the DATE SOLD stands in, and the
+                          two are different facts — on the notes measured they
+                          agree on every full landing and differ by up to 10
+                          days on the small tail ones. Brass, not rust: it is a
+                          question about the note, not a fault in the parse. */}
+                      <td style={td}>
+                        {fmtDate(l.landing_date)}
+                        {l.date_basis === 'sold' && (
+                          <span
+                            title="The note's LANDING DATE box was blank, so this is its DATE SOLD standing in. The two are usually the same day on a full landing note, but can differ by several days."
+                            style={{ color: 'var(--brass)', cursor: 'help' }}
+                          > (date sold)</span>
+                        )}
+                        {l.consigned ? ' (consigned)' : ''}
+                      </td>
                       <td style={td}>{l.vessel}</td>
                       <td style={td}>
                         {l.market}

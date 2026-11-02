@@ -2428,7 +2428,7 @@ Price vs Fleet · Alerts · Forecast · Crew List
 
 ## Parsers
 
-**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.3.9**. The
+**ONE PARSER, ONE FILE: `src/lib/parse-core.cjs`.** Now **1.4.0**. The
 CloudMailin webhook imports it and so does the browser upload, so a fix cannot
 reach one path and not the other.
 
@@ -3049,6 +3049,95 @@ that discriminates. `test-parser-codes.mjs` 46 → **57**.
 - **`gradesFor` on Fish Sales** lists `A-2` as its own row, which is honest.
 - **The note bridge** is still flagged-not-fixed above, and `A-` joins the list
   of what it will have to carry.
+
+### A NOTE WITH NO LANDING DATE — 1.4.0 (Nov 2026)
+
+Two Don notes arrived parsing perfectly and reconciling to the penny, with the
+upload card reading **no date**.
+
+**THE PARSER WAS NOT AT FAULT — the LANDING DATE cell on those notes is empty.**
+The port line normally carries it after the port name; on these it stops at the
+port. Nothing else about either note is unusual.
+
+**A DON NOTE PRINTS TWO DATES AND THEY ARE DIFFERENT FACTS.** DATE SOLD at the
+head, in figures, on every note the office has sent back to 2023; LANDING DATE
+in the port line, with a month name. `landing_date` has always held the second,
+which is why the first was never read. The first reading of this was that the
+numeric date was a new print format — it is not, every Don note on disk carries
+it.
+
+**THE TWO ARE NOT THE SAME DAY.** Measured over the 107 notes carrying both:
+they agree on **57**, and the other 50 are **1 to 10 days apart**. Copying one
+into the other would be the invoice work-date failure exactly.
+
+**BUT THE SPLIT IS BY NOTE SIZE, AND IT IS CLEAN:**
+
+    >= 20 rows   56 notes,  0 where sold <> landed
+    <  20 rows   51 notes, 50 where sold <> landed
+
+The main landing sells the morning it comes ashore; the small tail notes go days
+later. **The 20-row figure is NOT in the code** — it is a correlate, not a cause,
+and this repo already learned that from the engine limits, where a threshold off
+history alone would have flagged the correct readings.
+
+**AND A BLANK DATE IS NOT A SAFE RESTING STATE EITHER**, which is what decided
+it. An undated landing takes the **RETIRED A4 haddock ladder** — `haddockSpec`
+reads `'' >= '2026-10-20'` as false — drops out of every date view, and **cannot
+be corrected anywhere, because nothing in the app writes `landing_date`.** The
+same dead end as a crewman whose name had no field.
+
+So the sold date stands in and **says that it did**: `meta.dateBasis`,
+`sales_landings.date_basis` (`supabase/sales_landing_date_basis.sql`, applied),
+and the words *date sold — the landing-date box was blank* on the upload card
+and beside the date on the landings table, in brass. **Null is not backfilled**:
+the only question anything asks of that column is *was it substituted*, and null
+answers it as well as `'landed'` would, without asserting anything about 400
+notes nobody re-read.
+
+**THE DATE IS ONLY READ BESIDE ITS OWN LABEL, and that is load-bearing** —
+measured, not assumed. A bare `dd/mm/yy` swept over every line matches **24
+other lines** on the Don paperwork: a due date and a credit date on the
+company's invoice layout, a reference stamp, and the insurance clause numbers.
+Reading the first of those as a landing date is the shape of all five
+silent-drop faults in this parser's history.
+
+**An impossible date is dropped whole**, never rolled on. `landing_date` is a
+Postgres `date`, so 31 February would be refused at the END of an upload after
+every row had been built — and a date quietly rolled to 3 March would be worse.
+Same refusal as the invoice page ranges.
+
+**The two landings were repaired in place** to exactly what the fixed parser
+returns for those documents. 0 undated landings remain, 2 on a sold date, and
+neither carried a sub-grade, so nothing was stranded on the wrong ladder.
+
+#### CONSIGNED WAS TRUE ON EVERY DON LANDING — the heading, matched as a value
+
+Found in the same header. The test was `/\bConsigned\b/i` over the whole note,
+and the column heading itself contains the word — so it matched the HEADING, and
+all 402 landings on the record came back consigned.
+
+**I first read that as "consigned is meaningless here" and that was wrong.** The
+port-line census over the 109 Don notes on disk is **77 landed against 32
+genuinely consigned**, from five different ports. A flag true on every row
+carries no information, but the fix had to keep the 32 — so it anchors on the
+word STARTING the port line, and both directions are asserted. After: 77 landed,
+32 consigned, matching the census exactly.
+
+**NOT BACKFILLED. 201 landings are flagged consigned with a port of Peterhead**
+and are wrong; re-uploading a note corrects it, and a sweep across other fleets'
+rows is David's call, not a tidy-up. It is display-only — nothing computes off
+it.
+
+**The regression is the 295 PDFs on disk**, fingerprinted before and after:
+every row hash, vessel, market, row count and reconcile **identical on all of
+them**. The only fields that moved are `consigned` and the two dates.
+`test-parser.mjs` 65 → **85 checks**, mutation-checked against **7 weakened
+copies** — the fallback made unconditional, the basis always claiming the box
+was read, the label anchor dropped, the calendar check removed, consigned back
+to a whole-text match, consigned never true, and no fallback at all. All seven
+caught, each by the assertion meant to catch it.
+`scripts/upload-panel-preview.mjs` renders a fourth card for it and asserts the
+other three are **not** marked — a mark on every card is one nobody reads.
 
 ### THE LADDER MOVED FROM A4 TO A2 — Don notes, 20-10-2026
 

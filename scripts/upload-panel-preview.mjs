@@ -47,6 +47,13 @@ const items = [
       diffs: { boxes: -2, weight: 0, value: -150 },
     },
   }, { isNew: true, landings: priorLandings, knownBuyers: new Set() }),
+  /* THE 02-11-2026 SHAPE: Don printed the note with its LANDING DATE box
+     blank, so the date shown is DATE SOLD standing in. The panel has to say
+     so — it is the one figure on the card not read straight off the note. */
+  summariseNote({
+    ...res,
+    meta: { ...res.meta, isoDate: '2026-11-02', dateBasis: 'sold' },
+  }, { isNew: true, landings: priorLandings, knownBuyers: new Set() }),
 ]
 
 /* Bundle the component itself rather than reimplementing it here — the point
@@ -80,7 +87,8 @@ writeFileSync(out, `<!doctype html><meta charset="utf-8">
 </style>
 <h1 style="font-size:1.1rem">What the note just changed</h1>
 <p class="muted" style="font-size:.85rem">Rendered from the real sample note — a new landing,
-a re-read that replaced one, and one whose figures do not tie.</p>
+a re-read that replaced one, one whose figures do not tie, and one dated off DATE SOLD
+because the note's landing-date box was blank.</p>
 ${body}`)
 
 console.log(out)
@@ -88,5 +96,27 @@ for (const s of items) {
   console.log(`  ${s.isNew ? 'new     ' : 'replaced'} · ${s.checked.padEnd(7)}`
     + ` · ${s.rows} rows · £${s.value.toLocaleString('en-GB')}`
     + ` · ${s.before.landings}→${s.after.landings} landings`
-    + ` · fresh buyers ${s.fresh === null ? '(not looked up)' : s.fresh.length}`)
+    + ` · fresh buyers ${s.fresh === null ? '(not looked up)' : s.fresh.length}`
+    + ` · date ${s.dateBasis || '(basis not stated)'}`)
 }
+
+/* READ THE MARKUP BACK. A preview that only renders proves the component did
+   not throw; what matters here is that the substituted date is MARKED and —
+   just as much — that the other three are not. A mark that appears on every
+   card is one nobody reads. */
+const cards = body.split('class="card"').slice(1)
+let bad = 0
+const check = (label, got, want) => {
+  const ok = got === want
+  if (!ok) bad++
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${label}` + (ok ? '' : `  got ${got} want ${want}`))
+}
+check('four cards rendered', cards.length, 4)
+const says = cards.map((c) => c.includes('the landing-date box was blank'))
+check('the substituted date is marked', says[3], true)
+check('a note read off its own landing date is not', says[0], false)
+check('nor a re-read', says[1], false)
+check('nor one whose figures do not tie', says[2], false)
+check('and the marked one shows the date it stood in', cards[3].includes('2026-11-02'), true)
+if (bad) { console.error(`\n${bad} check(s) failed`); process.exit(1) }
+console.log('\nall passed')

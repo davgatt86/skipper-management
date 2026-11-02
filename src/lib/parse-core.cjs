@@ -39,10 +39,24 @@
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
-  const VERSION = "1.3.9";
+  const VERSION = "1.4.0";
   const round2 = n => Math.round(n * 100) / 100;
   // A leading '*' is a flag the office puts on a figure, not part of it.
   const num = s => parseFloat(String(s).replace(/,/g, "").replace(/^\s*\*+/, ""));
+
+  /* A REAL CALENDAR DATE, or "". The office prints its dates as separate
+     day/month/year cells, so nothing stops a misread or a mis-set scanner
+     producing 31/02 — and `landing_date` is a Postgres `date`, which refuses
+     it at the END of an upload, after every row has already been built. Check
+     it here, where the answer is simply that the note carries no date. */
+  function ymd(y, mo, d) {
+    const Y = Number(y), Mo = Number(mo), D = Number(d);
+    if (!Y || !Mo || !D || Mo > 12 || D > 31) return "";
+    const s = `${String(Y).padStart(4, "0")}-${String(Mo).padStart(2, "0")}-${String(D).padStart(2, "0")}`;
+    const t = new Date(s + "T00:00:00Z");
+    // Round-tripping is what catches 31 February: Date rolls it to 3 March.
+    return !isNaN(t) && t.toISOString().slice(0, 10) === s ? s : "";
+  }
 
   /* ------------------------------------------------------------------ *
    * Text extraction: pdf.js textContent -> merged lines + word coords
@@ -485,18 +499,54 @@
     for (const r of rows) r.buyer = canonBuyer(r.buyer);
 
     // ---- meta ----
-    let saleNo = "", iso = "", port = "Peterhead";
+    /* TWO DATES, AND THEY ARE DIFFERENT FACTS.
+     *
+     * The note prints LANDING DATE with a month name, in the port line under
+     * that heading — "Landed Peterhead 20-May-2026" — and DATE SOLD as plain
+     * figures at the top. Measured over 107 real Don notes carrying both:
+     * they agree on only 57. The other 50 are 1 to 10 days apart, and they
+     * are the small tail notes — the main landing sells the morning it comes
+     * ashore, the leftovers go days later. So the sold date is NOT the
+     * landing date and must never quietly stand in for it.
+     *
+     * BUT A BLANK LANDING DATE IS NOT A SAFE RESTING STATE EITHER. Don
+     * printed the notes of 02-11-2026 with that box empty, and an undated
+     * landing goes on the RETIRED haddock ladder (haddockSpec reads `'' >=
+     * '2026-10-20'` as false), drops out of every date view, and cannot be
+     * put right anywhere in the app because nothing writes landing_date.
+     *
+     * So the sold date is used, and SAYS SO: `dateBasis` is 'sold' when it
+     * stood in, 'landed' when the box was read. That is the whole difference
+     * from the invoice work-date failure this codebase already has written
+     * up — there a copied date was indistinguishable from a read one.
+     */
+    let saleNo = "", iso = "", sold = "", port = "Peterhead";
     const M = { jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06", jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12" };
     for (const ln of allLines) {
       let m = ln.match(/\b(33\d{5})\b/); if (m && !saleNo) saleNo = m[1];
       m = ln.match(/(\d{1,2})[-/]([A-Za-z]{3})[A-Za-z]*[-/](\d{2,4})/);
-      if (m && M[m[2].toLowerCase()] && !iso) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; iso = `${y}-${M[m[2].toLowerCase()]}-${m[1].padStart(2, "0")}`; }
+      if (m && M[m[2].toLowerCase()] && !iso) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; iso = ymd(y, M[m[2].toLowerCase()], m[1]); }
+      /* ANCHORED ON ITS OWN LABEL, and that is load-bearing — measured, not
+         assumed. A bare dd/mm/yy loose over every line matches 24 other lines
+         on the Don paperwork: a due date and a credit date on the company's
+         invoice layout, a reference stamp, and the insurance clause numbers.
+         Reading the first of those as a landing date is the shape of all five
+         silent-drop faults in this parser's history. */
+      m = ln.match(/DATE\s+SOLD\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})/i);
+      if (m && !sold) sold = ymd(m[3].length === 2 ? "20" + m[3] : m[3], m[2], m[1]);
       for (const p of ["Peterhead", "Scrabster", "Ullapool", "Kinlochbervie", "Lerwick"]) if (ln.includes(p)) port = p;
     }
-    const consigned = /\bConsigned\b/i.test(allLines.join(" "));
+    const dateBasis = iso ? "landed" : (sold ? "sold" : null);
+    /* THE WORD HAS TO START THE PORT LINE, not merely appear somewhere on the
+       note. The column heading is "LANDED / CONSIGNED PORT LANDING DATE", so
+       a test over the whole text matched the HEADING and every Don note ever
+       filed came back consigned — 402 landings, including the 109 on disk
+       whose own port line reads "Landed Peterhead". A flag that is true on
+       every row carries no information. */
+    const consigned = allLines.some(l => /^\s*Consigned\b/i.test(l));
     const headerText = allLines.slice(0, 18).join("  ");
     const vessel = detectVessel(headerText) || detectVessel(allLines.join("  "));
-    return { rows, meta: { saleNo, isoDate: iso, port, vessel, consigned }, reconcile: reconcileDon(allLines, rows) };
+    return { rows, meta: { saleNo, isoDate: iso || sold, landedDate: iso, soldDate: sold, dateBasis, port, vessel, consigned }, reconcile: reconcileDon(allLines, rows) };
   }
 
   // Printed control totals: last "TOTAL <boxes> <wt> <value>" line of the note.
