@@ -10,7 +10,7 @@
  */
 import assert from 'node:assert'
 import {
-  league, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
+  league, normHolderKey, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
 } from './src/lib/quota/ukHolders.js'
 import { accessForPath, NAV } from './src/nav.js'
 
@@ -129,6 +129,10 @@ eq(applyRowFilters(rows, { po: 'Fife' }).length, 2, 'the PO filter')
   eq(st.find((r) => r.species === 'Nephrops VII').tonnes, null, 'a units-only stock has null tonnes, not 0')
   near(st.find((r) => r.species === 'NS haddock').netOfTac, -0.4, 'with its quota and swaps')
 }
+
+/* ---- one firm, two spellings ---------------------------------------------------- */
+eq(normHolderKey('LUNAR FISHING CO LTD'), normHolderKey('LUNAR FISHING COMPANY LTD'), 'Co and Company group as one holder')
+eq(normHolderKey('COMPANY  CONSTRUCT LTD'), 'COMPANY CONSTRUCT LTD', 'only the whole word CO is touched')
 
 /* ---- look-up ------------------------------------------------------------------ */
 eq(search(rows, 'alpha').length, 2, 'by name, both spellings')
