@@ -24,6 +24,7 @@ const Estimator = lazy(() => import('./pages/Estimator'))
 const SquareUp = lazy(() => import('./squareup/SquareUp'))
 const Quota = lazy(() => import('./pages/Quota'))
 const QuotaSwaps = lazy(() => import('./pages/QuotaSwaps'))
+const QuotaHolders = lazy(() => import('./pages/QuotaHolders'))
 const DailyPrices = lazy(() => import('./pages/DailyPrices'))
 const Rota = lazy(() => import('./pages/Rota'))
 const Password = lazy(() => import('./pages/Password'))
@@ -266,6 +267,13 @@ export default function App() {
           <ProtectedRoute>
             <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
               <QuotaSwaps />
+            </Suspense>
+          </ProtectedRoute>
+        } />
+        <Route path="/quota-holders" element={
+          <ProtectedRoute>
+            <Suspense fallback={<div style={{ padding: '2rem', color: 'var(--grey-400)' }}>Loading…</div>}>
+              <QuotaHolders />
             </Suspense>
           </ProtectedRoute>
         } />

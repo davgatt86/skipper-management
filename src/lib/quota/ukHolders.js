@@ -1,0 +1,219 @@
+/* UK QUOTA HOLDERS — the pure half of /quota-holders.
+ *
+ * The data is an export of the public FQA register (fqaregister.service.gov.uk):
+ * one row per holding — a licence (vessel or PO "dummy" licence), its holder,
+ * its PO and the FQA units it carries per stock. It is loaded into
+ * `quota_holders_data` by the Claude pipeline; it is never committed here
+ * (this repo is public, and the register is a point-in-time snapshot).
+ *
+ * TONNES ARE AN ESTIMATE. The register gives units, not tonnes. For each stock
+ * and year:  tonnes per unit = sum of every PO's "TAC share" in that year's
+ * Marine Directorate uptake report  ÷  units held in POs on the register.
+ * That rate comes from the `balances` dataset of the swaps page, so it moves on
+ * by itself when a new year's TACs land in the uptake report. A future year has
+ * no report yet: its rate is the latest year's × (1 + the user's % for that stock).
+ * Stocks the uptake report does not cover (area VII, Norway, NAFO …) have units
+ * but no tonnes, and say so rather than show a zero.
+ */
+
+export const ALL = 'All'
+export const isAll = (v) => v == null || v === '' || v === ALL
+
+// Groups in the uptake report that are POs (their TAC share is unit-backed).
+export const PO_GROUPS = new Set(['SFO', 'Aberdeen', 'NESFO', 'Shetland', 'Fife', 'West Scotland', 'Orkney', 'Klondyke',
+  'Lunar', 'Anglo Scottish', 'EEFPO', 'Western PO', 'FPO', 'NIFPO', 'ANIFPO', 'Cornish', 'South West', 'North Sea',
+  'Wales & WC', 'Interfish', 'Humberside FPO', 'Isle of Man', 'Northern'])
+
+/* Holding types that are not a fishing boat's own licence: units held by agents,
+ * owners, private persons, companies, PO pools and quota schemes. These are the
+ * units most likely to be leased out. */
+export const ACTIVE_TYPES = new Set(['Vessel licence', 'Fishing Vessel Licencee in membership of PO',
+  'Fishing Vessel Licencee not in membership of PO'])
+export const isLeasable = (r) => !ACTIVE_TYPES.has(r.htype)
+
+export const NO_PO = 'No PO'
+
+/* Units a holding carries for the species asked for (all species when none picked). */
+export function unitsOf(row, species) {
+  const u = row.u || {}
+  if (!species || !species.length) return Object.values(u).reduce((a, b) => a + b, 0)
+  let s = 0
+  for (const k of species) s += u[k] || 0
+  return s
+}
+
+/* Tonnes for the species asked for; `missing` counts units with no rate. */
+export function tonnesOf(row, species, rates) {
+  const u = row.u || {}
+  const keys = species && species.length ? species : Object.keys(u)
+  let t = 0, missing = 0
+  for (const k of keys) {
+    const n = u[k] || 0
+    if (!n) continue
+    const r = rates.get(k)
+    if (r == null) missing += n
+    else t += n * r
+  }
+  return { t, missing }
+}
+
+/* Tonnes per unit, per species, for one year of the uptake report.
+ * speciesList: [{species, code}], balances: rows of that year, holdings: register rows. */
+export function ratesFor(speciesList, balances, holdings) {
+  const tac = new Map()
+  for (const b of balances || []) {
+    if (!PO_GROUPS.has(b.po)) continue
+    tac.set(b.stock, (tac.get(b.stock) || 0) + (b.tac_t || 0))
+  }
+  const poUnits = new Map()
+  for (const h of holdings || []) {
+    if (h.po === NO_PO) continue
+    for (const [k, v] of Object.entries(h.u || {})) poUnits.set(k, (poUnits.get(k) || 0) + v)
+  }
+  const out = new Map()
+  for (const s of speciesList || []) {
+    if (!s.code) continue
+    const t = tac.get(s.code), n = poUnits.get(s.species)
+    if (t > 0 && n > 0) out.set(s.species, t / n)
+  }
+  return out
+}
+
+/* A future year: the base year's rates moved by the user's % per species. */
+export function projectRates(base, pct = {}) {
+  const out = new Map()
+  for (const [k, r] of base) out.set(k, r * (1 + (Number(pct[k]) || 0) / 100))
+  return out
+}
+
+export function applyRowFilters(rows, { po, htype, admin, leasable } = {}) {
+  return (rows || []).filter((r) =>
+    (isAll(po) || r.po === po)
+    && (isAll(htype) || r.htype === htype)
+    && (isAll(admin) || r.admin === admin)
+    && (!leasable || isLeasable(r)))
+}
+
+const boatName = (r) => (r.vessel ? `${r.vessel} (${r.lic})` : `Licence ${r.lic}`)
+
+/* The key a holding is grouped under. Holders group across every holding and
+ * PO by their normalised name; `split` keeps each holding (licence + PO) apart. */
+export function groupKey(r, by, split) {
+  if (by === 'po') return r.po
+  if (by === 'boat') return `${r.lic}|${r.vessel}`
+  return split ? `${r.hkey}|${r.lic}|${r.po}` : r.hkey
+}
+
+/* LEAGUE TABLE. Ranks holders, boats or POs by units or estimated tonnes for the
+ * species picked. Boats are vessel licences only: units on PO dummy licences are
+ * not on any boat, and the result says how many units that leaves out. */
+export function league(rows, { by = 'holder', species = [], metric = 'units', rates = new Map(), split = false, top = 20 } = {}) {
+  let src = rows || []
+  let offBoat = 0
+  if (by === 'boat') {
+    offBoat = src.filter((r) => !r.vessel).reduce((a, r) => a + unitsOf(r, species), 0)
+    src = src.filter((r) => r.vessel)
+  }
+  const g = new Map()
+  for (const r of src) {
+    const units = unitsOf(r, species)
+    if (!units) continue
+    const { t, missing } = tonnesOf(r, species, rates)
+    const k = groupKey(r, by, split)
+    let e = g.get(k)
+    if (!e) {
+      e = { key: k, names: new Map(), units: 0, tonnes: 0, missing: 0, holdings: 0, pos: new Set(), vessels: new Set(),
+        holders: new Set(), lics: new Set(), per: {} }
+      g.set(k, e)
+    }
+    const nm = by === 'po' ? r.po : by === 'boat' ? boatName(r) : r.holder
+    e.names.set(nm, (e.names.get(nm) || 0) + units)
+    e.units += units; e.tonnes += t; e.missing += missing; e.holdings++
+    e.pos.add(r.po); if (r.vessel) e.vessels.add(r.vessel); e.holders.add(r.holder); e.lics.add(r.lic)
+    for (const s of species) {
+      const n = r.u?.[s] || 0
+      if (!n) continue
+      const p = e.per[s] || (e.per[s] = { units: 0, tonnes: 0 })
+      p.units += n
+      const rt = rates.get(s)
+      if (rt != null) p.tonnes += n * rt
+    }
+  }
+  const all = [...g.values()].map((e) => ({
+    key: e.key,
+    name: [...e.names.entries()].sort((a, b) => b[1] - a[1])[0][0],
+    units: e.units, tonnes: e.tonnes, missing: e.missing, holdings: e.holdings,
+    pos: [...e.pos].sort(), vessels: [...e.vessels].sort(), holders: [...e.holders].sort(), lics: [...e.lics].sort(),
+    per: e.per,
+  }))
+  const totalUnits = all.reduce((a, e) => a + e.units, 0)
+  const totalTonnes = all.reduce((a, e) => a + e.tonnes, 0)
+  const val = (e) => (metric === 'tonnes' ? e.tonnes : e.units)
+  all.sort((a, b) => val(b) - val(a) || a.name.localeCompare(b.name))
+  all.forEach((e, i) => {
+    e.rank = i + 1
+    e.share = metric === 'tonnes' ? (totalTonnes ? e.tonnes / totalTonnes : 0) : (totalUnits ? e.units / totalUnits : 0)
+  })
+  const shown = top && top > 0 ? all.slice(0, top) : all
+  const shownShare = shown.reduce((a, e) => a + e.share, 0)
+  return { rows: shown, count: all.length, totalUnits, totalTonnes, shownShare, offBoat }
+}
+
+/* PO MAKE-UP, part 1: for one stock, each PO's share of the register's units
+ * next to its quota and swaps for the year (from the swaps page's balances).
+ * A PO swapping out a lot more than its share of units suggests is long. */
+export function poShares(rows, balances, { species, code }) {
+  const units = new Map()
+  let total = 0
+  for (const r of rows || []) {
+    const n = r.u?.[species] || 0
+    if (!n) continue
+    units.set(r.po, (units.get(r.po) || 0) + n); total += n
+  }
+  const bal = new Map((balances || []).filter((b) => b.stock === code).map((b) => [b.po, b]))
+  const pos = new Set([...units.keys(), ...[...bal.keys()].filter((p) => PO_GROUPS.has(p))])
+  const out = []
+  for (const po of pos) {
+    const b = bal.get(po) || {}
+    const n = units.get(po) || 0
+    const tac = b.tac_t ?? null
+    out.push({
+      po, units: n, unitShare: total ? n / total : 0, tac_t: tac,
+      swaps_in_t: b.swaps_in_t ?? null, swaps_out_t: b.swaps_out_t ?? null, net_swaps_t: b.net_swaps_t ?? null,
+      // Against a quota of a few tonnes the % says nothing (65 t swapped onto
+      // 0.2 t reads 32,500%), so it is only shown from 10 t of quota up.
+      netOfTac: tac >= 10 && b.net_swaps_t != null ? b.net_swaps_t / tac : null,
+      landed_t: b.landed_t ?? null, used_pct: b.used_pct ?? null,
+    })
+  }
+  return out.sort((a, b) => b.units - a.units)
+}
+
+/* PO MAKE-UP, part 2: who holds a PO's units for a stock (or all stocks). */
+export function poHolders(rows, po, species, rates) {
+  return league((rows || []).filter((r) => r.po === po), { by: 'holder', species, metric: 'units', rates, top: 0 })
+}
+
+/* LOOK-UP: every holding matching a name, vessel or licence number. */
+export function search(rows, q) {
+  const s = String(q || '').trim().toUpperCase()
+  if (s.length < 2) return []
+  return (rows || []).filter((r) => r.holder.toUpperCase().includes(s) || r.hkey.includes(s)
+    || (r.vessel || '').toUpperCase().includes(s) || String(r.lic).includes(s))
+}
+
+/* A holder's (or any set of holdings') units per species, with tonnes. */
+export function breakdown(rows, rates) {
+  const m = new Map()
+  for (const r of rows || []) {
+    for (const [k, v] of Object.entries(r.u || {})) m.set(k, (m.get(k) || 0) + v)
+  }
+  return [...m.entries()].map(([species, units]) => {
+    const r = rates.get(species)
+    return { species, units, tonnes: r == null ? null : units * r }
+  }).sort((a, b) => (b.tonnes ?? -1) - (a.tonnes ?? -1) || b.units - a.units)
+}
+
+export const fmtUnits = (v) => (v == null ? '' : Math.round(v).toLocaleString('en-GB'))
+export const fmtT = (v) => (v == null ? '–' : Math.abs(v) >= 100 ? Math.round(v).toLocaleString('en-GB') : v.toFixed(1))
+export const fmtPct = (v) => (v == null ? '' : (v * 100).toFixed(1) + '%')

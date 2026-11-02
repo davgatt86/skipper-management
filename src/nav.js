@@ -77,6 +77,11 @@ export const NAV = [
          in supabase/uk_quota_swaps.sql refuses demo fleets, and a page that
          can only say "no data" comes off the menu too. */
       { to: '/quota-swaps', label: 'UK Quota Swaps', access: 'fleetTools', notOnDemo: true },
+      /* WHO HOLDS IT. The public FQA register: every holder, licence and PO and
+         the units per stock, with tonnes estimated off the uptake report.
+         Shared like the swaps page, and refused to the demo the same way —
+         supabase/uk_quota_holders.sql. */
+      { to: '/quota-holders', label: 'UK Quota Holders', access: 'fleetTools', notOnDemo: true },
     ],
   },
   {
