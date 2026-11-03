@@ -65,24 +65,113 @@ export function unitsOf(row, species) {
   return s
 }
 
+/* One holding's estimated tonnes of one stock: its units at the FQA rate, plus
+ * any Scottish additional quota (AQ) shared onto it as an active boat (row.aq,
+ * set by attachAq). Null when there is neither a rate nor any AQ. */
+export function tOf(row, k, rates) {
+  const r = rates.get(k)
+  const aq = row.aq?.[k] || 0
+  if (r == null) return aq ? aq : null
+  return (row.u?.[k] || 0) * r + aq
+}
+/* Every stock a holding has units or AQ in. */
+export function keysOf(row) {
+  return row.aq ? [...new Set([...Object.keys(row.u || {}), ...Object.keys(row.aq)])] : Object.keys(row.u || {})
+}
+
 /* Tonnes for the species asked for; `missing` counts units with no rate. */
 export function tonnesOf(row, species, rates) {
   const u = row.u || {}
-  const keys = species && species.length ? species : Object.keys(u)
+  const keys = species && species.length ? species : keysOf(row)
   let t = 0, missing = 0
   for (const k of keys) {
     const n = u[k] || 0
-    if (!n) continue
-    const r = rates.get(k)
-    if (r == null) missing += n
-    else t += n * r
+    const tk = tOf(row, k, rates)
+    if (tk == null) missing += n
+    else t += tk
   }
   return { t, missing }
 }
 
+/* SCOTTISH ADDITIONAL QUOTA (AQ).
+ *
+ * Scotland's extra quota from the UK-EU deal is not shared out by FQA units:
+ * the Scottish Government gives it to POs on their members' catch records. In
+ * the uptake reports it showed once, on its own: 53,775 t held in
+ * "Unallocated Scotland" in the first report (5 Jun 2024) and released to the
+ * Scottish POs and Interfish in the report of 3 Jul 2024 — in amounts that do
+ * not follow units at all. From 2025 it arrives inside the April allocation
+ * with everything else, so it cannot be read off again. `shares` is therefore
+ * each PO's AQ as a share of its own TAC share for a stock, measured in July
+ * 2024 and carried onto every year's TAC share: AQ = share x that year's TAC.
+ *
+ * Putting AQ through the units would hand it to every unit-holder, laid-up and
+ * dummy licences included, and short-change a small-FQA boat with a good catch
+ * record. So it is taken out of the per-unit rate and shared evenly between
+ * the PO's ACTIVE boats instead: an even split is the fairest guess without the
+ * catch records it is really shared on. */
+export const isActiveBoat = (r) => !!r.vessel && r.lt !== 'D' && ACTIVE_TYPES.has(r.htype) && r.admin === 'Marine Scotland'
+
+export function aqTonnes(shares, balances) {
+  const tac = new Map((balances || []).map((b) => [`${b.po}|${b.stock}`, b.tac_t || 0]))
+  const out = new Map()
+  for (const s of shares || []) {
+    const t = (tac.get(`${s.po}|${s.stock}`) || 0) * s.f
+    if (t > 0.05) out.set(`${s.po}|${s.stock}`, t)
+  }
+  return out
+}
+
+/* AQ by stock code, all POs together: what comes off the per-unit rate. */
+export function aqByCode(aq) {
+  const out = new Map()
+  for (const [k, t] of aq) {
+    const code = k.slice(k.indexOf('|') + 1)
+    out.set(code, (out.get(code) || 0) + t)
+  }
+  return out
+}
+
+/* Share each PO's AQ for a stock evenly between its active boats.
+ *   mode 'stock' — the active boats in that PO that hold units of the stock
+ *                  (a whitefish boat gets no share of the PO's mackerel AQ);
+ *                  if none do, every active boat in the PO.
+ *   mode 'all'   — every active boat in the PO, whatever it holds.
+ * Returns the holdings with row.aq = {species: tonnes} on each boat that gets a
+ * share, the active-boat count per PO, and any AQ no boat could take. */
+export function attachAq(holdings, aq, speciesList, mode = 'stock') {
+  const sp = new Map((speciesList || []).filter((s) => s.code).map((s) => [s.code, s.species]))
+  const boats = new Map()
+  for (const r of holdings || []) {
+    if (!isActiveBoat(r)) continue
+    if (!boats.has(r.po)) boats.set(r.po, [])
+    boats.get(r.po).push(r)
+  }
+  const add = new Map()   // row id -> {species: t}
+  let unplaced = 0
+  for (const [k, t] of aq) {
+    const i = k.indexOf('|'), po = k.slice(0, i), species = sp.get(k.slice(i + 1))
+    const all = boats.get(po) || []
+    if (!species || !all.length) { unplaced += t; continue }
+    let to = all
+    if (mode === 'stock') {
+      const holding = all.filter((r) => (r.u?.[species] || 0) > 0)
+      if (holding.length) to = holding
+    }
+    for (const r of to) {
+      const m = add.get(r.id) || {}
+      m[species] = (m[species] || 0) + t / to.length
+      add.set(r.id, m)
+    }
+  }
+  const rows = (holdings || []).map((r) => (add.has(r.id) ? { ...r, aq: add.get(r.id) } : r))
+  const counts = new Map([...boats].map(([po, list]) => [po, list.length]))
+  return { rows, counts, unplaced }
+}
+
 /* Tonnes per unit, per species, for one year of the uptake report.
  * speciesList: [{species, code}], balances: rows of that year, holdings: register rows. */
-export function ratesFor(speciesList, balances, holdings) {
+export function ratesFor(speciesList, balances, holdings, aqCode = new Map()) {
   const tac = new Map()
   for (const b of balances || []) {
     if (!PO_GROUPS.has(b.po)) continue
@@ -96,7 +185,8 @@ export function ratesFor(speciesList, balances, holdings) {
   const out = new Map()
   for (const s of speciesList || []) {
     if (!s.code) continue
-    const t = tac.get(s.code), n = poUnits.get(s.species)
+    // AQ is shared to boats separately, so it comes off what the units carry.
+    const t = (tac.get(s.code) || 0) - (aqCode.get(s.code) || 0), n = poUnits.get(s.species)
     if (t > 0 && n > 0) out.set(s.species, t / n)
   }
   return out
@@ -140,8 +230,8 @@ export function league(rows, { by = 'holder', species = [], metric = 'units', ra
   const g = new Map()
   for (const r of src) {
     const units = unitsOf(r, species)
-    if (!units) continue
     const { t, missing } = tonnesOf(r, species, rates)
+    if (!units && !t) continue
     const k = groupKey(r, by, split)
     let e = g.get(k)
     if (!e) {
@@ -155,11 +245,11 @@ export function league(rows, { by = 'holder', species = [], metric = 'units', ra
     e.pos.add(r.po); if (r.vessel) e.vessels.add(r.vessel); e.holders.add(r.holder); e.lics.add(r.lic)
     for (const s of species) {
       const n = r.u?.[s] || 0
-      if (!n) continue
+      const tk = tOf(r, s, rates)
+      if (!n && !tk) continue
       const p = e.per[s] || (e.per[s] = { units: 0, tonnes: 0 })
       p.units += n
-      const rt = rates.get(s)
-      if (rt != null) p.tonnes += n * rt
+      if (tk != null) p.tonnes += tk
     }
   }
   const all = [...g.values()].map((e) => ({
@@ -185,13 +275,15 @@ export function league(rows, { by = 'holder', species = [], metric = 'units', ra
 /* PO MAKE-UP, part 1: for one stock, each PO's share of the register's units
  * next to its quota and swaps for the year (from the swaps page's balances).
  * A PO swapping out a lot more than its share of units suggests is long. */
-export function poShares(rows, balances, { species, code }) {
-  const units = new Map()
+export function poShares(rows, balances, { species, code }, rates = new Map()) {
+  const units = new Map(), tonnes = new Map()
   let total = 0
   for (const r of rows || []) {
     const n = r.u?.[species] || 0
-    if (!n) continue
+    const t = tOf(r, species, rates)
+    if (!n && !t) continue
     units.set(r.po, (units.get(r.po) || 0) + n); total += n
+    if (t != null) tonnes.set(r.po, (tonnes.get(r.po) || 0) + t)
   }
   const forStock = (balances || []).filter((b) => b.stock === code)
   const bal = new Map(forStock.map((b) => [b.po, b]))
@@ -205,6 +297,7 @@ export function poShares(rows, balances, { species, code }) {
     const tac = b.tac_t ?? null
     out.push({
       po, label: poLabel(po), units: n, unitShare: total ? n / total : 0, tac_t: tac,
+      tonnes: rates.has(species) || tonnes.has(po) ? (tonnes.get(po) || 0) : null,
       swaps_in_t: b.swaps_in_t ?? null, swaps_out_t: b.swaps_out_t ?? null, net_swaps_t: b.net_swaps_t ?? null,
       // Against a quota of a few tonnes the % says nothing (65 t swapped onto
       // 0.2 t reads 32,500%), so it is only shown from 10 t of quota up.
@@ -264,11 +357,17 @@ export function poOverview(rows, balances, speciesList, rates) {
 /* PO MAKE-UP, ONE PO: its stocks, each with the PO's share of that stock's
  * units on the register, its estimated tonnes, and its quota and swaps. */
 export function poSpecies(rows, balances, po, speciesList, rates) {
-  const ukUnits = new Map(), mine = new Map()
+  const ukUnits = new Map(), mine = new Map(), mineT = new Map()
   for (const r of rows || []) {
     for (const [k, v] of Object.entries(r.u || {})) {
       ukUnits.set(k, (ukUnits.get(k) || 0) + v)
       if (r.po === po) mine.set(k, (mine.get(k) || 0) + v)
+    }
+    if (r.po === po) {
+      for (const k of keysOf(r)) {
+        const t = tOf(r, k, rates)
+        if (t != null) mineT.set(k, (mineT.get(k) || 0) + t)
+      }
     }
   }
   const out = []
@@ -276,8 +375,7 @@ export function poSpecies(rows, balances, po, speciesList, rates) {
     const n = mine.get(s.species) || 0
     const b = s.code ? balFor(balances, po, s.code) : null
     if (!n && !(b && (b.tac_t || b.swaps_in_t || b.swaps_out_t))) continue
-    const r = rates.get(s.species)
-    const line = poLine(po, n, ukUnits.get(s.species) ? n / ukUnits.get(s.species) : 0, r == null ? null : n * r, b)
+    const line = poLine(po, n, ukUnits.get(s.species) ? n / ukUnits.get(s.species) : 0, mineT.has(s.species) ? mineT.get(s.species) : null, b)
     out.push({ ...line, species: s.species, code: s.code })
   }
   return out.sort((a, b) => (b.tonnes ?? -1) - (a.tonnes ?? -1) || b.units - a.units)
@@ -300,12 +398,16 @@ export function search(rows, q) {
 export function breakdown(rows, rates) {
   const m = new Map()
   for (const r of rows || []) {
-    for (const [k, v] of Object.entries(r.u || {})) m.set(k, (m.get(k) || 0) + v)
+    for (const k of keysOf(r)) {
+      const e = m.get(k) || { species: k, units: 0, tonnes: null, aq: 0 }
+      e.units += r.u?.[k] || 0
+      const t = tOf(r, k, rates)
+      if (t != null) e.tonnes = (e.tonnes || 0) + t
+      e.aq += r.aq?.[k] || 0
+      m.set(k, e)
+    }
   }
-  return [...m.entries()].map(([species, units]) => {
-    const r = rates.get(species)
-    return { species, units, tonnes: r == null ? null : units * r }
-  }).sort((a, b) => (b.tonnes ?? -1) - (a.tonnes ?? -1) || b.units - a.units)
+  return [...m.values()].sort((a, b) => (b.tonnes ?? -1) - (a.tonnes ?? -1) || b.units - a.units)
 }
 
 /* SIDE BY SIDE: two holders, boats, licences or POs, stock by stock. Each side
@@ -315,19 +417,22 @@ export function breakdown(rows, rates) {
 export function compare(rowsA, rowsB, rates) {
   const add = (m, rows, side) => {
     for (const r of rows || []) {
-      for (const [k, v] of Object.entries(r.u || {})) {
-        const e = m.get(k) || { species: k, ua: 0, ub: 0 }
-        e[side] += v
+      for (const k of keysOf(r)) {
+        const e = m.get(k) || { species: k, ua: 0, ub: 0, ta: null, tb: null }
+        e['u' + side] += r.u?.[k] || 0
+        const t = tOf(r, k, rates)
+        if (t != null) e['t' + side] = (e['t' + side] || 0) + t
         m.set(k, e)
       }
     }
   }
   const m = new Map()
-  add(m, rowsA, 'ua'); add(m, rowsB, 'ub')
+  add(m, rowsA, 'a'); add(m, rowsB, 'b')
   const lines = [...m.values()].map((e) => {
-    const r = rates.get(e.species)
-    const ta = r == null ? null : e.ua * r, tb = r == null ? null : e.ub * r
-    return { ...e, ta, tb, dt: r == null ? null : ta - tb, du: e.ua - e.ub }
+    // A stock with tonnes on either side counts nought tonnes on the other, not "no estimate".
+    const est = e.ta != null || e.tb != null
+    const ta = est ? e.ta || 0 : null, tb = est ? e.tb || 0 : null
+    return { ...e, ta, tb, dt: est ? ta - tb : null, du: e.ua - e.ub }
   }).sort((x, y) => (Math.max(y.ta ?? -1, y.tb ?? -1) - Math.max(x.ta ?? -1, x.tb ?? -1)) || (Math.max(y.ua, y.ub) - Math.max(x.ua, x.ub)))
   const sum = (k) => lines.reduce((a, l) => a + (l[k] || 0), 0)
   return { lines, ua: sum('ua'), ub: sum('ub'), ta: sum('ta'), tb: sum('tb'),

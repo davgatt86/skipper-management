@@ -10054,6 +10054,29 @@ count vessel licences only and say how many units sit on dummy licences.
 
 `test-uk-quota-holders.mjs` (46 checks, synthetic rows only).
 
+**SCOTTISH ADDITIONAL QUOTA IS NOT SHARED BY UNITS (Nov 2026).** David: *"Scottish
+AQ quota is spread across via active boats ... non active boats have a portion
+of AQ and boats with low FQA's but a good track record of catches are receiving
+a lower share of AQ than reality."* AQ (Scotland's extra quota from the UK-EU
+deal) goes to POs on catch record. It showed in the uptake reports **once, on
+its own**: 53,775 t in `Unallocated Scotland` in the 5 Jun 2024 report, released
+to the ten Scottish POs and Interfish on **3 Jul 2024**, in amounts that do not
+follow units (NS herring 22-73 kg per unit across POs). From 2025 it arrives
+inside the April allocation (2 Apr 2025, 1 Apr 2026) and cannot be read off
+again — the Scottish-vs-rest tonnes-per-unit ratio holds at its post-July-2024
+level, which is the evidence it is still there.
+
+So `fqa_aq` (in `quota_holders_data`, made by `claude/quota-pipeline/fqa_aq.py`)
+holds each PO's AQ **as a share of its own TAC share** per stock in July 2024,
+and the page applies that share to each year's TAC share: ≈41,600 t in 2026.
+That comes **off the per-unit rate** and is shared **evenly between the PO's
+active boats** (`isActiveBoat`: a vessel licence administered by Marine
+Scotland — not a dummy, not units held for others, not an English boat in a
+Scottish PO). Default mode shares a stock's AQ only between active boats that
+hold units of it, so a whitefish boat takes no share of the PO's mackerel AQ;
+"all active boats" is David's literal even split; "off" is the old units-only
+estimate. The real split follows catch records, which are not public.
+
 ### `reconcile_ok` does NOT mean the money is wrong
 
 Worth knowing before chasing one. The flag compares the parsed rows against

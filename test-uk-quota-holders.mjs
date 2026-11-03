@@ -10,7 +10,7 @@
  */
 import assert from 'node:assert'
 import {
-  league, normHolderKey, compare, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
+  league, normHolderKey, compare, aqTonnes, aqByCode, attachAq, isActiveBoat, tOf, breakdown as bd2, poOverview, poSpecies, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown, unitsOf, tonnesOf, isLeasable, groupKey,
 } from './src/lib/quota/ukHolders.js'
 import { accessForPath, NAV } from './src/nav.js'
 
@@ -147,6 +147,39 @@ eq(normHolderKey('COMPANY  CONSTRUCT LTD'), 'COMPANY CONSTRUCT LTD', 'only the w
   eq([C.ua, C.ub], [1640, 1200], 'unit totals')
   near(C.ta - C.tb, 150 + 50 - 120, 'tonne totals: A 200 t against B 120 t')
   eq([C.onlyA, C.onlyB], [2, 0], 'A holds two stocks B does not')
+}
+
+/* ---- Scottish additional quota: off the units, onto active boats -------------- */
+{
+  const fleet = [
+    { id: 901, lic: '1', vessel: 'ONE', lt: '', htype: 'Vessel licence', admin: 'Marine Scotland', po: 'SFO', holder: 'A', hkey: 'A', u: { 'NS haddock': 100 } },
+    { id: 902, lic: '2', vessel: 'TWO', lt: '', htype: 'Vessel licence', admin: 'Marine Scotland', po: 'SFO', holder: 'B', hkey: 'B', u: { 'NS haddock': 900, 'NS saithe': 50 } },
+    { id: 903, lic: '3', vessel: 'THREE', lt: '', htype: 'Vessel licence', admin: 'Marine Scotland', po: 'SFO', holder: 'C', hkey: 'C', u: { 'NS saithe': 10 } },
+    { id: 904, lic: '9', vessel: '', lt: 'D', htype: 'Units held on behalf of private persons that are not fishing vessel licencees', admin: '', po: 'SFO', holder: 'D', hkey: 'D', u: { 'NS haddock': 1000 } },
+    { id: 905, lic: '4', vessel: 'FOUR', lt: '', htype: 'Vessel licence', admin: 'Marine Management Organisation', po: 'SFO', holder: 'E', hkey: 'E', u: { 'NS haddock': 500 } },
+  ]
+  ok(isActiveBoat(fleet[0]) && !isActiveBoat(fleet[3]) && !isActiveBoat(fleet[4]), 'active = a Scottish-administered vessel licence; not a dummy, not an English boat')
+  const bal = [{ po: 'SFO', stock: 'HAD/2AC4.', tac_t: 300 }]
+  const aq = aqTonnes([{ po: 'SFO', stock: 'HAD/2AC4.', f: 0.2 }], bal)
+  near(aq.get('SFO|HAD/2AC4.'), 60, 'AQ = the 2024 share (20%) of this year\u2019s TAC share (300 t)')
+  near(aqByCode(aq).get('HAD/2AC4.'), 60, 'summed by stock')
+  const r = ratesFor([{ species: 'NS haddock', code: 'HAD/2AC4.' }], bal, fleet, aqByCode(aq))
+  near(r.get('NS haddock'), (300 - 60) / 2500, 'the per-unit rate carries only the non-AQ 240 t')
+  const S = attachAq(fleet, aq, [{ species: 'NS haddock', code: 'HAD/2AC4.' }], 'stock')
+  eq(S.counts.get('SFO'), 3, 'three active boats in SFO')
+  const by = Object.fromEntries(S.rows.map((x) => [x.id, x.aq?.['NS haddock'] || 0]))
+  ok(Math.abs(by[901] - 30) < 1e-9 && Math.abs(by[902] - 30) < 1e-9, 'stock mode: the 60 t split evenly between the two active boats holding haddock')
+  eq([by[903], by[904], by[905]], [0, 0, 0], 'none to a boat without haddock, the private holder, or the English boat')
+  near(tOf(S.rows[0], 'NS haddock', r), 100 * 0.096 + 30, 'ONE: 100 units at the FQA rate plus 30 t AQ')
+  near(tOf(S.rows[3], 'NS haddock', r), 1000 * 0.096, 'the private holder: units only, no AQ')
+  const total = S.rows.reduce((a, x) => a + (tOf(x, 'NS haddock', r) || 0), 0)
+  near(total, 2500 * 0.096 + 60, 'nothing lost or doubled: units at the rate plus all the AQ')
+  const A = attachAq(fleet, aq, [{ species: 'NS haddock', code: 'HAD/2AC4.' }], 'all')
+  near(A.rows.find((x) => x.id === 903).aq['NS haddock'], 20, 'all mode: 60 t over all three active boats, haddock or not')
+  const L = league(A.rows, { species: ['NS haddock'], metric: 'tonnes', rates: r, top: 0 })
+  ok(L.rows.some((x) => x.name === 'C'), 'a boat with AQ but no units of the stock still ranks')
+  eq(bd2([A.rows.find((x) => x.id === 903)], r).find((x) => x.species === 'NS haddock').units, 0, 'and its breakdown shows the stock at nought units with tonnes')
+  eq(attachAq(fleet, new Map([['Orkney|HAD/2AC4.', 5]]), [{ species: 'NS haddock', code: 'HAD/2AC4.' }]).unplaced, 5, 'AQ for a PO with no active boat is reported, not lost')
 }
 
 /* ---- look-up ------------------------------------------------------------------ */
