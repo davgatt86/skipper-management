@@ -3129,7 +3129,22 @@ word STARTING the port line, and both directions are asserted. After: 77 landed,
 **NOT BACKFILLED. 201 landings are flagged consigned with a port of Peterhead**
 and are wrong; re-uploading a note corrects it, and a sweep across other fleets'
 rows is David's call, not a tidy-up. It is display-only — nothing computes off
-it.
+it. *(Swept the next day — see below.)*
+
+**AND THE PORT RULE THAT SWEPT THEM IS MEASURED, not assumed (Nov 2026).** The
+backfill set `consigned = (port <> 'Peterhead')` on every unread Don row, which
+is a RULE where the parser does a READING — so it is only sound if the two never
+come apart. Censused over **all 104 Don notes on disk: they never do.**
+"Consigned" appears with Fraserburgh, Kinlochbervie, Lerwick, Scrabster and
+Ullapool and never with Peterhead; "Landed" appears with Peterhead and nothing
+else. So `consigned` is trustworthy on a landing whose note has never been read,
+and a Peterhead row reading *consigned* would be a genuine novelty rather than
+the old heading bug.
+
+**`sale_type` HAS NO SUCH RULE and must never be given one.** Private is printed
+on the vessel line and nothing else on the row implies it — the port does not,
+and the 104 notes are 34 private at Peterhead against 38 auction at the same
+port. An unread note stays null.
 
 **The regression is the 295 PDFs on disk**, fingerprinted before and after:
 every row hash, vessel, market, row count and reconcile **identical on all of
@@ -6639,6 +6654,84 @@ since both are counters; not harmless for anything reading `enabled` or
 
 `test-limits.mjs` gained 12 checks on the boat's real generator figures,
 including the 24-hour ceiling both ways and three generators that both fit.
+
+#### AND IT ONLY EVER LOOKED ONE WAY — the forward leap (Nov 2026)
+
+David: *"I put an engine log in the other day. Did it not save?"*, on a digest
+still reporting the engine log seven days stale.
+
+**IT HAD SAVED, AND IT WAS FILED A MONTH EARLY.** Entered 02-11-2026 04:56 with
+a full set of 56 readings, dated **01-10-2026**. The date box defaults to today,
+so the month wheel slipped a notch and the day he picked — the 1st — was the day
+he meant. David confirmed: *"1/11/26"*.
+
+**THE SAME METER TYPED 736 HOURS AHEAD WENT IN CLEAN, where 736 behind would
+have been stopped at the save.** Main Engine 1 at 68,959 against 68,223 two days
+before. Every figure on the entry is ordinary and only the DATE is wrong — the
+shape no range check can see, and the reversal check looked the other way. It is
+the 30-07-2026 fault from the opposite side.
+
+**AND A BLANK IS NOT THE ONLY WAY A DATE GOES WRONG.** The stale-log alert keys
+on the latest `log_date`, so an entry filed backwards does not move it: the
+digest went on saying the book was a week old while the entry sat a month back
+in the list. Maintenance read current hours 92 short for the same reason.
+
+`hoursLeap` is **the same physics the rollover and the sibling fit already
+use**, pointed forwards: an hour meter cannot gain more than 24 hours a day,
+plus the one day's slack for readings taken at different times. Only hours carry
+it — oil added is a counter too and a man may add what he likes. A gap in the
+book is never a fault, because the ceiling scales with the clock.
+
+**THE FIGURE IS OFTEN RIGHT AND THE DATE WRONG**, so the warning names all three
+— this reading, the one before, and the day it was filed under — rather than
+calling the number a typo. 68,959 was a true reading of that meter.
+
+##### TWO BASELINES, AND THE REAL RECORD IS WHAT FORCED THEM APART
+
+`counterReversals` is **`counterFaults`** now, returning two kinds, because the
+walk and its baselines have to be shared.
+
+    highWater   the highest reading believed to be CORRECTLY DATED
+    previous    the last reading believed to be a REAL METER READING
+
+**A leap advances `previous` and not `highWater`; a reversal advances neither.**
+Both halves were measured on the boat's own 38 logs, and both cascades are real:
+
+- Measured from a stale high-water mark, the August run reported **8 leaps where
+  consecutive readings show 2**. This main engine runs so close to 24 hours a
+  day that the slack is the whole margin, so one bad date is never absorbed —
+  the series sat a hair over the ceiling for three weeks.
+- Letting 68,959 stand as the high-water mark made the **six ordinary entries
+  after it read as reversals**: one mistake, six red cards, and the wrong six.
+- And a reversal must not seed the forward check, or the next good entry is
+  measured from a mis-keyed low one and manufactures an enormous false leap.
+
+    21 flags -> 15.  5 leaps, every one a real break.
+
+**THE PRE-EXISTING REVERSAL CASCADE IS STILL THERE and is NOT this bug.**
+Generator 1 shifted scale on 06-09-2026 and never came back, so **9 cards** are
+lit on one event. The high-water rule is right for a one-off dip and wrong for a
+sustained shift, and which of those this is depends on the DG1 question that is
+already open above. Left alone — it is a different decision.
+
+**A MUTATION CHECK CAUGHT A HOLE IN ITS OWN TEST.** `JSON.stringify(Infinity)`
+is `"null"`, so asserting `perDay === null` the ordinary way passed happily on a
+copy that divided by nought days and would have printed *"Infinity a day"* on
+the warning. Asserted as a string now. 8 of 9 mutations caught; the survivor is
+the forward-direction guard in `hoursLeap`, which is **provably redundant** — a
+step that is level or backwards gains nothing and clears any ceiling — and says
+so rather than looking load-bearing, the same treatment as the Mini/Chipper tie.
+
+**AND THE FIRST FIXTURE WAS ITSELF IMPOSSIBLE.** The mis-keyed-low test used
+68,000 → 6,800 → 68,100 over two days, which is 50 hours a day whatever happened
+in between, so the check flagged it and was right to. **A fixture has to be
+physically possible before it can prove anything about the physics.**
+
+The entry was re-dated to 01-11-2026 with the reason on the row, where it is an
+ordinary 92 hours on from 27-10. `test-limits.mjs` → **+26 checks**.
+**The leap card and its save warning have not been rendered** — `EngineLogs.jsx`
+drags the supabase client in, so the build and the undefined-name scan are all
+that cover the JSX.
 
 ### THE PHOTO READER FOR THE SHEET — it fills the form, and only fills it (Sep 2026)
 

@@ -10,7 +10,7 @@
  */
 import {
   checkRange, checkReadings, isCounter, seedLimits, limitFor, limitKey,
-  DRIFT_PCT, MIN_HISTORY, counterReversals,
+  DRIFT_PCT, MIN_HISTORY, counterFaults, hoursLeap,
 } from './src/lib/engine/limits.js'
 
 let fail = 0
@@ -228,7 +228,7 @@ eq('and the history floor', MIN_HISTORY, 3)
     { log_date: '2026-07-30', readings: { ME: { Hours: 65924 } } },
     { log_date: '2026-07-31', readings: { ME: { Hours: 67105 } } },
   ]
-  const rev = counterReversals(real, counter)
+  const rev = counterFaults(real, counter)
   eq('the reversal is found', rev.length, 1)
   eq('on the right day', rev[0].on, '2026-07-30')
   eq('against the reading before it', rev[0].previous, 66796)
@@ -239,25 +239,25 @@ eq('and the history floor', MIN_HISTORY, 3)
   eq('the entry after it is not also flagged',
     rev.filter((r) => r.on === '2026-07-31').length, 0)
 
-  eq('a clean climb raises nothing', counterReversals([
+  eq('a clean climb raises nothing', counterFaults([
     { log_date: '2026-01-01', readings: { ME: { Hours: 100 } } },
     { log_date: '2026-01-02', readings: { ME: { Hours: 200 } } },
   ], counter).length, 0)
-  eq('a repeated reading is not a reversal', counterReversals([
+  eq('a repeated reading is not a reversal', counterFaults([
     { log_date: '2026-01-01', readings: { ME: { Hours: 100 } } },
     { log_date: '2026-01-02', readings: { ME: { Hours: 100 } } },
   ], counter).length, 0)
   // Only counters. A pressure going down is just a pressure going down.
-  eq('a non-counter is left alone', counterReversals([
+  eq('a non-counter is left alone', counterFaults([
     { log_date: '2026-01-01', readings: { ME: { Press: 5 } } },
     { log_date: '2026-01-02', readings: { ME: { Press: 4 } } },
   ], [LIM({ group_key: 'ME', param_key: 'Press' })]).length, 0)
-  eq('and one with no limit at all', counterReversals(real, []).length, 0)
+  eq('and one with no limit at all', counterFaults(real, []).length, 0)
   // Order in the array must not decide it — the dates do.
   eq('out-of-order rows are sorted first',
-    counterReversals([real[2], real[0], real[1]], counter)[0].on, '2026-07-30')
-  eq('nothing at all', counterReversals(null, counter).length, 0)
-  eq('a blank counter box is not a reading of nought, so not a reversal', counterReversals([
+    counterFaults([real[2], real[0], real[1]], counter)[0].on, '2026-07-30')
+  eq('nothing at all', counterFaults(null, counter).length, 0)
+  eq('a blank counter box is not a reading of nought, so not a reversal', counterFaults([
     { log_date: '2026-01-01', readings: { ME: { Hours: 100 } } },
     { log_date: '2026-01-02', readings: { ME: { Hours: '' } } },
   ], counter).length, 0)
@@ -274,7 +274,7 @@ eq('and the history floor', MIN_HISTORY, 3)
     { id: 'a', log_date: '2026-08-09', readings: { 'Generator 2': { 'Running Hours': 9087 } } },
     { id: 'b', log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 8864 } } },
   ]
-  const add = (id, log_date, readings) => counterReversals([...hist, { id, log_date, readings }], gens)
+  const add = (id, log_date, readings) => counterFaults([...hist, { id, log_date, readings }], gens)
 
   const swapped = add('c', '2026-09-06', { 'Generator 2': { 'Running Hours': 8900 } })
   eq('a Generator 1 figure typed under Generator 2 is caught as lower', swapped.length, 1)
@@ -293,12 +293,12 @@ eq('and the history floor', MIN_HISTORY, 3)
     { id: 'e', log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 10000 } } },
     { id: 'f', log_date: '2026-09-06', readings: { 'Generator 1': { 'Running Hours': 9950 } } },
   ]
-  const tooFar = counterReversals([hist[0], ...ceiling], gens)
+  const tooFar = counterFaults([hist[0], ...ceiling], gens)
   eq('a figure further ahead than 24 hours a day allows fits no machine', tooFar[0]?.fitsGroup, null)
-  const inReach = counterReversals([hist[0], ceiling[0], { ...ceiling[1], readings: { 'Generator 1': { 'Running Hours': 9780 } } }], gens)
+  const inReach = counterFaults([hist[0], ceiling[0], { ...ceiling[1], readings: { 'Generator 1': { 'Running Hours': 9780 } } }], gens)
   eq('one inside that ceiling does', inReach[0]?.fitsGroup?.group, 'Generator 2')
 
-  const main = counterReversals([
+  const main = counterFaults([
     { log_date: '2026-08-26', readings: { 'Main Engine 1': { 'Running Hours': 67746 } } },
     { log_date: '2026-09-06', readings: { 'Main Engine 1': { 'Running Hours': 67700 } } },
   ], gens)
@@ -306,7 +306,7 @@ eq('and the history floor', MIN_HISTORY, 3)
 
   /* THE ONE LOWER READING THAT IS NOT A MISTAKE. David: the meter goes back to
    * nought, but at 9,999 hours. */
-  const wrapped = counterReversals([
+  const wrapped = counterFaults([
     { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 9990 } } },
     { log_date: '2026-08-29', readings: { 'Generator 1': { 'Running Hours': 40 } } },
     { log_date: '2026-08-30', readings: { 'Generator 1': { 'Running Hours': 64 } } },
@@ -315,19 +315,19 @@ eq('and the history floor', MIN_HISTORY, 3)
   eq('and the count carries on from 40, so 64 the next day is fine too', wrapped.length, 0)
   eq('the real 8,864 to 7,396 is still a mistake — 8,532 hours in eleven days is impossible',
     add('g', '2026-09-06', { 'Generator 1': { 'Running Hours': 7396 } }).length, 1)
-  eq('9,000 to 100 the next day is not a rollover either — 1,100 hours in a day', counterReversals([
+  eq('9,000 to 100 the next day is not a rollover either — 1,100 hours in a day', counterFaults([
     { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 9000 } } },
     { log_date: '2026-08-27', readings: { 'Generator 1': { 'Running Hours': 100 } } },
   ], gens).length, 1)
-  eq('a five-figure meter wraps at 100,000', counterReversals([
+  eq('a five-figure meter wraps at 100,000', counterFaults([
     { log_date: '2026-08-26', readings: { 'Main Engine 1': { 'Running Hours': 99990 } } },
     { log_date: '2026-08-27', readings: { 'Main Engine 1': { 'Running Hours': 10 } } },
   ], gens).length, 0)
-  eq('with no dates, a rollover is never assumed', counterReversals([
+  eq('with no dates, a rollover is never assumed', counterFaults([
     { readings: { 'Generator 1': { 'Running Hours': 9990 } } },
     { readings: { 'Generator 1': { 'Running Hours': 40 } } },
   ], gens).length, 1)
-  eq('only an hour meter rolls over — a counter with no hours unit does not', counterReversals([
+  eq('only an hour meter rolls over — a counter with no hours unit does not', counterFaults([
     { log_date: '2026-08-26', readings: { ME: { Hours: 9990 } } },
     { log_date: '2026-08-27', readings: { ME: { Hours: 5 } } },
   ], [LIM({ group_key: 'ME', param_key: 'Hours', is_counter: true, enabled: false, min_val: null, max_val: null })]).length, 1)
@@ -335,13 +335,120 @@ eq('and the history floor', MIN_HISTORY, 3)
   /* Needs a THIRD generator to be possible at all, so it brings its own
    * template — with two, there is only ever one other machine to fit. */
   const three = ['Generator 1', 'Generator 2', 'Generator 3'].map((group) => ({ group, params: [{ label: 'Running Hours', unit: 'h' }] }))
-  const both = counterReversals([
+  const both = counterFaults([
     { log_date: '2026-08-25', readings: { 'Generator 1': { 'Running Hours': 9000 }, 'Generator 2': { 'Running Hours': 8800 }, 'Generator 3': { 'Running Hours': 8810 } } },
     { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 8830 } } },
   ], [...gens, GEN('Generator 3')], three)[0]
   eq('two machines that both fit name neither — that would be a guess', [both?.fitsGroup, both?.siblingsChecked], [null, 2])
 }
 
+
+/* A COUNTER THAT GAINED MORE HOURS THAN THERE WERE HOURS.
+ *
+ * The real one: David's log of 01-10-2026, entered on 2 November with the month
+ * a wheel out. Main Engine 1 at 68,959 against 68,223 two days before — 736
+ * hours in 48. Every figure on the entry is ordinary and only the DATE is
+ * wrong, which is the shape neither the range check nor the reversal check can
+ * see; it sailed in, and the stale-log alert went on firing because the latest
+ * log_date had not moved.
+ */
+{
+  const GEN = (g) => LIM({ group_key: g, param_key: 'Running Hours', is_counter: true, enabled: false, min_val: null, max_val: null })
+  const gens = [GEN('Generator 1'), GEN('Generator 2'), GEN('Main Engine 1')]
+  const ME = (log_date, h, id) => ({ id, log_date, readings: { 'Main Engine 1': { 'Running Hours': h } } })
+
+  const real = counterFaults([ME('2026-09-29', 68223), ME('2026-10-01', 68959, 'x')], gens)
+  eq('the real 01-10 entry is caught', real.length, 1)
+  eq('as a leap, not a reversal — it went the other way', real[0].kind, 'leap')
+  eq('it names the entry, so the card can carry it', real[0].id, 'x')
+  eq('736 hours gained', real[0].gained, 736)
+  eq('over 2 days', real[0].days, 2)
+  eq('against a ceiling of 24 x (2 + 1)', real[0].allowed, 72)
+  eq('which is 368 hours a day', real[0].perDay, 368)
+
+  /* DATED 1 NOVEMBER, WHERE IT BELONGS, IT IS AN ORDINARY ENTRY: 92 hours on
+   * from 27-10, five days later. The figure was never the problem. */
+  eq('the same reading on its real day raises nothing',
+    counterFaults([ME('2026-10-27', 68867), ME('2026-11-01', 68959)], gens).length, 0)
+
+  /* THE CEILING IS PHYSICS, AND IT HAS TO LET A HARD-WORKED ENGINE THROUGH.
+   * This boat tows round the clock, so a day's slack is the whole margin. */
+  eq('24 hours in a day is fine', counterFaults([ME('2026-01-01', 100), ME('2026-01-02', 124)], gens).length, 0)
+  eq('so is 48, which is the slack for readings taken at different times',
+    counterFaults([ME('2026-01-01', 100), ME('2026-01-02', 148)], gens).length, 0)
+  eq('49 is not', counterFaults([ME('2026-01-01', 100), ME('2026-01-02', 149)], gens).length, 1)
+
+  /* A GAP IN THE BOOK IS NOT A FAULT. The ceiling scales with the clock, so
+   * this never fires merely because nobody wrote anything down for two months. */
+  eq('1,000 hours over 60 days is well inside the ceiling',
+    counterFaults([ME('2026-01-01', 100), ME('2026-03-02', 1100)], gens).length, 0)
+
+  /* ONLY HOURS CARRY THE CEILING. Oil added is a counter too and a man may add
+   * as many litres as he likes in a day. */
+  const litres = [LIM({ group_key: 'Main Engine 1', param_key: 'Oil added', is_counter: true, enabled: false, min_val: null, max_val: null })]
+  eq('a counter that is not an hour meter never leaps', counterFaults([
+    { log_date: '2026-01-01', readings: { 'Main Engine 1': { 'Oil added': 10 } } },
+    { log_date: '2026-01-02', readings: { 'Main Engine 1': { 'Oil added': 9999 } } },
+  ], litres).length, 0)
+
+  eq('with no date there is no ceiling to breach', counterFaults([
+    { readings: { 'Main Engine 1': { 'Running Hours': 100 } } },
+    { readings: { 'Main Engine 1': { 'Running Hours': 99999 } } },
+  ], gens).length, 0)
+  eq('the first reading of a series cannot leap', counterFaults([ME('2026-01-01', 99999)], gens).length, 0)
+  const sameDay = hoursLeap({ value: 100, on: '2026-01-01' }, 125, '2026-01-01')
+  eq('two readings on one day still get 24 hours', sameDay?.allowed, 24)
+  /* STRINGIFIED, because JSON.stringify(Infinity) is "null" — asserting
+   * perDay === null the ordinary way passed happily on a copy that divided by
+   * nought days and would have printed "Infinity a day" on the warning. */
+  eq('and no per-day rate, since dividing by nought days is not a number',
+    String(sameDay?.perDay), 'null')
+  eq('a step that goes backwards is the reversal check’s business, not this one',
+    hoursLeap({ value: 100, on: '2026-01-01' }, 50, '2026-01-02'), null)
+  eq('and a rollover is still a rollover', counterFaults([
+    { log_date: '2026-08-26', readings: { 'Generator 1': { 'Running Hours': 9990 } } },
+    { log_date: '2026-08-29', readings: { 'Generator 1': { 'Running Hours': 40 } } },
+  ], gens).length, 0)
+
+  /* TWO BASELINES, AND THIS IS WHAT THEY BUY.
+   *
+   * A leap carries the series FORWARD — 68,959 is a true reading of that meter,
+   * just filed early — so the next entry is measured from it and not from a
+   * stale mark that the engine's own 24-hour working day can never catch up
+   * with. Measured on the boat's real August run, where the old single
+   * high-water baseline reported seven. */
+  const august = counterFaults([
+    ME('2026-07-31', 67105), ME('2026-08-03', 67205), ME('2026-08-05', 67280),
+    ME('2026-08-08', 67330), ME('2026-08-09', 67357), ME('2026-08-15', 67490),
+    ME('2026-08-17', 67541), ME('2026-08-20', 67610),
+  ], gens)
+  eq('the real August run has two breaks, not seven', august.length, 2)
+  eq('on the two days consecutive readings cannot both be right',
+    august.map((f) => f.on), ['2026-08-03', '2026-08-05'])
+
+  /* AND A LEAP NEVER BECOMES THE HIGH-WATER MARK, or the six ordinary entries
+   * after 68,959 would every one read as a reversal — one mistake, six red
+   * cards, and the wrong six. */
+  const after = counterFaults([
+    ME('2026-09-29', 68223), ME('2026-10-01', 68959), ME('2026-10-02', 68315),
+    ME('2026-10-06', 68385), ME('2026-10-10', 68493),
+  ], gens)
+  eq('the leap is reported once and the entries after it are left alone', after.length, 1)
+  eq('and it is the leap, not a reversal on the entry that follows', after[0].on, '2026-10-01')
+
+  /* THE OTHER DIRECTION OF THE SAME RULE. A reversal is not believed at all, so
+   * it must not seed the forward check either — measuring 68,100 from a
+   * mis-keyed 6,800 would manufacture a 61,240-hour leap out of a good entry.
+   *
+   * The 40 hours is deliberate and the first draft of this test got it wrong:
+   * 68,100 two days on is 50 hours a day, which is impossible whatever happened
+   * in between, so the check flagged it and was right to. A fixture has to be
+   * physically possible before it can prove anything about the physics. */
+  const dip = counterFaults([ME('2026-01-01', 68000), ME('2026-01-02', 6800), ME('2026-01-03', 68040)], gens)
+  eq('a mis-keyed low reading is one reversal', dip.length, 1)
+  eq('and the good reading after it is not turned into a leap', dip[0].kind, 'reversal')
+  eq('on the mis-keyed entry, not the good one', dip[0].on, '2026-01-02')
+}
 
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)

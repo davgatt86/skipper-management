@@ -5,7 +5,7 @@ import AppShell from '../AppShell'
 import PageHeader from '../PageHeader'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
-import { checkReadings, counterReversals } from '../lib/engine/limits'
+import { checkReadings, counterFaults } from '../lib/engine/limits'
 import { useCurrentVessel } from '../VesselContext'
 import { pickDetails } from '../lib/vessels'
 import { useAuth } from '../AuthContext'
@@ -190,9 +190,9 @@ export default function EngineLogs() {
    * sight for good — while the mistake sits in the record making every later
    * figure on that meter look wrong. So the card carries it, with the engine the
    * figure fits where exactly one does, and the Edit button beside it. */
-  const reversalsById = useMemo(() => {
+  const faultsById = useMemo(() => {
     const m = new Map()
-    for (const r of counterReversals(logs, limits)) {
+    for (const r of counterFaults(logs, limits)) {
       if (r.id == null) continue
       if (!m.has(r.id)) m.set(r.id, [])
       m.get(r.id).push(r)
@@ -255,7 +255,7 @@ export default function EngineLogs() {
     const priorLogs = logs.filter((l) => l.id !== editingId)
     const odd = [
       ...checkReadings(readings, limits, priorLogs),
-      ...counterReversals([...priorLogs, { log_date: draft.log_date, readings }], limits)
+      ...counterFaults([...priorLogs, { log_date: draft.log_date, readings }], limits)
         .filter((r) => r.on === draft.log_date),
     ]
     if (odd.length && !force) {
@@ -440,6 +440,19 @@ export default function EngineLogs() {
                             : ''}
                       </span>
                     )}
+                    {o.kind === 'leap' && (
+                      <span className="muted">
+                        {' '}— {o.gained.toLocaleString('en-GB')} hours on from {o.previous.toLocaleString('en-GB')} on {fmt(o.previousOn)}
+                        {o.days ? `, which is ${o.days} day${o.days === 1 ? '' : 's'}` : ', the same day'}.
+                        A meter cannot gain more than 24 hours a day
+                        {o.perDay ? `, and this is ${o.perDay.toLocaleString('en-GB')} a day` : ''}.
+                        {' '}Check the date on this entry as well as the figure — a reading filed under
+                        the wrong day looks exactly like this.
+                        {o.fitsGroup
+                          ? ` It does follow ${o.fitsGroup.group} (${o.fitsGroup.previous.toLocaleString('en-GB')} on ${fmt(o.fitsGroup.previousOn)}) — was it written under the wrong engine?`
+                          : ''}
+                      </span>
+                    )}
                     {(o.kind === 'drift' || !o.kind) && (
                       <span className="muted">
                         {' '}— usually about {o.avg}{o.times ? `, this is ${o.times}×` : ''}
@@ -450,8 +463,13 @@ export default function EngineLogs() {
                 ))}
               </ul>
               <p className="muted" style={{ fontSize: '0.85rem' }}>
-                {outlierWarn.every((o) => o.kind === 'reversal')
-                  ? 'A counter going backwards is a mistake, not the engine. Correct the figure above, or move it to the right engine, then save.'
+                {/* A COUNTER FAULT IS NEVER THE ENGINE, and the two kinds are
+                    corrected in different places — a reversal in the figure or
+                    the engine it was filed under, a leap often in the DATE. */}
+                {outlierWarn.every((o) => o.kind === 'reversal' || o.kind === 'leap')
+                  ? (outlierWarn.some((o) => o.kind === 'leap')
+                    ? 'A counter cannot climb faster than the clock, so something here is wrong — most often the date, not the reading. Check the date above, then the figure, then save.'
+                    : 'A counter going backwards is a mistake, not the engine. Correct the figure above, or move it to the right engine, then save.')
                   : 'This is usually a decimal in the wrong place — but it can be a real engine problem, and only you can tell which. Check the figures, then either fix them above or save them as they stand.'}
               </p>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -506,11 +524,15 @@ export default function EngineLogs() {
               )}
             </div>
 
-            {(reversalsById.get(l.id) || []).map((r) => (
+            {(faultsById.get(l.id) || []).map((r) => (
               <div key={`${r.group}|${r.param}`} role="alert"
                 style={{ marginTop: '0.6rem', padding: '0.45rem 0.6rem', borderLeft: '3px solid var(--rust)', background: 'var(--surface-2)', fontSize: '0.85rem' }}>
-                <strong>{r.group} · {r.param} {r.value.toLocaleString('en-GB')}</strong> is lower than{' '}
-                {r.previous.toLocaleString('en-GB')} on {fmt(r.previousOn)}, and a counter only climbs.
+                <strong>{r.group} · {r.param} {r.value.toLocaleString('en-GB')}</strong>{' '}
+                {r.kind === 'leap'
+                  ? <>is {r.gained.toLocaleString('en-GB')} hours on from {r.previous.toLocaleString('en-GB')} on {fmt(r.previousOn)}
+                      {r.days ? `, ${r.days} day${r.days === 1 ? '' : 's'} later` : ', the same day'}, and a meter
+                      cannot gain more than 24 hours a day. The reading may be right and the date wrong.</>
+                  : <>is lower than {r.previous.toLocaleString('en-GB')} on {fmt(r.previousOn)}, and a counter only climbs.</>}
                 {r.fitsGroup
                   ? ` It follows ${r.fitsGroup.group} (${r.fitsGroup.previous.toLocaleString('en-GB')} on ${fmt(r.fitsGroup.previousOn)}), so it may be under the wrong engine.`
                   : r.siblingsChecked ? ' It does not follow the other machine’s record either.' : ''}

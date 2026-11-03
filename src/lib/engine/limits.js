@@ -146,7 +146,7 @@ export function isCounter(values) {
   return backSum < rise
 }
 
-/* A COUNTER THAT WENT BACKWARDS.
+/* A COUNTER THAT WENT BACKWARDS — OR LEAPT FURTHER THAN THE CLOCK ALLOWS.
  *
  * The most reliable signal in the whole log, and it needs no limit at all:
  * running hours only climb, so a reading below the one before it is wrong, full
@@ -157,11 +157,55 @@ export function isCounter(values) {
  * block is an exact copy of 09-06's, down to the exhaust temperatures. A range
  * check would never have caught it: every individual figure is perfectly
  * ordinary, and it is only wrong in relation to the one before.
+ *
+ * AND FOR A YEAR IT ONLY LOOKED ONE WAY. The same meter typed 736 hours AHEAD
+ * went in clean, where 736 behind would have been stopped at the save. David's
+ * engine log of 01-10-2026 was entered on 2 November with the date box a month
+ * out — Main Engine 1 at 68,959 against 68,223 two days before — and the whole
+ * entry is otherwise perfect. Nothing in the app could see it, and the alert
+ * went on saying the log was a week stale because the latest `log_date` had not
+ * moved.
+ *
+ * `hoursLeap` is the SAME physics the rollover and the sibling fit already use,
+ * pointed forwards. Only hours carry that ceiling: oil added is a counter too
+ * and a man may add as much as he likes.
+ *
+ * A FAULTED READING NEVER BECOMES THE BASELINE, in either direction. That rule
+ * was already here for reversals — "one bad entry does not make every good
+ * reading after it look like a second reversal" — and a leap needs it more.
+ * Replayed on the real record, letting 68,959 stand as the high-water mark made
+ * the SIX ordinary entries after it read as reversals: one mistake, six red
+ * cards, and the wrong six.
  */
-export function counterReversals(logs, limits, template = ENGINE_TEMPLATE) {
+export function counterFaults(logs, limits, template = ENGINE_TEMPLATE) {
   const ordered = [...(logs || [])].sort(
     (a, b) => String(a.log_date || '').localeCompare(String(b.log_date || '')))
-  const last = new Map()
+  /* TWO BASELINES, BECAUSE THE TWO CHECKS ASK DIFFERENT QUESTIONS — and the
+   * real record is what forced it apart.
+   *
+   *   highWater  the highest reading believed to be CORRECTLY DATED.
+   *              "Is this below something already logged?"
+   *   previous   the last reading believed to be a REAL METER READING, dated
+   *              right or not. "Did the meter gain more than the clock allowed
+   *              since it was last read?"
+   *
+   * A leap advances `previous` and not `highWater`, and that asymmetry is the
+   * whole of it. 68,959 IS a true reading of that meter — it was filed a month
+   * early — so the next entry rightly follows it, but it must not become the
+   * high-water mark or the six ordinary entries after it read as reversals.
+   * A reversal advances NEITHER: a reading below the record is not believed at
+   * all, and using it as a forward baseline manufactures an enormous false leap
+   * out of the next good entry.
+   *
+   * WITHOUT THE SPLIT THE CHECK CRIED WOLF. Replayed over the boat's own 38
+   * logs, measuring every leap from a stale baseline reported 8 faults across
+   * the August run where consecutive readings show 2, and the main engine runs
+   * so close to 24 hours a day that one bad date is never absorbed — the series
+   * stayed a hair over the ceiling for three weeks. 21 flags became 15, and the
+   * 5 leaps are 5 real breaks.
+   */
+  const highWater = new Map()
+  const previous = new Map()
   const out = []
 
   for (const l of ordered) {
@@ -175,28 +219,41 @@ export function counterReversals(logs, limits, template = ENGINE_TEMPLATE) {
         const v = Number(raw)
         if (!Number.isFinite(v)) continue
         const k = limitKey(group, param)
-        const prev = last.get(k)
+        const prev = highWater.get(k)
+        const here = { value: v, on: l.log_date }
         /* A METER THAT ROLLED OVER IS NOT A REVERSAL. David: an hour meter does
          * go back to nought, "but it happens at 9999hrs". So the one lower
          * reading that is not a mistake is the wrap past the top of the dial —
          * and it needs no button, because it can be recognised exactly. */
         const unit = template.find((g) => g.group === group)?.params.find((p) => p.label === param)?.unit
         if (unit === 'h' && rolledOver(prev, v, l.log_date)) {
-          last.set(k, { value: v, on: l.log_date })
+          highWater.set(k, here); previous.set(k, here)
           continue
         }
+
+        let fault = null
         if (prev && v < prev.value) {
+          fault = {
+            kind: 'reversal',
+            previous: prev.value, previousOn: prev.on,
+            back: round2(prev.value - v),
+          }
+        } else if (unit === 'h') {
+          const leap = hoursLeap(previous.get(k), v, l.log_date)
+          if (leap) fault = { kind: 'leap', ...leap }
+        }
+
+        if (fault) {
           out.push({
-            kind: 'reversal', group, param, id: l.id ?? null,
-            value: v, previous: prev.value,
-            on: l.log_date, previousOn: prev.on,
-            back: Math.round((prev.value - v) * 100) / 100,
-            ...fitsSibling({ group, param, value: v, on: l.log_date, last, template }),
+            ...fault, group, param, id: l.id ?? null,
+            value: v, on: l.log_date,
+            ...fitsSibling({ group, param, value: v, on: l.log_date, last: highWater, template }),
           })
         }
-        // Only advance on a forward step, so one bad entry does not make every
-        // good reading after it look like a second reversal.
-        if (!prev || v >= prev.value) last.set(k, { value: v, on: l.log_date })
+        // A reversal is believed to be neither; a leap is a real reading on the
+        // wrong day, so it carries the series forward but never sets the record.
+        if (!fault) highWater.set(k, here)
+        if (fault?.kind !== 'reversal') previous.set(k, here)
       }
     }
   }
@@ -242,6 +299,49 @@ export function rolledOver(prev, value, on) {
   const wrap = 10 ** String(Math.floor(prev.value)).length
   const gained = value + wrap - prev.value
   return gained >= 0 && gained <= 24 * (days + 1)
+}
+
+/* DID IT GAIN MORE HOURS THAN THERE WERE HOURS?
+ *
+ * An hour meter cannot advance more than 24 hours in a day, however hard the
+ * boat is worked — so hours gained beyond the days that passed is not a
+ * judgement about this engine, it is arithmetic. The extra day's slack is the
+ * same one the rollover and the sibling fit allow, because two readings taken
+ * at different times of day are nearly a day apart at the ends.
+ *
+ * THE FIGURE IS OFTEN RIGHT AND THE DATE WRONG, which is why the caller must
+ * not read this as "that number is a typo". 68,959 was a true reading of a real
+ * meter; it was filed a month early. Either end of the pair can be the mistake,
+ * and so can the day it was filed under — the warning names all three rather
+ * than picking one.
+ *
+ * Null, never false, where nothing can be said: no previous reading, no usable
+ * dates, or a step that is not forwards at all (a reversal, which is the other
+ * check's business). A gap of months is allowed its months — the ceiling scales
+ * with the clock, so this never fires merely because nobody wrote in the book.
+ *
+ * `value > prev.value` is NOT load-bearing and the mutation check proved it:
+ * days is already known to be at least 0, so the ceiling is at least 24, and a
+ * step that is level or backwards gains nothing and clears it anyway. It is
+ * kept because it states what the function is for, and because it is the only
+ * guard left if the ceiling is ever allowed to go negative.
+ */
+export function hoursLeap(prev, value, on) {
+  if (!prev || !Number.isFinite(value) || !(value > prev.value)) return null
+  const days = (Date.parse(on) - Date.parse(prev.on)) / DAY_MS
+  if (!Number.isFinite(days) || days < 0) return null
+  const allowed = 24 * (days + 1)
+  const gained = value - prev.value
+  if (gained <= allowed) return null
+  return {
+    previous: prev.value, previousOn: prev.on,
+    gained: round2(gained),
+    days: round2(days),
+    allowed: round2(allowed),
+    // Two readings on one day have no per-day rate to report, and dividing by
+    // nought would print Infinity on the warning.
+    perDay: days > 0 ? round2(gained / days) : null,
+  }
 }
 
 function fitsSibling({ group, param, value, on, last, template }) {
