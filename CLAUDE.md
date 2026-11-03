@@ -9953,6 +9953,40 @@ build differences "Change in year" instead, which always reconciles.
 `test-uk-quota-swaps.mjs` (45 checks, synthetic rows only — the real figures
 are SWFPA-distributed PO data and stay out of a public repo).
 
+### UK QUOTA HOLDERS — `/quota-holders` (Nov 2026)
+
+David: *"most of this can go onto the quota segment. suggest if seperate tabs is
+better so it doesn't get too loud."* A **page of its own** beside UK Quota Swaps
+(which already has eight tabs), linked both ways: League tables, PO make-up,
+Lease prospects, Holder look-up.
+
+**THE DATA IS THE PUBLIC FQA REGISTER** — an export David takes from
+fqaregister.service.gov.uk (the site blocks automated access). Every holding:
+licence (vessel or PO dummy), holder, PO, holding type and units per stock. He
+chose to show every name, as the register does. Shared and cross-fleet like the
+swaps page; demo, officer and cook refused at the policy.
+
+**ITS OWN TABLE, `quota_holders_data`, ON PURPOSE.** The weekly swaps load ends
+in `quota_swaps_prune()`, which deletes every (dataset, year) that build did not
+make. The register is loaded by hand when a new export is taken, so in
+`quota_swaps_data` it would be wiped every Thursday. Same loader token
+(`quota_holders_load()` checks `quota_swaps_loader`). Prep and load scripts:
+`claude/quota-pipeline/fqa_prep.py` and `load_fqa.py` in the claude.ai project.
+**Never commit the export** — this repo is public.
+
+**TONNES ARE AN ESTIMATE, AND NEVER STORED.** Per stock and year: the sum of
+every PO's TAC share in the uptake report (`balances`) ÷ units held in POs on
+the register (David's choice over initial allocation, which carries banking).
+So they move on by themselves when a new year's TACs reach the uptake report.
+**The next year** is the latest year's rate × (1 + the user's % per stock), kept
+in localStorage. A stock the uptake report does not cover (area VII, Norway,
+NAFO) has **units and no tonnes — null, never 0**, and a holder carrying such
+units is marked. Holders group on a normalised name (Ltd/Limited, `&`,
+punctuation); "Each holding separately" splits by licence + PO. Boat rankings
+count vessel licences only and say how many units sit on dummy licences.
+
+`test-uk-quota-holders.mjs` (46 checks, synthetic rows only).
+
 ### `reconcile_ok` does NOT mean the money is wrong
 
 Worth knowing before chasing one. The flag compares the parsed rows against

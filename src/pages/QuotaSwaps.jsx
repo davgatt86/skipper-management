@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
@@ -174,7 +175,9 @@ export default function QuotaSwaps() {
         sub={head
           ? `Latest Marine Directorate report ${fmtDay(head.report_date)}: ${head.stocks_moved} stocks moved and ${t1(head.tonnes_moved)} t changed hands between groups. Built from the uptake reports the SWFPA forwards, since ${fmtDay(head.first_report)}.`
           : 'Who is swapping what with whom, week by week, from the Marine Directorate uptake reports.'}
-      />
+      >
+        <Link to="/quota-holders"><button type="button" className="secondary">Who holds the quota →</button></Link>
+      </PageHeader>
 
       {error && <p className="error">{error}</p>}
       {nothing && !error && <div className="card"><p className="muted" style={{ margin: 0 }}>No swaps data loaded yet.</p></div>}
