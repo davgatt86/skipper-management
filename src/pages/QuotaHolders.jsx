@@ -7,6 +7,7 @@ import PageHeader from '../PageHeader'
 import {
   ALL, league, ratesFor, projectRates, applyRowFilters, poShares, search, breakdown,
   fmtUnits, fmtT, fmtPct, poLabel, poOverview, poSpecies, normHolderKey, compare,
+  aqTonnes, aqByCode, attachAq, tOf, keysOf,
 } from '../lib/quota/ukHolders.js'
 
 /* UK QUOTA HOLDERS — who holds the UK's fixed quota allocation (FQA) units.
@@ -29,6 +30,12 @@ const TABS = [
 ]
 const TOPS = [10, 20, 50, 100, 0]
 const PCT_KEY = 'qh_next_year_pct_v1'
+const AQ_KEY = 'qh_aq_mode_v1'
+const AQ_MODES = [
+  ['stock', 'Shared between active boats holding the stock'],
+  ['all', 'Shared evenly between all active boats in the PO'],
+  ['off', 'Not separated: everything by FQA units'],
+]
 const PRESETS = [
   ['NS whitefish', ['NS cod', 'NS haddock', 'NS whiting', 'NS saithe', 'NS hake', 'NS anglers', 'NS megrim', 'Ling IV', 'Tusk IV', 'NS plaice', 'NS lemons & witches']],
   ['WS whitefish', ['WS cod (VIa)', 'Haddock VIa', 'WS whiting', 'WS saithe', 'WS anglers', 'WS megrim', 'Ling VI-X,XII,XIV', 'Tusk V,VI,VII', 'Blue ling VI,VII']],
@@ -68,6 +75,8 @@ export default function QuotaHolders() {
   const [htype, setHtype] = useState(ALL)
   const [admin, setAdmin] = useState(ALL)
   const [pct, setPctState] = useState(loadPct)
+  const [aqMode, setAqModeState] = useState(() => { try { return localStorage.getItem(AQ_KEY) || 'stock' } catch { return 'stock' } })
+  const setAqMode = (v) => { setAqModeState(v); try { localStorage.setItem(AQ_KEY, v) } catch { /* private mode */ } }
   const setPct = (v) => { setPctState(v); savePct(v) }
 
   useEffect(() => {
@@ -103,10 +112,19 @@ export default function QuotaHolders() {
   const meta = (data.fqa_meta || [])[0]
   const balances = bal[rateYear] || []
 
-  const baseRates = useMemo(() => ratesFor(speciesList, balances, holdings), [speciesList, balances, holdings])
+  // Scottish AQ: measured off the July 2024 release, carried onto this year's
+  // TAC shares, taken out of the per-unit rate and shared to active boats.
+  const aqBase = useMemo(() => (aqMode === 'off' ? new Map() : aqTonnes(data.fqa_aq || [], balances)), [aqMode, data.fqa_aq, balances])
+  const aq = useMemo(() => {
+    if (year !== 'next') return aqBase
+    const sp = new Map(speciesList.filter((x) => x.code).map((x) => [x.code, x.species]))
+    return new Map([...aqBase].map(([k, t]) => [k, t * (1 + (Number(pct[sp.get(k.slice(k.indexOf('|') + 1))]) || 0) / 100)]))
+  }, [aqBase, year, pct, speciesList])
+  const baseRates = useMemo(() => ratesFor(speciesList, balances, holdings, aqByCode(aqBase)), [speciesList, balances, holdings, aqBase])
   const rates = useMemo(() => (year === 'next' ? projectRates(baseRates, pct) : baseRates), [baseRates, pct, year])
+  const placed = useMemo(() => attachAq(holdings, aq, speciesList, aqMode === 'all' ? 'all' : 'stock'), [holdings, aq, speciesList, aqMode])
 
-  const filtered = useMemo(() => applyRowFilters(holdings, { po, htype, admin }), [holdings, po, htype, admin])
+  const filtered = useMemo(() => applyRowFilters(placed.rows, { po, htype, admin }), [placed.rows, po, htype, admin])
   const pos = useMemo(() => [...new Set(holdings.map((r) => r.po))].sort(), [holdings])
   const htypes = useMemo(() => [...new Set(holdings.map((r) => r.htype))].sort(), [holdings])
   const admins = useMemo(() => [...new Set(holdings.map((r) => r.admin).filter(Boolean))].sort(), [holdings])
@@ -150,6 +168,10 @@ export default function QuotaHolders() {
                 <option value={ALL}>All administrations</option>
                 {admins.map((p) => <option key={p} value={p}>{p}</option>)}
               </select></label>
+            <label className="muted" style={lbl}>Scottish AQ
+              <select value={aqMode} onChange={(e) => setAqMode(e.target.value)} style={{ ...ctl, maxWidth: 300 }}>
+                {AQ_MODES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+              </select></label>
             <button type="button" className="secondary" style={{ ...ctl, padding: '0 0.9rem' }}
               onClick={() => { setPo(ALL); setHtype(ALL); setAdmin(ALL); setYear(latest ?? null) }}>Reset</button>
             {busy && <span className="muted" style={{ fontSize: '0.8rem' }}>Loading…</span>}
@@ -164,6 +186,7 @@ export default function QuotaHolders() {
         {year === 'next' && <NextYear speciesList={speciesList} base={baseRates} pct={pct} setPct={setPct} latest={latest} />}
 
         {tab === 'league' && <League rows={filtered} speciesList={speciesList} rates={rates} yearLabel={yearLabel} />}
+        {tab === 'po' && aqMode !== 'off' && <AqCard aq={aq} counts={placed.counts} unplaced={placed.unplaced} yearLabel={yearLabel} mode={aqMode} />}
         {tab === 'po' && <PoMakeup rows={filtered} speciesList={speciesList} rates={rates} balances={balances}
           yearLabel={yearLabel} swapsYear={rateYear} estimate={year === 'next'} />}
         {tab === 'lease' && <League rows={filtered} speciesList={speciesList} rates={rates} yearLabel={yearLabel} leasable balances={balances} swapsYear={rateYear} />}
@@ -171,7 +194,8 @@ export default function QuotaHolders() {
 
         <p className="muted" style={{ fontSize: '0.75rem', marginTop: '1rem' }}>
           Source: the public FQA register (fqaregister.service.gov.uk){meta ? `, export of ${meta.as_at}` : ''}. Units are as registered.
-          Tonnes are an estimate: units × (the year's total PO TAC share for the stock in the Marine Directorate uptake report ÷ units held in POs).
+          Tonnes are an estimate: units × (the year's total PO TAC share for the stock in the Marine Directorate uptake report, less Scottish additional quota, ÷ units held in POs),
+          plus each active boat's even share of its PO's Scottish additional quota (AQ) unless that is switched off.
           They leave out banking and swaps, and stocks the uptake report does not cover (area VII, Norway, NAFO and others) show units only.
           {year === 'next' ? ` ${latest + 1} uses ${latest}'s rate moved by your % per stock.` : ''}
         </p>
@@ -501,9 +525,9 @@ function Holdings({ rows, species, rates }) {
       </tr></thead>
       <tbody>
         {rows.map((h) => {
-          const keys = species.length ? species : Object.keys(h.u)
+          const keys = species.length ? species : keysOf(h)
           const u = keys.reduce((a, k) => a + (h.u[k] || 0), 0)
-          const t = keys.reduce((a, k) => a + (rates.has(k) ? (h.u[k] || 0) * rates.get(k) : 0), 0)
+          const t = keys.reduce((a, k) => a + (tOf(h, k, rates) || 0), 0)
           return (
             <tr key={h.id}>
               <td style={td}>{h.lt ? `${h.lt} ` : ''}{h.lic}</td><td style={td}>{h.vessel || '—'}</td>
@@ -515,6 +539,52 @@ function Holdings({ rows, species, rates }) {
         })}
       </tbody>
     </table>
+  )
+}
+
+/* What the Scottish AQ adds up to this year, PO by PO, and how many active
+ * boats it is shared between. */
+export function AqCard({ aq, counts, unplaced, yearLabel, mode }) {
+  const [open, setOpen] = useState(false)
+  const byPo = new Map()
+  for (const [k, t] of aq) { const po = k.slice(0, k.indexOf('|')); byPo.set(po, (byPo.get(po) || 0) + t) }
+  const list = [...byPo].sort((a, b) => b[1] - a[1])
+  const total = list.reduce((a, [, t]) => a + t, 0)
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0 }}>Scottish additional quota</h2>
+        <span className="muted" style={{ fontSize: '0.85rem' }}>≈{fmtT(total)} t in {yearLabel}, shared between active boats</span>
+        <button type="button" className="secondary" style={{ ...ctl, height: '1.9rem' }} onClick={() => setOpen(!open)}>{open ? 'Hide' : 'How it is worked out'}</button>
+      </div>
+      {open && (<>
+        <p className="muted" style={{ fontSize: '0.8rem' }}>
+          Scotland's additional quota from the UK–EU deal is given to POs on their members' catch records, not FQA units. It showed in the uptake reports
+          once on its own: 53,775 t held in "Unallocated Scotland" in the 5 Jun 2024 report and released to the ten Scottish POs and Interfish on 3 Jul 2024,
+          in amounts that do not follow units. From 2025 it comes inside the April allocation (2 Apr 2025, 1 Apr 2026), so each PO's share of its own quota
+          that was AQ in July 2024 is carried onto each year's quota. That AQ is taken off the per-unit rate and shared evenly between the PO's active boats
+          — {mode === 'all' ? 'every active boat in the PO' : 'the active boats that hold units of that stock (all active boats in the PO where none do)'}.
+          Active boat = a vessel licence administered by Marine Scotland, not a PO dummy or units held for others. The real split follows each boat's catch
+          record, which is not public, so this is an estimate.
+        </p>
+        <div style={scroller}>
+          <table style={{ borderCollapse: 'separate', borderSpacing: 0, width: '100%', fontSize: '0.86rem' }}>
+            <thead><tr>{['PO', `AQ ${yearLabel} (t)`, 'Active boats', 'Average per boat (t)'].map((h, i) => <th key={h} style={i ? { ...th, textAlign: 'right' } : th}>{h}</th>)}</tr></thead>
+            <tbody>
+              {list.map(([po, t]) => (
+                <tr key={po}>
+                  <td style={{ ...td, fontWeight: 600 }}>{poLabel(po)}</td>
+                  <td style={{ ...td, ...num }}>{fmtT(t)}</td>
+                  <td style={{ ...td, ...num }}>{counts.get(po) || DASH}</td>
+                  <td style={{ ...td, ...num }}>{counts.get(po) ? fmtT(t / counts.get(po)) : DASH}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {unplaced > 0.5 && <p className="muted" style={{ fontSize: '0.78rem' }}>{fmtT(unplaced)} t could not be placed: no active boat in that PO on the register.</p>}
+      </>)}
+    </div>
   )
 }
 
@@ -545,7 +615,7 @@ export function PoMakeup({ rows, speciesList, rates, balances, yearLabel, swapsY
   const [openSp, setOpenSp] = useState('')
   const [openHolder, setOpenHolder] = useState('')
   const sp = isAllStock(stock) ? null : speciesList.find((s) => s.species === stock)
-  const top = useMemo(() => (sp ? poShares(rows, sp.code ? balances : [], sp).map((x) => ({ ...x, tonnes: rates.has(sp.species) ? x.units * rates.get(sp.species) : null }))
+  const top = useMemo(() => (sp ? poShares(rows, sp.code ? balances : [], sp, rates)
     : poOverview(rows, balances, speciesList, rates)), [rows, balances, speciesList, rates, sp])
   const togglePo = (po) => { setOpenPo(openPo === po ? '' : po); setOpenSp(sp ? sp.species : ''); setOpenHolder('') }
   const r = sp ? rates.get(sp.species) : null
