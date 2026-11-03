@@ -177,9 +177,31 @@ export function isCounter(values) {
  * the SIX ordinary entries after it read as reversals: one mistake, six red
  * cards, and the wrong six.
  */
-export function counterFaults(logs, limits, template = ENGINE_TEMPLATE) {
+export function counterFaults(logs, limits, template = ENGINE_TEMPLATE, changes = []) {
   const ordered = [...(logs || [])].sort(
     (a, b) => String(a.log_date || '').localeCompare(String(b.log_date || '')))
+
+  /* A METER THAT WAS REPLACED — a STATED fact, never read off the series.
+   *
+   * It does not need to beat the rollover guess or the reversal rule: it simply
+   * takes the baseline away, so there is nothing left to compare the first
+   * reading on the new meter against. A new meter and a rolled-over dial are
+   * indistinguishable from the readings (Generator 2's 9,087 to 90 fits both to
+   * the hour), and this is the only thing that can tell them apart.
+   *
+   * Dates only — the figures on the row are for the machine's lifetime, which
+   * is nothing to do with whether a reading is believable. */
+  const resets = new Map()
+  for (const c of changes || []) {
+    // Also defensive: a row with no date would sort as the string "undefined",
+    // which no ISO date reaches, so it would never be consumed in any case.
+    if (!c?.group_key || !c?.param_key || !c?.changed_on) continue
+    const k = limitKey(c.group_key, c.param_key)
+    if (!resets.has(k)) resets.set(k, [])
+    resets.get(k).push(String(c.changed_on))
+  }
+  for (const dates of resets.values()) dates.sort()
+  const taken = new Map()
   /* TWO BASELINES, BECAUSE THE TWO CHECKS ASK DIFFERENT QUESTIONS — and the
    * real record is what forced it apart.
    *
@@ -219,6 +241,25 @@ export function counterFaults(logs, limits, template = ENGINE_TEMPLATE) {
         const v = Number(raw)
         if (!Number.isFinite(v)) continue
         const k = limitKey(group, param)
+
+        /* Consume every change at or before this reading's date and drop both
+         * baselines. Scoped to THIS machine's key: a new meter on Generator 2
+         * says nothing about Generator 1, which is the whole of David's answer.
+         *
+         * The `typeof` guard is defensive rather than load-bearing, and the
+         * mutation check says so: comparing an ISO date against `undefined`
+         * is already false, so a dateless log consumes nothing either way.
+         * It earns its place only if a caller ever hands this a Date object,
+         * which stringifies to "Fri Oct 10 2026" and WOULD sort before every
+         * change on record. */
+        const dates = resets.get(k)
+        if (dates && typeof l.log_date === 'string' && l.log_date) {
+          let i = taken.get(k) || 0
+          const from = i
+          while (i < dates.length && dates[i] <= l.log_date) i++
+          if (i > from) { taken.set(k, i); highWater.delete(k); previous.delete(k) }
+        }
+
         const prev = highWater.get(k)
         const here = { value: v, on: l.log_date }
         /* A METER THAT ROLLED OVER IS NOT A REVERSAL. David: an hour meter does

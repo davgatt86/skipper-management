@@ -81,6 +81,7 @@ export default function EngineLogs() {
    * 28, 28, 2.8, 2.8, 38, 25, 38 and the median was 28, so a check derived from
    * history alone called the CORRECT readings outliers. */
   const [limits, setLimits] = useState([])
+  const [meterChanges, setMeterChanges] = useState([])
   // Which boat these particulars describe — one row per boat since Aug 2026.
   const boat = useCurrentVessel()
 
@@ -98,6 +99,21 @@ export default function EngineLogs() {
       if (!isOnline()) return
       const { data } = await supabase.from('engine_limits').select('*')
       if (live && data) { setLimits(data); cacheTable('engine_limits', data) }
+    })()
+    return () => { live = false }
+  }, [])
+
+  /* Cached like the limits, and for the same reason: without them at sea the
+   * counter check compares a new meter against the old one's record and buries
+   * the entry in warnings it cannot answer. */
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      const cached = await readCache('engine_meter_changes')
+      if (live && cached.rows.length) setMeterChanges(cached.rows)
+      if (!isOnline()) return
+      const { data } = await supabase.from('engine_meter_changes').select('*')
+      if (live && data) { setMeterChanges(data); cacheTable('engine_meter_changes', data) }
     })()
     return () => { live = false }
   }, [])
@@ -192,13 +208,13 @@ export default function EngineLogs() {
    * figure fits where exactly one does, and the Edit button beside it. */
   const faultsById = useMemo(() => {
     const m = new Map()
-    for (const r of counterFaults(logs, limits)) {
+    for (const r of counterFaults(logs, limits, ENGINE_TEMPLATE, meterChanges)) {
       if (r.id == null) continue
       if (!m.has(r.id)) m.set(r.id, [])
       m.get(r.id).push(r)
     }
     return m
-  }, [logs, limits])
+  }, [logs, limits, meterChanges])
 
   const summary = useMemo(() => {
     const latest = logs.find((l) => l.running_hours != null)
@@ -255,7 +271,7 @@ export default function EngineLogs() {
     const priorLogs = logs.filter((l) => l.id !== editingId)
     const odd = [
       ...checkReadings(readings, limits, priorLogs),
-      ...counterFaults([...priorLogs, { log_date: draft.log_date, readings }], limits)
+      ...counterFaults([...priorLogs, { log_date: draft.log_date, readings }], limits, ENGINE_TEMPLATE, meterChanges)
         .filter((r) => r.on === draft.log_date),
     ]
     if (odd.length && !force) {

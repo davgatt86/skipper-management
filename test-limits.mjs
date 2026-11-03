@@ -450,6 +450,75 @@ eq('and the history floor', MIN_HISTORY, 3)
   eq('on the mis-keyed entry, not the good one', dip[0].on, '2026-01-02')
 }
 
+/* A METER THAT WAS REPLACED — stated, never inferred. Nov 2026.
+ *
+ * The boat's own two breaks, and David settled which was which:
+ *   Generator 2  9,087 on 09-08 -> 90 on 10-10   NEW METER
+ *   Generator 1  8,864 on 26-08 -> 7,896 on 06-09   NOT one. Down 968, nowhere
+ *                near a fresh meter's zero, and it stays flagged.
+ *
+ * A new meter and a rolled-over dial fit the same arithmetic, so nothing in the
+ * readings can tell them apart — which is the whole reason the fact is stated.
+ */
+{
+  const G2 = (log_date, h) => ({ log_date, readings: { 'Generator 2': { 'Running Hours': h } } })
+  const G1 = (log_date, h) => ({ log_date, readings: { 'Generator 1': { 'Running Hours': h } } })
+  const CTR = (g) => LIM({ group_key: g, param_key: 'Running Hours', is_counter: true, enabled: false, min_val: null, max_val: null })
+  const gens = [CTR('Generator 1'), CTR('Generator 2')]
+  const change = [{ group_key: 'Generator 2', param_key: 'Running Hours', changed_on: '2026-10-10' }]
+
+  const real = [G2('2026-08-09', 9087), G2('2026-10-10', 90), G2('2026-10-14', 173), G2('2026-11-01', 607)]
+  eq('the new meter raises nothing once it is on record', counterFaults(real, gens, undefined, change).length, 0)
+  eq('and the series carries on from the new meter, not the old',
+    counterFaults([...real, G2('2026-11-02', 500)], gens, undefined, change).length, 1)
+
+  /* THE RESET CLEARS THE BASELINE, so there is nothing for the rollover guess
+   * to work on — a stated fact does not have to out-argue an inference, it
+   * removes the comparison the inference was making. */
+  eq('a drop too big to be a rollover is still clean across a stated change',
+    counterFaults([G2('2026-08-09', 9087), G2('2026-08-10', 5)], gens, undefined,
+      [{ group_key: 'Generator 2', param_key: 'Running Hours', changed_on: '2026-08-10' }]).length, 0)
+
+  /* IT IS BOUNDED TO ITS OWN MACHINE AND ITS OWN DATE.
+   *
+   * The second assertion dates the Generator 2 change INSIDE Generator 1's
+   * series on purpose. Dated outside it the test passes whether or not the
+   * reset is scoped per machine — which is how the first draft of it passed on
+   * a copy that reset every machine at once. */
+  eq('Generator 1 is NOT a meter change and stays flagged — David’s call',
+    counterFaults([G1('2026-08-26', 8864), G1('2026-09-06', 7896)], gens, undefined, change).length, 1)
+  eq('and a change on Generator 2 does not reset Generator 1',
+    counterFaults([G1('2026-08-26', 8864), G1('2026-09-06', 7896)], gens, undefined,
+      [{ group_key: 'Generator 2', param_key: 'Running Hours', changed_on: '2026-09-01' }]).length, 1)
+  eq('a change dated after the reading does not reach back to it',
+    counterFaults([G2('2026-08-09', 9087), G2('2026-08-20', 90)], gens, undefined,
+      [{ group_key: 'Generator 2', param_key: 'Running Hours', changed_on: '2026-09-01' }]).length, 1)
+  eq('no changes at all behaves exactly as before',
+    counterFaults(real, gens).length, counterFaults(real, gens, undefined, []).length)
+
+  /* A log with no date must never consume a change — String(undefined) sorts
+   * after any ISO date and would swallow every one of them. */
+  const undated = counterFaults(
+    [{ readings: { 'Generator 2': { 'Running Hours': 9087 } } }, G2('2026-09-01', 50)],
+    gens, undefined, change)
+  eq('an undated log does not spend the change meant for a later reading', undated.length, 1)
+
+  /* A half-written row resets nothing. Asserted on a drop too big to be a
+   * rollover, because the ROLLOVER would otherwise absorb the real series and
+   * the assertion would pass whether or not the row was ignored — which is how
+   * the first draft of this check passed for the wrong reason. */
+  eq('a row missing its date or its machine is ignored rather than resetting everything',
+    counterFaults([G2('2026-08-09', 9087), G2('2026-08-10', 5)], gens, undefined,
+      [{ group_key: 'Generator 2', param_key: 'Running Hours' }, {}]).length, 1)
+
+  /* TWO CHANGES ON ONE MACHINE are consumed in order, so the second resets
+   * again rather than the first standing for both. */
+  eq('a second meter change resets a second time', counterFaults(
+    [G2('2026-01-01', 900), G2('2026-02-01', 50), G2('2026-03-01', 20)], gens, undefined,
+    [{ group_key: 'Generator 2', param_key: 'Running Hours', changed_on: '2026-02-01' },
+     { group_key: 'Generator 2', param_key: 'Running Hours', changed_on: '2026-03-01' }]).length, 0)
+}
+
 console.log('')
 console.log(fail === 0 ? 'all passed' : `${fail} FAILED`)
 process.exit(fail === 0 ? 0 : 1)

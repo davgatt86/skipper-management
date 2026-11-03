@@ -72,6 +72,12 @@ declare
     -- in engine_sheet_reads.sql grant SELECT and nothing else. So it is NOT in
     -- the officer_works loop, which would hand him ALL.
     'engine_sheet_reads',
+    -- A meter was replaced. The man who fits it is the officer, so he states
+    -- it. NOT in the officer_works loop either: engine_meter_changes.sql grants
+    -- him exactly what he may do, and this name is here only so the deny loop
+    -- leaves it alone -- without it, re-running this file would take the fact
+    -- away and nine months of a new meter's readings would read as reversals.
+    'engine_meter_changes',
     'parts', 'parts_movements',
     -- The gear log. Deck work: a mate keeps it as much as the skipper does.
     'gear_nets', 'gear_parts', 'gear_components', 'gear_measurements',
@@ -139,7 +145,7 @@ declare
   allowed text[] := array[
     'engine_logs','vessel_fuel_log','garbage_log','fuel_suppliers',
     'maintenance_tasks','maintenance_events','engine_limits','parts','parts_movements',
-    'engine_sheet_reads',
+    'engine_sheet_reads','engine_meter_changes',
     'gear_nets','gear_parts','gear_components','gear_measurements',
     'crew','crew_certificates','crew_lists','crew_list_members',
     'oil_record_book_pages','oil_record_book_entries','orb_items','crew_ranks',

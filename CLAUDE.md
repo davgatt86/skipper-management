@@ -6729,6 +6729,73 @@ physically possible before it can prove anything about the physics.**
 
 The entry was re-dated to 01-11-2026 with the reason on the row, where it is an
 ordinary 92 hours on from 27-10. `test-limits.mjs` → **+26 checks**.
+
+#### A METER WAS REPLACED — and the September answer is reversed, by David
+
+David, on the nine Generator 1 cards: *"new meter."* So `counter_resets`, built
+and dropped in a single sitting in September, comes back as
+`engine_meter_changes` (`supabase/engine_meter_changes.sql`, applied).
+
+**THE OLD OBJECTION IS TO AN AFFORDANCE, NOT TO THE FACT.** *"A button would
+have been worse than no rule: it is the 'meter replaced' override again,
+available on the 8,000-to-7,000 case where it must not be used."* That is right
+about a one-tap dismiss on the warning, which is offered on every reversal
+including the real ones. A dated row naming a MACHINE, the old meter's final
+reading and the new one's start is not a dismiss — it is a statement somebody
+had to go and look up. **The fact gets a home and the warning gets no button.**
+
+**AND ASKING FIRST IS WHAT SAVED IT.** Measured before building, the record has
+**TWO** breaks and they are not alike:
+
+    Generator 2   9,087 (09-08) -> 90 (10-10)     down to near zero
+    Generator 1   8,864 (26-08) -> 7,896 (06-09)  down 968, nowhere near zero
+
+Read as "he means the one I just raised", I would have written a meter change
+for **Generator 1** — a false fact in an engine record, silencing a real fault.
+David: **Generator 2 only.** Generator 1 is wrong and the figures want putting
+right, so its nine cards stand on his instruction.
+
+**A NEW METER AND A ROLLED-OVER DIAL ARE INDISTINGUISHABLE FROM THE READINGS,
+which is the finding that makes this table necessary.** Generator 2's drop fits
+`rolledOver()` to the hour — a four-figure dial wrapping past 9,999 is 1,003
+hours over 62 days, 16 a day, entirely plausible here — so **the app had already
+absorbed a new meter as a rollover and said nothing.** Right outcome, wrong
+reason, and the machine's life differs by **913 hours** between the two
+readings:
+
+    rolled over   the dial passed 9,999    life ~ 10,000 + 607
+    new meter     the old count is frozen  life =   9,087 + 607 = 9,694
+
+David: the hours **sum**. `previous_final` and `new_start` are what make that
+answerable, both nullable so a blank never reads as a nought. **Nothing displays
+lifetime hours yet** — recording it was the only chance, the display is not
+built, and no unused helper was written for it either (that is the
+library-called-by-nothing failure, three times over in this file).
+
+**THE RESET TAKES THE BASELINE AWAY RATHER THAN OUT-ARGUING THE GUESS.** A
+stated change clears `highWater` and `previous` for that key, so there is simply
+nothing left for the rollover rule to work on. Scoped per machine and consumed
+in date order, so a change on Generator 2 says nothing about Generator 1 and a
+second change resets a second time.
+
+**It changes no flag count on the real record** — 13 before and after, because
+Generator 2 was already silent. The value is entirely in the record being right.
+
+Probed as the real logins rather than inspected: **skipper 1, officer 1 and
+writes his own fleet, officer refused another fleet, cook 0, another fleet's
+skipper 0.** `officer_role.sql` gains the table in both allow-lists and
+deliberately **not** in `officer_works` — its own policy grants exactly what he
+may do, and without the allow-list entry the next re-run of that file would take
+the fact away and nine months of a new meter's readings would read as reversals.
+
+**Three of fourteen mutations survive and all three are documented as
+defensive** rather than left looking load-bearing: the forward-direction guard
+in `hoursLeap`, the `typeof` date guard (comparing an ISO date against
+`undefined` is already false — it earns its place only against a Date object),
+and the half-written-row filter (a missing date sorts as `"undefined"`, which no
+ISO date reaches). **The per-machine test had to be rewritten to discriminate**:
+dated outside Generator 1's series it passed on a copy that reset every machine
+at once.
 **The leap card and its save warning have not been rendered** — `EngineLogs.jsx`
 drags the supabase client in, so the build and the undefined-name scan are all
 that cover the JSX.
